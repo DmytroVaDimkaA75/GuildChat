@@ -1,201 +1,236 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue, get, set } from 'firebase/database';
 import { database } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons'; // Для інших іконок
+import { Ionicons } from '@expo/vector-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faClock, faGlobe } from '@fortawesome/free-solid-svg-icons';
-import GBIcon from '../ico/GB.svg'; // тепер імпортуємо як компонент
+import GBIcon from '../ico/GB.svg';
+import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 
 const ProfileMain = () => {
   const [userName, setUserName] = useState('');
   const [activeWorld, setActiveWorld] = useState('');
   const [guilds, setGuilds] = useState([]);
 
+  const [isCultureSettingsOpen, setCultureSettingsOpen] = useState(false);
+  const [isProductionOpen, setProductionOpen] = useState(false);
+
+  // Збережені налаштування
+  const [selectedProductionTime, setSelectedProductionTime] = useState(null); // null = жоден
+  const [notifyNextActions, setNotifyNextActions] = useState(false);
+
+  const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
-  // Функція для перетворення ролей
   const convertRole = (role) => {
-    if (role === 'guildLeader') return 'Адміністратор';
-    if (role === 'member') return 'Користувач';
-    return role;
+    switch (role) {
+      case 'guildLeader': return 'Адміністратор';
+      case 'member': return 'Користувач';
+      default: return role;
+    }
+  };
+
+  // toggles
+  const toggleCultureSettings = () => setCultureSettingsOpen(prev => !prev);
+  const toggleProductionOpen = () => setProductionOpen(prev => !prev);
+
+  // Обробники взаємодії
+  const selectProductionTime = async (time) => {
+    const idx = productionTimeOptions.indexOf(time);
+    setSelectedProductionTime(time);
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (userId && guildId) {
+        await set(ref(database, `/users/${userId}/${guildId}/culture/productionPreference`), idx);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleCultureAlarm = async () => {
+    const newVal = !notifyNextActions;
+    setNotifyNextActions(newVal);
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (userId && guildId) {
+        await set(ref(database, `/users/${userId}/${guildId}/culture/cultureAlarm`), newVal);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   useEffect(() => {
-    // Завантаження базових даних: userName та активний світ
-    const fetchData = async () => {
+    const fetchInitialData = async () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
         const guildId = await AsyncStorage.getItem('guildId');
-
         if (userId) {
-          const userNameRef = ref(database, `/users/${userId}/userName`);
-          onValue(userNameRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-              setUserName(data);
-            }
-          });
-        } else {
-          console.log('userId не знайдено в AsyncStorage');
+          onValue(ref(database, `/users/${userId}/userName`), snap => snap.val() && setUserName(snap.val()));
         }
-
         if (guildId) {
-          const activeWorldRef = ref(database, `/guilds/${guildId}/worldName`);
-          onValue(activeWorldRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-              setActiveWorld(data);
-            }
-          });
-        } else {
-          console.log('guildId не знайдено в AsyncStorage');
+          onValue(ref(database, `/guilds/${guildId}/worldName`), snap => snap.val() && setActiveWorld(snap.val()));
         }
-      } catch (error) {
-        console.error('Помилка отримання даних:', error);
+        // Завантаження culture налаштувань
+        if (userId && guildId) {
+          const cultureSnap = await get(ref(database, `/users/${userId}/${guildId}/culture`));
+          if (cultureSnap.exists()) {
+            const data = cultureSnap.val();
+            // Заповнюємо productionPreference
+            if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
+              setSelectedProductionTime(productionTimeOptions[data.productionPreference]);
+            }
+            // Заповнюємо cultureAlarm
+            if (typeof data.cultureAlarm === 'boolean') {
+              setNotifyNextActions(data.cultureAlarm);
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
       }
     };
 
-    // Отримання даних усіх гілок, ім’я яких містить символ "_"
-    const fetchUserGuilds = async () => {
+    const fetchGuilds = async () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
-        if (!userId) {
-          console.log('userId не знайдено в AsyncStorage');
-          return;
-        }
-
-        // Отримуємо всі дані користувача
-        const userRef = ref(database, `/users/${userId}`);
-        const snapshot = await get(userRef);
-
-        if (snapshot.exists()) {
-          const userData = snapshot.val();
-          // Фільтруємо ключі, що містять "_"
-          const guildKeys = Object.keys(userData).filter(key => key.includes('_'));
-
-          const results = await Promise.all(
-            guildKeys.map(async (guildId) => {
-              const role = userData[guildId].role;
-              const guildRef = ref(database, `/guilds/${guildId}/worldName`);
-              const guildSnapshot = await get(guildRef);
-              const worldName = guildSnapshot.exists() ? guildSnapshot.val() : 'Не знайдено';
-              return { guildId, role, worldName };
-            })
-          );
-          setGuilds(results);
-          console.log('Отримані дані:', results);
-        } else {
-          console.log('Дані користувача не знайдені');
-        }
-      } catch (error) {
-        console.error('Помилка отримання даних для guilds:', error);
+        if (!userId) return;
+        const snap = await get(ref(database, `/users/${userId}`));
+        if (!snap.exists()) return;
+        const data = snap.val();
+        const keys = Object.keys(data).filter(k => k.includes('_'));
+        const arr = await Promise.all(
+          keys.map(async id => {
+            const role = data[id].role;
+            const worldSnap = await get(ref(database, `/guilds/${id}/worldName`));
+            return { guildId: id, role, worldName: worldSnap.val() || 'Не знайдено' };
+          })
+        );
+        setGuilds(arr);
+      } catch (e) {
+        console.error(e);
       }
     };
 
-    fetchData();
-    fetchUserGuilds();
+    fetchInitialData();
+    fetchGuilds();
   }, []);
-
-  // Функція для відкриття стека ProfileData
-  const handleProfileData = () => {
-    navigation.navigate('ProfileData');
-  };
-
-  const handleAddSchedule = () => {
-    navigation.navigate('AddSchedule');
-  };
-
-
-  const handleLanguageSelector = () => {
-    navigation.navigate('LanguageSelector');
-  };
-  
-  const handleMyGB = () => {
-    navigation.navigate('MyGB');
-  };
 
   return (
     <ScrollView style={styles.container}>
-      {/* Шапка: аватар, юзернейм та активний світ */}
+      {/* Шапка */}
       <View style={styles.header}>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.userName}>{userName}</Text>
-        </View>
+        <Text style={styles.userName}>{userName}</Text>
       </View>
 
-      {/* Розділ "Ігрові світи" */}
+      {/* Ігрові світи */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Ігрові світи</Text>
-
-        {/* Блок з даними гілок */}
-        <View style={styles.section}>
-          {guilds.length > 0 ? (
-            guilds.map((guild) => (
-              <View key={guild.guildId} style={styles.itemRowNoBorder}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.mainText}>{guild.worldName}</Text>
-                  {guild.worldName === activeWorld && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color="#0088cc"
-                      style={{ marginLeft: 5 }}
-                    />
-                  )}
-                </View>
-                <Text style={styles.mainText}>{convertRole(guild.role)}</Text>
+        {guilds.length ? (
+          guilds.map(g => (
+            <View key={g.guildId} style={styles.itemRowNoBorder}>
+              <View style={styles.rowContent}>
+                <Text style={styles.mainText}>{g.worldName}</Text>
+                {g.worldName === activeWorld && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color="#0088cc"
+                    style={styles.iconSpacing}
+                  />
+                )}
               </View>
-            ))
-          ) : (
-            <View style={styles.itemRowNoBorder}>
-              <Text style={styles.mainText}>Дані не знайдено</Text>
+              <Text style={styles.mainText}>{convertRole(g.role)}</Text>
             </View>
-          )}
-        </View>
+          ))
+        ) : (
+          <Text style={styles.mainText}>Дані не знайдено</Text>
+        )}
       </View>
 
-      {/* Горизонтальний роздільник */}
       <View style={styles.divider} />
 
-      {/* Розділ "Про себе" */}
+      {/* Про себе */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Про себе</Text>
-        <TouchableOpacity style={styles.itemRow} onPress={handleProfileData}>
-          <View style={styles.textContainer}>
-            <Text style={styles.mainText}>Я користувач</Text>
-            <Text style={styles.subText}>Додайте кілька слів про себе</Text>
-          </View>
+        <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('ProfileData')}>
+          <Text style={styles.mainText}>Я користувач</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Горизонтальний роздільник */}
       <View style={styles.divider} />
 
-      {/* Розділ з додатковими налаштуваннями */}
+      {/* Налаштування додатку */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Налаштування додатку</Text>  
-        <TouchableOpacity style={styles.itemRow} onPress={handleAddSchedule}>
-          <FontAwesomeIcon icon={faClock} size={24} color="#BDBDBD" style={{ marginRight: 8 }} />
+        <Text style={styles.sectionTitle}>Налаштування додатку</Text>
+        <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('AddSchedule')}>
+          <FontAwesomeIcon icon={faClock} size={20} style={{ color: '#BDBDBD', marginRight: 8 }} />
           <Text style={styles.mainText}>Розклад</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.itemRow} onPress={handleLanguageSelector}>
-          <FontAwesomeIcon icon={faGlobe} size={24} color="#BDBDBD" style={{ marginRight: 8 }} />
+        <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('LanguageSelector')}>
+          <FontAwesomeIcon icon={faGlobe} size={20} style={{ color: '#BDBDBD', marginRight: 8 }} />
           <Text style={styles.mainText}>Мова</Text>
         </TouchableOpacity>
       </View>
-      {/* Горизонтальний роздільник */}
+
       <View style={styles.divider} />
-      {/* Розділ з додатковими налаштуваннями */}
+
+      {/* Налаштування світу */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Налаштування світу</Text>
-        <TouchableOpacity style={styles.itemRow} onPress={handleMyGB}>
-          <GBIcon width={24} height={24} style={{ marginRight: 8 }} />
+        <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('MyGB')}>
+          <GBIcon width={20} height={20} style={styles.iconSpacing} />
           <Text style={styles.mainText}>Налаштування ВС</Text>
-        </TouchableOpacity>      
-        
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.itemRow} onPress={toggleCultureSettings}>
+          <GBIcon width={20} height={20} style={styles.iconSpacing} />
+          <Text style={styles.mainText}>Налаштування культурних поселень</Text>
+          <Ionicons
+            name={isCultureSettingsOpen ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color="#BDBDBD"
+            style={styles.marginAutoLeft}
+          />
+        </TouchableOpacity>
+        {isCultureSettingsOpen && (
+          <>
+            {/* Переважний час виробництв */}
+            <View style={styles.subHeaderRow}>
+              <Text style={styles.mainText}>Переважний час виробництв</Text>
+              <TouchableOpacity onPress={toggleProductionOpen} style={styles.marginAutoLeft}>
+                <Ionicons name="ellipsis-horizontal" size={20} color="#BDBDBD" />
+              </TouchableOpacity>
+            </View>
+            {isProductionOpen && productionTimeOptions.map(time => (
+              <TouchableOpacity
+                key={time}
+                style={styles.subItemRow}
+                onPress={() => selectProductionTime(time)}
+              >
+                {selectedProductionTime === time ? (
+                  <Ionicons name="checkmark-circle" size={20} color="#0088cc" style={{ marginRight: 8 }} />
+                ) : (
+                  <View style={styles.radioUnselected} />
+                )}
+                <Text style={styles.mainText}>{time}</Text>
+              </TouchableOpacity>
+            ))}
+            {/* Сигналізувати про наступні дії */}
+            <View style={styles.subItemRowDisabled}>
+              <Text style={styles.mainText}>Сигналізувати про наступні дії</Text>
+              <CustomCheckBox
+                checked={notifyNextActions}
+                onPress={toggleCultureAlarm}
+              />
+            </View>
+          </>
+        )}
       </View>
     </ScrollView>
   );
@@ -208,49 +243,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  // Верхній блок: аватар, юзернейм та активний світ
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    padding: 16,
     backgroundColor: '#517da2',
-  },
-  headerTextContainer: {
-    justifyContent: 'center',
-    width: '100%',
   },
   userName: {
     fontSize: 24,
-    fontWeight: '600',
     color: '#fff',
-    marginBottom: 2,
-  },
-  activeWorldContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  activeWorldLeft: {
-    fontSize: 14,
-    color: '#9ecbea',
-  },
-  activeWorldRight: {
-    fontSize: 14,
-    color: '#9ecbea',
-    textAlign: 'right',
   },
   divider: {
     height: 8,
     backgroundColor: '#e0e0e0',
   },
   section: {
-    backgroundColor: '#fff',
     paddingHorizontal: 16,
-    marginTop: 10,
+    marginTop: 12,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#0088cc',
     marginVertical: 8,
@@ -259,25 +269,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    borderBottomColor: '#ccc',
-    borderBottomWidth: 0.4,
   },
   itemRowNoBorder: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    justifyContent: 'space-between',
   },
-  textContainer: {
-    flex: 1,
+  rowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   mainText: {
     fontSize: 14,
-    color: '#000',
+    marginLeft: 8,
   },
-  subText: {
-    fontSize: 14,
-    color: '#8e8e93',
-    marginTop: 2,
+  subHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingLeft: 56,
+  },
+  subItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 56,
+    paddingVertical: 8,
+  },
+  subItemRowDisabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 56,
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  radioUnselected: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#0088cc',
+    marginRight: 8,
+  },
+  iconSpacing: {
+    marginRight: 8,
+  },
+  marginAutoLeft: {
+    marginLeft: 'auto',
   },
 });

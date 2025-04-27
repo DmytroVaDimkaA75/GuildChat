@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -566,6 +566,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [sendOptionsPopupVisible, setSendOptionsPopupVisible] = useState(false);
   // Новий state для модального вікна стилізації
   const [isFormattingModalVisible, setFormattingModalVisible] = useState(false);
+  const [viewableMessages, setViewableMessages] = useState([]);
+
 
   const handleReply = (message) => {
     setReplyToMessage(message);
@@ -613,6 +615,71 @@ const ChatWindow = ({ route, navigation }) => {
     const newHeight = Math.min(Math.max(40, height), maxInputHeight);
     setInputHeight(newHeight);
   };
+
+  const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
+    console.log('Raw viewable items:', viewableItems);
+    const visibleMessages = viewableItems
+    .filter(item => {
+      const isMessage = item.item.type === 'message';
+      const isNotSender = item.item.senderId !== userId;
+      const hasReadBy = !!item.item.readBy;
+      const isUnread = !item.item.readBy?.[userId];
+      
+      console.log('Item check:', {
+        id: item.item.id,
+        isMessage,
+        isNotSender,
+        hasReadBy,
+        isUnread
+      });
+      
+      return isMessage && isNotSender && isUnread;
+    })
+    .map(item => item.item.id);
+  
+    setViewableMessages(prev => {
+      const newMessages = Array.from(new Set([...prev, ...visibleMessages]));
+      console.log('Updated viewable messages:', newMessages);
+      return newMessages;
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!viewableMessages.length || !userId || !guildId || !chatId) {
+      console.log('Skipping update - missing data:', {
+        viewableMessages,
+        userId,
+        guildId,
+        chatId
+      });
+      return;
+    }
+  
+    const db = getDatabase();
+    const updates = {};
+    const currentTime = Date.now();
+  
+    viewableMessages.forEach(messageId => {
+      // Додайте перевірку на валідність messageId
+      if (typeof messageId !== 'string' || !messageId.trim()) return;
+      
+      const readStatusPath = `guilds/${guildId}/chats/${chatId}/messages/${messageId}/readBy/${userId}`;
+      updates[readStatusPath] = currentTime;
+      console.log('Preparing update for:', readStatusPath);
+    });
+  
+    if (Object.keys(updates).length === 0) {
+      console.log('No valid updates to apply');
+      return;
+    }
+  
+    update(ref(db), updates)
+      .then(() => console.log('Read statuses updated successfully'))
+      .catch(error => {
+        console.error('Firebase update error:', error);
+        Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
+      });
+  }, [viewableMessages, userId, guildId, chatId]);
 
   const pinnedMessagesForUser = messages
     .flatMap(group => group.messages)
@@ -693,35 +760,17 @@ const ChatWindow = ({ route, navigation }) => {
     }
   }, [chatId, guildId, navigation, userId, contactAvatar, contactName]);
 
-  useEffect(() => {
-    if (!chatId || !userId || !guildId) return;
-    const db = getDatabase();
-    const messagesRef = ref(db, `guilds/${guildId}/chats/${chatId}/messages`);
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
-      if (!snapshot.exists()) return;
-      const messagesData = snapshot.val();
-      const updates = {};
-      Object.entries(messagesData).forEach(([messageId, message]) => {
-        if (message.senderId !== userId && message.status !== 'read') {
-          updates[`guilds/${guildId}/chats/${chatId}/messages/${messageId}/status`] = 'read';
-        }
-      });
-      if (Object.keys(updates).length > 0) {
-        update(ref(db), updates);
-      }
-    });
-    return () => unsubscribe();
-  }, [chatId, userId, guildId]);
-
+  
   useEffect(() => {
     const fetchMessages = () => {
-      if (!chatId || !guildId) return;
+      if (!chatId || !guildId || !userId) return;
       const db = getDatabase();
       const messagesRef = ref(db, `guilds/${guildId}/chats/${chatId}/messages`);
       onValue(messagesRef, (snapshot) => {
         const messagesData = snapshot.val() || {};
         const messagesList = Object.keys(messagesData).map(key => ({
           id: key,
+          type: 'message', // Додано тип
           ...messagesData[key],
         }));
         const groupedMessages = messagesList.reduce((acc, message) => {
@@ -732,13 +781,17 @@ const ChatWindow = ({ route, navigation }) => {
         }, {});
         const groupedMessagesArray = Object.keys(groupedMessages).map(date => ({
           date,
-          messages: groupedMessages[date]
+          messages: groupedMessages[date],
+          type: 'date' // Додайте тип для заголовків дат
         }));
+        
+        // Додайте тип для повідомлень:
+        
         setMessages(groupedMessagesArray);
       });
     };
     fetchMessages();
-  }, [chatId, guildId, locale]);
+  }, [chatId, guildId, userId, locale]);
 
   const selectImage = async () => {
     try {
@@ -1060,6 +1113,27 @@ const ChatWindow = ({ route, navigation }) => {
     { label: "S", marker: "||" },
   ];
 
+  const renderReadStatus = (message) => {
+    if (!message.readBy) return null;
+    
+    const readUsers = Object.keys(message.readBy).length;
+    const isGroupChat = chatType === 'group';
+    
+    return (
+      <View style={styles.readStatus}>
+        {isGroupChat ? (
+          <Text>{readUsers}/{totalMembers} переглянуто</Text>
+        ) : (
+          <FontAwesomeIcon 
+            icon={readUsers > 0 ? faCheckDouble : faCheck} 
+            color="#4CAF50"
+          />
+        )}
+      </View>
+    );
+  };
+
+  
 
   return (
     <View style={styles.container}>
@@ -1297,6 +1371,8 @@ const ChatWindow = ({ route, navigation }) => {
           index,
         })}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        onViewableItemsChanged={handleViewableItemsChanged}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
       />
 
       {replyToMessage && (
