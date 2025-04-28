@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -35,12 +35,15 @@ import ProfileData from './Profile/ProfileData';
 import AddSchedule from './Profile/AddSchedule';
 import SleepSchedule from './Profile/SleepSchedule';
 import LanguageSelector from './Profile/LanguageSelector';
+import CulturalPlanner from './Culture/CulturalPlanner';
+import CulturalSettlements from './Culture/CulturalSettlements';
 
 import GB from "./ico/GB.svg";
 import Chat from "./ico/Chat.svg";
 import Quant from "./ico/quant.svg";
 import GVG from "./ico/GVG.svg";
 import Azbook from "./ico/azbook.svg";
+import Culture from "./ico/boat2.svg";
 import Servise from "./ico/servise.svg";
 import Profile from "./ico/profile.svg";
 import Admin from "./ico/admin.svg";
@@ -76,36 +79,29 @@ function ChatStack() {
         options={{ title: t("chatStack.guildMembersListTitle") }} // переклад для "Нове повідомлення"
       />
       <Stack.Screen 
-  name="CreateGroupScreen" 
-  component={CreateGroupScreen} 
-  options={({ navigation, route }) => ({
-    title: "Нова група",
-    headerLeft: () => (
-      <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
-        <Ionicons name="arrow-back" size={24} color="white" />
-      </TouchableOpacity>
-    ),
-    headerRight: () => (
-      <TouchableOpacity
-        onPress={() => {
-          if (route.params?.handleCreateGroup) {
-            route.params.handleCreateGroup();
-          }
-        }}
-        style={{ marginRight: 15 }}
-      >
-        <Ionicons name="checkmark" size={24} color="white" />
-      </TouchableOpacity>
-    ),
-  })}
-/>
-
-      
-      
-      
-      
-      
-      
+        name="CreateGroupScreen" 
+        component={CreateGroupScreen} 
+        options={({ navigation, route }) => ({
+          title: "Нова група",
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.handleCreateGroup) {
+                  route.params.handleCreateGroup();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color="white" />
+            </TouchableOpacity>
+         ),
+        })}
+      />
       <Stack.Screen
         name="NewGroupChat"
         component={NewGroupChat}
@@ -181,6 +177,75 @@ function QuantStack() {
           headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
         }}
       />
+    </Stack.Navigator>
+  );
+}
+
+function CultureStack() {
+  const { t } = useTranslation();
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+    <Stack.Screen
+      name="CulturalSettlements"
+      component={CulturalSettlements}
+      options={({ navigation }) => ({
+        title: 'Вибір поселення',
+        headerLeft: () => (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        ),
+      })}
+    />
+    <Stack.Screen
+      name="CulturalPlanner"
+      component={CulturalPlanner}
+      options={({ navigation, route }) => {
+        const { start } = route.params;
+        const removeAndBack = async () => {
+          const userId = await AsyncStorage.getItem('userId');
+          const guildId = await AsyncStorage.getItem('guildId');
+          await remove(ref(database, `guilds/${guildId}/guildUsers/${userId}/culturalSettlements`));
+          navigation.navigate('CulturalSettlements');
+        };
+        return {
+          title: 'План поселення',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (start) removeAndBack();
+                else navigation.goBack();
+              }}
+              style={{ marginLeft: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (start) removeAndBack();
+                else {
+                  Alert.alert(
+                    'Підтвердження',
+                    'Ви дійсно хочете закінчити планування культурного поселення і видалити весь прогрес?',
+                    [
+                      { text: 'Ні' },
+                      { text: 'Так', onPress: () => removeAndBack() }
+                    ]
+                  );
+                }
+              }}
+              style={{ marginRight: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
+        };
+      }}
+    />
+
+
     </Stack.Navigator>
   );
 }
@@ -652,6 +717,17 @@ function AppNavigator() {
             drawerLabel: t("drawer.pbgLabel"), // переклад для "Поле битви гільдій"
             drawerIcon: ({ color, size }) => (
               <GVG width={size} height={size} fill={color} />
+            ),
+          }}
+        />
+        <Drawer.Screen
+          name="Culture"
+          component={CultureStack}
+          options={{
+            headerShown: false,
+            drawerLabel: t("drawer.pbgLabel"), 
+            drawerIcon: ({ color, size }) => (
+              <Culture width={size} height={size} fill={color} />
             ),
           }}
         />
