@@ -1,15 +1,16 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Text, ScrollView, Dimensions } from 'react-native';
 import { get, ref } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { useTranslation } from 'react-i18next';
+import GBPatronCalculator from './GBPatronCalculator';
 
 // Константи, що використовуються як у компоненті, так і в стилях
 const BLOCK_ONE_WIDTH = 80;
 const rowHeight = 40;
 
-const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
+const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) => {
   const { t } = useTranslation();
 
   // Заголовки стовпців із перекладами (ключі з розділу gbPatrons)
@@ -22,6 +23,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
   ];
   const columnWidths = [100, 100, 100, 100, 100];
 
+
   // Стан для даних таблиці
   const [forgePointsList, setForgePointsList] = useState([]);
   const [placeMultipliers, setPlaceMultipliers] = useState([]);
@@ -30,7 +32,9 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
   const [totalFP, setTotalFP] = useState(0);
   const [ownerContribution, setOwnerContribution] = useState(0);
   const [distribution, setDistribution] = useState([]);
-
+  const [guarArray, setGuarArray] = useState([]);
+  const [kfin, setKfin] = useState(null);
+  const [nfin, setNfin] = useState(null);
   const screenHeight = Dimensions.get('window').height;
   const tableMaxHeight = screenHeight - 150;
 
@@ -43,20 +47,23 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
   const isSyncingVertical = useRef(false);
 
   // 1) Функція для формування placeCosts та placeMultipliers
+  // 1) Функція для формування placeCosts та placeMultipliers
   const processGreatBuildingBranches = async (greatBuildingId, currentLevel) => {
     try {
       const guildId = await AsyncStorage.getItem('guildId');
       const rawUserId = await AsyncStorage.getItem('userId');
       const userIds = rawUserId ? rawUserId.split(',').map(id => id.trim()) : [];
 
-      // Кількість місць: мінімум 5 або більше, якщо forgePointsList.length > 5
+      // Мінімум 5 слотів, або більше, якщо є дані
       const numPlaces = Math.max(5, forgePointsList.length);
       const upgradesRef = ref(database, `guilds/${guildId}/GBChat`);
       const snapshot = await get(upgradesRef);
+
       const localMultipliers = [];
       const localCosts = [];
 
       if (!snapshot.exists()) {
+        // Якщо немає жодних чатів — просто фолбек для всіх слотів
         for (let place = 0; place < numPlaces; place++) {
           const nominal = forgePointsList[place] || 1;
           localMultipliers.push(null);
@@ -64,52 +71,67 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
         }
       } else {
         const allChats = Object.entries(snapshot.val());
+        // Проходимо по кожному слоту з 1 до numPlaces
         for (let place = 1; place <= numPlaces; place++) {
-          let filteredChats = [];
+          const nominalRaw = forgePointsList[place - 1];
+          const hasNominal = nominalRaw != null;      // реальне значення з API?
+          const nominal = hasNominal ? nominalRaw : 1;
+
+          // Для фолбек-слотів відразу пушимо 1 і пропускаємо логіку фільтрації
+          if (!hasNominal) {
+            localMultipliers.push(null);
+            localCosts.push(nominal);
+            continue;
+          }
+
+          // Фільтруємо чати за правилами
+          const filteredChats = [];
           for (const [chatId, chatData] of allChats) {
             const rules = chatData.rules || {};
             if (rules.allowedGBs && !rules.allowedGBs.includes(greatBuildingId)) continue;
             if (rules.placeLimit && !rules.placeLimit.includes(place)) continue;
             if (rules.levelThreshold && rules.levelThreshold > currentLevel) continue;
             if (rules.selectedMembers) {
-              const isUserAllowed = userIds.some(uid => rules.selectedMembers.includes(uid));
-              if (!isUserAllowed) continue;
+              const allowed = userIds.some(uid => rules.selectedMembers.includes(uid));
+              if (!allowed) continue;
             }
             filteredChats.push({
               chatId,
               contributionMultiplier: rules.contributionMultiplier || 0,
             });
           }
+
           if (filteredChats.length > 0) {
-            filteredChats.sort((a, b) => b.contributionMultiplier - a.contributionMultiplier);
-            const nominal = forgePointsList[place - 1] || 1;
-            const computed = filteredChats.map(ch => {
-              const costVal = Math.round(ch.contributionMultiplier * nominal);
-              return { multiplier: ch.contributionMultiplier, cost: costVal };
-            });
+            // Обчислюємо cost = multiplier * nominal, шукаємо максимум
+            const computed = filteredChats.map(ch => ({
+              multiplier: ch.contributionMultiplier,
+              cost: Math.round(ch.contributionMultiplier * nominal),
+            }));
             const maxCost = Math.max(...computed.map(c => c.cost));
-            const chosen = computed.find(c => c.cost === maxCost) || computed[0];
+            const chosen = computed.find(c => c.cost === maxCost);
             localMultipliers.push(chosen.multiplier);
             localCosts.push(chosen.cost);
           } else {
-            const nominal = forgePointsList[place - 1] || 1;
+            // Якщо жодного чату немає — просто округлюємо nominal
             localMultipliers.push(null);
             localCosts.push(Math.round(nominal));
           }
         }
       }
+
       setPlaceMultipliers(localMultipliers.map(m => (m !== null ? parseFloat(m) : null)));
       setPlaceCosts(localCosts);
       console.log('processGreatBuildingBranches -> localCosts:', localCosts);
+
     } catch (error) {
       console.error('processGreatBuildingBranches -> error:', error);
-      if (placeCosts.length < 5) {
-        const fallback = forgePointsList.map(v => Math.round(v || 1));
-        setPlaceCosts(fallback);
-        setPlaceMultipliers(fallback.map(() => null));
-      }
+      // Фолбек для випадку помилки
+      const fallback = forgePointsList.map(v => Math.round(v || 1));
+      setPlaceCosts(fallback);
+      setPlaceMultipliers(fallback.map(() => null));
     }
   };
+
 
   // 2) Функція для отримання даних вкладників та їх коректного логіну
   const getPatronsData = async (greatBuildingId) => {
@@ -178,6 +200,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
     }
   };
 
+  
   // 3) Отримання даних з API (total_fp та forgePointsList)
   useEffect(() => {
     if (buildAPI && level !== null) {
@@ -194,7 +217,6 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
               setForgePointsList(arr);
             }
           }
-          console.log('API -> totalFP:', totalFP, 'forgePointsList:', forgePointsList);
         })
         .catch(err => {
           console.error('API fetch error:', err);
@@ -202,19 +224,25 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
     }
   }, [buildAPI, level, personalContribution]);
 
+  useEffect(() => {
+    if (buildId) {
+      getPatronsData(buildId);
+    }
+  }, [buildId, refresh, personalContribution]); 
+
   // 4) Отримання даних вкладників при зміні buildId
   useEffect(() => {
     if (buildId) {
       getPatronsData(buildId);
     }
-  }, [buildId]);
+  }, [buildId, personalContribution]); 
 
   // 5) Обробка гілки ВС при зміні buildId та level
   useEffect(() => {
     if (buildId && level) {
       processGreatBuildingBranches(buildId, level);
     }
-  }, [buildId, level, forgePointsList]);
+  }, [buildId, level, forgePointsList, personalContribution]); 
 
   // 6) Розрахунок розподілу (distribution) для таблиці
   useEffect(() => {
@@ -302,11 +330,34 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
       isSyncingVertical.current = false;
     }, 0);
   };
+// === Ось головна правка: useMemo для масивів ===
+  const placesIds = useMemo(
+    () => distribution.map(x => x && x.userName ? x.userName : ''),
+    [distribution]
+  );
+  const placesInvested = useMemo(
+    () => distribution.map(x => x && x.invest ? x.invest : 0),
+    [distribution]
+  );
+
+  // === Виклик компонента розрахунку гарантій з перевіркою перед setState ===
+  const handleGuarantorResult = useCallback(({ Guar }) => {
+    setGuarArray(prev => (JSON.stringify(prev) !== JSON.stringify(Guar) ? Guar : prev));
+  }, []);
 
   return (
     <View style={styles.container}>
+      
+      <GBPatronCalculator 
+        placeCosts={placeCosts}
+        totalFP={totalFP}
+        ownerContribution={ownerContribution}
+        distribution={distribution}
+        onCalculationComplete={handleGuarantorResult}
+      />
+
       <View style={styles.emptyBox}>
-        {/* Верхній рядок із заголовками */}
+       
         <View style={styles.topRow}>
           <View style={styles.blockOne}>
             <Text>{t('gbPatrons.leftColumnTitle')}</Text>
@@ -328,7 +379,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
         </View>
 
         <View style={styles.bottomRow}>
-          {/* Ліва колонка з номерами рядків */}
+          
           <ScrollView
             style={[styles.block3Scroll, { width: BLOCK_ONE_WIDTH, flexGrow: 0, overflow: 'hidden', height: containerHeight }]}
             ref={block3ScrollRef}
@@ -370,7 +421,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
             </View>
           </ScrollView>
 
-          {/* Основна частина таблиці */}
+          
           <View style={styles.block4Container}>
             <ScrollView
               ref={block4HorizontalScrollRef}
@@ -420,11 +471,16 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution }) => {
                               const costVal = placeCosts[rowIndex];
                               cellContent = costVal !== undefined ? String(costVal) : '-';
                             } else if (colIndex === 3) {
-                              cellContent = '-';
+                              cellContent = rowIndex > 4 ? '-' : (guarArray[rowIndex] !== undefined ? String(guarArray[rowIndex]) : '-');
                             } else if (colIndex === 4) {
-                              const mVal = placeMultipliers[rowIndex];
-                              cellContent = typeof mVal === 'number' ? mVal.toFixed(3) : '-';
-                            }
+                              cellContent = rowIndex > 4 ? '-' : (() => {
+                                const DEFAULT_COEFFICIENT = 1.900;
+                                const coeff = placeMultipliers[rowIndex] != null
+                                  ? placeMultipliers[rowIndex]
+                                  : DEFAULT_COEFFICIENT;
+                                return coeff.toFixed(3);
+                              })();
+                            }                             
                             return (
                               <View
                                 key={`cell-${rowIndex}-${colIndex}`}

@@ -128,7 +128,9 @@ const resources = {
         contributionAmountPlaceholder: "Розмір вкладу",
         saveButton: "Зберегти",
         cancelButton: "Скасувати",
-        fillAllFields: "Будь ласка, заповніть всі поля"
+        fillAllFields: "Будь ласка, заповніть всі поля",
+        optionStranger: "Чжинець",
+        optionFriend: "Друг"
       },
       gbChatWindow: {
         unknownBuild: "Невідома ВС",

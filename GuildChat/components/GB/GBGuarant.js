@@ -9,7 +9,7 @@ import {
   Dimensions,
   Modal,
 } from 'react-native';
-import { get, ref, set } from 'firebase/database';
+import { get, ref, set, update } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -33,7 +33,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 14, minValue = 0, maxValue
     setInputValue(String(newValue));
   };
 
-  const handleInputChange = (text) => {
+  const handleInputChange = text => {
     if (/^\d*$/.test(text)) {
       setInputValue(text);
     }
@@ -41,13 +41,9 @@ const Stepper = ({ value, onValueChange, buttonSize = 14, minValue = 0, maxValue
 
   const handleEndEditing = () => {
     let newValue = parseInt(inputValue, 10);
-    if (isNaN(newValue)) {
-      newValue = minValue;
-    } else if (newValue > maxValue) {
-      newValue = maxValue;
-    } else if (newValue < minValue) {
-      newValue = minValue;
-    }
+    if (isNaN(newValue)) newValue = minValue;
+    else if (newValue > maxValue) newValue = maxValue;
+    else if (newValue < minValue) newValue = minValue;
     onValueChange(newValue);
     setInputValue(String(newValue));
   };
@@ -85,14 +81,17 @@ const Stepper = ({ value, onValueChange, buttonSize = 14, minValue = 0, maxValue
 const GBGuarant = ({ route, navigation }) => {
   const { t } = useTranslation();
   const { buildingName, buildingId, buildingImage } = route.params;
+
   const [buildingLevel, setBuildingLevel] = useState(null);
   const [levelBase, setLevelBase] = useState(null);
   const [stepValue, setStepValue] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
-  const [contributorName, setContributorName] = useState('');
   const [contributionAmount, setContributionAmount] = useState('');
   const [selectedValue, setSelectedValue] = useState(null);
-  const [guildMembers, setGuildMembers] = useState([]); // Члени гільдії
+
+  // нові стани
+  const [guildMembers, setGuildMembers] = useState([]);
+  const [patronsKey, setPatronsKey] = useState(0);
   const [buildAPI, setBuildAPI] = useState('');
 
   useLayoutEffect(() => {
@@ -110,140 +109,152 @@ const GBGuarant = ({ route, navigation }) => {
       try {
         const guildId = await AsyncStorage.getItem('guildId');
         const userId = await AsyncStorage.getItem('userId');
+        if (!guildId || !userId) return;
 
-        if (guildId && userId) {
-          const buildingLevelRef = ref(database, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/level`);
-          const levelBaseRef = ref(database, `greatBuildings/${buildingId}/levelBase`);
-          const investmentRef = ref(database, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment`);
+        const lvlRef = ref(
+          database,
+          `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/level`
+        );
+        const baseRef = ref(database, `greatBuildings/${buildingId}/levelBase`);
+        const investRef = ref(
+          database,
+          `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment`
+        );
 
-          const [buildingLevelSnapshot, levelBaseSnapshot, investmentSnapshot] = await Promise.all([
-            get(buildingLevelRef),
-            get(levelBaseRef),
-            get(investmentRef),
-          ]);
+        const [lvlSnap, baseSnap, invSnap] = await Promise.all([
+          get(lvlRef),
+          get(baseRef),
+          get(investRef),
+        ]);
 
-          if (buildingLevelSnapshot.exists()) {
-            setBuildingLevel(buildingLevelSnapshot.val());
-          } else {
-            setBuildingLevel(t('gbScreen.levelNotFound') || 'Рівень не знайдено');
-          }
+        if (lvlSnap.exists()) setBuildingLevel(lvlSnap.val());
+        else setBuildingLevel(t('gbScreen.levelNotFound') || 'Рівень не знайдено');
 
-          if (levelBaseSnapshot.exists()) {
-            setLevelBase(levelBaseSnapshot.val());
-          } else {
-            setLevelBase(t('gbScreen.levelBaseNotFound') || 'levelBase не знайдено');
-          }
+        if (baseSnap.exists()) setLevelBase(baseSnap.val());
+        else setLevelBase(t('gbScreen.levelBaseNotFound') || 'levelBase не знайдено');
 
-          if (levelBaseSnapshot.exists() && buildingLevelSnapshot.exists()) {
-            const base = levelBaseSnapshot.val();
-            const level = buildingLevelSnapshot.val();
-            const buildAPIResult = `${base}${level + 1}`;
-            setBuildAPI(buildAPIResult);
-          }
-
-          const personalValue = investmentSnapshot.exists() && investmentSnapshot.val().personal
-            ? parseInt(investmentSnapshot.val().personal, 10)
-            : 0;
-          setStepValue(personalValue);
+        if (lvlSnap.exists() && baseSnap.exists()) {
+          const lvl = lvlSnap.val();
+          const base = baseSnap.val();
+          setBuildAPI(`${base}${lvl + 1}`);
         }
-      } catch (error) {
-        console.error(t('gbScreen.loadUserDataError'), error);
+
+        const personal = invSnap.exists() && invSnap.val().personal
+          ? parseInt(invSnap.val().personal, 10)
+          : 0;
+        setStepValue(personal);
+      } catch (err) {
+        console.error(t('gbScreen.loadUserDataError'), err);
       }
     };
-
     fetchBuildingData();
   }, [buildingId, t]);
 
-  useEffect(() => {
-    const fetchPatrons = async () => {
-      const guildId = await AsyncStorage.getItem('guildId');
-      const userId = await AsyncStorage.getItem('userId');
+  const fetchGuildMembers = async () => {
+    try {
+        const guildId = await AsyncStorage.getItem('guildId');
+        const currentUserId = await AsyncStorage.getItem('userId');
+        if (!guildId || !currentUserId) return;
 
-      if (guildId && userId) {
-        const investmentRef = ref(database, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment/patrons`);
-        try {
-          const snapshot = await get(investmentRef);
-          if (snapshot.exists()) {
-            const patrons = [];
-            snapshot.forEach((childSnapshot) => {
-              const patronData = childSnapshot.val();
-              if (patronData.patron !== 'friend' && patronData.patron !== 'stranger') {
-                patrons.push(patronData.patron);
-              }
+        // хто вже вніс вклад до цієї будівлі
+            const patronsSnap = await get(
+            ref(
+                database,
+                `guilds/${guildId}/guildUsers/${currentUserId}/greatBuild/${buildingId}/investment/patrons`
+            )
+        );
+        const investedIds = patronsSnap.exists()
+        ? Object.values(patronsSnap.val()).map(p => p.patron)
+        : [];
+        const usersSnap = await get(ref(database, `guilds/${guildId}/guildUsers`));
+        const members = [];
+        if (usersSnap.exists()) {
+            usersSnap.forEach(u => {
+                const id = u.key;
+                const { userName, imageUrl } = u.val();
+            // виключаємо самого себе та тих, хто вже вніс вклад
+                if (id === currentUserId || investedIds.includes(id)) return;
+                    members.push({ label: userName, value: id, imageUrl: imageUrl || null });
             });
-            console.log('Вкладники (крім friend та stranger):', patrons);
-          }
-        } catch (error) {
-          console.error('Помилка отримання вкладників:', error);
         }
-      }
-    };
-
-    if (modalVisible) {
-      fetchPatrons();
+        setGuildMembers(members);
+    } catch (err) {
+        console.error('Помилка завантаження співгільдійців:', err);
     }
-  }, [modalVisible, buildingId, t]);
+  };
 
-  const nextLevel = buildingLevel !== null && typeof buildingLevel === 'number' ? buildingLevel + 1 : null;
-
-  const screenWidth = Dimensions.get('window').width;
+  useEffect(() => {
+    if (modalVisible) {
+      // очистити попередній ввід
+      setSelectedValue(null);
+      setContributionAmount('');
+      fetchGuildMembers();
+    }
+  }, [modalVisible]);
 
   const handleSaveContributor = async () => {
     if (!selectedValue || !contributionAmount) {
       alert(t('gbGuarant.fillAllFields'));
       return;
     }
-    
     try {
       const guildId = await AsyncStorage.getItem('guildId');
       const userId = await AsyncStorage.getItem('userId');
+      if (!guildId || !userId) return;
+
       const patronId = uuidv4();
-
-      if (guildId && userId) {
-        const patronRef = ref(database, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment/patrons/${patronId}`);
-        const patronData = {
-          patron: selectedValue,
-          invest: contributionAmount,
-          timestamp: Date.now(),
-        };
-        await set(patronRef, patronData);
-        console.log('Дані вкладника успішно збережено:', patronData);
-        setModalVisible(false);
-      }
-    } catch (error) {
-      console.error('Помилка при збереженні вкладника:', error);
+      const patronRef = ref(
+        database,
+        `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment/patrons/${patronId}`
+      );
+      const data = {
+        patron: selectedValue,
+        invest: contributionAmount,
+        timestamp: Date.now(),
+      };
+      await set(patronRef, data);
+      console.log('Вкладник збережений:', data);
+      setPatronsKey(k => k + 1);
+      setModalVisible(false);
+    } catch (err) {
+      console.error('Помилка при збереженні вкладника:', err);
     }
   };
 
-  const handleValueChange = (newValue) => {
-    setStepValue(newValue);
-    updateInvestmentInFirebase(newValue);
-  };
-
-  const updateInvestmentInFirebase = async (newValue) => {
+  const updateInvestmentInFirebase = async newValue => {
     try {
       const guildId = await AsyncStorage.getItem('guildId');
       const userId = await AsyncStorage.getItem('userId');
-      
-      if (guildId && userId) {
-        const investmentRef = ref(database, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment`);
-        await set(investmentRef, { personal: newValue });
-        console.log('Значення успішно оновлено в Firebase:', newValue);
-      }
-    } catch (error) {
-      console.error('Помилка оновлення даних в Firebase: ', error);
+      if (!guildId || !userId) return;
+
+      await update(
+        ref(
+          database,
+          `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildingId}/investment`
+        ),
+        { personal: newValue }
+      );
+      console.log('Інвестиція оновлена:', newValue);
+    } catch (err) {
+      console.error('Помилка оновлення інвестиції:', err);
     }
   };
+
+  const handleValueChange = val => {
+    setStepValue(val);
+    updateInvestmentInFirebase(val);
+  };
+
+  const nextLevel =
+    typeof buildingLevel === 'number' ? buildingLevel + 1 : null;
+  const screenWidth = Dimensions.get('window').width;
 
   return (
     <View style={styles.container}>
       <View style={styles.imageLevelContainer}>
         <View style={styles.imageContainer}>
           {buildingImage && (
-            <Image
-              source={{ uri: buildingImage }}
-              style={styles.buildingImage}
-            />
+            <Image source={{ uri: buildingImage }} style={styles.buildingImage} />
           )}
         </View>
         <View style={styles.levelContainer}>
@@ -252,7 +263,9 @@ const GBGuarant = ({ route, navigation }) => {
           </View>
           <View style={styles.levelValue}>
             <Text style={styles.levelText}>
-              {buildingLevel !== null ? `${buildingLevel} → ${nextLevel}` : '...'}
+              {buildingLevel !== null
+                ? `${buildingLevel} → ${nextLevel}`
+                : '...'}
             </Text>
           </View>
         </View>
@@ -260,7 +273,9 @@ const GBGuarant = ({ route, navigation }) => {
 
       <View style={styles.additionalTextContainer}>
         <View style={styles.contributionContainer}>
-          <Text style={styles.contributionText}>{t('gbGuarant.myContribution')}</Text>
+          <Text style={styles.contributionText}>
+            {t('gbGuarant.myContribution')}
+          </Text>
         </View>
         <Stepper
           value={stepValue}
@@ -276,10 +291,14 @@ const GBGuarant = ({ route, navigation }) => {
           style={[styles.addButton, { width: screenWidth * 0.8 }]}
           onPress={() => setModalVisible(true)}
         >
-          <Text style={styles.addButtonText}>{t('gbGuarant.addContributorButton')}</Text>
+          <Text style={styles.addButtonText}>
+            {t('gbGuarant.addContributorButton')}
+          </Text>
         </TouchableOpacity>
       </View>
+
       <GBPatrons
+        key={patronsKey}
         buildId={buildingId}
         level={buildingLevel}
         buildAPI={buildAPI}
@@ -288,13 +307,16 @@ const GBGuarant = ({ route, navigation }) => {
 
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('gbGuarant.contributorModalTitle')}</Text>
+            <Text style={styles.modalTitle}>
+              {t('gbGuarant.contributorModalTitle')}
+            </Text>
+
             <Dropdown
               style={styles.dropdown}
               containerStyle={styles.dropdownContainer}
@@ -309,14 +331,12 @@ const GBGuarant = ({ route, navigation }) => {
               labelField="label"
               valueField="value"
               value={selectedValue}
-              onChange={item => {
-                setSelectedValue(item.value);
-              }}
+              onChange={item => setSelectedValue(item.value)}
               renderRightIcon={() => (
                 <FontAwesome name="chevron-down" size={14} color="#007AFF" />
               )}
               placeholder={t('gbGuarant.selectContributorPlaceholder')}
-              renderItem={item => (
+              renderItem={item =>
                 item.separator ? (
                   <View style={styles.separator}>
                     <Text>---</Text>
@@ -326,15 +346,18 @@ const GBGuarant = ({ route, navigation }) => {
                     {item.imageUrl && (
                       <Image
                         source={{ uri: item.imageUrl }}
-                        style={{ width: 30, height: 30, borderRadius: 15, marginRight: 10 }}
+                        style={styles.memberAvatar}
                       />
                     )}
                     <Text>{item.label}</Text>
                   </View>
                 )
-              )}
+              }
             />
-            <Text style={styles.modalTitle}>{t('gbGuarant.contributionAmountTitle')}</Text>
+
+            <Text style={styles.modalTitle}>
+              {t('gbGuarant.contributionAmountTitle')}
+            </Text>
             <TextInput
               style={styles.input}
               placeholder={t('gbGuarant.contributionAmountPlaceholder')}
@@ -342,12 +365,23 @@ const GBGuarant = ({ route, navigation }) => {
               onChangeText={setContributionAmount}
               keyboardType="numeric"
             />
+
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSaveContributor}>
-                <Text style={styles.saveButtonText}>{t('gbGuarant.saveButton')}</Text>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveContributor}
+              >
+                <Text style={styles.saveButtonText}>
+                  {t('gbGuarant.saveButton')}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>{t('gbGuarant.cancelButton')}</Text>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>
+                  {t('gbGuarant.cancelButton')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -539,6 +573,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 15,
   },
+  memberAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+  },
 });
 
 export default GBGuarant;
+

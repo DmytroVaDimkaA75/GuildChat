@@ -1,0 +1,46 @@
+name: Local Assistant
+version: 1.0.0
+schema: v1
+models:
+  - name: GPT-4 Turbo
+    provider: openai
+    model: gpt-4-turbo
+    apiKey: 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
+context:
+  - provider: code
+    files: "**/*.{js,jsx,ts,tsx,json,md}"
+  - provider: folder
+  - provider: codebase
+  - provider: terminal
+  - provider: problems
+  - provider: docs
+  - provider: diff
+context:
+  - provider: code
+  - provider: docs
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
+
+# 🔹 Додаткові налаштування
+files:
+  include:
+    - GuildChat/**
+    - README.md
+    - package.json
+    - babel.config.js
+    - metro.config.js
+    - config.js
+    - firebaseConfig.js
+    - i18n.js
+    - index.js
+  exclude:
+    - node_modules/
+    - .git/
+    - .vscode/
+    - .expo/
+    - .idea/
+    - **/__tests__/
+    - **/*.map
