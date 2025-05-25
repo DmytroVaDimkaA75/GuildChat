@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const GBPatronCalculator = ({
   placeCosts,
@@ -7,6 +7,8 @@ const GBPatronCalculator = ({
   distribution,
   onCalculationComplete
 }) => {
+  const previousResult = useRef(null); // Додаємо реф для збереження попереднього результату
+
   useEffect(() => {
     // Масиви з порожніми значеннями (null) для відповідності індексів
     const patronIds = Array.isArray(distribution)
@@ -43,16 +45,19 @@ const GBPatronCalculator = ({
       let sumGuarAbove = 0;
       for (let k = 0; k < idx; k++) {
         if (!patronIds[k]) {
-          sumGuarAbove += Guar[k] ?? 0;
+          // Додаємо саме placeCosts[k], а не Guar[k]
+          sumGuarAbove += placeCosts[k] ?? 0;
         }
       }
 
-      // 3. Визначаємо вклад/номінал для поточного місця
-      let currentValue = patronIds[idx] ? (invests[idx] ?? 0) : (placeCosts[idx] ?? 0);
-
-      // Додатковий лог для третього місця (індекс 2)
-      if (idx === 2) {
-        console.log('[DEBUG] idx=2 (чужинець): levelValue=', levelValue, 'ownerDeposit=', ownerDeposit, 'totalDeposits=', totalDeposits, 'sumGuarAbove=', sumGuarAbove, 'currentValue=', currentValue);
+      // 3. Визначаємо, що віднімати для поточного місця
+      let currentValue;
+      if (!patronIds[idx]) {
+        // Місце не зайняте — віднімаємо подвійну вартість місця
+        currentValue = 2 * (placeCosts[idx] ?? 0);
+      } else {
+        // Місце зайняте — віднімаємо вклад
+        currentValue = invests[idx] ?? 0;
       }
 
       // 4. Розрахунок гаранту
@@ -63,15 +68,12 @@ const GBPatronCalculator = ({
         - currentValue;
 
       // 5. Додаємо вклад чужинця нижче для будь-якого місця, якщо він є
-      let strangerInvestAdded = false;
       if (strangerBelowIdx !== null) {
         guar += invests[strangerBelowIdx] ?? 0;
-        strangerInvestAdded = true;
       }
 
       Guar.push(guar);
-      console.log(`місце ${idx + 1}: ${patronIds[idx] || '—'}, Guar = ${guar}`);
-      console.log(`idx=${idx}, patronId=${patronIds[idx]}, isStranger=${patronIds[idx]==='stranger'}, strangerBelowIdx=${strangerBelowIdx}, strangerInvest=${strangerBelowIdx!==null ? invests[strangerBelowIdx] : '—'}, strangerInvestAdded=${strangerInvestAdded}`);
+      // ...логування залишаємо за бажанням...
     }
 
     // Вивід масиву Guar після циклу
@@ -83,13 +85,19 @@ const GBPatronCalculator = ({
     console.log('ownerContribution:', ownerContribution);
     console.log('totalFP:', totalFP);
 
-    onCalculationComplete?.({
+    const result = {
       placeCosts,
       totalFP,
       ownerContribution,
       distribution,
-      Guar
-    });
+      Guar,
+    };
+
+    // Уникаємо зайвих викликів onCalculationComplete
+    if (JSON.stringify(result) !== JSON.stringify(previousResult.current)) {
+      previousResult.current = result;
+      onCalculationComplete?.(result);
+    }
   }, [placeCosts, totalFP, ownerContribution, distribution, onCalculationComplete]);
 
   return null;

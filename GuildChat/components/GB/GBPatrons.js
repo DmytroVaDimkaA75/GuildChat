@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Text, ScrollView, Dimensions } from 'react-native';
-import { get, ref } from 'firebase/database';
+import { View, StyleSheet, Text, ScrollView, Dimensions, TextInput, TouchableOpacity } from 'react-native';
+import { get, ref, set, update } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { useTranslation } from 'react-i18next';
@@ -294,7 +294,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
     );
     console.log('Full distribution (для таблиці):', fullDistribution);
     setDistribution(fullDistribution);
-  }, [placeCosts, totalFP, patronsList, ownerContribution]);
+  }, [placeCosts, totalFP, patronsList, ownerContribution, guarArray]); // Додаємо `guarArray` як залежність
 
   console.log('Поточна distribution:', distribution);
 
@@ -345,15 +345,60 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
     setGuarArray(prev => (JSON.stringify(prev) !== JSON.stringify(Guar) ? Guar : prev));
   }, []);
 
+  // Додаємо локальний стан для поточних вкладень
+  const [localInvests, setLocalInvests] = useState({});
+  const [calculationKey, setCalculationKey] = useState(0); // Ключ для перезапуску GBPatronCalculator
+
+  // Оновлюємо локальні інвестиції при зміні списку вкладників
+  useEffect(() => {
+    if (patronsList.length > 0) {
+      const obj = {};
+      patronsList.forEach(p => {
+        obj[p.recordId] = p.invest;
+      });
+      setLocalInvests(obj);
+    }
+  }, [patronsList]);
+
+  // Функція для оновлення інвестиції вкладника у Firebase
+  const updatePatronInvest = async (recordId, newValue) => {
+    try {
+      const guildId = await AsyncStorage.getItem('guildId');
+      const userId = await AsyncStorage.getItem('userId');
+      if (!guildId || !userId) return;
+      const patronRef = ref(
+        database,
+        `guilds/${guildId}/guildUsers/${userId}/greatBuild/${buildId}/investment/patrons/${recordId}`
+      );
+      await get(patronRef).then(snap => {
+        if (snap.exists()) {
+          const data = snap.val();
+          set(patronRef, { ...data, invest: newValue });
+        }
+      });
+    } catch (err) {
+      console.error('Помилка оновлення вкладу вкладника:', err);
+    }
+  };
+
+  const handleStepperChange = (recordId, newValue) => {
+    setLocalInvests(prev => ({
+      ...prev,
+      [recordId]: newValue,
+    }));
+    updatePatronInvest(recordId, newValue);
+    setCalculationKey(prevKey => prevKey + 1); // Перезапуск GBPatronCalculator
+  };
+
   return (
     <View style={styles.container}>
-      
-      <GBPatronCalculator 
+      <GBPatronCalculator
+        key={calculationKey} // Використовуємо ключ для перезапуску
         placeCosts={placeCosts}
         totalFP={totalFP}
         ownerContribution={ownerContribution}
         distribution={distribution}
-        onCalculationComplete={handleGuarantorResult}
+        onCalculationComplete={handleGuarantorResult} // Оновлюємо guarArray
       />
 
       <View style={styles.emptyBox}>
@@ -466,12 +511,27 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                 cellContent = t('gbPatrons.none');
                               }
                             } else if (colIndex === 1) {
-                              cellContent = distribution[rowIndex] ? String(distribution[rowIndex].invest) : '-';
+                              // Степпер для вкладника
+                              const row = distribution[rowIndex];
+                              if (row && row.recordId) {
+                                cellContent = (
+                                  <Stepper
+                                    value={localInvests[row.recordId] ?? row.invest}
+                                    onValueChange={val => handleStepperChange(row.recordId, val)}
+                                    buttonSize={20}
+                                    minValue={0}
+                                    maxValue={200000}
+                                  />
+                                );
+                              } else {
+                                cellContent = '-';
+                              }
                             } else if (colIndex === 2) {
                               const costVal = placeCosts[rowIndex];
                               cellContent = costVal !== undefined ? String(costVal) : '-';
                             } else if (colIndex === 3) {
-                              cellContent = rowIndex > 4 ? '-' : (guarArray[rowIndex] !== undefined ? String(guarArray[rowIndex]) : '-');
+                              // Відображення гаранту
+                              cellContent = guarArray[rowIndex] !== undefined ? String(guarArray[rowIndex]) : '-';
                             } else if (colIndex === 4) {
                               cellContent = rowIndex > 4 ? '-' : (() => {
                                 const DEFAULT_COEFFICIENT = 1.900;
@@ -480,7 +540,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                   : DEFAULT_COEFFICIENT;
                                 return coeff.toFixed(3);
                               })();
-                            }                             
+                            }
                             return (
                               <View
                                 key={`cell-${rowIndex}-${colIndex}`}
@@ -495,7 +555,9 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                   alignItems: 'center',
                                 }}
                               >
-                                <Text>{cellContent}</Text>
+                                {typeof cellContent === 'string' || typeof cellContent === 'number'
+                                  ? <Text>{cellContent}</Text>
+                                  : cellContent}
                               </View>
                             );
                           })}
@@ -509,6 +571,93 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
           </View>
         </View>
       </View>
+    </View>
+  );
+};
+
+// Локальний Stepper для цього файлу
+const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue = 200000 }) => {
+  const [inputValue, setInputValue] = useState(String(value));
+
+  const handleIncrement = () => {
+    const newValue = Math.min(Number(value) + 1, maxValue);
+    onValueChange(newValue);
+    setInputValue(String(newValue));
+  };
+
+  const handleDecrement = () => {
+    const newValue = Math.max(Number(value) - 1, minValue);
+    onValueChange(newValue);
+    setInputValue(String(newValue));
+  };
+
+  const handleInputChange = text => {
+    if (/^\d*$/.test(text)) {
+      setInputValue(text);
+    }
+  };
+
+  const handleEndEditing = () => {
+    let newValue = parseInt(inputValue, 10);
+    if (isNaN(newValue)) newValue = minValue;
+    else if (newValue > maxValue) newValue = maxValue;
+    else if (newValue < minValue) newValue = minValue;
+    onValueChange(newValue);
+    setInputValue(String(newValue));
+  };
+
+  useEffect(() => {
+    setInputValue(String(value));
+  }, [value]);
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#007AFF',
+      borderRadius: 4,
+      overflow: 'hidden',
+      paddingHorizontal: 0,
+    }}>
+      <TouchableOpacity
+        onPress={handleDecrement}
+        style={{
+          backgroundColor: '#007AFF',
+          width: buttonSize,
+          height: buttonSize,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ color: '#fff', fontSize: 12 }}>-</Text>
+      </TouchableOpacity>
+      <TextInput
+        style={{
+          fontSize: 12,
+          textAlign: 'center',
+          width: 40,
+          height: 24,
+          paddingVertical: 2,
+        }}
+        keyboardType="numeric"
+        value={inputValue}
+        onChangeText={handleInputChange}
+        onEndEditing={handleEndEditing}
+        maxLength={String(maxValue).length}
+      />
+      <TouchableOpacity
+        onPress={handleIncrement}
+        style={{
+          backgroundColor: '#007AFF',
+          width: buttonSize,
+          height: buttonSize,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ color: '#fff', fontSize: 12 }}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 };
