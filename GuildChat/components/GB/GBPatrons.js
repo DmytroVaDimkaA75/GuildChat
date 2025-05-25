@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Text, ScrollView, Dimensions, TextInput, TouchableOpacity } from 'react-native';
-import { get, ref, set, update } from 'firebase/database';
+import { View, StyleSheet, Text, ScrollView, Dimensions, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { get, ref, set, update, push } from 'firebase/database'; // <-- Додати push тут
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { useTranslation } from 'react-i18next';
@@ -46,7 +46,9 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
   const isSyncingHorizontal = useRef(false);
   const isSyncingVertical = useRef(false);
 
-  // 1) Функція для формування placeCosts та placeMultipliers
+  // Додаємо стан для шляхів до правил
+  const [placeRulePaths, setPlaceRulePaths] = useState([]);
+
   // 1) Функція для формування placeCosts та placeMultipliers
   const processGreatBuildingBranches = async (greatBuildingId, currentLevel) => {
     try {
@@ -61,6 +63,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
 
       const localMultipliers = [];
       const localCosts = [];
+      const localRulePaths = [];
 
       if (!snapshot.exists()) {
         // Якщо немає жодних чатів — просто фолбек для всіх слотів
@@ -68,6 +71,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
           const nominal = forgePointsList[place] || 1;
           localMultipliers.push(null);
           localCosts.push(Math.round(nominal));
+          localRulePaths.push(null);
         }
       } else {
         const allChats = Object.entries(snapshot.val());
@@ -81,6 +85,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
           if (!hasNominal) {
             localMultipliers.push(null);
             localCosts.push(nominal);
+            localRulePaths.push(null);
             continue;
           }
 
@@ -98,6 +103,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
             filteredChats.push({
               chatId,
               contributionMultiplier: rules.contributionMultiplier || 0,
+              rulePath: `guilds/${guildId}/GBChat/${chatId}/rules`
             });
           }
 
@@ -106,21 +112,25 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
             const computed = filteredChats.map(ch => ({
               multiplier: ch.contributionMultiplier,
               cost: Math.round(ch.contributionMultiplier * nominal),
+              rulePath: ch.rulePath
             }));
             const maxCost = Math.max(...computed.map(c => c.cost));
             const chosen = computed.find(c => c.cost === maxCost);
             localMultipliers.push(chosen.multiplier);
             localCosts.push(chosen.cost);
+            localRulePaths.push(chosen.rulePath);
           } else {
             // Якщо жодного чату немає — просто округлюємо nominal
             localMultipliers.push(null);
             localCosts.push(Math.round(nominal));
+            localRulePaths.push(null);
           }
         }
       }
 
       setPlaceMultipliers(localMultipliers.map(m => (m !== null ? parseFloat(m) : null)));
       setPlaceCosts(localCosts);
+      setPlaceRulePaths(localRulePaths);
       console.log('processGreatBuildingBranches -> localCosts:', localCosts);
 
     } catch (error) {
@@ -129,6 +139,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
       const fallback = forgePointsList.map(v => Math.round(v || 1));
       setPlaceCosts(fallback);
       setPlaceMultipliers(fallback.map(() => null));
+      setPlaceRulePaths(fallback.map(() => null));
     }
   };
 
@@ -340,14 +351,8 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
     [distribution]
   );
 
-  // === Виклик компонента розрахунку гарантій з перевіркою перед setState ===
-  const handleGuarantorResult = useCallback(({ Guar }) => {
-    setGuarArray(prev => (JSON.stringify(prev) !== JSON.stringify(Guar) ? Guar : prev));
-  }, []);
-
   // Додаємо локальний стан для поточних вкладень
   const [localInvests, setLocalInvests] = useState({});
-  const [calculationKey, setCalculationKey] = useState(0); // Ключ для перезапуску GBPatronCalculator
 
   // Оновлюємо локальні інвестиції при зміні списку вкладників
   useEffect(() => {
@@ -359,6 +364,85 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
       setLocalInvests(obj);
     }
   }, [patronsList]);
+
+  // Формуємо distribution з урахуванням локальних інвестицій
+  const distributionWithLocalInvests = useMemo(() => {
+    if (
+      !Array.isArray(placeCosts) ||
+      typeof placeCosts.length !== 'number' ||
+      placeCosts.length === 0 ||
+      !totalFP ||
+      !Array.isArray(patronsList)
+    ) {
+      return [];
+    }
+
+    const numPrizeSlots = Math.max(5, placeCosts.length);
+    const prizeDist = new Array(numPrizeSlots).fill(null);
+
+    // Підміняємо invest на локальний, якщо є
+    const patronsWithLocalInvests = patronsList.map(p => ({
+      ...p,
+      invest:
+        localInvests && Object.prototype.hasOwnProperty.call(localInvests, p.recordId)
+          ? Number(localInvests[p.recordId])
+          : Number(p.invest),
+    }));
+
+    const sumInv = patronsWithLocalInvests.reduce((acc, p) => acc + (Number(p.invest) || 0), 0);
+    const leftover = totalFP - (ownerContribution + sumInv);
+
+    const sorted = [...patronsWithLocalInvests].sort((a, b) => {
+      if (b.invest !== a.invest) return b.invest - a.invest;
+      return a.rawTimestamp - b.rawTimestamp;
+    });
+
+    let placeIndex = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const player = sorted[i];
+      if (placeIndex >= numPrizeSlots) break;
+      let placed = false;
+      while (!placed && placeIndex < numPrizeSlots) {
+        const costNeeded = placeCosts[placeIndex];
+        if ((Number(player.invest) || 0) >= costNeeded) {
+          prizeDist[placeIndex] = { ...player, finalPlace: placeIndex + 1 };
+          placeIndex++;
+          placed = true;
+        } else {
+          const nextP = sorted[i + 1];
+          let nextInvest = nextP ? Number(nextP.invest) : 0;
+          if ((nextInvest || 0) + leftover >= (Number(player.invest) || 0)) {
+            placeIndex++;
+          } else {
+            prizeDist[placeIndex] = { ...player, finalPlace: placeIndex + 1 };
+            placeIndex++;
+            placed = true;
+          }
+        }
+      }
+    }
+
+    const prizeRecordIds = new Set(prizeDist.filter(x => x !== null).map(x => x.recordId));
+    const nonDistributed = sorted.filter(p => !prizeRecordIds.has(p.recordId));
+    const fullDistribution = prizeDist.concat(
+      nonDistributed.map(p => ({ ...p, finalPlace: 'Не отримав' }))
+    );
+    return fullDistribution;
+  }, [
+    placeCosts,
+    totalFP,
+    patronsList,
+    ownerContribution,
+    localInvests,
+  ]);
+
+  // === Виклик компонента розрахунку гарантій з перевіркою перед setState ===
+  const handleGuarantorResult = useCallback(({ Guar }) => {
+    setGuarArray(prev => (JSON.stringify(prev) !== JSON.stringify(Guar) ? Guar : prev));
+  }, []);
+
+  // Додаємо локальний стан для поточних вкладень
+  const [calculationKey, setCalculationKey] = useState(0); // Ключ для перезапуску GBPatronCalculator
 
   // Функція для оновлення інвестиції вкладника у Firebase
   const updatePatronInvest = async (recordId, newValue) => {
@@ -387,22 +471,149 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
       [recordId]: newValue,
     }));
     updatePatronInvest(recordId, newValue);
-    setCalculationKey(prevKey => prevKey + 1); // Перезапуск GBPatronCalculator
   };
+
+  // Обробка натискання на "До прокачки"
+  const handleToLevelUpPress = async (rowIndex) => {
+    try {
+      const guildId = await AsyncStorage.getItem('guildId');
+      const userId = await AsyncStorage.getItem('userId');
+      const rulePath = placeRulePaths[rowIndex];
+      if (!guildId || !userId || !rulePath) {
+        Alert.alert(t('gbPatrons.toLevelUp'), t('gbPatrons.toLevelUpMsg'));
+        return;
+      }
+
+      // Витягуємо chatId з rulePath
+      const match = rulePath.match(/GBChat\/([^/]+)\/rules/);
+      if (!match) {
+        Alert.alert(t('gbPatrons.toLevelUp'), t('gbPatrons.toLevelUpMsg'));
+        return;
+      }
+      const chatId = match[1];
+
+      // Формуємо ключ місця
+      const placeKey = (rowIndex + 1).toString();
+
+      // Вартість для цього місця
+      const placeValue = placeCosts[rowIndex];
+
+      // Дані для places: значенням має бути саме вартість місця
+      const placesUpdate = {};
+      placesUpdate[placeKey] = placeValue;
+
+      // Вивід id вкладників у консоль
+      console.log('patronsList:', patronsList);
+      console.log('patronIds:', patronsList.map(p => p.patronId));
+
+      // Збираємо id співгільдійців, які вже зробили внесок (числові id, не stranger/friend)
+      const excludedUser = {};
+      patronsList.forEach(p => {
+        if (
+          p.patronId &&
+          p.patronId !== 'stranger' &&
+          p.patronId !== 'friend' &&
+          !isNaN(Number(p.patronId))
+        ) {
+          excludedUser[p.patronId] = true;
+        }
+      });
+
+      // Шлях до messages
+      const messagesRef = ref(database, `guilds/${guildId}/GBChat/${chatId}/messages`);
+
+      // 1. Отримуємо всі повідомлення
+      const snapshot = await get(messagesRef);
+      let updated = false;
+
+      if (snapshot.exists()) {
+        const messages = snapshot.val();
+        // 2. Шукаємо повідомлення для цієї споруди і цього користувача
+        const messageEntry = Object.entries(messages).find(
+          ([, msg]) =>
+            msg.build === buildId && msg.senderId === userId
+        );
+
+        if (messageEntry) {
+          // 3. Оновлюємо об'єкт places у знайденому повідомленні (тільки додаємо/оновлюємо ключ)
+          const [messageId, msg] = messageEntry;
+          const currentPlaces = typeof msg.places === 'object' && msg.places !== null ? msg.places : {};
+          const newPlaces = { ...currentPlaces, ...placesUpdate };
+          const messageToUpdateRef = ref(database, `guilds/${guildId}/GBChat/${chatId}/messages/${messageId}/places`);
+          await set(messageToUpdateRef, newPlaces);
+
+          // Оновлюємо excludedUser
+          if (Object.keys(excludedUser).length > 0) {
+            const excludedUserRef = ref(database, `guilds/${guildId}/GBChat/${chatId}/messages/${messageId}/excludedUser`);
+            await set(excludedUserRef, excludedUser);
+          }
+
+          console.log('Оновлено places та excludedUser у повідомленні:', {
+            path: `guilds/${guildId}/GBChat/${chatId}/messages/${messageId}`,
+            places: newPlaces,
+            excludedUser,
+          });
+
+          Alert.alert(
+            t('gbPatrons.toLevelUp'),
+            t('gbPatrons.toLevelUpMsg')
+          );
+          updated = true;
+        }
+      }
+
+      if (!updated) {
+        // 4. Якщо не знайдено — створюємо нове повідомлення
+        const places = {};
+        places[placeKey] = placeValue;
+        const messageData = {
+          build: buildId,
+          places,
+          senderId: userId,
+          timestamp: Date.now(),
+        };
+        // Додаємо excludedUser якщо є
+        if (Object.keys(excludedUser).length > 0) {
+          messageData.excludedUser = excludedUser;
+        }
+        await push(messagesRef, messageData);
+
+        console.log('Створено повідомлення для прокачки:', {
+          path: `guilds/${guildId}/GBChat/${chatId}/messages`,
+          data: messageData,
+        });
+
+        Alert.alert(
+          t('gbPatrons.toLevelUp'),
+          t('gbPatrons.toLevelUpMsg')
+        );
+      }
+    } catch (err) {
+      console.error('Помилка створення/оновлення повідомлення для прокачки:', err);
+      Alert.alert(t('gbPatrons.toLevelUp'), t('gbPatrons.toLevelUpMsg'));
+    }
+  };
+
+  useEffect(() => {
+    // Логування при активації компоненту
+    console.log('GBPatrons activated');
+    console.log('buildId:', buildId);
+    console.log('level:', level);
+    console.log('buildAPI:', buildAPI);
+    console.log('personalContribution:', personalContribution);
+    console.log('refresh:', refresh);
+  }, []); // Логування лише при монтуванні
 
   return (
     <View style={styles.container}>
       <GBPatronCalculator
-        key={calculationKey} // Використовуємо ключ для перезапуску
         placeCosts={placeCosts}
         totalFP={totalFP}
         ownerContribution={ownerContribution}
-        distribution={distribution}
-        onCalculationComplete={handleGuarantorResult} // Оновлюємо guarArray
+        distribution={distributionWithLocalInvests}
+        onCalculationComplete={handleGuarantorResult}
       />
-
       <View style={styles.emptyBox}>
-       
         <View style={styles.topRow}>
           <View style={styles.blockOne}>
             <Text>{t('gbPatrons.leftColumnTitle')}</Text>
@@ -486,84 +697,128 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                   scrollEventThrottle={48}
                 >
                   <View>
-                    {new Array(numRows).fill(0).map((_, rowIndex) => (
-                      <React.Fragment key={`frag-${rowIndex}`}>
-                        {rowIndex === 5 && (
+                    {new Array(numRows).fill(0).map((_, rowIndex) => {
+                      const isGuaranteed =
+                        guarArray[rowIndex] !== undefined &&
+                        guarArray[rowIndex] <= 0 &&
+                        distributionWithLocalInvests[rowIndex] &&
+                        distributionWithLocalInvests[rowIndex].patronId;
+                      const isFreeGuaranteed =
+                        guarArray[rowIndex] !== undefined &&
+                        guarArray[rowIndex] <= 0 &&
+                        (!distributionWithLocalInvests[rowIndex] ||
+                          !distributionWithLocalInvests[rowIndex].patronId);
+
+                      return (
+                        <React.Fragment key={`frag-${rowIndex}`}>
+                          {rowIndex === 5 && (
+                            <View
+                              style={{
+                                height: 3,
+                                backgroundColor: 'black',
+                                width: columnWidths.reduce((a, b) => a + b, 0),
+                                marginBottom: 2,
+                              }}
+                            />
+                          )}
                           <View
+                            key={`tableRow-${rowIndex}`}
                             style={{
-                              height: 3,
-                              backgroundColor: 'black',
-                              width: columnWidths.reduce((a, b) => a + b, 0),
-                              marginBottom: 2,
+                              flexDirection: 'row',
+                              backgroundColor: isGuaranteed ? '#DCF8C6' : undefined,
                             }}
-                          />
-                        )}
-                        <View key={`tableRow-${rowIndex}`} style={{ flexDirection: 'row' }}>
-                          {columnWidths.map((cw, colIndex) => {
-                            let cellContent = '';
-                            if (colIndex === 0) {
-                              if (distribution[rowIndex]) {
-                                cellContent =
-                                  distribution[rowIndex].patronId === 'stranger' || distribution[rowIndex].patronId === 'friend'
-                                    ? distribution[rowIndex].userName
-                                    : `${distribution[rowIndex].userName}`;
-                              } else {
-                                cellContent = t('gbPatrons.none');
+                          >
+                            {columnWidths.map((cw, colIndex) => {
+                              let cellContent = '';
+                              if (colIndex === 0) {
+                                if (distributionWithLocalInvests[rowIndex]) {
+                                  cellContent =
+                                    distributionWithLocalInvests[rowIndex].patronId === 'stranger' || distributionWithLocalInvests[rowIndex].patronId === 'friend'
+                                      ? distributionWithLocalInvests[rowIndex].userName
+                                      : `${distributionWithLocalInvests[rowIndex].userName}`;
+                                } else {
+                                  cellContent = t('gbPatrons.none');
+                                }
+                              } else if (colIndex === 1) {
+                                // Степпер для вкладника
+                                const row = distributionWithLocalInvests[rowIndex];
+                                if (row && row.recordId) {
+                                  cellContent = (
+                                    <Stepper
+                                      value={localInvests[row.recordId] ?? row.invest}
+                                      onValueChange={val => handleStepperChange(row.recordId, val)}
+                                      buttonSize={20}
+                                      minValue={0}
+                                      maxValue={200000}
+                                    />
+                                  );
+                                } else {
+                                  cellContent = '-';
+                                }
+                              } else if (colIndex === 2) {
+                                const costVal = placeCosts[rowIndex];
+                                cellContent = costVal !== undefined ? String(costVal) : '-';
+                              } else if (colIndex === 3) {
+                                // Якщо місце не зайняте і гарантовано, показати кнопку
+                                if (isFreeGuaranteed) {
+                                  cellContent = (
+                                    <TouchableOpacity
+                                      style={{
+                                        backgroundColor: '#007AFF',
+                                        borderRadius: 6,
+                                        paddingVertical: 4,
+                                        paddingHorizontal: 8,
+                                      }}
+                                      onPress={() => handleToLevelUpPress(rowIndex)}
+                                    >
+                                      <Text style={{ color: '#fff', fontSize: 13 }}>
+                                        {t('gbPatrons.toLevelUp')}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  );
+                                } else if (
+                                  guarArray[rowIndex] !== undefined &&
+                                  guarArray[rowIndex] <= 0 &&
+                                  distributionWithLocalInvests[rowIndex] &&
+                                  distributionWithLocalInvests[rowIndex].patronId
+                                ) {
+                                  cellContent = t('gbPatrons.guaranteed') || 'Гарантовано';
+                                } else {
+                                  cellContent = guarArray[rowIndex] !== undefined ? String(guarArray[rowIndex]) : '-';
+                                }
+                              } else if (colIndex === 4) {
+                                cellContent = rowIndex > 4 ? '-' : (() => {
+                                  const DEFAULT_COEFFICIENT = 1.900;
+                                  const coeff = placeMultipliers[rowIndex] != null
+                                    ? placeMultipliers[rowIndex]
+                                    : DEFAULT_COEFFICIENT;
+                                  return coeff.toFixed(3);
+                                })();
                               }
-                            } else if (colIndex === 1) {
-                              // Степпер для вкладника
-                              const row = distribution[rowIndex];
-                              if (row && row.recordId) {
-                                cellContent = (
-                                  <Stepper
-                                    value={localInvests[row.recordId] ?? row.invest}
-                                    onValueChange={val => handleStepperChange(row.recordId, val)}
-                                    buttonSize={20}
-                                    minValue={0}
-                                    maxValue={200000}
-                                  />
-                                );
-                              } else {
-                                cellContent = '-';
-                              }
-                            } else if (colIndex === 2) {
-                              const costVal = placeCosts[rowIndex];
-                              cellContent = costVal !== undefined ? String(costVal) : '-';
-                            } else if (colIndex === 3) {
-                              // Відображення гаранту
-                              cellContent = guarArray[rowIndex] !== undefined ? String(guarArray[rowIndex]) : '-';
-                            } else if (colIndex === 4) {
-                              cellContent = rowIndex > 4 ? '-' : (() => {
-                                const DEFAULT_COEFFICIENT = 1.900;
-                                const coeff = placeMultipliers[rowIndex] != null
-                                  ? placeMultipliers[rowIndex]
-                                  : DEFAULT_COEFFICIENT;
-                                return coeff.toFixed(3);
-                              })();
-                            }
-                            return (
-                              <View
-                                key={`cell-${rowIndex}-${colIndex}`}
-                                style={{
-                                  width: cw,
-                                  height: rowHeight,
-                                  borderLeftWidth: 1,
-                                  borderLeftColor: 'black',
-                                  borderTopWidth: 1,
-                                  borderTopColor: 'black',
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                }}
-                              >
-                                {typeof cellContent === 'string' || typeof cellContent === 'number'
-                                  ? <Text>{cellContent}</Text>
-                                  : cellContent}
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </React.Fragment>
-                    ))}
+                              return (
+                                <View
+                                  key={`cell-${rowIndex}-${colIndex}`}
+                                  style={{
+                                    width: cw,
+                                    height: rowHeight,
+                                    borderLeftWidth: 1,
+                                    borderLeftColor: 'black',
+                                    borderTopWidth: 1,
+                                    borderTopColor: 'black',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  {typeof cellContent === 'string' || typeof cellContent === 'number'
+                                    ? <Text>{cellContent}</Text>
+                                    : cellContent}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
                   </View>
                 </ScrollView>
               </View>
@@ -619,6 +874,8 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       borderRadius: 4,
       overflow: 'hidden',
       paddingHorizontal: 0,
+      height: buttonSize, // Висота рамки = висота кнопки
+      
     }}>
       <TouchableOpacity
         onPress={handleDecrement}
@@ -634,11 +891,14 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       </TouchableOpacity>
       <TextInput
         style={{
-          fontSize: 12,
+          fontSize: 14,
           textAlign: 'center',
           width: 40,
-          height: 24,
-          paddingVertical: 2,
+          height: buttonSize,
+          paddingVertical: 0,
+          paddingHorizontal: 0,
+          borderWidth: 0,
+          backgroundColor: 'white',
         }}
         keyboardType="numeric"
         value={inputValue}

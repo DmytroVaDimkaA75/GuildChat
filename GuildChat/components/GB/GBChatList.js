@@ -25,7 +25,9 @@ const GBChatList = () => {
     const fetchChats = async () => {
       try {
         const storedGuildId = await AsyncStorage.getItem('guildId');
+        const storedUserId = await AsyncStorage.getItem('userId');
         setGuildId(storedGuildId);
+        setUserId(storedUserId);
         if (storedGuildId) {
           const chatRef = ref(database, `guilds/${storedGuildId}/GBChat`);
           unsubscribe = onValue(chatRef, (snapshot) => {
@@ -36,6 +38,20 @@ const GBChatList = () => {
               Object.keys(chatData).forEach((chatID) => {
                 const chatRules = chatData[chatID].rules;
                 console.log(`Чат ${chatID} має дозволений рівень арки: ${chatRules.ArcLevel}`);
+                // Додаємо логування повідомлень
+                if (chatData[chatID].messages) {
+                  console.log(`Чат ${chatID} має повідомлення:`, Object.keys(chatData[chatID].messages));
+                  Object.entries(chatData[chatID].messages).forEach(([msgId, msg]) => {
+                    console.log(`  Повідомлення ${msgId}:`, msg);
+                    console.log(`    Правила гілки:`, chatRules);
+                    // Додаємо логування для власника
+                    if (msg.senderId === storedUserId) {
+                      console.log(`    Ви є власником цього повідомлення (userId: ${storedUserId})`);
+                    }
+                  });
+                } else {
+                  console.log(`Чат ${chatID} не має повідомлень`);
+                }
               });
 
               setRawChats(chatData);
@@ -43,6 +59,10 @@ const GBChatList = () => {
               setRawChats({});
             }
           });
+        }
+        // Додаємо логування userId
+        if (storedUserId) {
+          console.log('userId:', storedUserId);
         }
       } catch (error) {
         console.error(t("gbChatList.fetchError"), error);
@@ -121,7 +141,6 @@ useEffect(() => {
       const groups = {};
       Object.keys(rawChats).forEach((chatID) => {
         const chat = rawChats[chatID];
-        // Перевірка: якщо повідомлень немає, чат не враховується
         if (!chat.messages || Object.keys(chat.messages).length === 0) {
           return;
         }
@@ -129,25 +148,35 @@ useEffect(() => {
         const allowedArc = chatRules.ArcLevel;
         const multiplier = chatRules.contributionMultiplier;
         let eligible = false;
-        // Умова 1: якщо рівень арки користувача (або mayInvest) більше або дорівнює дозволеного рівня чату
+
+        // Головна логіка фільтрації:
         if (userArcLevel >= allowedArc || (userMayInvest !== null && userMayInvest >= allowedArc)) {
           eligible = Object.keys(chat.messages).some((messageId) => {
             const msg = chat.messages[messageId];
-            return !msg.excludedUser || msg.excludedUser[userId] === true;
+            // Якщо ви власник повідомлення — завжди показувати чат
+            if (msg.senderId === userId) return true;
+            // Якщо excludedUser відсутній — показувати чат
+            if (!msg.excludedUser) return true;
+            // Якщо userId відсутній у excludedUser — показувати чат
+            if (!(userId in msg.excludedUser)) return true;
+            // Якщо userId є у excludedUser і true — НЕ показувати чат
+            if (msg.excludedUser[userId] === true) return false;
+            // Якщо userId є у excludedUser і false — показувати чат
+            if (msg.excludedUser[userId] === false) return true;
+            // За замовчуванням не показувати
+            return false;
           });
         } else {
-          // Умова 2: якщо рівень арки менший, чат відображається лише, якщо повідомлення відправлене користувачем
           eligible = Object.keys(chat.messages).some((messageId) => {
             const msg = chat.messages[messageId];
             return msg.senderId === userId;
           });
         }
         if (eligible) {
-          // Групування чатів за contributionMultiplier з використанням перекладу для назви групи
           if (!groups[multiplier]) {
             groups[multiplier] = {
               id: `group_${multiplier}`,
-              name: t('gbChatList.chatGroup', { multiplier }), // наприклад: "Прокачка під 1.5"
+              name: t('gbChatList.chatGroup', { multiplier }),
               chatIds: [chatID],
             };
           } else {
@@ -155,9 +184,8 @@ useEffect(() => {
           }
         }
       });
-      
+
       let finalGroups = Object.values(groups);
-      // Якщо в гілці express є чат з майбутнім timestamp, додаємо "Експрес" як перший елемент
       if (expressAvailable) {
         finalGroups.unshift({
           id: 'express',

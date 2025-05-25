@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 
 const GBPatronCalculator = ({
   placeCosts,
@@ -7,8 +7,6 @@ const GBPatronCalculator = ({
   distribution,
   onCalculationComplete
 }) => {
-  const previousResult = useRef(null); // Додаємо реф для збереження попереднього результату
-
   useEffect(() => {
     // Масиви з порожніми значеннями (null) для відповідності індексів
     const patronIds = Array.isArray(distribution)
@@ -85,19 +83,13 @@ const GBPatronCalculator = ({
     console.log('ownerContribution:', ownerContribution);
     console.log('totalFP:', totalFP);
 
-    const result = {
+    onCalculationComplete?.({
       placeCosts,
       totalFP,
       ownerContribution,
       distribution,
-      Guar,
-    };
-
-    // Уникаємо зайвих викликів onCalculationComplete
-    if (JSON.stringify(result) !== JSON.stringify(previousResult.current)) {
-      previousResult.current = result;
-      onCalculationComplete?.(result);
-    }
+      Guar
+    });
   }, [placeCosts, totalFP, ownerContribution, distribution, onCalculationComplete]);
 
   return null;

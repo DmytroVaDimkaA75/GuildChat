@@ -156,7 +156,12 @@ const resources = {
         column4: "До гаранту",
         column5: "Коефіцієнт",
         none: "Немає",
-        leftColumnTitle: "Місце"
+        leftColumnTitle: "Місце",
+        guaranteed: "Гарантовано",
+        stranger: "Чужинець",
+        friend: "Друг",
+        toLevelUp: "До прокачки",
+        toLevelUpMsg: "Це місце вже гарантовано. Ви можете зайняти його для прокачки!"
       },
       gbChatList: {
         noChats: "Немає доступних чатів",
@@ -330,7 +335,12 @@ const resources = {
         column4: "До гарантии",
         column5: "Коэффициент",
         none: "Нет",
-        leftColumnTitle: "Место"
+        leftColumnTitle: "Место",
+        guaranteed: "Гарантировано",
+        stranger: "Чужой",
+        friend: "Друг",
+        toLevelUp: "К прокачке",
+        toLevelUpMsg: "Это место уже гарантировано. Вы можете занять его для прокачки!"
       },
       gbChatList: {
         noChats: "Нет доступных чатов",
@@ -487,36 +497,36 @@ const resources = {
       newGBChat: {
         contributionRatioLabel: "Коефіцієнт внеску (nodeRatio):",
         contributionRatioLabelWithCoefficient: "Коефіцієнт внеску (nodeRatio): (коефіцієнт {{coefficient}})",
-        allowedGBsLabel: "Дозволені в гілці ВС (allowedGBs):",
+        allowedGBsLabel: "Дозволеныя ў гілцы ВС (allowedGBs):",
         selectGBPlaceholder: "Оберіть ВС",
-        levelThresholdLabel: "Мінімальний рівень ВС (levelThreshold):",
-        guildMembersLabel: "Учасники гільдії:",
-        selectMembersPlaceholder: "Оберіть учасників",
-        placeLimitLabel: "Обмеження місць (placeLimit):",
-        createChatButton: "Створити новий чат",
-        selectAllOption: "Обрати все",
-        guildIdNotFound: "Guild ID не знайдено",
-        createChatError: "Помилка при створенні чату:",
-        fetchContributionError: "Помилка при отриманні даних з API:"
+        levelThresholdLabel: "Мінімальны ўзровень ВС (levelThreshold):",
+        guildMembersLabel: "Удзельнікі гільдыі:",
+        selectMembersPlaceholder: "Оберіть удзельнікаў",
+        placeLimitLabel: "Абмежаванне месцаў (placeLimit):",
+        createChatButton: "Стварыць новы чат",
+        selectAllOption: "Абраць усё",
+        guildIdNotFound: "Guild ID не знойдзены",
+        createChatError: "Памылка пры стварэнні чату:",
+        fetchContributionError: "Памылка пры атрыманні даных з API:"
       },
       gbGuarant: {
-        levelNotFound: "Рівень не знайдено",
-        levelBaseNotFound: "levelBase не знайдено",
-        levelLabel: "Рівень",
-        myContribution: "Мій вклад",
-        addContributorButton: "Додати вкладника",
-        contributorModalTitle: "Вкладник",
-        selectContributorPlaceholder: "Оберіть вкладника...",
-        contributionAmountTitle: "Розмір вкладу",
-        contributionAmountPlaceholder: "Розмір вкладу",
-        saveButton: "Зберегти",
-        cancelButton: "Скасувати",
-        fillAllFields: "Будь ласка, заповніть всі поля"
+        levelNotFound: "Роўня не знойдзена",
+        levelBaseNotFound: "levelBase не знойдзена",
+        levelLabel: "Роўня",
+        myContribution: "Мой уклад",
+        addContributorButton: "Дадаць укладчыка",
+        contributorModalTitle: "Укладчык",
+        selectContributorPlaceholder: "Оберіть укладчыка...",
+        contributionAmountTitle: "Памер ўкладу",
+        contributionAmountPlaceholder: "Памер ўкладу",
+        saveButton: "Захаваць",
+        cancelButton: "Скасаваць",
+        fillAllFields: "Калі ласка, запоўніце ўсе палі"
       },
       gbChatWindow: {
-        unknownBuild: "Невідома ВС",
+        unknownBuild: "Невядомая ВС",
         unknownUser: "Невядомы",
-        unknownLevel: "Невядомы рівень",
+        unknownLevel: "Невядомы ўзровень",
         noMessages: "Няма паведамленняў",
         userDataError: "Памылка пры атрыманні даных карыстальніка:",
         messagesError: "Памылка пры атрыманні паведамленняў:",
@@ -529,6 +539,20 @@ const resources = {
         placeSelectedMessage: "Вы абралі месца",
         placeUpdateError: "Памылка абнаўлення месца або excludedUser:",
         levelLabel: "Роў"
+      },
+      gbPatrons: {
+        column1: "Укладчык",
+        column2: "Укладзена",
+        column3: "Кошт",
+        column4: "Да гаранта",
+        column5: "Каэфіцыент",
+        none: "Няма",
+        leftColumnTitle: "Месца",
+        guaranteed: "Гарантавана",
+        stranger: "Чужынец",
+        friend: "Сябар",
+        toLevelUp: "Да пракачкі",
+        toLevelUpMsg: "Гэта месца ўжо гарантавана. Вы можаце заняць яго для пракачкі!"
       },
       gbChatList: {
         noChats: "Няма даступных чатаў",
@@ -726,7 +750,12 @@ const resources = {
         column4: "Bis zur Garantie",
         column5: "Faktor",
         none: "Keine",
-        leftColumnTitle: "Platz"
+        leftColumnTitle: "Platz",
+        guaranteed: "Garantiert",
+        stranger: "Fremder",
+        friend: "Freund",
+        toLevelUp: "Zum Leveln",
+        toLevelUpMsg: "Dieser Platz ist bereits garantiert. Sie können ihn zum Leveln belegen!"
       },
       gbNewExpress: {
         selectBuilding: "GB für Express",

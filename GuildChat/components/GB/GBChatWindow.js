@@ -6,6 +6,7 @@ import { database } from '../../firebaseConfig';
 import { format } from 'date-fns';
 import { uk, ru, de, be } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
+import { v4 as uuidv4 } from 'uuid';
 
 const GBChatWindow = ({ route }) => {
   const { t, i18n } = useTranslation();
@@ -83,6 +84,7 @@ const GBChatWindow = ({ route }) => {
                 buildingName,
                 buildingLevel,
                 buildingImage,
+                branchId: branchId, // Додаємо branchId до повідомлення
               };
 
               if (message.excludedUser && message.excludedUser[storedUserId] === false) {
@@ -102,9 +104,14 @@ const GBChatWindow = ({ route }) => {
         setMessages(combined);
       };
 
+      // Вивід шляхів до всіх гілок повідомлень
       if (chatIds && Array.isArray(chatIds) && chatIds.length > 0) {
         chatIds.forEach((branchId) => {
-          const messagesRef = ref(database, `guilds/${storedGuildId}/GBChat/${branchId}/messages`);
+          const path = `guilds/${storedGuildId}/GBChat/${branchId}/messages`;
+          console.log('Before logging path');
+          console.log('Messages branch path:', path);
+          console.log('After logging path');
+          const messagesRef = ref(database, path);
           const unsubscribe = onValue(
             messagesRef,
             (snapshot) => {
@@ -117,7 +124,9 @@ const GBChatWindow = ({ route }) => {
           unsubscribes.push(unsubscribe);
         });
       } else {
-        const messagesRef = ref(database, `guilds/${storedGuildId}/GBChat/${chatId}/messages`);
+        const path = `guilds/${storedGuildId}/GBChat/${chatId}/messages`;
+        console.log('Messages branch path:', path);
+        const messagesRef = ref(database, path);
         const unsubscribe = onValue(
           messagesRef,
           async (snapshot) => {
@@ -157,6 +166,7 @@ const GBChatWindow = ({ route }) => {
                     buildingName,
                     buildingLevel,
                     buildingImage,
+                    branchId: chatId, // Додаємо branchId для одиночного чату
                   };
 
                   if (message.excludedUser && message.excludedUser[storedUserId] === false) {
@@ -287,20 +297,65 @@ const GBChatWindow = ({ route }) => {
   };
   
 
-  const handlePlacePress = async (messageId, placeKey) => {
+  const handlePlacePress = async (branchId, messageId, placeKey) => {
     if (!guildId || !userId) return;
     try {
-      const placeRef = ref(database, `guilds/${guildId}/GBChat/${chatId}/messages/${messageId}/places/${placeKey}`);
-      await set(placeRef, false);
-      const excludedUserRef = ref(database, `guilds/${guildId}/GBChat/${chatId}/messages/${messageId}/excludedUser/${userId}`);
+      const messagePath = `guilds/${guildId}/GBChat/${branchId}/messages/${messageId}`;
+      console.log('Message path:', messagePath);
+
+      // Отримуємо дані повідомлення
+      const messageRef = ref(database, messagePath);
+      let messageSnapshot;
+      let messageData;
+      try {
+        messageSnapshot = await new Promise((resolve, reject) => {
+          onValue(messageRef, resolve, reject, { onlyOnce: true });
+        });
+        messageData = messageSnapshot.val();
+      } catch (err) {
+        console.error('Не вдалося отримати дані повідомлення:', err);
+        return;
+      }
+      if (!messageData || !messageData.places || !messageData.places[placeKey]) {
+        Alert.alert(t('gbChatWindow.placeUpdateError'), t('gbChatWindow.noPlaceValue'));
+        return;
+      }
+
+      // Отримуємо розмір вкладу, senderId, buildId
+      const investValue = messageData.places[placeKey];
+      const ownerId = messageData.senderId;
+      const buildId = messageData.build;
+
+      // Видаляємо запис про місце
+      const placeRef = ref(database, `${messagePath}/places/${placeKey}`);
+      await set(placeRef, null);
+
+      // Оновлюємо excludedUser як і раніше
+      const excludedUserRef = ref(database, `${messagePath}/excludedUser/${userId}`);
       await set(excludedUserRef, false);
+
+      // Додаємо запис про вклад у patrons власника ВС через uuid
+      if (ownerId && buildId && investValue) {
+        const patronsPath = `guilds/${guildId}/guildUsers/${ownerId}/greatBuild/${buildId}/investment/patrons`;
+        const patronId = uuidv4();
+        // !!! Ось тут причина помилки: ref(ref, key) не працює у web SDK v9+ !!!
+        // Потрібно формувати шлях як рядок:
+        const newPatronRef = ref(database, `${patronsPath}/${patronId}`);
+        await set(newPatronRef, {
+          invest: investValue,
+          patron: userId,
+          timestamp: Date.now(),
+        });
+        console.log('Створено запис у patrons:', patronId);
+      }
+
       Alert.alert(t('gbChatWindow.placeSelectedTitle'), `${t('gbChatWindow.placeSelectedMessage')} ${placeKey}`);
     } catch (error) {
       console.error(t('gbChatWindow.placeUpdateError'), error);
     }
   };
 
-  const renderPlacesButtons = (places, messageId, isOwnMessage) => {
+  const renderPlacesButtons = (places, branchId, messageId, isOwnMessage) => {
     if (!places) return null;
     return (
       <View style={styles.placesRow}>
@@ -312,7 +367,7 @@ const GBChatWindow = ({ route }) => {
                 style={styles.telegramButton}
                 onPress={() => {
                   if (!isOwnMessage) {
-                    handlePlacePress(messageId, key);
+                    handlePlacePress(branchId, messageId, key);
                   }
                 }}
               >
@@ -352,7 +407,7 @@ const GBChatWindow = ({ route }) => {
           )}
         </View>
         <View style={styles.placesContainer}>
-          {renderPlacesButtons(item.places, item.id, item.isOwnMessage)}
+          {renderPlacesButtons(item.places, item.branchId, item.id, item.isOwnMessage)}
         </View>
       </View>
     </View>
