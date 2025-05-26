@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faClock, faGlobe } from '@fortawesome/free-solid-svg-icons';
 import GBIcon from '../ico/GB.svg';
+import BoatIcon from '../ico/boat.svg';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 
 const ProfileMain = () => {
@@ -189,7 +190,7 @@ const ProfileMain = () => {
           <Text style={styles.mainText}>Налаштування ВС</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.itemRow} onPress={toggleCultureSettings}>
-          <GBIcon width={20} height={20} style={styles.iconSpacing} />
+          <BoatIcon width={20} height={20} style={styles.iconSpacing} />
           <Text style={styles.mainText}>Налаштування культурних поселень</Text>
           <Ionicons
             name={isCultureSettingsOpen ? 'chevron-up' : 'chevron-down'}

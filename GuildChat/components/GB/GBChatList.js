@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { ref, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import FloatingActionButton from '../CustomElements/FloatingActionButton';
 import { useNavigation } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
 import { useTranslation } from 'react-i18next';
@@ -198,9 +197,9 @@ useEffect(() => {
   }, [rawChats, userArcLevel, userMayInvest, userId, t, expressAvailable]);
 
   // Обробка натискання на FloatingActionButton
-  const handleFabPress = () => {
-    navigation.navigate('NewGBChat');
-  };
+  // const handleFabPress = () => {
+  //   navigation.navigate('NewGBChat');
+  // };
 
   // Обробка вибору конкретного чату/групи
   const handleChatSelect = (chat) => {
@@ -230,10 +229,9 @@ useEffect(() => {
         ListEmptyComponent={<Text style={styles.emptyMessage}>{t('gbChatList.noChats')}</Text>}
         contentContainerStyle={{ flexGrow: 1 }}
       />
-      <FloatingActionButton onPress={handleFabPress} iconName="pencil" />
+      {/* <FloatingActionButton onPress={handleFabPress} iconName="pencil" /> */}
     </View>
   );
-  
 };
 
 const styles = StyleSheet.create({

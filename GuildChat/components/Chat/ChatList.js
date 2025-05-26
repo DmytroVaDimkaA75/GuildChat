@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
-import FloatingActionButton from '../CustomElements/FloatingActionButton';
 import { useNavigation } from '@react-navigation/native';
 import { ref, onValue } from 'firebase/database';
 import { database } from '../../firebaseConfig'; // Імпорт Firebase конфігурації
@@ -24,10 +23,6 @@ const ChatList = ({ chats, guildId, userId }) => {
 
     fetchUsers();
   }, [guildId]);
-
-  const handleFabPress = () => {
-    navigation.navigate('GuildMembersList'); // Назва екрану в навігації
-  };
 
   const handleChatSelect = (chat) => {
     navigation.navigate('ChatWindow', { chatId: chat.id });
@@ -81,10 +76,6 @@ const ChatList = ({ chats, guildId, userId }) => {
         keyExtractor={(item) => item.id}
         ListEmptyComponent={<Text style={styles.emptyMessage}>Немає доступних чатів</Text>}
       />
-      <FloatingActionButton 
-        onPress={handleFabPress}
-        iconName="pencil"
-      />
     </View>
   );
 };
@@ -136,28 +127,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#888',
     fontSize: 16,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#517da2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-  },
-  fabIcon: {
-    width: 24,
-    height: 24,
-    tintColor: 'white',
-  },
-  icon: {
-    flex: 1,
-    marginTop: 15,
-    alignItems: 'center',
   },
 });
 

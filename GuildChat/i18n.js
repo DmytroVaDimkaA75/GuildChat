@@ -71,7 +71,8 @@ const resources = {
         azbookLabel: "Абетка",
         serviseLabel: "Сервіси",
         profileLabel: "Профіль",
-        adminLabel: "Адміністративна панель"
+        adminLabel: "Адміністративна панель",
+        culture: "Культурні поселення"
       },
       gbScreen: {
         userIdError: "Не вдалося отримати userId",
@@ -197,6 +198,9 @@ const resources = {
         // Усі мови використовують однакові короткі назви
         days: ["нд", "пн", "вт", "ср", "чт", "пт", "сб"],
         months: ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"]
+      },
+      adminStack: {
+        adminScreenTitle: "Налаштування гільдії"
       }
     }
   },
@@ -269,7 +273,8 @@ const resources = {
         azbookLabel: "Азбука",
         serviseLabel: "Сервисы",
         profileLabel: "Профиль",
-        adminLabel: "Административная панель"
+        adminLabel: "Административная панель",
+        culture: "Культурные поселения"
       },
       gbScreen: {
         userIdError: "Не удалось получить userId",
@@ -392,6 +397,9 @@ const resources = {
       datesShort: {
         days: ["нд", "пн", "вт", "ср", "чт", "пт", "сб"],
         months: ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+      },
+      adminStack: {
+        adminScreenTitle: "Настройки гильдии"
       }
     }
   },
@@ -464,7 +472,8 @@ const resources = {
         azbookLabel: "Азбука",
         serviseLabel: "Сэрвісы",
         profileLabel: "Профіль",
-        adminLabel: "Адміністрацыйная панэль"
+        adminLabel: "Адміністрацыйная панэль",
+        culture: "Культурныя паселішчы"
       },
       gbScreen: {
         userIdError: "Не атрымалася атрымаць userId",
@@ -587,6 +596,9 @@ const resources = {
       datesShort: {
         days: ["нд", "пн", "ўт", "ср", "чц", "пт", "сб"],
         months: ["студ", "лют", "сака", "крас", "май", "чэр", "ліп", "жнів", "вера", "кас", "ліст", "сне"]
+      },
+      adminStack: {
+        adminScreenTitle: "Налады гільдыі"
       }
     }
   },
@@ -626,7 +638,7 @@ const resources = {
         chatScreenTitle: "Aultanka",
         guildMembersListTitle: "Neue Nachricht",
         newGroupChatTitle: "Gruppe erstellen",
-        chatWindowTitle: "Chat"
+        chatWindowTitle: "Чат"
       },
       gbStack: {
         gbScreenTitle: "Aufwertung Großartiger Bauwerke",
@@ -659,7 +671,8 @@ const resources = {
         azbookLabel: "Alphabet",
         serviseLabel: "Dienste",
         profileLabel: "Profil",
-        adminLabel: "Administratives Panel"
+        adminLabel: "Administratives Panel",
+        culture: "Kulturelle Siedlungen"
       },
       gbScreen: {
         userIdError: "UserId konnte nicht abgerufen werden",
@@ -743,20 +756,6 @@ const resources = {
         arcFetchError: "Fehler beim Abrufen des Arkadenlevels:",
         express: "Express",
       },
-      gbPatrons: {
-        column1: "Spender",
-        column2: "Eingezahlt",
-        column3: "Kosten",
-        column4: "Bis zur Garantie",
-        column5: "Faktor",
-        none: "Keine",
-        leftColumnTitle: "Platz",
-        guaranteed: "Garantiert",
-        stranger: "Fremder",
-        friend: "Freund",
-        toLevelUp: "Zum Leveln",
-        toLevelUpMsg: "Dieser Platz ist bereits garantiert. Sie können ihn zum Leveln belegen!"
-      },
       gbNewExpress: {
         selectBuilding: "GB für Express",
         selectBuildingPlaceholder: "Wählen Sie ein GB",
@@ -782,6 +781,9 @@ const resources = {
       datesShort: {
         days: ["nd", "mo", "di", "mi", "do", "fr", "sa"],
         months: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+      },
+      adminStack: {
+        adminScreenTitle: "Gildeneinstellungen"
       }
     }
   },

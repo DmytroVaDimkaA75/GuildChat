@@ -330,9 +330,9 @@ const GBChatWindow = ({ route }) => {
       const placeRef = ref(database, `${messagePath}/places/${placeKey}`);
       await set(placeRef, null);
 
-      // Оновлюємо excludedUser як і раніше
+      // Оновлюємо excludedUser: встановлюємо true (користувач більше не може брати участь у цьому місці)
       const excludedUserRef = ref(database, `${messagePath}/excludedUser/${userId}`);
-      await set(excludedUserRef, false);
+      await set(excludedUserRef, true);
 
       // Додаємо запис про вклад у patrons власника ВС через uuid
       if (ownerId && buildId && investValue) {
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
   },
   ownMessage: {
     marginLeft: 20,
-    backgroundColor: '#d1e7dd',
+    backgroundColor: '#DCF8C6',
     alignSelf: 'flex-end',
   },
   otherMessage: {
