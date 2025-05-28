@@ -14,7 +14,7 @@ import { ref, get, update } from 'firebase/database';
 import { database } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import WheelPickerExpo from 'react-native-wheel-picker-expo';
+//import WheelPickerExpo from 'react-native-wheel-picker-expo';
 
 const MONTHS = [
   'Січень', 'Лютий', 'Березень', 'Квітень',

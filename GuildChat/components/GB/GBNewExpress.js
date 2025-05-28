@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dropdown } from 'react-native-element-dropdown';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
-import WheelPickerExpo from 'react-native-wheel-picker-expo';
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import { ref, get, push, set } from 'firebase/database';
 import { database } from '../../firebaseConfig';
 import { useTranslation } from 'react-i18next';
@@ -521,36 +521,27 @@ const GBNewExpress = ({ route, navigation }) => {
                     <Text style={styles.modalTitle}>{t('gbNewExpress.modalTitle')}</Text>
                     <View style={styles.wheelWrapper}>
                       <View style={styles.wheelContainer}>
-                        <WheelPickerExpo
-                          height={180}
-                          width={140}
-                          initialSelectedIndex={tempDayIndex}
-                          items={dayOptions.map((item, idx) => ({
-                            label: item.label,
-                            value: idx
-                          }))}
-                          onChange={({ item }) => setTempDayIndex(item.value)}
-                        />
-                        <WheelPickerExpo
-                          height={180}
-                          width={60}
-                          initialSelectedIndex={tempHourIndex}
-                          items={Array.from({ length: 24 }, (_, i) => ({
-                            label: String(i).padStart(2, '0'),
-                            value: i
-                          }))}
-                          onChange={({ item }) => setTempHourIndex(item.value)}
-                        />
-                        <WheelPickerExpo
-                          height={180}
-                          width={60}
-                          initialSelectedIndex={tempMinuteIndex}
-                          items={Array.from({ length: 60 }, (_, i) => ({
-                            label: String(i).padStart(2, '0'),
-                            value: i
-                          }))}
-                          onChange={({ item }) => setTempMinuteIndex(item.value)}
-                        />
+                        <View style={{ width: 140, height: 180, overflow: 'hidden' }}>
+                          <SimpleWheelPicker
+                            data={dayOptions.map((item) => item.label)}
+                            selectedIndex={tempDayIndex}
+                            onValueChange={(_, idx) => setTempDayIndex(idx)}
+                          />
+                        </View>
+                        <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                          <SimpleWheelPicker
+                            data={Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))}
+                            selectedIndex={tempHourIndex}
+                            onValueChange={(_, idx) => setTempHourIndex(idx)}
+                          />
+                        </View>
+                        <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                          <SimpleWheelPicker
+                            data={Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))}
+                            selectedIndex={tempMinuteIndex}
+                            onValueChange={(_, idx) => setTempMinuteIndex(idx)}
+                          />
+                        </View>
                       </View>
                       <View style={styles.selectionOverlay} pointerEvents="none" />
                     </View>
