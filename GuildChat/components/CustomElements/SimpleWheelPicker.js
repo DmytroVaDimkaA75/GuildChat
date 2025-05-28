@@ -1,64 +1,86 @@
-
-import React, { useRef, useEffect } from 'react';
-import { FlatList, Text, View, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { ScrollView, Text, View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 
 const ITEM_HEIGHT = 36;
 const VISIBLE_ITEMS = 5;
 
-const SimpleWheelPicker = ({ data, selectedIndex, onValueChange }) => {
-  const flatListRef = useRef(null);
+const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
+  const scrollViewRef = useRef(null);
+  const [currentIndex, setCurrentIndex] = useState(selectedIndex);
 
-  // Скролити до вибраного індексу при зміні selectedIndex
+  // Scroll to selected index when component mounts or selectedIndex changes externally
   useEffect(() => {
-    if (flatListRef.current && selectedIndex != null) {
-      flatListRef.current.scrollToOffset({
-        offset: Math.max(0, ITEM_HEIGHT * selectedIndex),
-        animated: false,
-      });
+    if (scrollViewRef.current && selectedIndex != null) {
+      scrollToIndex(selectedIndex, false);
+      setCurrentIndex(selectedIndex);
     }
   }, [selectedIndex]);
 
-  const onScrollEnd = (e) => {
+  // Helper function to scroll to a specific index
+  const scrollToIndex = (index, animated = true) => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y: Math.max(0, ITEM_HEIGHT * index),
+        animated,
+      });
+    }
+  };
+
+  // Handle scroll end event
+  const handleScrollEnd = (e) => {
     const offsetY = e.nativeEvent.contentOffset.y;
     let index = Math.round(offsetY / ITEM_HEIGHT);
-    if (index < 0) index = 0;
-    if (index > data.length - 1) index = data.length - 1;
-    if (index !== selectedIndex) {
-      onValueChange(data[index], index);
+    
+    // Ensure index is within valid range
+    index = Math.max(0, Math.min(index, data.length - 1));
+    
+    // Update if the index changed
+    if (index !== currentIndex) {
+      setCurrentIndex(index);
+      onValueChange && onValueChange(data[index], index);
+      
+      // Ensure proper snap alignment (important for touch interactions)
+      scrollToIndex(index);
     }
+  };
+
+  // Handle direct item selection
+  const handleItemPress = (index) => {
+    setCurrentIndex(index);
+    onValueChange && onValueChange(data[index], index);
+    scrollToIndex(index);
   };
 
   return (
     <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={data}
-        keyExtractor={(item, index) => index.toString()}
+      <ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
         decelerationRate="fast"
-        getItemLayout={(_, index) => ({
-          length: ITEM_HEIGHT,
-          offset: ITEM_HEIGHT * index,
-          index,
-        })}
-        initialScrollIndex={selectedIndex}
-        onMomentumScrollEnd={onScrollEnd}
-        onScrollEndDrag={onScrollEnd}
-        renderItem={({ item, index }) => (
-          <View style={styles.item}>
-            <Text style={[
-              styles.itemText,
-              index === selectedIndex && styles.selectedText
-            ]}>
-              {item}
-            </Text>
-          </View>
-        )}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           paddingVertical: (ITEM_HEIGHT * (VISIBLE_ITEMS - 1)) / 2,
         }}
-      />
+      >
+        {data.map((item, index) => (
+          <TouchableWithoutFeedback 
+            key={index} 
+            onPress={() => handleItemPress(index)}
+          >
+            <View style={styles.item}>
+              <Text style={[
+                styles.itemText,
+                index === currentIndex && styles.selectedText
+              ]}>
+                {item}
+              </Text>
+            </View>
+          </TouchableWithoutFeedback>
+        ))}
+      </ScrollView>
       <View style={styles.highlight} pointerEvents="none" />
     </View>
   );
@@ -75,6 +97,7 @@ const styles = StyleSheet.create({
     height: ITEM_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%', // Ensure items span the full width for better touch targets
   },
   itemText: {
     fontSize: 20,
