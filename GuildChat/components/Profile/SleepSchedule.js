@@ -1,8 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { View, Dimensions, StyleSheet, PanResponder } from 'react-native';
+import { View, Dimensions, StyleSheet, PanResponder, TouchableOpacity, Text } from 'react-native';
 import Svg, { Circle, Path, G, Line, Text as SvgText } from 'react-native-svg';
 import BedIcon from '../ico/bed.svg';           // Іконка ліжка
 import AlarmClockIcon from '../ico/alarm-clock.svg'; // Іконка будильника
+import { ref, set } from "firebase/database";
+import { database } from "../../firebaseConfig";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { v4 as uuidv4 } from 'uuid';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 const TOTAL_MINUTES = 24 * 60;
 
@@ -19,8 +24,25 @@ const formatTimeFromAngle = (angle) => {
   return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
 };
 
+/** Перетворює кут у UTC ISO string (тільки час, дата довільна) */
+const angleToUtcTime = (angle) => {
+  let adjusted = angle + Math.PI / 2;
+  if (adjusted < 0) adjusted += 2 * Math.PI;
+  const fraction = adjusted / (2 * Math.PI);
+  const totalMins = Math.round(fraction * TOTAL_MINUTES);
+  const hh = Math.floor(totalMins / 60);
+  const mm = totalMins % 60;
+  // Створюємо дату з цим часом в UTC (дата довільна, наприклад 1970-01-01)
+  const date = new Date(Date.UTC(1970, 0, 1, hh, mm, 0));
+  return date.toISOString(); // повертає у форматі '1970-01-01THH:MM:00.000Z'
+};
+
+const daysOfWeek = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
 const SleepSchedule = () => {
   const { width } = Dimensions.get('window');
+  const navigation = useNavigation();
+  const route = useRoute();
 
   // Основні розміри
   const redDiameter = width;
@@ -195,6 +217,43 @@ const SleepSchedule = () => {
     return marks;
   };
 
+  // Стан для вибраних днів тижня
+  const [selectedDays, setSelectedDays] = useState([1,2,3,4,5]); // за замовчуванням робочі дні
+
+  const toggleDay = (idx) => {
+    setSelectedDays((prev) =>
+      prev.includes(idx)
+        ? prev.filter((d) => d !== idx)
+        : [...prev, idx]
+    );
+  };
+
+  // Збереження часу в Firestore
+  const handleSave = async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      if (!userId) return;
+      const uuid = uuidv4();
+      // Ось тут створюється тека (гілка) для розкладу:
+      // users/{userId}/setting/{uuid}
+      const dbRef = ref(database, `users/${userId}/setting/shedule/${uuid}`);
+      await set(dbRef, {
+        timeStart: angleToUtcTime(greenStartAngle),
+        timeEnd: angleToUtcTime(greenEndAngle),
+        // days: selectedDays, // поки не зберігаємо
+      });
+      // Можна додати повідомлення про успіх
+    } catch (e) {
+      // Можна додати повідомлення про помилку
+      console.error(e);
+    }
+  };
+
+  // Передаємо handleSave у route.params для доступу з хедера
+  React.useEffect(() => {
+    navigation.setParams?.({ handleSave });
+  }, [greenStartAngle, greenEndAngle]);
+
   return (
     <View style={styles.container}>
       <Svg width={redDiameter} height={redDiameter}>
@@ -214,38 +273,31 @@ const SleepSchedule = () => {
         {renderMajorMarks()}
 
         {/* 
-          1) Іконка ліжка + час (greenStartAngle)
+          1) Іконка будильника + час (greenStartAngle) -- початок активності
         */}
         <G transform={`translate(${cx-50}, ${cy - 30})`}>
-          
-          
           <G>
-            <BedIcon width={24} height={24} fill="#BDBDBD" />
+            <AlarmClockIcon width={24} height={24} fill="#BDBDBD" />
           </G>
-          
-            <SvgText
+          <SvgText
             x={30}
             y={23}
             fill="#000"
             fontSize="32"
             fontWeight="bold"
             textAnchor="start"
-            
           >
             {formatTimeFromAngle(greenStartAngle)}
           </SvgText>
-          
-          
         </G>
 
         {/* 
-          2) Іконка будильника + час (greenEndAngle)
+          2) Іконка ліжка + час (greenEndAngle) -- кінець активності
         */}
         <G transform={`translate(${cx - 50}, ${cy+5})`}>
           <G>
-            <AlarmClockIcon width={24} height={24} fill="#BDBDBD" />
+            <BedIcon width={24} height={24} fill="#BDBDBD" />
           </G>
-          
           <SvgText
             x={30}
             y={23}
@@ -258,11 +310,11 @@ const SleepSchedule = () => {
           </SvgText>
         </G>
 
-        {/* Група "start" (ручка з BedIcon) */}
+        {/* Група "start" (ручка з AlarmClockIcon) */}
         <G transform={`translate(${greenX1}, ${greenY1})`} {...greenStartPanResponder.panHandlers}>
           <Circle cx={0} cy={0} r={startRadiusControl} fill="#007AFF" />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - startIconOffset}, ${ICON_POSITION_SHIFT_Y - startIconOffset})`}>
-            <BedIcon
+            <AlarmClockIcon
               width={startIconSize}
               height={startIconSize}
               fill="#fff"
@@ -270,11 +322,11 @@ const SleepSchedule = () => {
           </G>
         </G>
 
-        {/* Група "end" (ручка з AlarmClockIcon) */}
+        {/* Група "end" (ручка з BedIcon) */}
         <G transform={`translate(${greenX2}, ${greenY2})`} {...greenEndPanResponder.panHandlers}>
           <Circle cx={0} cy={0} r={endRadiusControl} fill="#007AFF" />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - endIconOffset}, ${ICON_POSITION_SHIFT_Y - endIconOffset})`}>
-            <AlarmClockIcon
+            <BedIcon
               width={endIconSize}
               height={endIconSize}
               fill="#fff"
@@ -282,6 +334,27 @@ const SleepSchedule = () => {
           </G>
         </G>
       </Svg>
+      {/* Дні тижня під діаграмою, середній розмір */}
+      <View style={styles.daysRow}>
+        {daysOfWeek.map((day, idx) => (
+          <TouchableOpacity
+            key={day}
+            style={[
+              styles.dayButton,
+              selectedDays.includes(idx) && styles.dayButtonActive
+            ]}
+            onPress={() => toggleDay(idx)}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.dayButtonText,
+              selectedDays.includes(idx) && styles.dayButtonTextActive
+            ]}>
+              {day}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 };
@@ -289,6 +362,33 @@ const SleepSchedule = () => {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 3,
+  },
+  dayButton: {
+    paddingVertical: 4,      // між попередніми 2 і 6
+    paddingHorizontal: 9,    // між попередніми 6 і 10
+    borderRadius: 7,         // між 6 і 8
+    backgroundColor: '#eee',
+    marginHorizontal: 1.5,
+    minWidth: 28,            // між 24 і 32
+    alignItems: 'center',
+  },
+  dayButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  dayButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 15,            // між 13 і 16
+  },
+  dayButtonTextActive: {
+    color: '#fff',
   },
 });
 

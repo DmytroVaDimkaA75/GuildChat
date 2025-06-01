@@ -11,6 +11,8 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import i18n from "../../i18n";
 console.log("i18n:", i18n);
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { ref, set } from "firebase/database";
+import { database } from "../../firebaseConfig";
 
 const supportedLanguages = [
   { code: "uk", label: "Українська" },
@@ -45,10 +47,28 @@ const LanguageSelector = () => {
     navigation.setParams({ selectedLanguage });
   }, [selectedLanguage]);
 
+  // Передаємо saveLanguage у route.params для доступу з хедера
+  React.useEffect(() => {
+    navigation.setParams({ selectedLanguage, saveLanguage });
+  }, [selectedLanguage]);
+
   const handleLanguageChange = (langCode) => {
     setSelectedLanguage(langCode);
     // Тут ми НЕ змінюємо AsyncStorage і НЕ викликаємо i18n.changeLanguage,
     // бо чекаємо на фінальне "підтвердження" через галочку.
+  };
+
+  // Додаємо функцію для збереження мови в AsyncStorage і БД
+  const saveLanguage = async (langCode) => {
+    await AsyncStorage.setItem("userLanguage", langCode);
+    // Зберігаємо також у Realtime Database
+    const userId = await AsyncStorage.getItem("userId");
+    if (userId) {
+      const langRef = ref(database, `users/${userId}/setting/language`);
+      await set(langRef, langCode);
+    }
+    i18n.changeLanguage(langCode);
+    navigation.goBack();
   };
 
   return (

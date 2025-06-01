@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, Animated, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, onValue, get, set, update } from 'firebase/database';
 import { database } from '../../firebaseConfig';
@@ -11,8 +11,9 @@ import GBIcon from '../ico/GB.svg';
 import BoatIcon from '../ico/boat.svg';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 import * as Clipboard from 'expo-clipboard';
+import { FontAwesome } from '@expo/vector-icons';
 
-const ProfileMain = () => {
+const AdminMain = () => {
   const [userName, setUserName] = useState('');
   const [guildName, setGuildName] = useState(''); // Додаємо стан для назви гільдії
   const [activeWorld, setActiveWorld] = useState('');
@@ -252,6 +253,52 @@ const ProfileMain = () => {
     }).start();
   }, [showMembers]);
 
+  // Додаємо стан для гілок прокачки з id та name
+  const [upgradeBranches, setUpgradeBranches] = useState([]);
+
+  // Завантаження гілок прокачки з БД
+  useEffect(() => {
+    const fetchUpgradeBranches = async () => {
+      try {
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!guildId) return;
+        const snap = await get(ref(database, `/guilds/${guildId}/GBChat`));
+        if (snap.exists()) {
+          const data = snap.val();
+          // Масив об'єктів {id, name}
+          const branches = Object.entries(data)
+            .map(([id, branch]) => branch?.name ? { id, name: branch.name } : null)
+            .filter(Boolean);
+          setUpgradeBranches(branches);
+        } else {
+          setUpgradeBranches([]);
+        }
+      } catch (e) {
+        setUpgradeBranches([]);
+      }
+    };
+    fetchUpgradeBranches();
+  }, []);
+
+  // Обробник видалення гілки
+  const handleDeleteBranch = async (branchId) => {
+    try {
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (!guildId) return;
+      await set(ref(database, `/guilds/${guildId}/GBChat/${branchId}`), null);
+      setUpgradeBranches(prev => prev.filter(b => b.id !== branchId));
+    } catch (e) {
+      Alert.alert('Помилка', 'Не вдалося видалити гілку');
+    }
+  };
+
+  // Обробник редагування гілки
+  const handleEditBranch = (branchId) => {
+    const branch = upgradeBranches.find(b => b.id === branchId);
+    if (!branch) return;
+    navigation.navigate('NewGBChat', { editBranch: branch, from: 'AdminMain' }); // Додаємо from
+  };
+
   return (
     <ScrollView style={styles.container}>
       {/* Шапка */}
@@ -373,11 +420,45 @@ const ProfileMain = () => {
      
       {/* Налаштування світу */}
       
+      <View style={styles.divider} />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Гілки прокачки</Text>
+        {upgradeBranches.length === 0 ? (
+          <Text style={styles.mainText}>Немає гілок прокачки</Text>
+        ) : (
+          upgradeBranches.map(branch => (
+            <View
+              key={branch.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 8,
+              }}
+            >
+              <Text style={styles.mainText}>{branch.name}</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <TouchableOpacity
+                  onPress={() => handleEditBranch(branch.id)}
+                  style={{ marginRight: 16 }}
+                >
+                  <FontAwesome name="pencil" size={18} color="#0088cc" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleDeleteBranch(branch.id)}
+                >
+                  <FontAwesome name="trash" size={18} color="#0088cc" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
     </ScrollView>
   );
 };
 
-export default ProfileMain;
+export default AdminMain;
 
 const styles = StyleSheet.create({
   container: {

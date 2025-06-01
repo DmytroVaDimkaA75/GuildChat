@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity, TextInput } from 'react-native';
-import { getDatabase, ref, onValue, push } from 'firebase/database';
+import { getDatabase, ref, onValue, push, set, get, update } from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 import { MultiSelect } from 'react-native-element-dropdown';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 
 const NewGBChat = () => {
   const { t, i18n } = useTranslation();
   const navigation = useNavigation();
+  const route = useRoute();
 
+  // Додаємо стейт для режиму редагування
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editBranchId, setEditBranchId] = useState(null);
+
+  // Додаємо стейт для назви чату
+  const [chatName, setChatName] = useState('');
   const [nodeRatio, setNodeRatio] = useState('');
   const [levelThreshold, setLevelThreshold] = useState('');
   const [allowedGBs, setAllowedGBs] = useState([]);
@@ -88,6 +95,35 @@ const NewGBChat = () => {
     fetchGuildMembers();
   }, [t]);
 
+  useEffect(() => {
+    // Якщо передано editBranch через route.params, підвантажуємо дані для редагування
+    if (route.params?.editBranch) {
+      const { id } = route.params.editBranch;
+      setIsEditMode(true);
+      setEditBranchId(id);
+
+      // Підвантажуємо дані гілки з БД
+      (async () => {
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!guildId) return;
+        const db = getDatabase();
+        const branchRef = ref(db, `guilds/${guildId}/GBChat/${id}`);
+        const snap = await get(branchRef);
+        if (snap.exists()) {
+          const data = snap.val();
+          setChatName(data.name || '');
+          setNodeRatio(data.rules?.ArcLevel?.toString() || '');
+          setLevelThreshold(data.rules?.levelThreshold?.toString() || '');
+          setAllowedGBs(data.rules?.allowedGBs || []);
+          setPlaceLimit([1,2,3,4,5].map(i => (data.rules?.placeLimit || []).includes(i)));
+          setSelectedMembers(data.rules?.selectedMembers || []);
+          setContributionMultiplier(data.rules?.contributionMultiplier || 0);
+        }
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.editBranch]);
+
   const handleSelectAll = (items) => {
     if (items.includes('selectAll')) {
       const allBuildingValues = greatBuildings
@@ -134,6 +170,7 @@ const NewGBChat = () => {
         .filter((value) => value !== null);
 
       const newChat = {
+        name: chatName,
         rules: {
           ArcLevel: parseFloat(nodeRatio) || 0,
           levelThreshold: parseInt(levelThreshold, 10) || 0,
@@ -146,14 +183,31 @@ const NewGBChat = () => {
       };
 
       const guildId = await AsyncStorage.getItem('guildId');
-      if (guildId) {
+      if (!guildId) {
+        console.error(t('newGBChat.guildIdNotFound'));
+        return;
+      }
+
+      if (isEditMode && editBranchId) {
+        // Оновлення існуючої гілки
+        await update(ref(db, `guilds/${guildId}/GBChat/${editBranchId}`), newChat);
+      } else {
+        // Створення нового чату
         await push(ref(db, `guilds/${guildId}/GBChat`), newChat);
+      }
+
+      // Повертаємося до попереднього екрану (звідки відкривали)
+      if (route.params?.from === 'AdminMain') {
+        navigation.navigate('AdminScreen');
+      } else if (route.params?.from === 'GBChatList') {
+        navigation.navigate('GBScreen');
+      } else if (navigation.canGoBack()) {
         navigation.goBack();
       } else {
-        console.error(t('newGBChat.guildIdNotFound'));
+        navigation.navigate('GBScreen');
       }
     } catch (error) {
-      console.error(t('newGBChat.createChatError'), error);
+      console.error(isEditMode ? t('newGBChat.updateChatError') : t('newGBChat.createChatError'), error);
     }
   };
 
@@ -219,8 +273,22 @@ const NewGBChat = () => {
     );
   };
 
+  // Перевірка, чи кнопка має бути активною
+  const isCreateDisabled = !chatName.trim() || !nodeRatio || Number(nodeRatio) === 0;
+
   return (
     <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: '#ffffff' }}>
+      {/* Блок для введення назви чату */}
+      <View style={styles.block}>
+        <Text style={{ marginBottom: 10 }}>{t('newGBChat.chatNameLabel') || 'Назва чату'}</Text>
+        <TextInput
+          style={styles.chatNameInput}
+          value={chatName}
+          onChangeText={setChatName}
+          placeholder={t('newGBChat.chatNamePlaceholder') || 'Введіть назву чату'}
+        />
+      </View>
+
       {/* Блок для коефіцієнта внеску (nodeRatio) */}
       <View style={styles.block}>
         <Text style={{ marginBottom: 10 }}>{t('newGBChat.contributionRatioLabel')}</Text>
@@ -327,8 +395,17 @@ const NewGBChat = () => {
       </View>
 
       {/* Кнопка для створення нового чату */}
-      <TouchableOpacity style={styles.createButton} onPress={handleCreateChat}>
-        <Text style={styles.createButtonText}>{t('newGBChat.createChatButton')}</Text>
+      <TouchableOpacity
+        style={[
+          styles.createButton,
+          isCreateDisabled && styles.createButtonDisabled
+        ]}
+        onPress={handleCreateChat}
+        disabled={isCreateDisabled}
+      >
+        <Text style={styles.createButtonText}>
+          {isEditMode ? t('newGBChat.updateChatButton') || 'Оновити' : t('newGBChat.createChatButton')}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -411,10 +488,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 10,
   },
+  createButtonDisabled: {
+    backgroundColor: '#b0b0b0',
+    opacity: 0.6,
+  },
   createButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  chatNameInput: {
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    marginBottom: 5,
   },
 });
 

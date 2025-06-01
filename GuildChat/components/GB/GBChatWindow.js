@@ -87,7 +87,8 @@ const GBChatWindow = ({ route }) => {
                 branchId: branchId, // Додаємо branchId до повідомлення
               };
 
-              if (message.excludedUser && message.excludedUser[storedUserId] === false) {
+              // Не показувати повідомлення, якщо користувач у excludedUser зі значенням true
+              if (message.excludedUser && message.excludedUser[storedUserId] === true) {
                 return null;
               }
               return message;
@@ -169,7 +170,8 @@ const GBChatWindow = ({ route }) => {
                     branchId: chatId, // Додаємо branchId для одиночного чату
                   };
 
-                  if (message.excludedUser && message.excludedUser[storedUserId] === false) {
+                  // Не показувати повідомлення, якщо користувач у excludedUser зі значенням true
+                  if (message.excludedUser && message.excludedUser[storedUserId] === true) {
                     return null;
                   }
                   return message;
@@ -338,8 +340,6 @@ const GBChatWindow = ({ route }) => {
       if (ownerId && buildId && investValue) {
         const patronsPath = `guilds/${guildId}/guildUsers/${ownerId}/greatBuild/${buildId}/investment/patrons`;
         const patronId = uuidv4();
-        // !!! Ось тут причина помилки: ref(ref, key) не працює у web SDK v9+ !!!
-        // Потрібно формувати шлях як рядок:
         const newPatronRef = ref(database, `${patronsPath}/${patronId}`);
         await set(newPatronRef, {
           invest: investValue,
@@ -347,6 +347,16 @@ const GBChatWindow = ({ route }) => {
           timestamp: Date.now(),
         });
         console.log('Створено запис у patrons:', patronId);
+
+        // Додаємо запис у users/${userId}/${guildId}/myInvest з UUID
+        const myInvestId = uuidv4();
+        const myInvestRef = ref(database, `users/${userId}/${guildId}/myInvest/${myInvestId}`);
+        await set(myInvestRef, {
+          owner: ownerId,
+          greatBuild: buildId,
+          investmentAmount: investValue,
+        });
+        console.log('Створено запис у myInvest:', myInvestId);
       }
 
       Alert.alert(t('gbChatWindow.placeSelectedTitle'), `${t('gbChatWindow.placeSelectedMessage')} ${placeKey}`);

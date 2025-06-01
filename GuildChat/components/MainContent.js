@@ -449,15 +449,23 @@ function ProfileStack() {
       <Stack.Screen
         name="SleepSchedule"
         component={SleepSchedule}
-        options={({ navigation }) => ({
-          title: t("profileStack.sleepScheduleTitle"), // переклад для "Дані профілю"
+        options={({ navigation, route }) => ({
+          title: t("profileStack.sleepScheduleTitle"),
           headerLeft: () => (
             <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}>
+            <TouchableOpacity
+              onPress={() => {
+                // Викликаємо handleSave, якщо він переданий з SleepSchedule
+                if (route.params?.handleSave) {
+                  route.params.handleSave();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
               <Ionicons name="checkmark" size={24} color="white" />
             </TouchableOpacity>
           ),
@@ -481,9 +489,10 @@ function ProfileStack() {
             return (
               <TouchableOpacity
                 onPress={async () => {
-                  await AsyncStorage.setItem("userLanguage", selectedLanguage);
-                  i18n.changeLanguage(selectedLanguage);
-                  navigation.goBack();
+                  // Викликаємо saveLanguage з LanguageSelector через route.params
+                  if (route.params?.saveLanguage) {
+                    await route.params.saveLanguage(selectedLanguage);
+                  }
                 }}
                 style={{ marginRight: 15 }}
               >
@@ -491,8 +500,8 @@ function ProfileStack() {
               </TouchableOpacity>
             );
           },
-  })}
-/>
+        })}
+      />
 
 
     </Stack.Navigator>

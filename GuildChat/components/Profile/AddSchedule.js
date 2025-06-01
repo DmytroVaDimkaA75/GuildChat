@@ -29,7 +29,7 @@ const AddSchedule = () => {
       <View style={styles.suggestedConditionsContainer}>
         <Text style={styles.suggestedTitle}>Запропоновані умови</Text>
         <TouchableOpacity style={styles.suggestedItem}  onPress={handleSleepSchedule}>
-          <Text style={styles.suggestedText}>Розклад сну</Text>
+          <Text style={styles.suggestedText}>Час активності</Text>
           <MaterialIcons name="add" size={24} color="green" />
         </TouchableOpacity>
       </View>

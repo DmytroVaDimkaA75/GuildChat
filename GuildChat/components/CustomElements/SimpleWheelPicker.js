@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
     top: ITEM_HEIGHT * Math.floor(VISIBLE_ITEMS / 2),
     height: ITEM_HEIGHT,
     width: '100%',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
+    //borderTopWidth: 1,
+    //borderBottomWidth: 1,
+    borderColor: '#007aff',
   },
 });
 

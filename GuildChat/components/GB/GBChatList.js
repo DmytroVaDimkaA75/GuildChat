@@ -198,7 +198,7 @@ useEffect(() => {
 
   // Обробка натискання на FloatingActionButton
   // const handleFabPress = () => {
-  //   navigation.navigate('NewGBChat');
+  //   navigation.navigate('NewGBChat', { from: 'GBChatList' });
   // };
 
   // Обробка вибору конкретного чату/групи
@@ -258,6 +258,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#888',
     fontSize: 16,
+  },
+  myInvestBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eaf4ff',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#2296f3',
+    shadowColor: '#2296f3',
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 3,
+    minHeight: 48,
+  },
+  myInvestText: {
+    color: '#2296f3',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.2,
   },
 });
 

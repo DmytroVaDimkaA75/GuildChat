@@ -14,7 +14,7 @@ import { ref, get, update } from 'firebase/database';
 import { database } from '../../firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-//import WheelPickerExpo from 'react-native-wheel-picker-expo';
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker'; // додано
 
 const MONTHS = [
   'Січень', 'Лютий', 'Березень', 'Квітень',
@@ -170,22 +170,17 @@ const ProfileData = () => {
                   <Text style={styles.modalTitle}>Дата народження</Text>
                   <View style={styles.wheelWrapper}>
                     <View style={styles.wheelContainer}>
-                      <WheelPickerExpo
-                        height={180}
-                        width={80}
-                        initialSelectedIndex={tempDayIndex}
-                        items={daysArray.map(d => ({ label: String(d), value: d }))}
-                        onChange={({ item }) => setTempDayIndex(item.value - 1)}
+                      <SimpleWheelPicker
+                        data={daysArray.map(d => String(d))}
+                        selectedIndex={tempDayIndex}
+                        onValueChange={(_, idx) => setTempDayIndex(idx)}
                       />
-                      <WheelPickerExpo
-                        height={180}
-                        width={120}
-                        initialSelectedIndex={tempMonthIndex}
-                        items={MONTHS.map((m, idx) => ({ label: m, value: idx }))}
-                        onChange={({ item }) => {
-                          const newMonth = item.value;
-                          setTempMonthIndex(newMonth);
-                          const newDays = getDaysArray(newMonth);
+                      <SimpleWheelPicker
+                        data={MONTHS}
+                        selectedIndex={tempMonthIndex}
+                        onValueChange={(_, idx) => {
+                          setTempMonthIndex(idx);
+                          const newDays = getDaysArray(idx);
                           if ((tempDayIndex + 1) > newDays.length) {
                             setTempDayIndex(newDays.length - 1);
                           }
