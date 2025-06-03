@@ -13,9 +13,9 @@ import {
   Button,
   Alert,
   ActivityIndicator,
-  Clipboard,
   Linking
 } from "react-native";
+import * as Clipboard from 'expo-clipboard';
 import {
   getDatabase,
   ref,
@@ -711,8 +711,8 @@ const ChatWindow = ({ route, navigation }) => {
     }
   };
 
-  const handleCopyMessage = (message) => {
-    Clipboard.setString(message.text);
+  const handleCopyMessage = async (message) => {
+    await Clipboard.setStringAsync(message.text);
   };
 
   const handleEditMessage = (message) => {
