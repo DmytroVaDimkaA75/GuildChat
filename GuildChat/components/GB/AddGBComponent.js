@@ -56,7 +56,7 @@ const AddGBComponent = () => {
     const gbRef = ref(db, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${id}`);
     set(gbRef, { level: 1 })
       .then(() => {
-        navigation.replace('MyGB');
+        navigation.goBack(); // <-- замість replace('MyGB')
       })
       .catch((error) => {
         console.error(t("addGBComponent.addError"), error);

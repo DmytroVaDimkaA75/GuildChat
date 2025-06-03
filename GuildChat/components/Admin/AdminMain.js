@@ -74,135 +74,82 @@ const AdminMain = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        const guildId = await AsyncStorage.getItem('guildId');
-        if (userId) {
-          onValue(ref(database, `/users/${userId}/userName`), snap => snap.val() && setUserName(snap.val()));
-        }
-        if (guildId) {
-          onValue(ref(database, `/guilds/${guildId}/worldName`), snap => snap.val() && setActiveWorld(snap.val()));
-          // Додаємо отримання назви гільдії
-          onValue(ref(database, `/guilds/${guildId}/guildName`), snap => snap.val() && setGuildName(snap.val()));
-        }
-        // Завантаження culture налаштувань
-        if (userId && guildId) {
-          const cultureSnap = await get(ref(database, `/users/${userId}/${guildId}/culture`));
-          if (cultureSnap.exists()) {
-            const data = cultureSnap.val();
-            // Заповнюємо productionPreference
-            if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
-              setSelectedProductionTime(productionTimeOptions[data.productionPreference]);
-            }
-            // Заповнюємо cultureAlarm
-            if (typeof data.cultureAlarm === 'boolean') {
-              setNotifyNextActions(data.cultureAlarm);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    const fetchGuilds = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        if (!userId) return;
-        const snap = await get(ref(database, `/users/${userId}`));
-        if (!snap.exists()) return;
-        const data = snap.val();
-        const keys = Object.keys(data).filter(k => k.includes('_'));
-        const arr = await Promise.all(
-          keys.map(async id => {
-            const role = data[id].role;
-            const worldSnap = await get(ref(database, `/guilds/${id}/worldName`));
-            return { guildId: id, role, worldName: worldSnap.val() || 'Не знайдено' };
-          })
-        );
-        setGuilds(arr);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    fetchInitialData();
-    fetchGuilds();
-  }, []);
-
-  // Додаємо функцію fetchMembers у scope компонента
-  const fetchMembers = async (guildId) => {
-    try {
-      const currentUserId = await AsyncStorage.getItem('userId');
-      const membersSnap = await get(ref(database, `/guilds/${guildId}/guildUsers`));
-      if (membersSnap.exists()) {
-        const membersArr = [];
-        membersSnap.forEach(child => {
-          const val = child.val();
-          const userId = child.key;
-          membersArr.push({
-            id: userId,
-            userName: val.userName || '',
-            imageUrl: val.imageUrl || null,
-            // Додаємо isSelf
-            isSelf: userId === currentUserId,
-          });
-        });
-        // Паралельно отримуємо role та password для кожного userId
-        const membersWithRoles = await Promise.all(
-          membersArr.map(async member => {
-            let role = '';
-            let password = '';
-            try {
-              const guildId = await AsyncStorage.getItem('guildId');
-              // role: users/${userId}/${guildId}/role
-              const roleSnap = await get(ref(database, `/users/${member.id}/${guildId}/role`));
-              if (roleSnap.exists()) {
-                role = roleSnap.val();
-              }
-              // password: users/${userId}/password
-              const passSnap = await get(ref(database, `/users/${member.id}/password`));
-              if (passSnap.exists()) {
-                password = passSnap.val();
-              }
-            } catch (e) {
-              console.error('Помилка отримання role/password для', member.id, e);
-            }
-            return {
-              ...member,
-              role,
-              password,
-            };
-          })
-        );
-        setGuildMembersList(membersWithRoles);
-      } else {
-        setGuildMembersList([]);
-      }
-    } catch (e) {
-      console.error('Помилка при пошуку членів гільдії:', e);
-    }
-  };
-
-  // Викликаємо fetchMembers лише при відкритті списку
-  useEffect(() => {
-    if (showMembers) {
-      (async () => {
-        const guildId = await AsyncStorage.getItem('guildId');
-        console.log('Поточний guildId для пошуку членів:', guildId);
-        if (guildId) {
-          fetchMembers(guildId);
-        }
-      })();
-    }
-    // Не має залежності від AsyncStorage.getItem('guildId'), лише showMembers
-  }, [showMembers]);
-
-  // Додаємо useFocusEffect для згортання блоку при виході з екрану
+  // Переносимо fetchInitialData та fetchGuilds всередину useFocusEffect для оновлення при кожному фокусі
   useFocusEffect(
     React.useCallback(() => {
+      const fetchInitialData = async () => {
+        try {
+          const userId = await AsyncStorage.getItem('userId');
+          const guildId = await AsyncStorage.getItem('guildId');
+          if (userId) {
+            onValue(ref(database, `/users/${userId}/userName`), snap => snap.val() && setUserName(snap.val()));
+          }
+          if (guildId) {
+            onValue(ref(database, `/guilds/${guildId}/worldName`), snap => snap.val() && setActiveWorld(snap.val()));
+            onValue(ref(database, `/guilds/${guildId}/guildName`), snap => snap.val() && setGuildName(snap.val()));
+          }
+          if (userId && guildId) {
+            const cultureSnap = await get(ref(database, `/users/${userId}/${guildId}/culture`));
+            if (cultureSnap.exists()) {
+              const data = cultureSnap.val();
+              if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
+                setSelectedProductionTime(productionTimeOptions[data.productionPreference]);
+              }
+              if (typeof data.cultureAlarm === 'boolean') {
+                setNotifyNextActions(data.cultureAlarm);
+              }
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      const fetchGuilds = async () => {
+        try {
+          const userId = await AsyncStorage.getItem('userId');
+          if (!userId) return;
+          const snap = await get(ref(database, `/users/${userId}`));
+          if (!snap.exists()) return;
+          const data = snap.val();
+          const keys = Object.keys(data).filter(k => k.includes('_'));
+          const arr = await Promise.all(
+            keys.map(async id => {
+              const role = data[id].role;
+              const worldSnap = await get(ref(database, `/guilds/${id}/worldName`));
+              return { guildId: id, role, worldName: worldSnap.val() || 'Не знайдено' };
+            })
+          );
+          setGuilds(arr);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      const fetchUpgradeBranches = async () => {
+        try {
+          const guildId = await AsyncStorage.getItem('guildId');
+          if (!guildId) return;
+          const snap = await get(ref(database, `/guilds/${guildId}/GBChat`));
+          if (snap.exists()) {
+            const data = snap.val();
+            const branches = Object.entries(data)
+              .map(([id, branch]) => branch?.name ? { id, name: branch.name } : null)
+              .filter(Boolean);
+            setUpgradeBranches(branches);
+          } else {
+            setUpgradeBranches([]);
+          }
+        } catch (e) {
+          setUpgradeBranches([]);
+        }
+      };
+
+      fetchInitialData();
+      fetchGuilds();
+      fetchUpgradeBranches();
+
+      // Не має залежності від AsyncStorage.getItem('guildId'), лише showMembers
       return () => {
         // on blur — згортати список членів гільдії
         setShowMembers(false);

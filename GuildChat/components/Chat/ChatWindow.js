@@ -57,8 +57,8 @@ import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 // Імпорт SVG-іконок через react-native-svg-transformer
 import PinIcon from '../ico/pin.svg';
 import UnpinIcon from '../ico/unpin.svg';
-import PinsIcon from '../ico/translete.svg';
-import TransleteIcon from '../ico/reply.svg';
+import PinsIcon from '../ico/pins.svg';
+import TransleteIcon from '../ico/translete.svg';
 import ReplyIcon from '../ico/reply.svg';
 import CopyIcon from '../ico/copy.svg';
 import PencilIcon from '../ico/pencil.svg';

@@ -98,6 +98,9 @@ const MyGB = () => {
   const [error, setError] = useState(null);
   const navigation = useNavigation();
 
+  // Додаємо forceReload для примусового оновлення
+  const [forceReload, setForceReload] = useState(0);
+
   const getLocalizedBuildingName = building => {
     if (building.buildingName && typeof building.buildingName === 'object') {
       return building.buildingName[i18n.language] || building.buildingName.uk || '';
@@ -154,7 +157,7 @@ const MyGB = () => {
     };
 
     fetchGreatBuilds();
-  }, [t, i18n.language]);
+  }, [t, i18n.language, forceReload]); // Додаємо forceReload
 
   const handleValueChange = async (buildId, newLevel) => {
     try {
@@ -210,6 +213,14 @@ const MyGB = () => {
       Alert.alert(t("myGB.error"), t("myGB.deleteErrorMessage"));
     }
   };
+
+  // Додаємо ефект для підписки на фокус (оновлення при поверненні на екран)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setForceReload(f => f + 1);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   if (loading) return <ActivityIndicator size="large" color="#0000ff" />;
   if (error)   return <Text>{t("Error")}: {error.message || t("myGB.unknownError")}</Text>;
