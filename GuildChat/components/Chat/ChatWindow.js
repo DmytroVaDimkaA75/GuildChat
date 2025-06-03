@@ -57,8 +57,8 @@ import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 // Імпорт SVG-іконок через react-native-svg-transformer
 import PinIcon from '../ico/pin.svg';
 import UnpinIcon from '../ico/unpin.svg';
-import PinsIcon from '../ico/pins.svg';
-import TransleteIcon from '../ico/translete.svg';
+import PinsIcon from '../ico/translete.svg';
+import TransleteIcon from '../ico/reply.svg';
 import ReplyIcon from '../ico/reply.svg';
 import CopyIcon from '../ico/copy.svg';
 import PencilIcon from '../ico/pencil.svg';
@@ -339,6 +339,23 @@ const handleAttachMessage = async (message, userId, guildId, chatId, pinForAllOr
   }
 };
 
+const handleUnpinMessage = async (message, userId, guildId, chatId, forAll) => {
+  try {
+    const db = getDatabase();
+    const pinnedRef = ref(db, `guilds/${guildId}/chats/${chatId}/messages/${message.id}/pinned`);
+    if (forAll) {
+      // Видалити pinned повністю
+      await set(pinnedRef, null);
+    } else {
+      // Видалити лише pinnedFor[userId]
+      const pinnedForRef = ref(db, `guilds/${guildId}/chats/${chatId}/messages/${message.id}/pinned/pinnedFor/${userId}`);
+      await set(pinnedForRef, null);
+    }
+  } catch (error) {
+    console.error("Error unpinning message:", error);
+  }
+};
+
 const SenderName = ({ senderId, currentUserId }) => {
   const [userName, setUserName] = useState(null);
   useEffect(() => {
@@ -399,13 +416,20 @@ const renderQuotedContent = (quotedMessage) => {
         visualElement = (
           <FontAwesomeIcon icon={faYoutube} size={24} color="#FF0000" />
         );
+        // Виводимо заголовок ролику, якщо є previewData.title, інакше адресу
+        const title =
+          quotedMessage.previewData && quotedMessage.previewData.title
+            ? quotedMessage.previewData.title
+            : firstUrl;
+        const extraText = quotedMessage.text.replace(urlRegex, "").trim();
+        textContent = extraText || title;
       } else {
         visualElement = (
           <FontAwesomeIcon icon={getDocsIcon(firstUrl)} size={24} color="#4285F4" />
         );
+        const extraText = quotedMessage.text.replace(urlRegex, "").trim();
+        textContent = extraText || (quotedMessage.title || firstUrl);
       }
-      const extraText = quotedMessage.text.replace(urlRegex, "").trim();
-      textContent = extraText || (quotedMessage.title || firstUrl);
     } else if (quotedMessage.previewImage) {
       visualElement = (
         <Image source={{ uri: quotedMessage.previewImage }} style={styles.pinnedImage} resizeMode="cover" />
@@ -567,6 +591,9 @@ const ChatWindow = ({ route, navigation }) => {
   // Новий state для модального вікна стилізації
   const [isFormattingModalVisible, setFormattingModalVisible] = useState(false);
   const [viewableMessages, setViewableMessages] = useState([]);
+
+  const [unpinModalVisible, setUnpinModalVisible] = useState(false);
+  const [messageToUnpin, setMessageToUnpin] = useState(null);
 
 
   const handleReply = (message) => {
@@ -1033,20 +1060,21 @@ const ChatWindow = ({ route, navigation }) => {
     if (hasLink) {
       const urls = message.text.match(urlRegex) || [];
       const firstUrl = urls[0];
-      if (message.previewData) {
-        visualElement = <PinnedPreview previewData={message.previewData} url={firstUrl} />;
+      if (isYouTubeURL(firstUrl)) {
+        visualElement = (
+          <FontAwesomeIcon icon={faYoutube} size={24} color="#FF0000" />
+        );
+        // Виводимо заголовок ролику, якщо є previewData.title, інакше адресу
+        const title =
+          message.previewData && message.previewData.title
+            ? message.previewData.title
+            : firstUrl;
         const extraText = message.text.replace(urlRegex, "").trim();
-        textContent = extraText || (message.previewData.title || firstUrl);
-      } else if (isYouTubeURL(firstUrl) || isDocsURL(firstUrl)) {
-        if (isYouTubeURL(firstUrl)) {
-          visualElement = (
-            <FontAwesomeIcon icon={faYoutube} size={24} color="#FF0000" />
-          );
-        } else {
-          visualElement = (
-            <FontAwesomeIcon icon={getDocsIcon(firstUrl)} size={24} color="#4285F4" />
-          );
-        }
+        textContent = extraText || title;
+      } else if (isDocsURL(firstUrl)) {
+        visualElement = (
+          <FontAwesomeIcon icon={getDocsIcon(firstUrl)} size={24} color="#4285F4" />
+        );
         const extraText = message.text.replace(urlRegex, "").trim();
         textContent = extraText || (message.title || firstUrl);
       } else if (message.previewImage) {
@@ -1055,6 +1083,10 @@ const ChatWindow = ({ route, navigation }) => {
         );
         const extraText = message.text.replace(urlRegex, "").trim();
         textContent = extraText || (message.title || firstUrl);
+      } else if (message.previewData && message.previewData.title) {
+        visualElement = <PinnedPreview previewData={message.previewData} url={firstUrl} />;
+        const extraText = message.text.replace(urlRegex, "").trim();
+        textContent = extraText || message.previewData.title;
       } else {
         visualElement = <PinnedPreview url={firstUrl} />;
         const extraText = message.text.replace(urlRegex, "").trim();
@@ -1217,22 +1249,23 @@ const ChatWindow = ({ route, navigation }) => {
                                 <QuotedMessage replyTo={message.replyTo} guildId={guildId} chatId={chatId} />
                               </TouchableOpacity>
                             )}
-                            {parts.map((part, idx) => {
-                              if (part.type === 'text') {
-                                if (!part.value.trim()) return null;
-                                return (
-                                  <Text style={styles.messageText} key={idx}>
-                                    {part.value}
-                                  </Text>
-                                );
-                              } else if (part.type === 'link') {
-                                return <LinkPreviewCard url={part.value} key={idx} />;
-                              }
-                              return null;
-                            })}
-                            {message.imageUrls && message.imageUrls.length > 0 && (
+                            {/* Якщо є зображення, спочатку зображення, потім текст; якщо немає, як раніше */}
+                            {message.imageUrls && message.imageUrls.length > 0 ? (
                               message.imageUrls.length === 1 ? (
-                                <SingleImage uri={message.imageUrls[0]} />
+                                <>
+                                  <SingleImage uri={message.imageUrls[0]} />
+                                  {/* Текст після зображення, але тільки один раз, не дублюємо */}
+                                  {parts
+                                    .filter(p => p.type === 'text' && p.value.trim())
+                                    .map((part, idx) =>
+                                      <Text style={styles.messageText} key={`imgtext-${idx}`}>{part.value}</Text>
+                                    )
+                                  }
+                                  {/* Лінки після тексту */}
+                                  {parts.filter(p => p.type === 'link').map((part, idx) =>
+                                    <LinkPreviewCard url={part.value} key={`imglink-${idx}`} />
+                                  )}
+                                </>
                               ) : (
                                 <View style={styles.imagesContainer}>
                                   {(() => {
@@ -1256,10 +1289,40 @@ const ChatWindow = ({ route, navigation }) => {
                                       </TouchableOpacity>
                                     ));
                                   })()}
+                                  {/* Текст після зображень, тільки один раз, не дублюємо */}
+                                  {parts
+                                    .filter(p => p.type === 'text' && p.value.trim())
+                                    .map((part, idx) =>
+                                      <Text style={styles.messageText} key={`imgtextmulti-${idx}`}>{part.value}</Text>
+                                    )
+                                  }
+                                  {/* Лінки після тексту */}
+                                  {parts.filter(p => p.type === 'link').map((part, idx) =>
+                                    <LinkPreviewCard url={part.value} key={`imglinkmulti-${idx}`} />
+                                  )}
                                 </View>
                               )
+                            ) : (
+                              // Якщо немає зображень, як і раніше: текст і лінки у своєму порядку
+                              parts.map((part, idx) => {
+                                if (part.type === 'text') {
+                                  if (!part.value.trim()) return null;
+                                  return (
+                                    <Text style={styles.messageText} key={idx}>
+                                      {part.value}
+                                    </Text>
+                                  );
+                                } else if (part.type === 'link') {
+                                  return <LinkPreviewCard url={part.value} key={idx} />;
+                                }
+                                return null;
+                              })
                             )}
                             <View style={styles.messageFooter}>
+                              {/* Додаємо іконку PinIcon якщо повідомлення закріплене */}
+                              {message.pinned && message.pinned.isPinned && (
+                                <PinIcon width={16} height={16} fill="#0088cc" style={{ marginRight: 4 }} />
+                              )}
                               {isCurrentUser && getStatusIcon(message.status)}
                               <Text style={styles.messageDate}>
                                 {format(new Date(message.timestamp), 'H:mm', { locale })}
@@ -1300,7 +1363,10 @@ const ChatWindow = ({ route, navigation }) => {
                               </View>
                             </MenuOption>
                           ) : (
-                            <MenuOption value="attach1" onSelect={() => setPinMessageModalVisible(true)}>
+                            <MenuOption value="attach1" onSelect={() => {
+                              setPinMessageModalVisible(true);
+                              // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
+                            }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
                                 <Text>Закріпити</Text>
@@ -1338,11 +1404,20 @@ const ChatWindow = ({ route, navigation }) => {
                             </View>
                           </MenuOption>
                           {message.pinned && message.pinned.isPinned ? (
-                            <MenuOption value="unattach" onSelect={() => {}}>
-                              <Text>Відкріпити</Text>
+                            <MenuOption value="unattach" onSelect={() => {
+                              setMessageToUnpin(message);
+                              setUnpinModalVisible(true);
+                            }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                                <Text>Відкріпити</Text>
+                              </View>
                             </MenuOption>
                           ) : (
-                            <MenuOption value="attach1" onSelect={() => setPinMessageModalVisible(true)}>
+                            <MenuOption value="attach1" onSelect={() => {
+                              setPinMessageModalVisible(true);
+                              // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
+                            }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
                                 <Text>Закріпити</Text>
@@ -1606,10 +1681,168 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={pinMessageModalVisible}
+        onRequestClose={() => setPinMessageModalVisible(false)}
+      >
+        <View style={commonModalStyles.overlay}>
+          <View style={commonModalStyles.container}>
+            <Text style={commonModalStyles.header}>Закріпити повідомлення</Text>
+            <View style={buttonContainerColumn}>
+              <TouchableOpacity
+                style={commonModalStyles.button}
+                onPress={async () => {
+                  // Знаходимо повідомлення для закріплення
+                  const selectedMessage = messages
+                    .flatMap(group => group.messages)
+                    .find(m => m.id === selectedMessageId);
+                  if (selectedMessage) {
+                    await handleAttachMessage(
+                      selectedMessage,
+                      userId,
+                      guildId,
+                      chatId,
+                      false // тільки для себе
+                    );
+                  }
+                  setPinMessageModalVisible(false);
+                }}
+              >
+                <Text style={commonModalStyles.buttonText}>Закріпити для мене</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={commonModalStyles.button}
+                onPress={async () => {
+                  const selectedMessage = messages
+                    .flatMap(group => group.messages)
+                    .find(m => m.id === selectedMessageId);
+                  if (selectedMessage) {
+                    await handleAttachMessage(
+                      selectedMessage,
+                      userId,
+                      guildId,
+                      chatId,
+                      true // для всіх
+                    );
+                  }
+                  setPinMessageModalVisible(false);
+                }}
+              >
+                <Text style={commonModalStyles.buttonText}>Закріпити для всіх</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={commonModalStyles.button}
+                onPress={() => setPinMessageModalVisible(false)}
+              >
+                <Text style={commonModalStyles.buttonText}>Скасувати</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={unpinModalVisible}
+        onRequestClose={() => setUnpinModalVisible(false)}
+      >
+        <View style={commonModalStyles.overlay}>
+          <View style={commonModalStyles.container}>
+            <Text style={commonModalStyles.header}>Відкріпити повідомлення</Text>
+            <View style={buttonContainerColumn}>
+              {chatType === "group" ? (
+                <>
+                  <TouchableOpacity
+                    style={commonModalStyles.button}
+                    onPress={async () => {
+                      await handleUnpinMessage(
+                        messageToUnpin,
+                        userId,
+                        guildId,
+                        chatId,
+                        true // для всіх
+                      );
+                      setUnpinModalVisible(false);
+                      setMessageToUnpin(null);
+                    }}
+                  >
+                    <Text style={commonModalStyles.buttonText}>Відкріпити для всіх</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={commonModalStyles.button}
+                    onPress={async () => {
+                      await handleUnpinMessage(
+                        messageToUnpin,
+                        userId,
+                        guildId,
+                        chatId,
+                        false // лише для себе
+                      );
+                      setUnpinModalVisible(false);
+                      setMessageToUnpin(null);
+                    }}
+                  >
+                    <Text style={commonModalStyles.buttonText}>Відкріпити для мене</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={commonModalStyles.button}
+                    onPress={async () => {
+                      await handleUnpinMessage(
+                        messageToUnpin,
+                        userId,
+                        guildId,
+                        chatId,
+                        true // для обох у приватному чаті
+                      );
+                      setUnpinModalVisible(false);
+                      setMessageToUnpin(null);
+                    }}
+                  >
+                    <Text style={commonModalStyles.buttonText}>
+                      Відкріпити для {contactName || "користувача"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={commonModalStyles.button}
+                    onPress={async () => {
+                      await handleUnpinMessage(
+                        messageToUnpin,
+                        userId,
+                        guildId,
+                        chatId,
+                        false // лише для себе
+                      );
+                      setUnpinModalVisible(false);
+                      setMessageToUnpin(null);
+                    }}
+                  >
+                    <Text style={commonModalStyles.buttonText}>Відкріпити для мене</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity
+                style={commonModalStyles.button}
+                onPress={() => {
+                  setUnpinModalVisible(false);
+                  setMessageToUnpin(null);
+                }}
+              >
+                <Text style={commonModalStyles.buttonText}>Відміна</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
