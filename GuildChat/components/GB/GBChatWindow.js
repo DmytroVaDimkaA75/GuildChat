@@ -425,6 +425,7 @@ const GBChatWindow = ({ route }) => {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.testText}>тест</Text>
       <FlatList
         data={messages}
         renderItem={renderItem}
@@ -509,6 +510,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     width: 30,
+  },
+  testText: {
+    textAlign: 'center',
+    fontSize: 16,
+    marginBottom: 10,
   },
   emptyMessage: {
     textAlign: 'center',
