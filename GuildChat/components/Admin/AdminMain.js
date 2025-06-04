@@ -157,6 +157,73 @@ const AdminMain = () => {
     }, [])
   );
 
+  // Додаємо функцію fetchMembers у scope компонента
+  const fetchMembers = async (guildId) => {
+    try {
+      const currentUserId = await AsyncStorage.getItem('userId');
+      const membersSnap = await get(ref(database, `/guilds/${guildId}/guildUsers`));
+      if (membersSnap.exists()) {
+        const membersArr = [];
+        membersSnap.forEach(child => {
+          const val = child.val();
+          const userId = child.key;
+          membersArr.push({
+            id: userId,
+            userName: val.userName || '',
+            imageUrl: val.imageUrl || null,
+            // Додаємо isSelf
+            isSelf: userId === currentUserId,
+          });
+        });
+        // Паралельно отримуємо role та password для кожного userId
+        const membersWithRoles = await Promise.all(
+          membersArr.map(async member => {
+            let role = '';
+            let password = '';
+            try {
+              const guildId = await AsyncStorage.getItem('guildId');
+              // role: users/${userId}/${guildId}/role
+              const roleSnap = await get(ref(database, `/users/${member.id}/${guildId}/role`));
+              if (roleSnap.exists()) {
+                role = roleSnap.val();
+              }
+              // password: users/${userId}/password
+              const passSnap = await get(ref(database, `/users/${member.id}/password`));
+              if (passSnap.exists()) {
+                password = passSnap.val();
+              }
+            } catch (e) {
+              console.error('Помилка отримання role/password для', member.id, e);
+            }
+            return {
+              ...member,
+              role,
+              password,
+            };
+          })
+        );
+        setGuildMembersList(membersWithRoles);
+      } else {
+        setGuildMembersList([]);
+      }
+    } catch (e) {
+      console.error('Помилка при пошуку членів гільдії:', e);
+    }
+  };
+
+  // Викликаємо fetchMembers лише при відкритті списку
+  useEffect(() => {
+    if (showMembers) {
+      (async () => {
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (guildId) {
+          fetchMembers(guildId);
+        }
+      })();
+    }
+    // Не має залежності від AsyncStorage.getItem('guildId'), лише showMembers
+  }, [showMembers]);
+
   // Обробник зміни ролі (чекбокс)
   const handleRoleChange = async (userId, checked) => {
     try {
