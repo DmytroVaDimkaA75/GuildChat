@@ -1,24 +1,33 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  TextInput,
+  Button,
+  ScrollView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
-import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
+import { callAssistant, ASSISTANT_IDS, PROJECT_ID, OPENAI_API_KEY } from '../../assistantApi';
 
 const CulturalPlanner = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const start = route.params?.start;
+
+  // --- Нова логіка чату з ШІ ---
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [threadId, setThreadId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -43,15 +52,40 @@ const CulturalPlanner = () => {
             2
           )}`;
 
-          console.log('DEBUG: prompt для асистента:', prompt);
-          const reply = await callAssistant(prompt);
-          console.log('DEBUG: відповідь від асистента:', reply);
+          // Додайте логування для дебагу
+          console.log('DEBUG: settlementName:', settlementName);
+          console.log('DEBUG: ASSISTANT_IDS:', ASSISTANT_IDS);
+          console.log('DEBUG: ASSISTANT_IDS keys:', Object.keys(ASSISTANT_IDS || {}));
 
-          if (reply && reply.length) {
-            Alert.alert('Результат планування', reply);
-          } else {
-            Alert.alert('Помилка', 'Асистент не надав відповіді.');
+          // Додаємо кастомну відповідь у messages
+          setMessages([
+            {
+              role: 'assistant',
+              content: `Вітаю в культурному поселенні ${settlementName}!`
+            }
+          ]);
+
+          // Додаємо перевірку settlementName
+          if (!settlementName || !ASSISTANT_IDS?.[settlementName]) {
+            console.error('❌ Некоректний settlementName:', settlementName);
+            throw new Error('Некоректний settlementName. Виберіть поселення ще раз.');
           }
+
+          // Додайте захист від undefined
+          const assistantId = ASSISTANT_IDS?.[settlementName] || ASSISTANT_IDS?.['Поселення1'];
+          if (!assistantId) {
+            throw new Error('assistantId is undefined. Перевірте ASSISTANT_IDS та settlementName.');
+          }
+
+          const reply = await callAssistant(prompt, assistantId);
+          //console.log('DEBUG: відповідь від асистента:', reply);
+
+          // Прибрати показ Alert з результатом
+          // if (reply && reply.length) {
+          //   Alert.alert('Результат планування', reply);
+          // } else {
+          //   Alert.alert('Помилка', 'Асистент не надав відповіді.');
+          // }
         } catch (e) {
           console.error('ERROR при callAssistant:', e);
           Alert.alert('Помилка', e.message);
@@ -109,12 +143,160 @@ const CulturalPlanner = () => {
     });
   }, [navigation, settlementName, start]);
 
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    setIsLoading(true);
+
+    try {
+      // 1. Створити thread, якщо ще не існує
+      let currentThreadId = threadId;
+      if (!currentThreadId) {
+        console.log('[CulturalPlanner] Створення нового thread...');
+        const threadRes = await fetch('https://api.openai.com/v1/threads', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`, // <-- використовуємо імпортований ключ
+            'OpenAI-Project': PROJECT_ID,
+            'OpenAI-Beta': 'assistants=v2',
+            'Content-Type': 'application/json'
+          },
+          body: '{}'
+        });
+        const threadData = await threadRes.json();
+        console.log('[CulturalPlanner] threadRes:', threadData);
+        currentThreadId = threadData.id;
+        setThreadId(currentThreadId);
+        console.log('[CulturalPlanner] Thread створено:', currentThreadId);
+      } else {
+        console.log('[CulturalPlanner] Використовується існуючий thread:', currentThreadId);
+      }
+
+      // 2. Додати повідомлення
+      console.log('[CulturalPlanner] Надсилання повідомлення користувача:', input);
+      await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'OpenAI-Project': PROJECT_ID,
+          'OpenAI-Beta': 'assistants=v2',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'user',
+          content: input
+        })
+      });
+
+      setMessages(prev => [...prev, { role: 'user', content: input }]);
+      setInput('');
+
+      // 3. Запустити run
+      if (!settlementName || !ASSISTANT_IDS?.[settlementName]) {
+        console.log('[CulturalPlanner] Некоректний settlementName:', settlementName);
+        Alert.alert('Помилка', 'Некоректний settlementName. Виберіть поселення ще раз.');
+        setIsLoading(false);
+        return;
+      }
+      const assistantId = ASSISTANT_IDS[settlementName];
+      console.log('[CulturalPlanner] Запуск run для assistantId:', assistantId);
+
+      const runRes = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/runs`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'OpenAI-Project': PROJECT_ID,
+          'OpenAI-Beta': 'assistants=v2',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          assistant_id: assistantId
+        })
+      });
+      const runData = await runRes.json();
+      console.log('[CulturalPlanner] runRes:', runData);
+      console.log('[CulturalPlanner] Run створено:', runData.id, 'Статус:', runData.status);
+
+      // 4. Очікувати завершення (з таймаутом)
+      let runStatus = runData.status;
+      let waited = 0;
+      const maxWait = 30000; // 30 секунд
+      while (runStatus !== 'completed' && runStatus !== 'failed' && runStatus !== 'cancelled' && waited < maxWait) {
+        await new Promise(r => setTimeout(r, 2000));
+        waited += 2000;
+        const check = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/runs/${runData.id}`, {
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            'OpenAI-Project': PROJECT_ID,
+            'OpenAI-Beta': 'assistants=v2'
+          }
+        });
+        const checkData = await check.json();
+        console.log('[CulturalPlanner] checkData:', checkData);
+        runStatus = checkData.status;
+        console.log(`[CulturalPlanner] Run статус: ${runStatus} (очікування: ${waited / 1000}s)`);
+      }
+      if (runStatus !== 'completed') {
+        console.log('[CulturalPlanner] Run завершився з неуспішним статусом:', runStatus);
+        Alert.alert('Помилка', 'Асистент не дав відповідь або сталася помилка.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 5. Отримати відповідь
+      console.log('[CulturalPlanner] Отримання відповіді асистента...');
+      const msgRes = await fetch(`https://api.openai.com/v1/threads/${currentThreadId}/messages`, {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          'OpenAI-Project': PROJECT_ID,
+          'OpenAI-Beta': 'assistants=v2'
+        }
+      });
+      const msgData = await msgRes.json();
+      console.log('[CulturalPlanner] msgData:', msgData);
+      const last = msgData.data.find(m => m.role === 'assistant');
+      if (last) {
+        const text = last.content?.[0]?.text?.value || '❌ Помилка';
+        console.log('[CulturalPlanner] Відповідь асистента:', text);
+        setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+      } else {
+        console.log('[CulturalPlanner] Відповідь асистента не знайдена.');
+      }
+    } catch (e) {
+      console.error('[CulturalPlanner] Помилка:', e);
+      Alert.alert('Помилка', e.message || 'Щось пішло не так');
+    }
+
+    setIsLoading(false);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
         Тут логіка планувальника для {settlementName}
       </Text>
-      {/* Ваша подальша реалізація UI планувальника */}
+      <View style={{flex: 1}}>
+        <ScrollView style={styles.chat}>
+          {messages.map((m, i) => (
+            <Text
+              key={i}
+              style={m.role === 'user' ? styles.user : styles.assistant}
+            >
+              {m.role === 'user' ? '🧑‍💬' : '🤖'} {m.content}
+            </Text>
+          ))}
+        </ScrollView>
+        <TextInput
+          style={styles.input}
+          value={input}
+          onChangeText={setInput}
+          placeholder="Введіть повідомлення"
+        />
+        <Button
+          title={isLoading ? 'Очікуйте...' : 'Надіслати'}
+          onPress={sendMessage}
+          disabled={isLoading}
+        />
+      </View>
     </View>
   );
 };
@@ -122,7 +304,11 @@ const CulturalPlanner = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
   title: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  chat: { flex: 1, marginBottom: 10 },
+  user: { alignSelf: 'flex-end', backgroundColor: '#dcf8c6', borderRadius: 10, padding: 10, marginVertical: 5 },
+  assistant: { alignSelf: 'flex-start', backgroundColor: '#f1f0f0', borderRadius: 10, padding: 10, marginVertical: 5 },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 20, padding: 10, marginBottom: 10 }
 });
 
 export default CulturalPlanner;
