@@ -310,7 +310,7 @@ const SingleImage = ({ uri }) => {
 };
 
 const getPinnedMessageText = (messageId, allMessages) => {
-  const found = allMessages.flatMap(group => group.messages).find(m => m.id === messageId);
+  const found = allMessages.find(m => m.type === 'message' && m.id === messageId);
   return found ? found.text : "(Повідомлення не знайдено)";
 };
 
@@ -643,6 +643,232 @@ const ChatWindow = ({ route, navigation }) => {
     setInputHeight(newHeight);
   };
 
+  const renderChatItem = ({ item, index }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={styles.dateGroup}>
+          <View style={styles.dateBlock}>
+            <Text style={styles.date}>{item.date}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (item.deletedFor && item.deletedFor[userId]) return null;
+
+    const isCurrentUser = item.senderId === userId;
+    const nextItem = messages[index + 1];
+    const isLastMessageFromUser = !nextItem || nextItem.type !== 'message' || nextItem.senderId !== item.senderId;
+    const parts = splitMessageIntoParts(item.text);
+
+    return (
+      <Menu style={styles.menu} key={item.id}>
+        <MenuTrigger onPress={() => handlePressMessage(item.id)}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+            {(chatType !== 'private' && !isCurrentUser) && (
+              <View style={{ width: 30, marginRight: 8, marginTop: 'auto' }}>
+                {(!nextItem || nextItem.type !== 'message' || nextItem.senderId !== item.senderId) && (
+                  <InterlocutorAvatar senderId={item.senderId} guildId={guildId} />
+                )}
+              </View>
+            )}
+            <View
+              ref={ref => messageRefs.current[item.id] = ref}
+              onLayout={(event) => {
+                const { height } = event.nativeEvent.layout;
+                setMessageHeights(prev => ({ ...prev, [item.id]: height }));
+              }}
+              style={[
+                styles.messageContainer,
+                isCurrentUser ? [styles.myMessage, { marginLeft: 'auto' }] : [styles.theirMessage, { marginLeft: 15 }],
+                (hasLinkOrImage(item) || item.replyTo) ? styles.standardBubble : styles.flexibleBubble,
+                highlightedMessageId === item.id && styles.highlightedMessage
+              ]}
+            >
+              <View style={styles.messageInnerContainer}>
+                {chatType === 'group' && item.senderId !== userId && (
+                  <SenderName senderId={item.senderId} currentUserId={userId} />
+                )}
+                {item.replyTo && (
+                  <TouchableOpacity onPress={() => scrollToMessage(item.replyTo)}>
+                    <QuotedMessage replyTo={item.replyTo} guildId={guildId} chatId={chatId} />
+                  </TouchableOpacity>
+                )}
+                {item.imageUrls && item.imageUrls.length > 0 ? (
+                  item.imageUrls.length === 1 ? (
+                    <>
+                      <SingleImage uri={item.imageUrls[0]} />
+                      {parts
+                        .filter(p => p.type === 'text' && p.value.trim())
+                        .map((part, idx) => (
+                          <Text style={styles.messageText} key={`imgtext-${idx}`}>{part.value}</Text>
+                        ))}
+                      {parts.filter(p => p.type === 'link').map((part, idx) => (
+                        <LinkPreviewCard url={part.value} key={`imglink-${idx}`} />
+                      ))}
+                    </>
+                  ) : (
+                    <View style={styles.imagesContainer}>
+                      {(() => {
+                        const totalImages = item.imageUrls.length;
+                        const imagesPerRow = totalImages <= 4 ? totalImages : 4;
+                        const imageMargin = 4;
+                        const imageSize = (screenWidth - (imagesPerRow + 1) * imageMargin) / imagesPerRow;
+                        return item.imageUrls.map((imgUrl, i) => (
+                          <TouchableOpacity
+                            key={i}
+                            onPress={() => {
+                              setFullSizeImageUri(imgUrl);
+                              setFullSizeImageModalVisible(true);
+                            }}
+                            style={{ margin: imageMargin / 2 }}
+                          >
+                            <Image
+                              source={{ uri: imgUrl }}
+                              style={{ width: imageSize, height: imageSize, borderRadius: 10 }}
+                            />
+                          </TouchableOpacity>
+                        ));
+                      })()}
+                      {parts
+                        .filter(p => p.type === 'text' && p.value.trim())
+                        .map((part, idx) => (
+                          <Text style={styles.messageText} key={`imgtextmulti-${idx}`}>{part.value}</Text>
+                        ))}
+                      {parts.filter(p => p.type === 'link').map((part, idx) => (
+                        <LinkPreviewCard url={part.value} key={`imglinkmulti-${idx}`} />
+                      ))}
+                    </View>
+                  )
+                ) : (
+                  parts.map((part, idx) => {
+                    if (part.type === 'text') {
+                      if (!part.value.trim()) return null;
+                      return <Text style={styles.messageText} key={idx}>{part.value}</Text>;
+                    } else if (part.type === 'link') {
+                      return <LinkPreviewCard url={part.value} key={idx} />;
+                    }
+                    return null;
+                  })
+                )}
+                <View style={styles.messageFooter}>
+                  {item.pinned && item.pinned.isPinned && (
+                    <PinIcon width={16} height={16} fill="#0088cc" style={{ marginRight: 4 }} />
+                  )}
+                  {isCurrentUser && getStatusIcon(item.status)}
+                  <Text style={styles.messageDate}>
+                    {format(new Date(item.timestamp), 'H:mm', { locale })}
+                  </Text>
+                </View>
+              </View>
+              {isLastMessageFromUser && (
+                <View
+                  style={[
+                    styles.triangle,
+                    isCurrentUser
+                      ? (highlightedMessageId === item.id ? styles.triangleMyHighlighted : styles.triangleMy)
+                      : (highlightedMessageId === item.id ? styles.triangleTheirHighlighted : styles.triangleTheir)
+                  ]}
+                />
+              )}
+            </View>
+          </View>
+        </MenuTrigger>
+        <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
+          {isCurrentUser ? (
+            <>
+              <MenuOption value="reply" onSelect={() => handleReply(item)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Відповісти</Text>
+                </View>
+              </MenuOption>
+              <MenuOption value="copy" onSelect={() => handleCopyMessage(item)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Копіювати</Text>
+                </View>
+              </MenuOption>
+              {item.pinned && item.pinned.isPinned ? (
+                <MenuOption value="unattach" onSelect={() => {}}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                    <Text>Відкріпити</Text>
+                  </View>
+                </MenuOption>
+              ) : (
+                <MenuOption value="attach1" onSelect={() => {
+                  setPinMessageModalVisible(true);
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                    <Text>Закріпити</Text>
+                  </View>
+                </MenuOption>
+              )}
+              <MenuOption value="edit" onSelect={() => handleEditMessage(item)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <PencilIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Редагувати</Text>
+                </View>
+              </MenuOption>
+              <MenuOption value="delete" onSelect={() => {
+                setMessageToDelete(item);
+                setDeleteModalVisible(true);
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <DeleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Видалити</Text>
+                </View>
+              </MenuOption>
+            </>
+          ) : (
+            <>
+              <MenuOption value="reply" onSelect={() => handleReply(item)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Відповісти</Text>
+                </View>
+              </MenuOption>
+              <MenuOption value="copy" onSelect={() => handleCopyMessage(item)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Копіювати</Text>
+                </View>
+              </MenuOption>
+              {item.pinned && item.pinned.isPinned ? (
+                <MenuOption value="unattach" onSelect={() => {
+                  setMessageToUnpin(item);
+                  setUnpinModalVisible(true);
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                    <Text>Відкріпити</Text>
+                  </View>
+                </MenuOption>
+              ) : (
+                <MenuOption value="attach1" onSelect={() => {
+                  setPinMessageModalVisible(true);
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                    <Text>Закріпити</Text>
+                  </View>
+                </MenuOption>
+              )}
+              <MenuOption value="translate" onSelect={() => handleMenuOptionSelect('translate')}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TransleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                  <Text>Перекласти</Text>
+                </View>
+              </MenuOption>
+            </>
+          )}
+        </MenuOptions>
+      </Menu>
+    );
+  };
+
   const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
     console.log('Raw viewable items:', viewableItems);
     const visibleMessages = viewableItems
@@ -709,7 +935,7 @@ const ChatWindow = ({ route, navigation }) => {
   }, [viewableMessages, userId, guildId, chatId]);
 
   const pinnedMessagesForUser = messages
-    .flatMap(group => group.messages)
+    .filter(m => m.type === 'message')
     .filter(m => m.pinned && m.pinned.pinnedFor && m.pinned.pinnedFor[userId]);
 
   useEffect(() => {
@@ -806,15 +1032,14 @@ const ChatWindow = ({ route, navigation }) => {
           acc[date].push(message);
           return acc;
         }, {});
-        const groupedMessagesArray = Object.keys(groupedMessages).map(date => ({
-          date,
-          messages: groupedMessages[date],
-          type: 'date' // Додайте тип для заголовків дат
-        }));
-        
-        // Додайте тип для повідомлень:
-        
-        setMessages(groupedMessagesArray);
+
+        const flattened = [];
+        Object.keys(groupedMessages).forEach(date => {
+          flattened.push({ type: 'date', date });
+          groupedMessages[date].forEach(msg => flattened.push(msg));
+        });
+
+        setMessages(flattened);
       });
     };
     fetchMessages();
@@ -938,7 +1163,7 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleMenuOptionSelect = async (option) => {
     if (selectedMessageId) {
-      const selectedMessage = messages.flatMap(group => group.messages).find(m => m.id === selectedMessageId);
+      const selectedMessage = messages.find(m => m.type === 'message' && m.id === selectedMessageId);
       if (!selectedMessage) return;
       if (option === 'translate') {
         try {
@@ -976,12 +1201,7 @@ const ChatWindow = ({ route, navigation }) => {
         const updatedMessage = { ...messageToDelete, deletedFor: { [userId]: true } };
         await set(messageRef, updatedMessage);
       }
-      setMessages(prev =>
-        prev.map(group => ({
-          ...group,
-          messages: group.messages.filter(m => m.id !== messageToDelete.id)
-        }))
-      );
+      // Стан оновиться через підписку onValue
       setDeleteModalVisible(false);
       setMessageToDelete(null);
     } catch (error) {
@@ -1008,14 +1228,7 @@ const ChatWindow = ({ route, navigation }) => {
         text: editMessageText,
         edited: true,
       });
-      setMessages(prev =>
-        prev.map(group => ({
-          ...group,
-          messages: group.messages.map(m =>
-            m.id === editMessage.id ? { ...m, text: editMessageText, edited: true } : m
-          )
-        }))
-      );
+      // Оновлення прийде через підписку onValue
       setEditMessage(null);
       setEditMessageText('');
     } catch (error) {
@@ -1024,26 +1237,11 @@ const ChatWindow = ({ route, navigation }) => {
   };
 
   const scrollToMessage = (messageId) => {
-    const allMessages = messages.flatMap(group => group.messages);
-    const messageIndex = allMessages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1) return;
-    let scrollOffset = 0;
-    for (let i = 0; i < messageIndex; i++) {
-      const prevMessageId = allMessages[i].id;
-      const messageHeight = messageHeights[prevMessageId] || 100;
-      scrollOffset += messageHeight + 10;
-    }
-    const dateHeaderHeight = 50;
-    const datesBeforeMessage = new Set(
-      allMessages.slice(0, messageIndex).map(m => format(new Date(m.timestamp), 'd MMMM'))
-    ).size;
-    scrollOffset += dateHeaderHeight * datesBeforeMessage;
-    const windowHeight = Dimensions.get('window').height;
-    const centerOffset = windowHeight / 2 - (messageHeights[messageId] || 100) / 2;
-    flatListRef.current?.scrollToOffset({
-      offset: Math.max(0, scrollOffset - centerOffset),
-      animated: true
-    });
+    const index = messages.findIndex(
+      item => item.type === 'message' && item.id === messageId
+    );
+    if (index === -1) return;
+    flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5 });
     setHighlightedMessageId(messageId);
     setTimeout(() => setHighlightedMessageId(null), 1500);
   };
@@ -1194,261 +1392,17 @@ const ChatWindow = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
       )}
-
       <FlatList
         ref={flatListRef}
         data={messages.length > 0 ? messages : []}
-        renderItem={({ item }) => (
-          <View style={styles.dateGroup}>
-            <View style={styles.dateBlock}>
-              <Text style={styles.date}>{item.date}</Text>
-            </View>
-            {item.messages
-              .filter(m => !m.deletedFor || !m.deletedFor[userId])
-              .map((message, index) => {
-                const isCurrentUser = message.senderId === userId;
-                const isLastMessageFromUser =
-                  index === item.messages.length - 1 ||
-                  (item.messages[index + 1] && item.messages[index + 1].senderId !== message.senderId);
-                const parts = splitMessageIntoParts(message.text);
-
-                return (
-                  <Menu style={styles.menu} key={message.id}>
-                    <MenuTrigger onPress={() => handlePressMessage(message.id)}>
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                        {(chatType !== 'private' && !isCurrentUser) && (
-                          <View style={{ width: 30, marginRight: 8, marginTop: 'auto' }}>
-                            {(index === item.messages.length - 1 ||
-                              (item.messages[index + 1] && item.messages[index + 1].senderId !== message.senderId)
-                            ) && (
-                              <InterlocutorAvatar senderId={message.senderId} guildId={guildId} />
-                            )}
-                          </View>
-                        )}
-                        <View
-                          ref={ref => messageRefs.current[message.id] = ref}
-                          onLayout={(event) => {
-                            const { height } = event.nativeEvent.layout;
-                            setMessageHeights(prev => ({ ...prev, [message.id]: height }));
-                          }}
-                          style={[
-                            styles.messageContainer,
-                            isCurrentUser
-                              ? [styles.myMessage, { marginLeft: 'auto' }]
-                              : [styles.theirMessage, { marginLeft: 15 }],
-                            (hasLinkOrImage(message) || message.replyTo) ? styles.standardBubble : styles.flexibleBubble,
-                            highlightedMessageId === message.id && styles.highlightedMessage
-                          ]}
-                        >
-                          <View style={styles.messageInnerContainer}>
-                            {chatType === 'group' && message.senderId !== userId && (
-                              <SenderName senderId={message.senderId} currentUserId={userId} />
-                            )}
-                            {message.replyTo && (
-                              <TouchableOpacity onPress={() => scrollToMessage(message.replyTo)}>
-                                <QuotedMessage replyTo={message.replyTo} guildId={guildId} chatId={chatId} />
-                              </TouchableOpacity>
-                            )}
-                            {/* Якщо є зображення, спочатку зображення, потім текст; якщо немає, як раніше */}
-                            {message.imageUrls && message.imageUrls.length > 0 ? (
-                              message.imageUrls.length === 1 ? (
-                                <>
-                                  <SingleImage uri={message.imageUrls[0]} />
-                                  {/* Текст після зображення, але тільки один раз, не дублюємо */}
-                                  {parts
-                                    .filter(p => p.type === 'text' && p.value.trim())
-                                    .map((part, idx) =>
-                                      <Text style={styles.messageText} key={`imgtext-${idx}`}>{part.value}</Text>
-                                    )
-                                  }
-                                  {/* Лінки після тексту */}
-                                  {parts.filter(p => p.type === 'link').map((part, idx) =>
-                                    <LinkPreviewCard url={part.value} key={`imglink-${idx}`} />
-                                  )}
-                                </>
-                              ) : (
-                                <View style={styles.imagesContainer}>
-                                  {(() => {
-                                    const totalImages = message.imageUrls.length;
-                                    const imagesPerRow = totalImages <= 4 ? totalImages : 4;
-                                    const imageMargin = 4;
-                                    const imageSize = (screenWidth - (imagesPerRow + 1) * imageMargin) / imagesPerRow;
-                                    return message.imageUrls.map((imgUrl, i) => (
-                                      <TouchableOpacity
-                                        key={i}
-                                        onPress={() => {
-                                          setFullSizeImageUri(imgUrl);
-                                          setFullSizeImageModalVisible(true);
-                                        }}
-                                        style={{ margin: imageMargin / 2 }}
-                                      >
-                                        <Image
-                                          source={{ uri: imgUrl }}
-                                          style={{ width: imageSize, height: imageSize, borderRadius: 10 }}
-                                        />
-                                      </TouchableOpacity>
-                                    ));
-                                  })()}
-                                  {/* Текст після зображень, тільки один раз, не дублюємо */}
-                                  {parts
-                                    .filter(p => p.type === 'text' && p.value.trim())
-                                    .map((part, idx) =>
-                                      <Text style={styles.messageText} key={`imgtextmulti-${idx}`}>{part.value}</Text>
-                                    )
-                                  }
-                                  {/* Лінки після тексту */}
-                                  {parts.filter(p => p.type === 'link').map((part, idx) =>
-                                    <LinkPreviewCard url={part.value} key={`imglinkmulti-${idx}`} />
-                                  )}
-                                </View>
-                              )
-                            ) : (
-                              // Якщо немає зображень, як і раніше: текст і лінки у своєму порядку
-                              parts.map((part, idx) => {
-                                if (part.type === 'text') {
-                                  if (!part.value.trim()) return null;
-                                  return (
-                                    <Text style={styles.messageText} key={idx}>
-                                      {part.value}
-                                    </Text>
-                                  );
-                                } else if (part.type === 'link') {
-                                  return <LinkPreviewCard url={part.value} key={idx} />;
-                                }
-                                return null;
-                              })
-                            )}
-                            <View style={styles.messageFooter}>
-                              {/* Додаємо іконку PinIcon якщо повідомлення закріплене */}
-                              {message.pinned && message.pinned.isPinned && (
-                                <PinIcon width={16} height={16} fill="#0088cc" style={{ marginRight: 4 }} />
-                              )}
-                              {isCurrentUser && getStatusIcon(message.status)}
-                              <Text style={styles.messageDate}>
-                                {format(new Date(message.timestamp), 'H:mm', { locale })}
-                              </Text>
-                            </View>
-                          </View>
-                          {isLastMessageFromUser && (
-                            <View style={[
-                              styles.triangle,
-                              isCurrentUser
-                                ? (highlightedMessageId === message.id ? styles.triangleMyHighlighted : styles.triangleMy)
-                                : (highlightedMessageId === message.id ? styles.triangleTheirHighlighted : styles.triangleTheir)
-                            ]} />
-                          )}
-                        </View>
-                      </View>
-                    </MenuTrigger>
-                    <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
-                      {isCurrentUser ? (
-                        <>
-                          <MenuOption value="reply" onSelect={() => handleReply(message)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Відповісти</Text>
-                            </View>
-                          </MenuOption>
-                          <MenuOption value="copy" onSelect={() => handleCopyMessage(message)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Копіювати</Text>
-                            </View>
-                          </MenuOption>
-                          {message.pinned && message.pinned.isPinned ? (
-                            <MenuOption value="unattach" onSelect={() => {}}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                                <Text>Відкріпити</Text>
-                              </View>
-                            </MenuOption>
-                          ) : (
-                            <MenuOption value="attach1" onSelect={() => {
-                              setPinMessageModalVisible(true);
-                              // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
-                            }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                                <Text>Закріпити</Text>
-                              </View>
-                            </MenuOption>
-                          )}
-                          <MenuOption value="edit" onSelect={() => handleEditMessage(message)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <PencilIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Редагувати</Text>
-                            </View>
-                          </MenuOption>
-                          <MenuOption value="delete" onSelect={() => {
-                            setMessageToDelete(message);
-                            setDeleteModalVisible(true);
-                          }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <DeleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Видалити</Text>
-                            </View>
-                          </MenuOption>
-                        </>
-                      ) : (
-                        <>
-                          <MenuOption value="reply" onSelect={() => handleReply(message)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Відповісти</Text>
-                            </View>
-                          </MenuOption>
-                          <MenuOption value="copy" onSelect={() => handleCopyMessage(message)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Копіювати</Text>
-                            </View>
-                          </MenuOption>
-                          {message.pinned && message.pinned.isPinned ? (
-                            <MenuOption value="unattach" onSelect={() => {
-                              setMessageToUnpin(message);
-                              setUnpinModalVisible(true);
-                            }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                                <Text>Відкріпити</Text>
-                              </View>
-                            </MenuOption>
-                          ) : (
-                            <MenuOption value="attach1" onSelect={() => {
-                              setPinMessageModalVisible(true);
-                              // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
-                            }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                                <Text>Закріпити</Text>
-                              </View>
-                            </MenuOption>
-                          )}
-                          <MenuOption value="translate" onSelect={() => handleMenuOptionSelect('translate')}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <TransleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
-                              <Text>Перекласти</Text>
-                            </View>
-                          </MenuOption>
-                        </>
-                      )}
-                    </MenuOptions>
-                  </Menu>
-                );
-              })}
-          </View>
-        )}
-        keyExtractor={(item) => item.date + item.messages[0].id}
+        renderItem={renderChatItem}
+        keyExtractor={(item, index) => item.type === "date" ? `date-${item.date}-${index}` : item.id}
         style={styles.messagesList}
-        getItemLayout={(data, index) => ({
-          length: 100,
-          offset: 100 * index,
-          index,
-        })}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
       />
+
 
       {replyToMessage && (
         <View style={styles.replyingToContainer}>
@@ -1697,8 +1651,7 @@ const ChatWindow = ({ route, navigation }) => {
                 onPress={async () => {
                   // Знаходимо повідомлення для закріплення
                   const selectedMessage = messages
-                    .flatMap(group => group.messages)
-                    .find(m => m.id === selectedMessageId);
+                    .find(m => m.type === 'message' && m.id === selectedMessageId);
                   if (selectedMessage) {
                     await handleAttachMessage(
                       selectedMessage,
@@ -1717,8 +1670,7 @@ const ChatWindow = ({ route, navigation }) => {
                 style={commonModalStyles.button}
                 onPress={async () => {
                   const selectedMessage = messages
-                    .flatMap(group => group.messages)
-                    .find(m => m.id === selectedMessageId);
+                    .find(m => m.type === 'message' && m.id === selectedMessageId);
                   if (selectedMessage) {
                     await handleAttachMessage(
                       selectedMessage,
