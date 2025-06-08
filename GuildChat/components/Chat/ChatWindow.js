@@ -645,27 +645,35 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
     console.log('Raw viewable items:', viewableItems);
-    const visibleMessages = viewableItems
-    .filter(item => {
-      const isMessage = item.item.type === 'message';
-      const isNotSender = item.item.senderId !== userId;
-      const hasReadBy = !!item.item.readBy;
-      const isUnread = !item.item.readBy?.[userId];
-      
-      console.log('Item check:', {
-        id: item.item.id,
-        isMessage,
-        isNotSender,
-        hasReadBy,
-        isUnread
+    const visibleItems = viewableItems
+      .filter(item => {
+        const isMessage = item.item.type === 'message';
+        const isNotSender = item.item.senderId !== userId;
+        const hasReadBy = !!item.item.readBy;
+        const isUnread = !item.item.readBy?.[userId];
+
+        console.log('Item check:', {
+          id: item.item.id,
+          isMessage,
+          isNotSender,
+          hasReadBy,
+          isUnread
+        });
+
+        return isMessage && isNotSender && isUnread;
       });
-      
-      return isMessage && isNotSender && isUnread;
-    })
-    .map(item => item.item.id);
-  
+
+    const visibleMessageIds = visibleItems.map(item => item.item.id);
+
+    if (visibleItems.length > 0) {
+      console.log(
+        'Переглянуті повідомлення:',
+        visibleItems.map(v => ({ id: v.item.id, text: v.item.text }))
+      );
+    }
+
     setViewableMessages(prev => {
-      const newMessages = Array.from(new Set([...prev, ...visibleMessages]));
+      const newMessages = Array.from(new Set([...prev, ...visibleMessageIds]));
       console.log('Updated viewable messages:', newMessages);
       return newMessages;
     });
