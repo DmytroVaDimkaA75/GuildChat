@@ -647,33 +647,27 @@ const ChatWindow = ({ route, navigation }) => {
     console.log('Raw viewable items:', viewableItems);
     const visibleMessages = viewableItems
       .filter(item => {
-        // item.item - це JS-об'єкт повідомлення
-        // id треба брати з item.key (це ключ у Firebase, а не поле в об'єкті!)
-        // senderId/readBy мають бути присутні, якщо це саме повідомлення
         if (!item || !item.item) {
           console.log('SKIP: item or item.item is undefined:', item);
           return false;
         }
-        // item.key - це id повідомлення з Firebase
-        const id = item.key;
+
+        const id = item.key; // id беремо з ім'я теки
         const senderId = item.item.senderId;
         const readBy = item.item.readBy;
-        const isNotSender = senderId !== userId;
         const isUnread = !readBy || !readBy[userId];
 
         console.log('Item check:', {
           id,
           senderId,
           userId,
-          isNotSender,
           isUnread,
           readBy
         });
 
-        // Перевіряємо тільки не свої і непрочитані
-        return isNotSender && isUnread;
+        return senderId !== userId && isUnread;
       })
-      .map(item => item.key); // id беремо з item.key
+      .map(item => item.key);
 
     console.log('visibleMessages after filter/map:', visibleMessages);
 
