@@ -822,20 +822,21 @@ const ChatWindow = ({ route, navigation }) => {
   useEffect(() => {
     if (initialScrollDone) return;
     if (!flatListRef.current) return;
-    if (firstUnreadId) {
+
+    if (firstUnreadId && messageHeights[firstUnreadId]) {
       const timer = setTimeout(() => {
         scrollToUnread(firstUnreadId);
-      }, 500);
+      }, 100);
       setInitialScrollDone(true);
       return () => clearTimeout(timer);
-    } else if (messages.length > 0) {
+    } else if (!firstUnreadId && messages.length > 0) {
       const timer = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: false });
-      }, 500);
+      }, 100);
       setInitialScrollDone(true);
       return () => clearTimeout(timer);
     }
-  }, [firstUnreadId, messages, initialScrollDone]);
+  }, [firstUnreadId, messages, initialScrollDone, messageHeights]);
 
   const selectImage = async () => {
     try {
