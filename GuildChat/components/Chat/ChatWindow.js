@@ -628,6 +628,8 @@ const ChatWindow = ({ route, navigation }) => {
   const messageRefs = useRef({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [firstUnreadId, setFirstUnreadId] = useState(null);
+  const [lastUnreadId, setLastUnreadId] = useState(null);
+  const [unreadIdsInitialized, setUnreadIdsInitialized] = useState(false);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
 
   const [pinMessageModalVisible, setPinMessageModalVisible] = useState(false);
@@ -810,18 +812,24 @@ const ChatWindow = ({ route, navigation }) => {
   }, [chatId, guildId, userId, locale]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || unreadIdsInitialized) return;
     const allMsgs = messages.flatMap(g => g.messages);
-    const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
-    setFirstUnreadId(unreadMsg ? unreadMsg.id : null);
-  }, [messages, userId]);
+    const unreadMsgs = allMsgs.filter(
+      m => m.senderId !== userId && (!m.readBy || !m.readBy[userId])
+    );
+    if (unreadMsgs.length > 0) {
+      setFirstUnreadId(unreadMsgs[0].id);
+      setLastUnreadId(unreadMsgs[unreadMsgs.length - 1].id);
+    }
+    setUnreadIdsInitialized(true);
+  }, [messages, userId, unreadIdsInitialized]);
 
   useEffect(() => {
-    if (initialScrollDone) return;
+    if (initialScrollDone || !unreadIdsInitialized) return;
     if (!flatListRef.current) return;
     if (firstUnreadId) {
       const timer = setTimeout(() => {
-        scrollToUnread(firstUnreadId);
+        scrollToUnread(firstUnreadId, lastUnreadId);
       }, 500);
       setInitialScrollDone(true);
       return () => clearTimeout(timer);
@@ -832,7 +840,7 @@ const ChatWindow = ({ route, navigation }) => {
       setInitialScrollDone(true);
       return () => clearTimeout(timer);
     }
-  }, [firstUnreadId, messages, initialScrollDone]);
+  }, [firstUnreadId, lastUnreadId, messages, initialScrollDone, unreadIdsInitialized]);
 
   const selectImage = async () => {
     try {
@@ -1062,32 +1070,50 @@ const ChatWindow = ({ route, navigation }) => {
     setTimeout(() => setHighlightedMessageId(null), 1500);
   };
 
-  const scrollToUnread = (messageId) => {
+  const scrollToUnread = (firstId, lastId) => {
     const allMessages = messages.flatMap(group => group.messages);
-    const messageIndex = allMessages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1) return;
-    let scrollOffset = 0;
-    for (let i = 0; i < messageIndex; i++) {
-      const prevMessageId = allMessages[i].id;
-      const messageHeight = messageHeights[prevMessageId] || 100;
-      scrollOffset += messageHeight + 10;
-    }
     const dateHeaderHeight = 50;
-    const datesBeforeMessage = new Set(
-      allMessages.slice(0, messageIndex).map(m => format(new Date(m.timestamp), 'd MMMM'))
-    ).size;
-    scrollOffset += dateHeaderHeight * datesBeforeMessage;
     const newHeaderHeight = 40;
-    scrollOffset = Math.max(0, scrollOffset - newHeaderHeight);
+
+    const getOffset = (index) => {
+      let offset = 0;
+      for (let i = 0; i < index; i++) {
+        const prevId = allMessages[i].id;
+        const h = messageHeights[prevId] || 100;
+        offset += h + 10;
+      }
+      const datesBefore = new Set(
+        allMessages.slice(0, index).map(m => format(new Date(m.timestamp), 'd MMMM'))
+      ).size;
+      offset += dateHeaderHeight * datesBefore;
+      return offset;
+    };
+
+    const firstIndex = allMessages.findIndex(m => m.id === firstId);
+    if (firstIndex === -1) return;
+
+    const lastIndex = lastId ? allMessages.findIndex(m => m.id === lastId) : firstIndex;
+    const offsetFirst = Math.max(0, getOffset(firstIndex) - newHeaderHeight);
+    const offsetLastTop = getOffset(lastIndex);
+    const lastHeight = messageHeights[allMessages[lastIndex].id] || 100;
 
     const windowHeight = Dimensions.get('window').height;
+    const rangeHeight = offsetLastTop + lastHeight - offsetFirst;
+
+    let targetOffset;
+    if (rangeHeight <= windowHeight) {
+      targetOffset = Math.max(0, offsetLastTop + lastHeight - windowHeight);
+    } else {
+      targetOffset = offsetFirst;
+    }
+
     const totalHeight = allMessages.reduce((sum, m) => sum + (messageHeights[m.id] || 100) + 10, 0)
       + dateHeaderHeight * new Set(allMessages.map(m => format(new Date(m.timestamp), 'd MMMM'))).size;
 
-    if (totalHeight - scrollOffset <= windowHeight) {
+    if (totalHeight - targetOffset <= windowHeight) {
       flatListRef.current?.scrollToEnd({ animated: false });
     } else {
-      flatListRef.current?.scrollToOffset({ offset: scrollOffset, animated: false });
+      flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
     }
   };
 
