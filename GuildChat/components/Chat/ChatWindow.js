@@ -811,10 +811,13 @@ const ChatWindow = ({ route, navigation }) => {
 
   useEffect(() => {
     if (!userId) return;
+    if (firstUnreadId) return; // зберігаємо перший непрочитаний ID незмінним
     const allMsgs = messages.flatMap(g => g.messages);
     const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
-    setFirstUnreadId(unreadMsg ? unreadMsg.id : null);
-  }, [messages, userId]);
+    if (unreadMsg) {
+      setFirstUnreadId(unreadMsg.id);
+    }
+  }, [messages, userId, firstUnreadId]);
 
   useEffect(() => {
     if (initialScrollDone) return;
