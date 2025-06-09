@@ -647,8 +647,8 @@ const ChatWindow = ({ route, navigation }) => {
     if (!userId || !guildId || !chatId) return;
 
     const db = getDatabase();
-    const updates = {};
     const currentTime = Date.now();
+    const windowHeight = Dimensions.get('window').height;
 
     viewableItems.forEach(item => {
       if (!item || !item.item || !Array.isArray(item.item.messages)) {
@@ -664,21 +664,23 @@ const ChatWindow = ({ route, navigation }) => {
           return;
         }
 
-        const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
-        updates[path] = currentTime;
-        processedMessages.current.add(id);
-        console.log('Preparing read update for:', path);
+        const msgRef = messageRefs.current[id];
+        if (!msgRef || typeof msgRef.measureInWindow !== 'function') return;
+
+        msgRef.measureInWindow((x, y, width, height) => {
+          if (y < windowHeight && y + height > 0) {
+            const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
+            set(ref(db, path), currentTime)
+              .then(() => console.log('Marked as read:', path))
+              .catch(error => {
+                console.error('Firebase update error:', error);
+                Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
+              });
+            processedMessages.current.add(id);
+          }
+        });
       });
     });
-
-    if (Object.keys(updates).length === 0) return;
-
-    update(ref(db), updates)
-      .then(() => console.log('Read statuses updated successfully'))
-      .catch(error => {
-        console.error('Firebase update error:', error);
-        Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
-      });
   }, [userId, guildId, chatId]);
 
   const pinnedMessagesForUser = messages
