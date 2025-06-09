@@ -823,13 +823,23 @@ const ChatWindow = ({ route, navigation }) => {
     if (initialScrollDone) return;
     if (!flatListRef.current) return;
 
-    if (firstUnreadId && messageHeights[firstUnreadId]) {
-      const timer = setTimeout(() => {
-        scrollToUnread(firstUnreadId);
-      }, 100);
-      setInitialScrollDone(true);
-      return () => clearTimeout(timer);
-    } else if (!firstUnreadId && messages.length > 0) {
+    if (firstUnreadId) {
+      const indices = findGroupAndMessageIndex(firstUnreadId);
+      if (indices) {
+        try {
+          flatListRef.current.scrollToIndex({ index: indices.groupIndex, animated: false });
+        } catch (e) {}
+        const timer = setTimeout(() => {
+          if (messageHeights[firstUnreadId]) {
+            scrollToUnread(firstUnreadId);
+          }
+        }, 100);
+        setInitialScrollDone(true);
+        return () => clearTimeout(timer);
+      }
+    }
+
+    if (!firstUnreadId && messages.length > 0) {
       const timer = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: false });
       }, 100);
@@ -1064,6 +1074,14 @@ const ChatWindow = ({ route, navigation }) => {
     });
     setHighlightedMessageId(messageId);
     setTimeout(() => setHighlightedMessageId(null), 1500);
+  };
+
+  const findGroupAndMessageIndex = (messageId) => {
+    for (let gi = 0; gi < messages.length; gi++) {
+      const mi = messages[gi].messages.findIndex(m => m.id === messageId);
+      if (mi !== -1) return { groupIndex: gi, messageIndex: mi };
+    }
+    return null;
   };
 
   const scrollToUnread = (messageId) => {
