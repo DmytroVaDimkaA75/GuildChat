@@ -627,6 +627,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [messageHeights, setMessageHeights] = useState({});
   const messageRefs = useRef({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [firstUnreadId, setFirstUnreadId] = useState(null);
+  const [initialScrollDone, setInitialScrollDone] = useState(false);
 
   const [pinMessageModalVisible, setPinMessageModalVisible] = useState(false);
   const [pinForAllOrUser, setPinForAllOrUser] = useState(false);
@@ -806,6 +808,31 @@ const ChatWindow = ({ route, navigation }) => {
     };
     fetchMessages();
   }, [chatId, guildId, userId, locale]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const allMsgs = messages.flatMap(g => g.messages);
+    const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
+    setFirstUnreadId(unreadMsg ? unreadMsg.id : null);
+  }, [messages, userId]);
+
+  useEffect(() => {
+    if (initialScrollDone) return;
+    if (!flatListRef.current) return;
+    if (firstUnreadId) {
+      const timer = setTimeout(() => {
+        scrollToUnread(firstUnreadId);
+      }, 500);
+      setInitialScrollDone(true);
+      return () => clearTimeout(timer);
+    } else if (messages.length > 0) {
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 500);
+      setInitialScrollDone(true);
+      return () => clearTimeout(timer);
+    }
+  }, [firstUnreadId, messages, initialScrollDone]);
 
   const selectImage = async () => {
     try {
@@ -1035,6 +1062,35 @@ const ChatWindow = ({ route, navigation }) => {
     setTimeout(() => setHighlightedMessageId(null), 1500);
   };
 
+  const scrollToUnread = (messageId) => {
+    const allMessages = messages.flatMap(group => group.messages);
+    const messageIndex = allMessages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+    let scrollOffset = 0;
+    for (let i = 0; i < messageIndex; i++) {
+      const prevMessageId = allMessages[i].id;
+      const messageHeight = messageHeights[prevMessageId] || 100;
+      scrollOffset += messageHeight + 10;
+    }
+    const dateHeaderHeight = 50;
+    const datesBeforeMessage = new Set(
+      allMessages.slice(0, messageIndex).map(m => format(new Date(m.timestamp), 'd MMMM'))
+    ).size;
+    scrollOffset += dateHeaderHeight * datesBeforeMessage;
+    const newHeaderHeight = 40;
+    scrollOffset = Math.max(0, scrollOffset - newHeaderHeight);
+
+    const windowHeight = Dimensions.get('window').height;
+    const totalHeight = allMessages.reduce((sum, m) => sum + (messageHeights[m.id] || 100) + 10, 0)
+      + dateHeaderHeight * new Set(allMessages.map(m => format(new Date(m.timestamp), 'd MMMM'))).size;
+
+    if (totalHeight - scrollOffset <= windowHeight) {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    } else {
+      flatListRef.current?.scrollToOffset({ offset: scrollOffset, animated: false });
+    }
+  };
+
   const renderPinnedContent = (message) => {
     const urlRegex = /https?:\/\/[^\s]+/g;
     const hasImages = message.imageUrls && message.imageUrls.length > 0;
@@ -1199,7 +1255,15 @@ const ChatWindow = ({ route, navigation }) => {
                   (item.messages[index + 1] && item.messages[index + 1].senderId !== message.senderId);
                 const parts = splitMessageIntoParts(message.text);
 
+                const showNewHeader = firstUnreadId === message.id;
+
                 return (
+                  <React.Fragment key={message.id}>
+                    {showNewHeader && (
+                      <View style={styles.newMessagesBlock}>
+                        <Text style={styles.newMessagesText}>Нові повідомлення</Text>
+                      </View>
+                    )}
                   <Menu style={styles.menu} key={message.id}>
                     <MenuTrigger onPress={() => handlePressMessage(message.id)}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -1421,6 +1485,7 @@ const ChatWindow = ({ route, navigation }) => {
                       )}
                     </MenuOptions>
                   </Menu>
+                </React.Fragment>
                 );
               })}
           </View>
@@ -1850,6 +1915,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#fff",
     backgroundColor: "#999",
+    padding: 5,
+    borderRadius: 10,
+  },
+  newMessagesBlock: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  newMessagesText: {
+    fontSize: 14,
+    color: '#fff',
+    backgroundColor: '#2296f3',
     padding: 5,
     borderRadius: 10,
   },
