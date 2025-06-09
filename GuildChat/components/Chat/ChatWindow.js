@@ -643,45 +643,57 @@ const ChatWindow = ({ route, navigation }) => {
     setInputHeight(newHeight);
   };
 
-  const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
+  const checkAndMarkRead = useCallback((messagesToCheck) => {
     if (!userId || !guildId || !chatId) return;
 
     const db = getDatabase();
     const currentTime = Date.now();
     const windowHeight = Dimensions.get('window').height;
 
-    viewableItems.forEach(item => {
-      if (!item || !item.item || !Array.isArray(item.item.messages)) {
+    messagesToCheck.forEach(message => {
+      if (!message) return;
+      const { id, senderId, readBy } = message;
+      const isUnread = !readBy || !readBy[userId];
+
+      if (senderId === userId || !isUnread || processedMessages.current.has(id)) {
         return;
       }
 
-      item.item.messages.forEach(message => {
-        if (!message) return;
-        const { id, senderId, readBy } = message;
-        const isUnread = !readBy || !readBy[userId];
+      const msgRef = messageRefs.current[id];
+      if (!msgRef || typeof msgRef.measureInWindow !== 'function') return;
 
-        if (senderId === userId || !isUnread || processedMessages.current.has(id)) {
-          return;
+      msgRef.measureInWindow((x, y, width, height) => {
+        if (y >= 0 && y + height <= windowHeight) {
+          const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
+          set(ref(db, path), currentTime)
+            .then(() => console.log('Marked as read:', path))
+            .catch(error => {
+              console.error('Firebase update error:', error);
+              Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
+            });
+          processedMessages.current.add(id);
         }
-
-        const msgRef = messageRefs.current[id];
-        if (!msgRef || typeof msgRef.measureInWindow !== 'function') return;
-
-        msgRef.measureInWindow((x, y, width, height) => {
-          if (y < windowHeight && y + height > 0) {
-            const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
-            set(ref(db, path), currentTime)
-              .then(() => console.log('Marked as read:', path))
-              .catch(error => {
-                console.error('Firebase update error:', error);
-                Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
-              });
-            processedMessages.current.add(id);
-          }
-        });
       });
     });
   }, [userId, guildId, chatId]);
+
+  const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
+    const messagesToCheck = [];
+
+    viewableItems.forEach(item => {
+      if (!item || !item.item || !Array.isArray(item.item.messages)) return;
+      messagesToCheck.push(...item.item.messages);
+    });
+
+    checkAndMarkRead(messagesToCheck);
+  }, [checkAndMarkRead]);
+
+  const handleScroll = useCallback(() => {
+    const unread = messages
+      .flatMap(g => g.messages)
+      .filter(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]) && !processedMessages.current.has(m.id));
+    checkAndMarkRead(unread);
+  }, [messages, userId, checkAndMarkRead]);
 
   const pinnedMessagesForUser = messages
     .flatMap(group => group.messages)
@@ -1422,6 +1434,8 @@ const ChatWindow = ({ route, navigation }) => {
         })}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onViewableItemsChanged={handleViewableItemsChanged}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
         viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
       />
 
