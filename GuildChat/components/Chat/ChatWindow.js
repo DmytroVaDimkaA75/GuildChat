@@ -628,6 +628,7 @@ const ChatWindow = ({ route, navigation }) => {
   const messageRefs = useRef({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [firstUnreadId, setFirstUnreadId] = useState(null);
+  const firstUnreadSet = useRef(false);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
 
   const [pinMessageModalVisible, setPinMessageModalVisible] = useState(false);
@@ -810,10 +811,16 @@ const ChatWindow = ({ route, navigation }) => {
   }, [chatId, guildId, userId, locale]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (firstUnreadSet.current) return;
+    if (!userId || messages.length === 0) return;
     const allMsgs = messages.flatMap(g => g.messages);
-    const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
-    setFirstUnreadId(unreadMsg ? unreadMsg.id : null);
+    const unreadMsg = allMsgs.find(
+      m => m.senderId !== userId && (!m.readBy || !m.readBy[userId])
+    );
+    if (unreadMsg) {
+      setFirstUnreadId(unreadMsg.id);
+    }
+    firstUnreadSet.current = true;
   }, [messages, userId]);
 
   useEffect(() => {
