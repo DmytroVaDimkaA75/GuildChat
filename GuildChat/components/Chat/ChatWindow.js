@@ -590,7 +590,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [sendOptionsPopupVisible, setSendOptionsPopupVisible] = useState(false);
   // Новий state для модального вікна стилізації
   const [isFormattingModalVisible, setFormattingModalVisible] = useState(false);
-  const [viewableMessages, setViewableMessages] = useState([]);
+  const processedMessages = useRef(new Set());
 
   const [unpinModalVisible, setUnpinModalVisible] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
@@ -644,81 +644,42 @@ const ChatWindow = ({ route, navigation }) => {
   };
 
   const handleViewableItemsChanged = useCallback(({ viewableItems }) => {
-    console.log('Raw viewable items:', viewableItems);
-    const visibleMessages = viewableItems
-      .filter(item => {
-        if (!item || !item.item) {
-          console.log('SKIP: item or item.item is undefined:', item);
-          return false;
-        }
+    if (!userId || !guildId || !chatId) return;
 
-        const id = item.key; // id беремо з ім'я теки
-        const senderId = item.item.senderId;
-        const readBy = item.item.readBy;
-        const isUnread = !readBy || !readBy[userId];
-
-        console.log('Item check:', {
-          id,
-          senderId,
-          userId,
-          isUnread,
-          readBy
-        });
-
-        return senderId !== userId && isUnread;
-      })
-      .map(item => item.key);
-
-    console.log('visibleMessages after filter/map:', visibleMessages);
-
-    setViewableMessages(prev => {
-      const newMessages = Array.from(new Set([...prev, ...visibleMessages]));
-      console.log('Prev viewableMessages:', prev);
-      console.log('Combined (prev + visibleMessages):', [...prev, ...visibleMessages]);
-      console.log('Updated viewable messages (unique):', newMessages);
-      if (newMessages.length === 0) {
-        console.log('newMessages is EMPTY after merge!');
-      }
-      return newMessages;
-    });
-  }, [userId]);
-
-  useEffect(() => {
-    if (!viewableMessages.length || !userId || !guildId || !chatId) {
-      console.log('Skipping update - missing data:', {
-        viewableMessages,
-        userId,
-        guildId,
-        chatId
-      });
-      return;
-    }
-  
     const db = getDatabase();
     const updates = {};
     const currentTime = Date.now();
-  
-    viewableMessages.forEach(messageId => {
-      // Додайте перевірку на валідність messageId
-      if (typeof messageId !== 'string' || !messageId.trim()) return;
-      
-      const readStatusPath = `guilds/${guildId}/chats/${chatId}/messages/${messageId}/readBy/${userId}`;
-      updates[readStatusPath] = currentTime;
-      console.log('Preparing update for:', readStatusPath);
+
+    viewableItems.forEach(item => {
+      if (!item || !item.item || !Array.isArray(item.item.messages)) {
+        return;
+      }
+
+      item.item.messages.forEach(message => {
+        if (!message) return;
+        const { id, senderId, readBy } = message;
+        const isUnread = !readBy || !readBy[userId];
+
+        if (senderId === userId || !isUnread || processedMessages.current.has(id)) {
+          return;
+        }
+
+        const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
+        updates[path] = currentTime;
+        processedMessages.current.add(id);
+        console.log('Preparing read update for:', path);
+      });
     });
-  
-    if (Object.keys(updates).length === 0) {
-      console.log('No valid updates to apply');
-      return;
-    }
-  
+
+    if (Object.keys(updates).length === 0) return;
+
     update(ref(db), updates)
       .then(() => console.log('Read statuses updated successfully'))
       .catch(error => {
         console.error('Firebase update error:', error);
         Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
       });
-  }, [viewableMessages, userId, guildId, chatId]);
+  }, [userId, guildId, chatId]);
 
   const pinnedMessagesForUser = messages
     .flatMap(group => group.messages)
