@@ -639,6 +639,12 @@ const ChatWindow = ({ route, navigation }) => {
     }
   }, [pinMessageModalVisible]);
 
+  // Reset scroll state when switching between chats
+  useEffect(() => {
+    setInitialScrollDone(false);
+    setFirstUnreadId(null);
+  }, [chatId]);
+
   const handleContentSizeChange = (event) => {
     const { height } = event.nativeEvent.contentSize;
     const newHeight = Math.min(Math.max(40, height), maxInputHeight);
@@ -811,42 +817,63 @@ const ChatWindow = ({ route, navigation }) => {
 
   useEffect(() => {
     if (!userId) return;
-    if (firstUnreadId) return; // зберігаємо перший непрочитаний ID незмінним
     const allMsgs = messages.flatMap(g => g.messages);
     const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
+    
     if (unreadMsg) {
       setFirstUnreadId(unreadMsg.id);
+    } else {
+      setFirstUnreadId(null);
     }
-  }, [messages, userId, firstUnreadId]);
+  }, [messages, userId]);
 
   useEffect(() => {
     if (initialScrollDone) return;
     if (!flatListRef.current) return;
+    if (messages.length === 0) return;
 
-    if (firstUnreadId) {
-      const indices = findGroupAndMessageIndex(firstUnreadId);
-      if (indices) {
-        try {
-          flatListRef.current.scrollToIndex({ index: indices.groupIndex, animated: false });
-        } catch (e) {}
-        const timer = setTimeout(() => {
-          if (messageHeights[firstUnreadId]) {
-            scrollToUnread(firstUnreadId);
+    // Add a longer delay to ensure the FlatList is fully rendered
+    const timer = setTimeout(() => {
+      if (firstUnreadId) {
+        const indices = findGroupAndMessageIndex(firstUnreadId);
+        if (indices) {
+          try {
+            flatListRef.current.scrollToIndex({ index: indices.groupIndex, animated: false });
+            // Add additional delay for scrollToUnread
+            setTimeout(() => {
+              if (messageHeights[firstUnreadId]) {
+                scrollToUnread(firstUnreadId);
+              }
+            }, 100);
+          } catch (e) {
+            console.error('Error scrolling to index:', e);
           }
-        }, 100);
-        setInitialScrollDone(true);
-        return () => clearTimeout(timer);
+        }
+      } else {
+        // No unread messages, scroll to end
+        try {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        } catch (e) {
+          console.error('Error scrolling to end:', e);
+        }
       }
-    }
-
-    if (!firstUnreadId && messages.length > 0) {
-      const timer = setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: false });
-      }, 100);
       setInitialScrollDone(true);
-      return () => clearTimeout(timer);
-    }
+    }, 300); // Increased timeout to ensure proper rendering
+
+    return () => clearTimeout(timer);
   }, [firstUnreadId, messages, initialScrollDone, messageHeights]);
+
+  // Fallback mechanism to ensure scroll to end works
+  useEffect(() => {
+    if (!flatListRef.current || !initialScrollDone || firstUnreadId) return;
+    
+    // Additional fallback scroll to end for chats with no unread messages
+    const fallbackTimer = setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }, 500);
+
+    return () => clearTimeout(fallbackTimer);
+  }, [messages, initialScrollDone, firstUnreadId]);
 
   const selectImage = async () => {
     try {
@@ -1201,7 +1228,6 @@ const ChatWindow = ({ route, navigation }) => {
     setSelection({ start: newCursorPos, end: newCursorPos });
   };
 
-  // ← Додати одразу після wrapSelection
   const formatMarkers = [
     { label: "Ж", marker: "**" },
     { label: "К", marker: "_" },
@@ -1514,12 +1540,6 @@ const ChatWindow = ({ route, navigation }) => {
         )}
         keyExtractor={(item) => item.date + item.messages[0].id}
         style={styles.messagesList}
-        getItemLayout={(data, index) => ({
-          length: 100,
-          offset: 100 * index,
-          index,
-        })}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onViewableItemsChanged={handleViewableItemsChanged}
         onScroll={handleScroll}
         scrollEventThrottle={100}
@@ -2299,9 +2319,9 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 10,
-    textAlign: "center",
+    textAlign: 'center',
   },
   fullSizeImageModalOverlay: {
     flex: 1,
@@ -2480,8 +2500,6 @@ const styles = StyleSheet.create({
   },           // сірий текст
 
 });
-
-
 
 
 export default ChatWindow;
