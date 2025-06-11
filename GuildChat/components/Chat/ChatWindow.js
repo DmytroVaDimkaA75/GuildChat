@@ -628,6 +628,7 @@ const ChatWindow = ({ route, navigation }) => {
   const messageRefs = useRef({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [firstUnreadId, setFirstUnreadId] = useState(null);
+  const [originalFirstUnreadId, setOriginalFirstUnreadId] = useState(null);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
 
   const [pinMessageModalVisible, setPinMessageModalVisible] = useState(false);
@@ -639,10 +640,11 @@ const ChatWindow = ({ route, navigation }) => {
     }
   }, [pinMessageModalVisible]);
 
-  // Reset scroll state when switching between chats
   useEffect(() => {
     setInitialScrollDone(false);
     setFirstUnreadId(null);
+    setOriginalFirstUnreadId(null);
+    processedMessages.current = new Set();
   }, [chatId]);
 
   const handleContentSizeChange = (event) => {
@@ -674,7 +676,6 @@ const ChatWindow = ({ route, navigation }) => {
         if (y >= 0 && y + height <= windowHeight) {
           const path = `guilds/${guildId}/chats/${chatId}/messages/${id}/readBy/${userId}`;
           set(ref(db, path), currentTime)
-            .then(() => console.log('Marked as read:', path))
             .catch(error => {
               console.error('Firebase update error:', error);
               Alert.alert('Помилка', 'Не вдалося оновити статус переглядів');
@@ -706,6 +707,8 @@ const ChatWindow = ({ route, navigation }) => {
   const pinnedMessagesForUser = messages
     .flatMap(group => group.messages)
     .filter(m => m.pinned && m.pinned.pinnedFor && m.pinned.pinnedFor[userId]);
+
+  const hasSetOriginalUnreadId = useRef(false);
 
   useEffect(() => {
     const fetchUserIdAndGuildId = async () => {
@@ -790,24 +793,36 @@ const ChatWindow = ({ route, navigation }) => {
       const messagesRef = ref(db, `guilds/${guildId}/chats/${chatId}/messages`);
       onValue(messagesRef, (snapshot) => {
         const messagesData = snapshot.val() || {};
+        
         const messagesList = Object.keys(messagesData).map(key => ({
           id: key,
-          type: 'message', // Додано тип
+          type: 'message',
           ...messagesData[key],
         }));
+        
+        const unreadMessages = messagesList.filter(msg => 
+          msg.senderId !== userId && 
+          (!msg.readBy || !msg.readBy[userId])
+        );
+        
+        if (messagesList.length > 0 && !hasSetOriginalUnreadId.current && unreadMessages.length > 0) {
+          setOriginalFirstUnreadId(unreadMessages[0].id);
+          setFirstUnreadId(unreadMessages[0].id);
+          hasSetOriginalUnreadId.current = true;
+        }
+        
         const groupedMessages = messagesList.reduce((acc, message) => {
           const date = format(new Date(message.timestamp), 'd MMMM', { locale });
           if (!acc[date]) acc[date] = [];
           acc[date].push(message);
           return acc;
         }, {});
+        
         const groupedMessagesArray = Object.keys(groupedMessages).map(date => ({
           date,
           messages: groupedMessages[date],
-          type: 'date' // Додайте тип для заголовків дат
+          type: 'date'
         }));
-        
-        // Додайте тип для повідомлень:
         
         setMessages(groupedMessagesArray);
       });
@@ -816,14 +831,22 @@ const ChatWindow = ({ route, navigation }) => {
   }, [chatId, guildId, userId, locale]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || messages.length === 0 || hasSetOriginalUnreadId.current) return;
+    
     const allMsgs = messages.flatMap(g => g.messages);
-    const unreadMsg = allMsgs.find(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
+    const unreadMsg = allMsgs.find(m => 
+      m.senderId !== userId && 
+      (!m.readBy || !m.readBy[userId]) && 
+      !processedMessages.current.has(m.id)
+    );
     
     if (unreadMsg) {
       setFirstUnreadId(unreadMsg.id);
-    } else {
-      setFirstUnreadId(null);
+      
+      if (!hasSetOriginalUnreadId.current) {
+        setOriginalFirstUnreadId(unreadMsg.id);
+        hasSetOriginalUnreadId.current = true;
+      }
     }
   }, [messages, userId]);
 
@@ -832,14 +855,16 @@ const ChatWindow = ({ route, navigation }) => {
     if (!flatListRef.current) return;
     if (messages.length === 0) return;
 
-    // Add a longer delay to ensure the FlatList is fully rendered
     const timer = setTimeout(() => {
+      const hasUnreadMessages = messages
+        .flatMap(g => g.messages)
+        .some(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
+      
       if (firstUnreadId) {
         const indices = findGroupAndMessageIndex(firstUnreadId);
         if (indices) {
           try {
             flatListRef.current.scrollToIndex({ index: indices.groupIndex, animated: false });
-            // Add additional delay for scrollToUnread
             setTimeout(() => {
               if (messageHeights[firstUnreadId]) {
                 scrollToUnread(firstUnreadId);
@@ -849,8 +874,7 @@ const ChatWindow = ({ route, navigation }) => {
             console.error('Error scrolling to index:', e);
           }
         }
-      } else {
-        // No unread messages, scroll to end
+      } else if (!hasUnreadMessages) {
         try {
           flatListRef.current?.scrollToEnd({ animated: false });
         } catch (e) {
@@ -858,22 +882,26 @@ const ChatWindow = ({ route, navigation }) => {
         }
       }
       setInitialScrollDone(true);
-    }, 300); // Increased timeout to ensure proper rendering
+    }, 300);
 
     return () => clearTimeout(timer);
-  }, [firstUnreadId, messages, initialScrollDone, messageHeights]);
+  }, [firstUnreadId, messages, initialScrollDone, messageHeights, userId]);
 
-  // Fallback mechanism to ensure scroll to end works
   useEffect(() => {
     if (!flatListRef.current || !initialScrollDone || firstUnreadId) return;
     
-    // Additional fallback scroll to end for chats with no unread messages
+    const hasUnreadMessages = messages
+      .flatMap(g => g.messages)
+      .some(m => m.senderId !== userId && (!m.readBy || !m.readBy[userId]));
+    
+    if (hasUnreadMessages) return;
+    
     const fallbackTimer = setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: false });
     }, 500);
 
     return () => clearTimeout(fallbackTimer);
-  }, [messages, initialScrollDone, firstUnreadId]);
+  }, [messages, initialScrollDone, firstUnreadId, userId]);
 
   const selectImage = async () => {
     try {
@@ -1303,7 +1331,7 @@ const ChatWindow = ({ route, navigation }) => {
                   (item.messages[index + 1] && item.messages[index + 1].senderId !== message.senderId);
                 const parts = splitMessageIntoParts(message.text);
 
-                const showNewHeader = firstUnreadId === message.id;
+                const showNewHeader = originalFirstUnreadId === message.id;
 
                 return (
                   <React.Fragment key={message.id}>
@@ -1836,7 +1864,7 @@ const ChatWindow = ({ route, navigation }) => {
                 <Text style={commonModalStyles.buttonText}>Скасувати</Text>
               </TouchableOpacity>
             </View>
-          </View>
+                   </View>
         </View>
       </Modal>
 
