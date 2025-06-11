@@ -1259,6 +1259,21 @@ const ChatWindow = ({ route, navigation }) => {
     setSelection({ start: newCursorPos, end: newCursorPos });
   };
 
+  const formatReadTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+
+    const timeString = format(date, 'HH:mm', { locale });
+    if (date.toDateString() === now.toDateString()) {
+      return `сьогодні, ${timeString}`;
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return `учора, ${timeString}`;
+    }
+    return `${format(date, 'dd MMM', { locale })}, ${timeString}`;
+  };
+
   const formatMarkers = [
     { label: "Ж", marker: "**" },
     { label: "К", marker: "_" },
@@ -1473,6 +1488,19 @@ const ChatWindow = ({ route, navigation }) => {
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
                       {isCurrentUser ? (
                         <>
+                          {chatType === 'private' && message.readBy && Object.keys(message.readBy).find(id => id !== userId) && (
+                            <>
+                              <MenuOption disabled>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <FontAwesomeIcon icon={faCheckDouble} size={14} style={{ marginRight: 5, color: '#4CAF50' }} />
+                                  <Text>
+                                    {formatReadTime(message.readBy[Object.keys(message.readBy).find(id => id !== userId)])}
+                                  </Text>
+                                </View>
+                              </MenuOption>
+                              <View style={styles.menuSeparator} />
+                            </>
+                          )}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -2168,6 +2196,11 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: '#cccccc',
+  },
+  menuSeparator: {
+    height: 1,
+    backgroundColor: '#ccc',
+    marginVertical: 5,
   },
   pinnedMessageWrapper: {
     flexDirection: 'row',
