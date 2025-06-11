@@ -601,21 +601,24 @@ const ChatWindow = ({ route, navigation }) => {
     setReplyToMessageText(message.text);
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (message) => {
+    if (!message) return null;
+    const { status, readBy, senderId } = message;
+    const isReadByOthers = readBy && Object.keys(readBy).some(id => id !== senderId);
+    if (isReadByOthers || status === 'read') {
+      return (
+        <View style={styles.doubleCheckContainer}>
+          <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />
+          <FontAwesomeIcon icon={faCheckDouble} size={14} style={[styles.statusIcon, styles.secondCheck]} />
+        </View>
+      );
+    }
     switch (status) {
       case 'sending':
         return <FontAwesomeIcon icon={faClock} size={14} style={styles.statusIcon} />;
       case 'sent':
-        return <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />;
-      case 'read':
-        return (
-          <View style={styles.doubleCheckContainer}>
-            <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />
-            <FontAwesomeIcon icon={faCheckDouble} size={14} style={[styles.statusIcon, styles.secondCheck]} />
-          </View>
-        );
       default:
-        return null;
+        return <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />;
     }
   };
 
@@ -1450,7 +1453,7 @@ const ChatWindow = ({ route, navigation }) => {
                               {message.pinned && message.pinned.isPinned && (
                                 <PinIcon width={16} height={16} fill="#0088cc" style={{ marginRight: 4 }} />
                               )}
-                              {isCurrentUser && getStatusIcon(message.status)}
+                              {isCurrentUser && getStatusIcon(message)}
                               <Text style={styles.messageDate}>
                                 {format(new Date(message.timestamp), 'H:mm', { locale })}
                               </Text>
