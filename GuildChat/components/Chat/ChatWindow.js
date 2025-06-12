@@ -314,6 +314,22 @@ const getPinnedMessageText = (messageId, allMessages) => {
   return found ? found.text : "(Повідомлення не знайдено)";
 };
 
+const getViewsText = (count, localeCode = 'en') => {
+  const rules = new Intl.PluralRules(localeCode);
+  const forms = {
+    uk: { one: 'перегляд', few: 'перегляди', many: 'переглядів', other: 'переглядів' },
+    ru: { one: 'просмотр', few: 'просмотра', many: 'просмотров', other: 'просмотров' },
+    fr: { one: 'vue', other: 'vues' },
+    de: { one: 'Aufruf', other: 'Aufrufe' },
+    es: { one: 'vista', other: 'vistas' },
+    en: { one: 'view', other: 'views' },
+  };
+  const formSet = forms[localeCode] || forms.en;
+  const rule = rules.select(count);
+  const word = formSet[rule] || formSet.other;
+  return `${count} ${word}`;
+};
+
 const handleAttachMessage = async (message, userId, guildId, chatId, pinForAllOrUser) => {
   try {
     const db = getDatabase();
@@ -636,6 +652,12 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [pinMessageModalVisible, setPinMessageModalVisible] = useState(false);
   const [pinForAllOrUser, setPinForAllOrUser] = useState(false);
+
+  // States for read users info modal
+  const [readUsersModalVisible, setReadUsersModalVisible] = useState(false);
+  const [readUsersInfo, setReadUsersInfo] = useState([]);
+  const [readUsersSide, setReadUsersSide] = useState('left');
+  const [readUsersLoading, setReadUsersLoading] = useState(false);
 
   useEffect(() => {
     if (pinMessageModalVisible) {
@@ -1051,6 +1073,31 @@ const ChatWindow = ({ route, navigation }) => {
     setSelectedMessageId(messageId);
   };
 
+  const handleMenuOpen = async (message, isCurrentUser) => {
+    setReadUsersInfo([]);
+    setReadUsersLoading(false);
+    setReadUsersSide(isCurrentUser ? 'left' : 'right');
+    if (chatType !== 'group' || !message.readBy) return;
+    setReadUsersLoading(true);
+    try {
+      const db = getDatabase();
+      const userIds = Object.keys(message.readBy);
+      const snapshots = await Promise.all(
+        userIds.map(id => get(ref(db, `guilds/${guildId}/guildUsers/${id}`)))
+      );
+      const users = snapshots.map((snap, idx) => ({
+        userId: userIds[idx],
+        userName: snap.val()?.userName || 'Unknown',
+        avatar: snap.val()?.imageUrl || null,
+      }));
+      setReadUsersInfo(users);
+    } catch (e) {
+      console.error('Error fetching read users', e);
+    } finally {
+      setReadUsersLoading(false);
+    }
+  };
+
   const handleDeleteMessage = async (deleteForBoth) => {
     if (!messageToDelete) return;
     try {
@@ -1358,7 +1405,7 @@ const ChatWindow = ({ route, navigation }) => {
                         <Text style={styles.newMessagesText}>Нові повідомлення</Text>
                       </View>
                     )}
-                  <Menu style={styles.menu} key={message.id}>
+                  <Menu style={styles.menu} key={message.id} onOpen={() => handleMenuOpen(message, isCurrentUser)}>
                     <MenuTrigger onPress={() => handlePressMessage(message.id)}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         {(chatType !== 'private' && !isCurrentUser) && (
@@ -1488,19 +1535,29 @@ const ChatWindow = ({ route, navigation }) => {
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
                       {isCurrentUser ? (
                         <>
-                          {chatType === 'private' && message.readBy && Object.keys(message.readBy).find(id => id !== userId) && (
+                          {chatType === 'group' && (
                             <>
-                              <MenuOption disabled>
+                              <MenuOption onSelect={() => setReadUsersModalVisible(true)}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                  <FontAwesomeIcon icon={faCheckDouble} size={14} style={{ marginRight: 5, color: '#4CAF50' }} />
-                                  <Text>
-                                    {formatReadTime(message.readBy[Object.keys(message.readBy).find(id => id !== userId)])}
-                                  </Text>
+                                  <FontAwesomeIcon icon={faCheckDouble} size={20} color="gray" style={{ marginRight: 5 }} />
+                                  {readUsersLoading ? (
+                                    <ActivityIndicator size="small" color="gray" />
+                                  ) : readUsersInfo.length === 1 ? (
+                                    <>
+                                      <Text numberOfLines={1} style={{ maxWidth: 120 }}>{readUsersInfo[0].userName}</Text>
+                                      {readUsersInfo[0].avatar && (
+                                        <Image source={{ uri: readUsersInfo[0].avatar }} style={styles.readUserAvatar} />
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Text>{getViewsText(readUsersInfo.length, locale.code)}</Text>
+                                  )}
                                 </View>
                               </MenuOption>
                               <View style={styles.menuSeparator} />
                             </>
                           )}
+                          <MenuOption value="reply" onSelect={() => handleReply(message)}>
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -1549,6 +1606,28 @@ const ChatWindow = ({ route, navigation }) => {
                         </>
                       ) : (
                         <>
+                          {chatType === 'group' && (
+                            <>
+                              <MenuOption onSelect={() => setReadUsersModalVisible(true)}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                  <FontAwesomeIcon icon={faCheckDouble} size={20} color="gray" style={{ marginRight: 5 }} />
+                                  {readUsersLoading ? (
+                                    <ActivityIndicator size="small" color="gray" />
+                                  ) : readUsersInfo.length === 1 ? (
+                                    <>
+                                      <Text numberOfLines={1} style={{ maxWidth: 120 }}>{readUsersInfo[0].userName}</Text>
+                                      {readUsersInfo[0].avatar && (
+                                        <Image source={{ uri: readUsersInfo[0].avatar }} style={styles.readUserAvatar} />
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Text>{getViewsText(readUsersInfo.length, locale.code)}</Text>
+                                  )}
+                                </View>
+                              </MenuOption>
+                              <View style={styles.menuSeparator} />
+                            </>
+                          )}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -1994,6 +2073,30 @@ const ChatWindow = ({ route, navigation }) => {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={readUsersModalVisible}
+        onRequestClose={() => setReadUsersModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={[styles.readUsersOverlay, { alignItems: readUsersSide === 'left' ? 'flex-start' : 'flex-end' }]}
+          activeOpacity={1}
+          onPress={() => setReadUsersModalVisible(false)}
+        >
+          <View style={styles.readUsersContainer}>
+            <ScrollView>
+              {readUsersInfo.map(u => (
+                <View style={styles.readUserRow} key={u.userId}>
+                  <Text numberOfLines={1} style={{ maxWidth: 140 }}>{u.userName}</Text>
+                  {u.avatar && <Image source={{ uri: u.avatar }} style={styles.readUserAvatar} />}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -2562,6 +2665,35 @@ const styles = StyleSheet.create({
   formatButtonTextDisabled: {
     color: '#aaa'
   },           // сірий текст
+  menuSeparator: {
+    height: 1,
+    backgroundColor: '#ccc',
+    marginVertical: 5,
+  },
+  readUserAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginLeft: 5,
+  },
+  readUsersOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+  },
+  readUsersContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    maxHeight: 200,
+    width: 200,
+  },
+  readUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 3,
+  },
 
 });
 
