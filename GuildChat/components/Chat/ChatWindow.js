@@ -1565,8 +1565,7 @@ const ChatWindow = ({ route, navigation }) => {
                               <View style={styles.menuSeparator} />
                             </>
                           )}
-                          <MenuOption value="reply" onSelect={() => handleReply(message)}>
-                          <MenuOption value="reply" onSelect={() => handleReply(message)}>
+                            <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
                               <Text>Відповісти</Text>
