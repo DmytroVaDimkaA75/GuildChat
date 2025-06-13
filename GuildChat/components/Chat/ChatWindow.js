@@ -1082,11 +1082,13 @@ const ChatWindow = ({ route, navigation }) => {
     try {
       const db = getDatabase();
       const userIds = Object.keys(message.readBy);
+      // Sort user ids by timestamp when they read the message
+      const sortedIds = userIds.sort((a, b) => message.readBy[a] - message.readBy[b]);
       const snapshots = await Promise.all(
-        userIds.map(id => get(ref(db, `guilds/${guildId}/guildUsers/${id}`)))
+        sortedIds.map(id => get(ref(db, `guilds/${guildId}/guildUsers/${id}`)))
       );
       const users = snapshots.map((snap, idx) => ({
-        userId: userIds[idx],
+        userId: sortedIds[idx],
         userName: snap.val()?.userName || 'Unknown',
         avatar: snap.val()?.imageUrl || null,
       }));
@@ -1550,7 +1552,13 @@ const ChatWindow = ({ route, navigation }) => {
                                       )}
                                     </>
                                   ) : (
-                                    <Text>{getViewsText(readUsersInfo.length, locale.code)}</Text>
+                                    <>
+                                      <Text numberOfLines={1} style={{ maxWidth: 120 }}>{readUsersInfo[0].userName}</Text>
+                                      {readUsersInfo[0].avatar && (
+                                        <Image source={{ uri: readUsersInfo[0].avatar }} style={styles.readUserAvatar} />
+                                      )}
+                                      <Text style={{ color: 'red', marginLeft: 3 }}>{`(+${readUsersInfo.length - 1})`}</Text>
+                                    </>
                                   )}
                                 </View>
                               </MenuOption>
@@ -1621,7 +1629,13 @@ const ChatWindow = ({ route, navigation }) => {
                                       )}
                                     </>
                                   ) : (
-                                    <Text>{getViewsText(readUsersInfo.length, locale.code)}</Text>
+                                    <>
+                                      <Text numberOfLines={1} style={{ maxWidth: 120 }}>{readUsersInfo[0].userName}</Text>
+                                      {readUsersInfo[0].avatar && (
+                                        <Image source={{ uri: readUsersInfo[0].avatar }} style={styles.readUserAvatar} />
+                                      )}
+                                      <Text style={{ color: 'red', marginLeft: 3 }}>{`(+${readUsersInfo.length - 1})`}</Text>
+                                    </>
                                   )}
                                 </View>
                               </MenuOption>
