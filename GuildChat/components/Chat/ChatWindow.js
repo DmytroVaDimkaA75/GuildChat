@@ -601,22 +601,66 @@ const ChatWindow = ({ route, navigation }) => {
     setReplyToMessageText(message.text);
   };
 
-  const getStatusIcon = (status) => {
+// Show a double-check icon when a message was seen by someone other than
+// the sender or when its status explicitly equals "read".
+const getStatusIcon = (message) => {
+    if (!message) return null;
+    const { status, readBy, senderId } = message;
+    const isReadByOthers = readBy && Object.keys(readBy).some(id => id !== senderId);
+    if (isReadByOthers || status === 'read') {
+      return (
+        <View style={styles.doubleCheckContainer}>
+          <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />
+          <FontAwesomeIcon icon={faCheckDouble} size={14} style={[styles.statusIcon, styles.secondCheck]} />
+        </View>
+      );
+    }
     switch (status) {
       case 'sending':
         return <FontAwesomeIcon icon={faClock} size={14} style={styles.statusIcon} />;
       case 'sent':
-        return <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />;
-      case 'read':
-        return (
-          <View style={styles.doubleCheckContainer}>
-            <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />
-            <FontAwesomeIcon icon={faCheckDouble} size={14} style={[styles.statusIcon, styles.secondCheck]} />
-          </View>
-        );
       default:
-        return null;
+        return <FontAwesomeIcon icon={faCheck} size={14} style={styles.statusIcon} />;
     }
+  };
+
+// Format a timestamp relative to today/yesterday to display read time.
+const formatReadTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const timeString = format(date, 'HH:mm', { locale });
+
+    if (date.toDateString() === now.toDateString()) {
+      return `сьогодні, ${timeString}`;
+    }
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `учора, ${timeString}`;
+    }
+    return `${format(date, 'dd MMM', { locale })}, ${timeString}`;
+  };
+
+// When a private message has been read, show the time at the top of the menu.
+const renderReadReceiptOption = (message) => {
+    if (!message || chatType !== 'private') return null;
+    const { readBy, senderId } = message;
+    if (!readBy) return null;
+    const otherEntries = Object.entries(readBy).filter(([id]) => id !== senderId);
+    if (otherEntries.length === 0) return null;
+
+    const readTime = otherEntries[0][1];
+
+    return (
+      <>
+        <View style={styles.readReceiptOption}>
+          <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+          <Text>{formatReadTime(readTime)}</Text>
+        </View>
+        <View style={styles.menuSeparator} />
+      </>
+    );
   };
 
   const flatListRef = useRef(null);
@@ -1450,7 +1494,7 @@ const ChatWindow = ({ route, navigation }) => {
                               {message.pinned && message.pinned.isPinned && (
                                 <PinIcon width={16} height={16} fill="#0088cc" style={{ marginRight: 4 }} />
                               )}
-                              {isCurrentUser && getStatusIcon(message.status)}
+                              {isCurrentUser && getStatusIcon(message)}
                               <Text style={styles.messageDate}>
                                 {format(new Date(message.timestamp), 'H:mm', { locale })}
                               </Text>
@@ -1470,6 +1514,7 @@ const ChatWindow = ({ route, navigation }) => {
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
                       {isCurrentUser ? (
                         <>
+                          {renderReadReceiptOption(message)}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -2526,6 +2571,16 @@ const styles = StyleSheet.create({
   formatButtonTextDisabled: {
     color: '#aaa'
   },           // сірий текст
+  readReceiptOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  menuSeparator: {
+    height: 1,
+    backgroundColor: '#BDBDBD',
+    marginVertical: 5,
+  },
 
 });
 
