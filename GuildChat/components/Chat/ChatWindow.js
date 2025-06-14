@@ -490,6 +490,51 @@ const QuotedMessage = ({ replyTo, guildId, chatId }) => {
   return renderQuotedContent(quotedMsg);
 };
 
+const GroupReadByOption = ({ message, guildId, onShowList }) => {
+  const [userName, setUserName] = useState('');
+  const [avatar, setAvatar] = useState(null);
+
+  useEffect(() => {
+    if (!message || !message.readBy || !guildId) return;
+    const entries = Object.entries(message.readBy);
+    if (entries.length === 0) return;
+    entries.sort((a, b) => a[1] - b[1]);
+    const firstUserId = entries[0][0];
+    const db = getDatabase();
+    get(ref(db, `guilds/${guildId}/guildUsers/${firstUserId}`)).then((snap) => {
+      const data = snap.val();
+      if (data) {
+        setUserName(data.userName || '');
+        setAvatar(data.imageUrl || null);
+      }
+    });
+  }, [message, guildId]);
+
+  if (!message || !message.readBy) return null;
+  const entries = Object.entries(message.readBy);
+  if (entries.length === 0) return null;
+  const extra = entries.length - 1;
+  const truncated = userName.length > 15 ? `${userName.slice(0, 15)}...` : userName;
+
+  return (
+    <>
+      <TouchableOpacity
+        style={styles.readReceiptOption}
+        disabled={extra <= 0}
+        onPress={() => extra > 0 && onShowList()}
+      >
+        <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+        <Text style={styles.readByText}>
+          {truncated}
+          {extra > 0 && <Text style={{ color: 'red' }}> (+{extra})</Text>}
+        </Text>
+        {avatar && <Image source={{ uri: avatar }} style={styles.readByAvatar} />}
+      </TouchableOpacity>
+      <View style={styles.menuSeparator} />
+    </>
+  );
+};
+
 const commonModalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -594,11 +639,44 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [unpinModalVisible, setUnpinModalVisible] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
+  const [readersMessageId, setReadersMessageId] = useState(null);
+  const [readersList, setReadersList] = useState([]);
+  const [readersSide, setReadersSide] = useState('left');
+  const [readersTop, setReadersTop] = useState(0);
 
 
   const handleReply = (message) => {
     setReplyToMessage(message);
     setReplyToMessageText(message.text);
+  };
+
+  const openReadersList = async (message, isCurrentUser) => {
+    if (!message.readBy || !guildId) return;
+    if (messageRefs.current[message.id] && typeof messageRefs.current[message.id].measureInWindow === 'function') {
+      messageRefs.current[message.id].measureInWindow((x, y) => {
+        setReadersTop(y);
+      });
+    } else {
+      setReadersTop(0);
+    }
+    const entries = Object.entries(message.readBy).sort((a, b) => a[1] - b[1]);
+    const db = getDatabase();
+    const details = await Promise.all(
+      entries.map(async ([uid]) => {
+        const snap = await get(ref(db, `guilds/${guildId}/guildUsers/${uid}`));
+        const data = snap.val() || {};
+        return { id: uid, name: data.userName || '', avatar: data.imageUrl || null };
+      })
+    );
+    setReadersList(details);
+    setReadersMessageId(message.id);
+    setReadersSide(isCurrentUser ? 'left' : 'right');
+  };
+
+  const closeReadersList = () => {
+    setReadersMessageId(null);
+    setReadersList([]);
+    setReadersTop(0);
   };
 
 // Show a double-check icon when a message was seen by someone other than
@@ -1512,6 +1590,13 @@ const renderReadReceiptOption = (message) => {
                       </View>
                     </MenuTrigger>
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
+                      {chatType === 'group' && (
+                        <GroupReadByOption
+                          message={message}
+                          guildId={guildId}
+                          onShowList={() => openReadersList(message, isCurrentUser)}
+                        />
+                      )}
                       {isCurrentUser ? (
                         <>
                           {renderReadReceiptOption(message)}
@@ -2008,6 +2093,32 @@ const renderReadReceiptOption = (message) => {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={readersMessageId !== null}
+        onRequestClose={closeReadersList}
+      >
+        <TouchableOpacity style={styles.readersOverlay} onPress={closeReadersList} activeOpacity={1}>
+          <View
+            style={[
+              styles.readersListContainer,
+              readersSide === 'left' ? styles.readersListLeft : styles.readersListRight,
+              { top: readersTop },
+            ]}
+          >
+            <ScrollView>
+              {readersList.map(u => (
+                <View key={u.id} style={styles.readersItem}>
+                  <Text style={styles.readersName}>{u.name.length > 15 ? `${u.name.slice(0,15)}...` : u.name}</Text>
+                  {u.avatar && <Image source={{ uri: u.avatar }} style={styles.readByAvatar} />}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -2575,6 +2686,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
+  },
+  readByText: {
+    maxWidth: 100,
+  },
+  readByAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginLeft: 5,
+  },
+  readersListContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cccccc',
+    width: 150,
+    maxHeight: 200,
+    padding: 8,
+  },
+  readersListLeft: {
+    position: 'absolute',
+    right: 170,
+  },
+  readersListRight: {
+    position: 'absolute',
+    left: 170,
+  },
+  readersItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  readersName: {
+    flex: 1,
+  },
+  readersOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   menuSeparator: {
     height: 1,
