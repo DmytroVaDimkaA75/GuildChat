@@ -642,25 +642,90 @@ const formatReadTime = (timestamp) => {
     return `${format(date, 'dd MMM', { locale })}, ${timeString}`;
   };
 
-// When a private message has been read, show the time at the top of the menu.
-const renderReadReceiptOption = (message) => {
-    if (!message || chatType !== 'private') return null;
-    const { readBy, senderId } = message;
-    if (!readBy) return null;
-    const otherEntries = Object.entries(readBy).filter(([id]) => id !== senderId);
-    if (otherEntries.length === 0) return null;
+// Component that renders read receipt info and list for group chats
+const GroupReadReceiptOption = ({ message, isCurrentUser }) => {
+    const [usersInfo, setUsersInfo] = useState({});
+    const [showList, setShowList] = useState(false);
 
-    const readTime = otherEntries[0][1];
+    useEffect(() => {
+      if (!message || !message.readBy || chatType !== 'group') return;
+      const db = getDatabase();
+      const entries = Object.keys(message.readBy).filter(id => id !== message.senderId);
+      entries.forEach(uid => {
+        const uRef = ref(db, `guilds/${guildId}/guildUsers/${uid}`);
+        get(uRef).then(snap => {
+          if (snap.exists()) {
+            const data = snap.val();
+            setUsersInfo(prev => ({ ...prev, [uid]: { userName: data.userName, imageUrl: data.imageUrl } }));
+          }
+        });
+      });
+    }, [message]);
+
+    if (!message || chatType !== 'group') return null;
+    const readers = Object.entries(message.readBy || {}).filter(([id]) => id !== message.senderId);
+    if (readers.length === 0) return null;
+    readers.sort((a,b) => a[1]-b[1]);
+    const firstId = readers[0][0];
+    const firstInfo = usersInfo[firstId] || {};
+    const moreCount = readers.length - 1;
+    const displayName = firstInfo.userName ? (firstInfo.userName.length > 15 ? `${firstInfo.userName.slice(0,15)}…` : firstInfo.userName) : '…';
 
     return (
       <>
-        <View style={styles.readReceiptOption}>
+        <TouchableOpacity onPress={() => setShowList(!showList)} style={styles.readReceiptOption}>
           <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
-          <Text>{formatReadTime(readTime)}</Text>
-        </View>
+          <Text style={{ flexShrink: 1 }} numberOfLines={1}>
+            {displayName}{moreCount > 0 && <Text style={{ color: 'red' }}>{` (+${moreCount})`}</Text>}
+          </Text>
+          {firstInfo.imageUrl && (
+            <Image source={{ uri: firstInfo.imageUrl }} style={styles.readReceiptAvatar} />
+          )}
+        </TouchableOpacity>
         <View style={styles.menuSeparator} />
+        {showList && (
+          <View style={[styles.readByPopup, isCurrentUser ? styles.readByPopupLeft : styles.readByPopupRight]}>
+            <ScrollView>
+              {readers.map(([uid]) => {
+                const info = usersInfo[uid] || {};
+                const name = info.userName ? (info.userName.length > 20 ? `${info.userName.slice(0,20)}…` : info.userName) : '…';
+                return (
+                  <View key={uid} style={styles.readByItem}>
+                    <Text style={styles.readByName}>{name}</Text>
+                    {info.imageUrl && <Image source={{ uri: info.imageUrl }} style={styles.readReceiptAvatar} />}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </>
     );
+  };
+
+// When a private message has been read, show the time at the top of the menu.
+const renderReadReceiptOption = (message, isCurrentUser) => {
+    if (!message) return null;
+    if (chatType === 'private') {
+      const { readBy, senderId } = message;
+      if (!readBy) return null;
+      const otherEntries = Object.entries(readBy).filter(([id]) => id !== senderId);
+      if (otherEntries.length === 0) return null;
+      const readTime = otherEntries[0][1];
+      return (
+        <>
+          <View style={styles.readReceiptOption}>
+            <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+            <Text>{formatReadTime(readTime)}</Text>
+          </View>
+          <View style={styles.menuSeparator} />
+        </>
+      );
+    }
+    if (chatType === 'group') {
+      return <GroupReadReceiptOption message={message} isCurrentUser={isCurrentUser} />;
+    }
+    return null;
   };
 
   const flatListRef = useRef(null);
@@ -1514,7 +1579,7 @@ const renderReadReceiptOption = (message) => {
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
                       {isCurrentUser ? (
                         <>
-                          {renderReadReceiptOption(message)}
+                          {renderReadReceiptOption(message, true)}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -1563,6 +1628,7 @@ const renderReadReceiptOption = (message) => {
                         </>
                       ) : (
                         <>
+                          {renderReadReceiptOption(message, false)}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
@@ -2575,6 +2641,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
+  },
+  readReceiptAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginLeft: 5,
+  },
+  readByPopup: {
+    position: 'absolute',
+    top: 0,
+    width: 160,
+    maxHeight: 150,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cccccc',
+    borderRadius: 8,
+    padding: 5,
+    zIndex: 1000,
+  },
+  readByPopupLeft: {
+    right: 170,
+  },
+  readByPopupRight: {
+    left: 170,
+  },
+  readByItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  readByName: {
+    flex: 1,
   },
   menuSeparator: {
     height: 1,
