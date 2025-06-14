@@ -30,6 +30,7 @@ import NewGroupChat from "./Chat/NewGroupChat";
 import ChatScreen from "./Chat/ChatScreen";
 import ChatWindow from './Chat/ChatWindow';
 import MapComponent from './Quant/MapComponent';
+import GBGScreen from './GBG/GBGscreen';
 import ProfileMain from './Profile/ProfileMain';
 import ProfileData from './Profile/ProfileData';
 import AddSchedule from './Profile/AddSchedule';
@@ -218,6 +219,23 @@ function QuantStack() {
     </Stack.Navigator>
   );
 }
+
+function GBGStack() {
+  const { t } = useTranslation();
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="QuantScreen"
+        component={GBGScreen}
+        options={{
+          title: t("gbgStack.gbgScreenTitle"), // переклад для "Квантові вторгнення"
+          headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 
 function AdmintStack() {
   const { t } = useTranslation();
@@ -814,8 +832,8 @@ function AppNavigator() {
           }}
         />
         <Drawer.Screen
-          name="PBG"
-          component={QuantStack}
+          name="GBG"
+          component={GBGStack}
           options={{
             headerShown: false,
             drawerLabel: t("drawer.pbgLabel"), // переклад для "Поле битви гільдій"

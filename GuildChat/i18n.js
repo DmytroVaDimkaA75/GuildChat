@@ -50,6 +50,9 @@ const resources = {
       quantStack: {
         quantScreenTitle: "Квантові вторгнення"
       },
+      gbgStack: {
+        gbgScreenTitle: "Поле битви гільдій"
+      },
       profileStack: {
         profileMainTitle: "Налаштування профілю",
         profileDataTitle: "Дані профілю",
@@ -252,6 +255,9 @@ const resources = {
       quantStack: {
         quantScreenTitle: "Квантовые вторжения"
       },
+      gbgStack: {
+        gbgScreenTitle: "Поле битвы гильдий"
+      },
       profileStack: {
         profileMainTitle: "Настройка профиля",
         profileDataTitle: "Данные профиля",
@@ -451,6 +457,9 @@ const resources = {
       quantStack: {
         quantScreenTitle: "Квантаваныя ўварванні"
       },
+      gbgStack: {
+        gbgScreenTitle: "Поле бітвы гільдый"
+      },
       profileStack: {
         profileMainTitle: "Налада профілю",
         profileDataTitle: "Дадзеныя профілю",
@@ -649,6 +658,9 @@ const resources = {
       },
       quantStack: {
         quantScreenTitle: "Quanteninvasionen"
+      },
+      gbgStack: {
+        gbgScreenTitle: "Gildenkampffeld"
       },
       profileStack: {
         profileMainTitle: "Profileinstellungen",
