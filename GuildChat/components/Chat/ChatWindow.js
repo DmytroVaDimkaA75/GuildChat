@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useContext } from "react";
 import {
   View,
   Text,
@@ -39,7 +39,7 @@ import { faYoutube } from '@fortawesome/free-brands-svg-icons';
 import { faFileAlt, faTableCellsLarge, faChartSimple } from '@fortawesome/free-solid-svg-icons';
 import { format } from 'date-fns';
 import { uk, ru, es, fr, de } from 'date-fns/locale';
-import { Menu, MenuTrigger, MenuOptions, MenuOption } from 'react-native-popup-menu';
+import { Menu, MenuTrigger, MenuOptions, MenuOption, MenuContext } from 'react-native-popup-menu';
 import translateMessage from '../../translateMessage';
 import { database, storage } from '../../firebaseConfig';
 import {
@@ -679,6 +679,23 @@ const ChatWindow = ({ route, navigation }) => {
   const [messageToUnpin, setMessageToUnpin] = useState(null);
   const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
 
+  const menuCtx = useContext(MenuContext);
+
+  const closeReadUsersPopup = useCallback(() => {
+    setReadUsersPopupFor(null);
+    if (menuCtx && menuCtx.menuActions && typeof menuCtx.menuActions.closeMenu === 'function') {
+      menuCtx.menuActions.closeMenu();
+    }
+  }, [menuCtx]);
+
+  const toggleReadUsersPopup = useCallback((messageId) => {
+    if (readUsersPopupFor === messageId) {
+      closeReadUsersPopup();
+    } else {
+      setReadUsersPopupFor(messageId);
+    }
+  }, [readUsersPopupFor, closeReadUsersPopup]);
+
 
   const handleReply = (message) => {
     setReplyToMessage(message);
@@ -763,7 +780,7 @@ const renderReadReceiptOption = (message) => {
       <>
         <TouchableOpacity
           disabled={extra <= 0}
-          onPress={() => extra > 0 && setReadUsersPopupFor(message.id)}
+          onPress={() => extra > 0 && toggleReadUsersPopup(message.id)}
         >
           <View style={styles.readReceiptOption}>
             <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
@@ -1726,7 +1743,7 @@ const renderReadReceiptOption = (message) => {
                         message={message}
                         guildId={guildId}
                         isCurrentUser={isCurrentUser}
-                        onClose={() => setReadUsersPopupFor(null)}
+                        onClose={closeReadUsersPopup}
                       />
                     )}
                   </Menu>
