@@ -206,6 +206,26 @@ const MyGB = () => {
         }
       }
 
+       // 3) Видаляємо всі повідомлення з GBChat, які відносяться до видаленої ВС
+      const gbChatSnap = await get(ref(database, `guilds/${guildId}/GBChat`));
+      if (gbChatSnap.exists()) {
+        const gbChatData = gbChatSnap.val();
+        for (const chatKey of Object.keys(gbChatData)) {
+          const chat = gbChatData[chatKey];
+          if (!chat.messages) continue;
+          for (const msgKey of Object.keys(chat.messages)) {
+            const msg = chat.messages[msgKey];
+            if (msg.build === buildId && msg.senderId === userId) {
+              await remove(
+                ref(database, `guilds/${guildId}/GBChat/${chatKey}/messages/${msgKey}`)
+              );
+            }
+          }
+        }
+      }
+     
+     
+     
       // Оновлюємо локальний стейт
       setGreatBuilds(prev => prev.filter(b => b.id !== buildId));
     } catch (err) {
