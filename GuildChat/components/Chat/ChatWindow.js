@@ -395,6 +395,89 @@ const InterlocutorAvatar = ({ senderId, guildId }) => {
   return <Image source={{ uri: avatar }} style={styles.interlocutorAvatar} />;
 };
 
+const ReadUserInline = ({ userId, guildId, maxLength = 12 }) => {
+  const [info, setInfo] = useState({ name: '', avatar: '' });
+
+  useEffect(() => {
+    if (userId && guildId) {
+      const db = getDatabase();
+      const userRef = ref(db, `guilds/${guildId}/guildUsers/${userId}`);
+      get(userRef)
+        .then((snap) => {
+          const data = snap.val() || {};
+          setInfo({ name: data.userName || '', avatar: data.imageUrl || '' });
+        })
+        .catch((e) => console.error('Error fetching user info', e));
+    }
+  }, [userId, guildId]);
+
+  const displayName =
+    info.name.length > maxLength ? info.name.slice(0, maxLength) + '…' : info.name;
+
+  return (
+    <>
+      <Text style={styles.readUserName}>{displayName}</Text>
+      {info.avatar ? (
+        <Image source={{ uri: info.avatar }} style={styles.readUserAvatar} />
+      ) : null}
+    </>
+  );
+};
+
+const ReadUserRow = ({ userId, guildId }) => {
+  const [info, setInfo] = useState({ name: '', avatar: '' });
+
+  useEffect(() => {
+    if (userId && guildId) {
+      const db = getDatabase();
+      const userRef = ref(db, `guilds/${guildId}/guildUsers/${userId}`);
+      get(userRef)
+        .then((snap) => {
+          const data = snap.val() || {};
+          setInfo({ name: data.userName || '', avatar: data.imageUrl || '' });
+        })
+        .catch((e) => console.error('Error fetching user info', e));
+    }
+  }, [userId, guildId]);
+
+  const displayName =
+    info.name.length > 20 ? info.name.slice(0, 20) + '…' : info.name;
+
+  return (
+    <View style={styles.readUserRow}>
+      <Text style={styles.readUserName}>{displayName}</Text>
+      {info.avatar ? (
+        <Image source={{ uri: info.avatar }} style={styles.readUserAvatar} />
+      ) : null}
+    </View>
+  );
+};
+
+const ReadUsersPopup = ({ message, guildId, isCurrentUser, onClose }) => {
+  if (!message || !message.readBy) return null;
+  const entries = Object.entries(message.readBy)
+    .filter(([id]) => id !== message.senderId)
+    .sort((a, b) => a[1] - b[1]);
+  if (entries.length <= 1) return null;
+
+  return (
+    <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.popupOverlay}>
+      <View
+        style={[
+          styles.readUsersPopup,
+          isCurrentUser ? styles.readUsersPopupPersonal : styles.readUsersPopupInterlocutor,
+        ]}
+      >
+        <ScrollView>
+          {entries.map(([uid]) => (
+            <ReadUserRow key={uid} userId={uid} guildId={guildId} />
+          ))}
+        </ScrollView>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 const renderQuotedContent = (quotedMessage) => {
   const urlRegex = /https?:\/\/[^\s]+/g;
   const hasImages = quotedMessage.imageUrls && quotedMessage.imageUrls.length > 0;
@@ -594,6 +677,7 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [unpinModalVisible, setUnpinModalVisible] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
+  const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
 
 
   const handleReply = (message) => {
@@ -658,6 +742,37 @@ const renderReadReceiptOption = (message) => {
           <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
           <Text>{formatReadTime(readTime)}</Text>
         </View>
+        <View style={styles.menuSeparator} />
+      </>
+    );
+  };
+
+  const renderGroupReadReceiptOption = (message, isCurrentUser) => {
+    if (!message || chatType !== 'group') return null;
+    const { readBy, senderId } = message;
+    if (!readBy) return null;
+    const entries = Object.entries(readBy)
+      .filter(([id]) => id !== senderId)
+      .sort((a, b) => a[1] - b[1]);
+    if (entries.length === 0) return null;
+
+    const [firstId] = entries[0];
+    const extra = entries.length - 1;
+
+    return (
+      <>
+        <TouchableOpacity
+          disabled={extra <= 0}
+          onPress={() => extra > 0 && setReadUsersPopupFor(message.id)}
+        >
+          <View style={styles.readReceiptOption}>
+            <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+            <ReadUserInline userId={firstId} guildId={guildId} />
+            {extra > 0 && (
+              <Text style={styles.extraCount}> (+{extra})</Text>
+            )}
+          </View>
+        </TouchableOpacity>
         <View style={styles.menuSeparator} />
       </>
     );
@@ -1512,6 +1627,7 @@ const renderReadReceiptOption = (message) => {
                       </View>
                     </MenuTrigger>
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
+                      {renderGroupReadReceiptOption(message, isCurrentUser)}
                       {isCurrentUser ? (
                         <>
                           {renderReadReceiptOption(message)}
@@ -1605,6 +1721,14 @@ const renderReadReceiptOption = (message) => {
                         </>
                       )}
                     </MenuOptions>
+                    {readUsersPopupFor === message.id && (
+                      <ReadUsersPopup
+                        message={message}
+                        guildId={guildId}
+                        isCurrentUser={isCurrentUser}
+                        onClose={() => setReadUsersPopupFor(null)}
+                      />
+                    )}
                   </Menu>
                 </React.Fragment>
                 );
@@ -2575,6 +2699,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
+  },
+  readUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  readUserName: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  readUserAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  extraCount: {
+    color: 'red',
+  },
+  readUsersPopup: {
+    position: 'absolute',
+    top: 0,
+    width: 150,
+    maxHeight: 150,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#cccccc',
+  },
+  readUsersPopupPersonal: {
+    right: -310,
+  },
+  readUsersPopupInterlocutor: {
+    left: 160,
   },
   menuSeparator: {
     height: 1,
