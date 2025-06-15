@@ -46,6 +46,30 @@ const GVG = () => {
               A5A
             </Text>
           </G>
+          <G id="gC5D" onPress={() => handleShapePress('C5D')}>
+            <Polygon
+              id="C5D"
+              points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
+              fill="#0000ff"
+              stroke="#ffffff"
+              strokeWidth={2}
+              strokeOpacity={0}
+              transform="matrix(0,0.24307514,-0.24307514,0,97.064157,134.0936)"
+            />
+            <Text
+              id="tC5D"
+              x={77.039581}
+              y={148.77287}
+              fontSize={7.05587}
+              fontFamily="Arial"
+              fill="#000000"
+              stroke="#131313"
+              strokeWidth={0}
+              pointerEvents="none"
+            >
+              C5D
+            </Text>
+          </G>
         </Svg>
       </View>
     </View>
