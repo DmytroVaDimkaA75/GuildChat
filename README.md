@@ -20,3 +20,13 @@
 _Базова інсталяція додатку займе приблизно **30–80 МБ** на телефоні. При активному використанні (фото, кеш) — до 200 МБ і більше._
 
 
+
+## Автоматичне видалення експрес-записів
+
+Для відкладеного видалення записів `express` використовуються Firebase Cloud Functions та Cloud Tasks.
+
+1. Створіть папку `functions` та встановіть залежності `firebase-admin`, `firebase-functions` і `@google-cloud/tasks`.
+2. `scheduleExpressDeletion` – тригер на створення запису `guilds/{guildId}/express/{expressId}`. Він зчитує `scheduleTime` і створює задачу у черзі `express-deletions`.
+3. Задача викликає HTTP‑функцію `deleteExpress`, яка видаляє відповідний експрес‑запис у потрібний час.
+
+Функції знаходяться у каталозі [`functions`](./functions).
