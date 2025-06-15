@@ -761,9 +761,9 @@ const renderReadReceiptOption = (message) => {
 
     return (
       <>
-        <TouchableOpacity
+        <MenuOption
           disabled={extra <= 0}
-          onPress={() => extra > 0 && setReadUsersPopupFor(message.id)}
+          onSelect={() => extra > 0 && setReadUsersPopupFor(message.id)}
         >
           <View style={styles.readReceiptOption}>
             <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
@@ -772,7 +772,7 @@ const renderReadReceiptOption = (message) => {
               <Text style={styles.extraCount}> (+{extra})</Text>
             )}
           </View>
-        </TouchableOpacity>
+        </MenuOption>
         <View style={styles.menuSeparator} />
       </>
     );
@@ -1499,7 +1499,11 @@ const renderReadReceiptOption = (message) => {
                         <Text style={styles.newMessagesText}>Нові повідомлення</Text>
                       </View>
                     )}
-                  <Menu style={styles.menu} key={message.id}>
+                  <Menu
+                    style={styles.menu}
+                    key={message.id}
+                    onClose={() => setReadUsersPopupFor(null)}
+                  >
                     <MenuTrigger onPress={() => handlePressMessage(message.id)}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         {(chatType !== 'private' && !isCurrentUser) && (
