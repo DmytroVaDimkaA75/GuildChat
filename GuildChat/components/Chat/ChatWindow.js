@@ -679,6 +679,12 @@ const ChatWindow = ({ route, navigation }) => {
   const [messageToUnpin, setMessageToUnpin] = useState(null);
   const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
 
+  useEffect(() => {
+    if (!selectedMessageId) {
+      setReadUsersPopupFor(null);
+    }
+  }, [selectedMessageId]);
+
 
   const handleReply = (message) => {
     setReplyToMessage(message);
@@ -763,7 +769,12 @@ const renderReadReceiptOption = (message) => {
       <>
         <TouchableOpacity
           disabled={extra <= 0}
-          onPress={() => extra > 0 && setReadUsersPopupFor(message.id)}
+          onPress={() => {
+            if (extra > 0) {
+              setReadUsersPopupFor(message.id);
+              setSelectedMessageId(null);
+            }
+          }}
         >
           <View style={styles.readReceiptOption}>
             <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
@@ -1726,7 +1737,10 @@ const renderReadReceiptOption = (message) => {
                         message={message}
                         guildId={guildId}
                         isCurrentUser={isCurrentUser}
-                        onClose={() => setReadUsersPopupFor(null)}
+                        onClose={() => {
+                          setReadUsersPopupFor(null);
+                          setSelectedMessageId(null);
+                        }}
                       />
                     )}
                   </Menu>
