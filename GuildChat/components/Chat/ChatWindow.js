@@ -560,6 +560,84 @@ const defaultWrapSelection = (marker, text, selection, setText, setSelection) =>
   setSelection({ start: newCursorPos, end: newCursorPos });
 };
 
+// Component to show read information for group chats
+const GroupReadInfo = ({ message, guildId, isCurrentUser }) => {
+  const [readers, setReaders] = useState([]);
+  const [showPopup, setShowPopup] = useState(false);
+
+  useEffect(() => {
+    if (!message || !message.readBy) {
+      setReaders([]);
+      return;
+    }
+    const otherEntries = Object.entries(message.readBy).filter(([id]) => id !== message.senderId);
+    if (otherEntries.length === 0) {
+      setReaders([]);
+      return;
+    }
+    const db = getDatabase();
+    const fetchData = async () => {
+      const data = await Promise.all(
+        otherEntries.map(async ([uid, ts]) => {
+          try {
+            const snap = await get(ref(db, `guilds/${guildId}/guildUsers/${uid}`));
+            const val = snap.exists() ? snap.val() : {};
+            return { userId: uid, userName: val.userName || uid, imageUrl: val.imageUrl, timestamp: ts };
+          } catch (e) {
+            return { userId: uid, userName: uid, imageUrl: null, timestamp: ts };
+          }
+        })
+      );
+      data.sort((a, b) => a.timestamp - b.timestamp);
+      setReaders(data);
+    };
+    fetchData();
+  }, [message, guildId]);
+
+  if (!readers.length) return null;
+
+  const first = readers[0];
+  const remain = readers.length - 1;
+  const shortName = first.userName.length > 20 ? `${first.userName.slice(0, 17)}...` : first.userName;
+
+  return (
+    <>
+      <TouchableOpacity onPress={() => setShowPopup(true)} style={styles.readReceiptOption}>
+        <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+        <Text style={{ marginRight: 5 }}>
+          {shortName}
+          {remain > 0 && <Text style={{ color: 'red' }}> (+{remain})</Text>}
+        </Text>
+        {first.imageUrl && (
+          <Image source={{ uri: first.imageUrl }} style={styles.readAvatar} />
+        )}
+      </TouchableOpacity>
+      {showPopup && (
+        <View
+          style={[
+            styles.readersPopup,
+            isCurrentUser ? styles.readersPopupLeft : styles.readersPopupRight,
+          ]}
+        >
+          <ScrollView>
+            {readers.map((r) => (
+              <View key={r.userId} style={styles.readerRow}>
+                <Text style={styles.readerName} numberOfLines={1}>
+                  {r.userName}
+                </Text>
+                {r.imageUrl && (
+                  <Image source={{ uri: r.imageUrl }} style={styles.readAvatar} />
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+      <View style={styles.menuSeparator} />
+    </>
+  );
+};
+
 const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
 
@@ -1512,6 +1590,9 @@ const renderReadReceiptOption = (message) => {
                       </View>
                     </MenuTrigger>
                     <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
+                      {chatType === 'group' && (
+                        <GroupReadInfo message={message} guildId={guildId} isCurrentUser={isCurrentUser} />
+                      )}
                       {isCurrentUser ? (
                         <>
                           {renderReadReceiptOption(message)}
@@ -2575,6 +2656,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
+  },
+  readAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginLeft: 5,
+  },
+  readersPopup: {
+    position: 'absolute',
+    top: 0,
+    width: 150,
+    maxHeight: 120,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cccccc',
+    borderRadius: 8,
+    padding: 5,
+    zIndex: 2,
+  },
+  readersPopupLeft: {
+    right: '100%',
+    marginRight: 5,
+  },
+  readersPopupRight: {
+    left: '100%',
+    marginLeft: 5,
+  },
+  readerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  readerName: {
+    flex: 1,
+    marginRight: 5,
   },
   menuSeparator: {
     height: 1,
