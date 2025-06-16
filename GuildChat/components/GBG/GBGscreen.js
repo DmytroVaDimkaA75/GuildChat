@@ -12,15 +12,15 @@ const SVG_HEIGHT = 164.52901;
 
 
 const GVG = () => {
-  const handleShapePress = (id) => {
-    console.log('Pressed shape:', id);
-    Alert.alert("ID фігури", id);
+  const handleShapePress = (event) => {
+    const { locationX, locationY } = event.nativeEvent;
+    console.log('Pressed coordinates:', locationX, locationY);
+    Alert.alert("Координати натискання", `${locationX}, ${locationY}`);
   };
 
-  const MapText = ({ id, children, ...props }) => {
-    const shapeId = id.startsWith('t') ? id.slice(1) : id;
+  const MapText = ({ children, ...props }) => {
     return (
-      <Text {...props} pointerEvents="auto" onPress={() => handleShapePress(shapeId)}>
+      <Text {...props} pointerEvents="auto" onPress={handleShapePress}>
         {children}
       </Text>
     );
@@ -37,7 +37,7 @@ const GVG = () => {
           <G id="gA4A">
             <Polygon
               id="A4A"
-              onPress={() => handleShapePress('A4A')}
+              onPress={handleShapePress}
               points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397"
               fill="#6161fa"
               fillOpacity={1}
@@ -64,7 +64,7 @@ const GVG = () => {
           <G id="gA5A">
             <Polygon
               id="A5A"
-              onPress={() => handleShapePress('A5A')}
+              onPress={handleShapePress}
               points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
               fill="#0000ff"
               stroke="#ffffff"
@@ -90,7 +90,7 @@ const GVG = () => {
           <G id="gA5B">
             <Polygon
               id="A5B"
-              onPress={() => handleShapePress('A5B')}
+              onPress={handleShapePress}
               points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397"
               fill="#0000ff"
               stroke="#ffffff"
@@ -116,7 +116,7 @@ const GVG = () => {
           <G id="gC5D">
             <Polygon
               id="C5D"
-              onPress={() => handleShapePress('C5D')}
+              onPress={handleShapePress}
               points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
               fill="#0000ff"
               stroke="#ffffff"
@@ -140,7 +140,7 @@ const GVG = () => {
           <G id="gD5A">
             <Polygon
               id="D5A"
-              onPress={() => handleShapePress('D5A')}
+              onPress={handleShapePress}
               points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397"
               fill="#0000ff"
               stroke="#ffffff"
@@ -164,7 +164,7 @@ const GVG = () => {
           <G id="gA3A">
             <Polygon
               id="A3A"
-              onPress={() => handleShapePress('A3A')}
+              onPress={handleShapePress}
               points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -190,7 +190,7 @@ const GVG = () => {
           <G id="gA2A">
             <Polygon
               id="A2A"
-              onPress={() => handleShapePress('A2A')}
+              onPress={handleShapePress}
               points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397"
               fill="#0064ff"
               fillOpacity={1}
@@ -216,7 +216,7 @@ const GVG = () => {
           <G id="gX1X">
             <Polygon
               id="X1X"
-              onPress={() => handleShapePress('X1X')}
+              onPress={handleShapePress}
               points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397"
               fill="#ff00ff"
               stroke="#ffffff"
@@ -241,7 +241,7 @@ const GVG = () => {
           <G id="gD2A">
             <Polygon
               id="D2A"
-              onPress={() => handleShapePress('D2A')}
+              onPress={handleShapePress}
               points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397"
               fill="#0064ff"
               fillOpacity={1}
@@ -267,7 +267,7 @@ const GVG = () => {
           <G id="gD3A">
             <Polygon
               id="D3A"
-              onPress={() => handleShapePress('D3A')}
+              onPress={handleShapePress}
               points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -293,7 +293,7 @@ const GVG = () => {
           <G id="gD4A">
             <Polygon
               id="D4A"
-              onPress={() => handleShapePress('D4A')}
+              onPress={handleShapePress}
               points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397"
               fill="#6161fa"
               fillOpacity={1}
@@ -319,7 +319,7 @@ const GVG = () => {
           <G id="gA4B">
             <Polygon
               id="A4B"
-              onPress={() => handleShapePress('A4B')}
+              onPress={handleShapePress}
               points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
               fill="#6161fa"
               fillOpacity={1}
@@ -346,7 +346,7 @@ const GVG = () => {
           <G id="gA3B">
             <Polygon
               id="A3B"
-              onPress={() => handleShapePress('A3B')}
+              onPress={handleShapePress}
               points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -372,7 +372,7 @@ const GVG = () => {
           <G id="gB2A">
             <Polygon
               id="B2A"
-              onPress={() => handleShapePress('B2A')}
+              onPress={handleShapePress}
               points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397"
               fill="#0064ff"
               fillOpacity={1}
@@ -398,7 +398,7 @@ const GVG = () => {
           <G id="gC2A">
             <Polygon
               id="C2A"
-              onPress={() => handleShapePress('C2A')}
+              onPress={handleShapePress}
               points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397"
               fill="#0064ff"
               fillOpacity={1}
@@ -424,7 +424,7 @@ const GVG = () => {
           <G id="gC3B">
             <Polygon
               id="C3B"
-              onPress={() => handleShapePress('C3B')}
+              onPress={handleShapePress}
               points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -450,7 +450,7 @@ const GVG = () => {
           <G id="gC4C">
             <Polygon
               id="C4C"
-              onPress={() => handleShapePress('C4C')}
+              onPress={handleShapePress}
               points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397"
               fill="#6161fa"
               fillOpacity={1}
@@ -476,7 +476,7 @@ const GVG = () => {
           <G id="gA5C">
             <Polygon
               id="A5C"
-              onPress={() => handleShapePress('A5C')}
+              onPress={handleShapePress}
               points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397"
               fill="#0000ff"
               fillOpacity={1}
@@ -502,7 +502,7 @@ const GVG = () => {
           <G id="gA4C">
             <Polygon
               id="A4C"
-              onPress={() => handleShapePress('A4C')}
+              onPress={handleShapePress}
               points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397"
               fill="#6161fa"
               fillOpacity={1}
@@ -528,7 +528,7 @@ const GVG = () => {
           <G id="gB3A">
             <Polygon
               id="B3A"
-              onPress={() => handleShapePress('B3A')}
+              onPress={handleShapePress}
               points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -554,7 +554,7 @@ const GVG = () => {
           <G id="gB3B">
             <Polygon
               id="B3B"
-              onPress={() => handleShapePress('B3B')}
+              onPress={handleShapePress}
               points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397"
               fill="#94ff00"
               fillOpacity={1}
@@ -580,7 +580,7 @@ const GVG = () => {
           <G id="gC3A">
             <Polygon
               id="C3A"
-              onPress={() => handleShapePress('C3A')}
+              onPress={handleShapePress}
               points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
               fill="#94ff00"
               fillOpacity={1}
@@ -606,7 +606,7 @@ const GVG = () => {
           <G id="gC4B">
             <Polygon
               id="C4B"
-              onPress={() => handleShapePress('C4B')}
+              onPress={handleShapePress}
               points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
               fill="#6161fa"
               fillOpacity={1}
@@ -632,7 +632,7 @@ const GVG = () => {
           <G id="gC5C">
             <Polygon
               id="C5C"
-              onPress={() => handleShapePress('C5C')}
+              onPress={handleShapePress}
               points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
               fill="#0000ff"
               fillOpacity={1}
@@ -658,7 +658,7 @@ const GVG = () => {
           <G id="gA5D">
             <Polygon
               id="A5D"
-              onPress={() => handleShapePress('A5D')}
+              onPress={handleShapePress}
               points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 "
               fill="#0000ff"
               stroke="#ffffff"
@@ -683,7 +683,7 @@ const GVG = () => {
         <G id="gB4A">
           <Polygon
             id="B4A"
-            onPress={() => handleShapePress('B4A')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -709,7 +709,7 @@ const GVG = () => {
         <G id="gB4B">
           <Polygon
             id="B4B"
-            onPress={() => handleShapePress('B4B')}
+            onPress={handleShapePress}
             points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -735,7 +735,7 @@ const GVG = () => {
         <G id="gB4C">
           <Polygon
             id="B4C"
-            onPress={() => handleShapePress('B4C')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -761,7 +761,7 @@ const GVG = () => {
         <G id="gC4A">
           <Polygon
             id="C4A"
-            onPress={() => handleShapePress('C4A')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -787,7 +787,7 @@ const GVG = () => {
         <G id="gC5B">
           <Polygon
             id="C5B"
-            onPress={() => handleShapePress('C5B')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -813,7 +813,7 @@ const GVG = () => {
         <G id="gB5A">
           <Polygon
             id="B5A"
-            onPress={() => handleShapePress('B5A')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#0000ff"
             stroke="#ffffff"
@@ -838,7 +838,7 @@ const GVG = () => {
         <G id="gB5B">
           <Polygon
             id="B5B"
-            onPress={() => handleShapePress('B5B')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -864,7 +864,7 @@ const GVG = () => {
         <G id="gB5C">
           <Polygon
             id="B5C"
-            onPress={() => handleShapePress('B5C')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -890,7 +890,7 @@ const GVG = () => {
         <G id="gB5D">
           <Polygon
             id="B5D"
-            onPress={() => handleShapePress('B5D')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -916,7 +916,7 @@ const GVG = () => {
         <G id="g36">
           <Polygon
             id="polygon13"
-            onPress={() => handleShapePress('polygon13')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -942,7 +942,7 @@ const GVG = () => {
         <G id="gF5D">
           <Polygon
             id="F5D"
-            onPress={() => handleShapePress('F5D')}
+            onPress={handleShapePress}
             points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 "
             fill="#0000ff"
             stroke="#ffffff"
@@ -967,7 +967,7 @@ const GVG = () => {
         <G id="gF4C">
           <Polygon
             id="F4C"
-            onPress={() => handleShapePress('F4C')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -992,7 +992,7 @@ const GVG = () => {
         <G id="gF3B">
           <Polygon
             id="F3B"
-            onPress={() => handleShapePress('F3B')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#94ff00"
             fillOpacity={1}
@@ -1017,7 +1017,7 @@ const GVG = () => {
         <G id="gF2A">
           <Polygon
             id="F2A"
-            onPress={() => handleShapePress('F2A')}
+            onPress={handleShapePress}
             points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
             fill="#0064ff"
             fillOpacity={1}
@@ -1042,7 +1042,7 @@ const GVG = () => {
         <G id="gE2A">
           <Polygon
             id="E2A"
-            onPress={() => handleShapePress('E2A')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#0064ff"
             fillOpacity={1}
@@ -1067,7 +1067,7 @@ const GVG = () => {
         <G id="gD3B">
           <Polygon
             id="D3B"
-            onPress={() => handleShapePress('D3B')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#94ff00"
             fillOpacity={1}
@@ -1092,7 +1092,7 @@ const GVG = () => {
         <G id="gD4B">
           <Polygon
             id="D4B"
-            onPress={() => handleShapePress('D4B')}
+            onPress={handleShapePress}
             points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1117,7 +1117,7 @@ const GVG = () => {
         <G id="gD5B">
           <Polygon
             id="D5B"
-            onPress={() => handleShapePress('D5B')}
+            onPress={handleShapePress}
             points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1142,7 +1142,7 @@ const GVG = () => {
         <G id="gF5C">
           <Polygon
             id="F5C"
-            onPress={() => handleShapePress('F5C')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#0000ff"
             stroke="#ffffff"
@@ -1167,7 +1167,7 @@ const GVG = () => {
         <G id="gF4B">
           <Polygon
             id="F4B"
-            onPress={() => handleShapePress('F4B')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1192,7 +1192,7 @@ const GVG = () => {
         <G id="gF3A">
           <Polygon
             id="F3A"
-            onPress={() => handleShapePress('F3A')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#94ff00"
             fillOpacity={1}
@@ -1217,7 +1217,7 @@ const GVG = () => {
         <G id="gE3B">
           <Polygon
             id="E3B"
-            onPress={() => handleShapePress('E3B')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#94ff00"
             fillOpacity={1}
@@ -1242,7 +1242,7 @@ const GVG = () => {
         <G id="gE3A">
           <Polygon
             id="E3A"
-            onPress={() => handleShapePress('E3A')}
+            onPress={handleShapePress}
             points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 "
             fill="#94ff00"
             fillOpacity={1}
@@ -1267,7 +1267,7 @@ const GVG = () => {
         <G id="gD4C">
           <Polygon
             id="D4C"
-            onPress={() => handleShapePress('D4C')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1292,7 +1292,7 @@ const GVG = () => {
         <G id="gD5C">
           <Polygon
             id="D5C"
-            onPress={() => handleShapePress('D5C')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1317,7 +1317,7 @@ const GVG = () => {
         <G id="gF5B">
           <Polygon
             id="F5B"
-            onPress={() => handleShapePress('F5B')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#0000ff"
             stroke="#ffffff"
@@ -1343,7 +1343,7 @@ const GVG = () => {
         <G id="gF4A">
           <Polygon
             id="F4A"
-            onPress={() => handleShapePress('F4A')}
+            onPress={handleShapePress}
             points="13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1368,7 +1368,7 @@ const GVG = () => {
         <G id="gE4C">
           <Polygon
             id="E4C"
-            onPress={() => handleShapePress('E4C')}
+            onPress={handleShapePress}
             points="13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 50,93.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1394,7 +1394,7 @@ const GVG = () => {
         <G id="gE4B">
           <Polygon
             id="E4B"
-            onPress={() => handleShapePress('E4B')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1419,7 +1419,7 @@ const GVG = () => {
         <G id="gE4A">
           <Polygon
             id="E4A"
-            onPress={() => handleShapePress('E4A')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#6161fa"
             fillOpacity={1}
@@ -1444,7 +1444,7 @@ const GVG = () => {
         <G id="gD5D">
           <Polygon
             id="D5D"
-            onPress={() => handleShapePress('D5D')}
+            onPress={handleShapePress}
             points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1469,7 +1469,7 @@ const GVG = () => {
         <G id="gF5A">
           <Polygon
             id="F5A"
-            onPress={() => handleShapePress('F5A')}
+            onPress={handleShapePress}
             points="50,13.397 86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 "
             fill="#0000ff"
             stroke="#131313"
@@ -1495,7 +1495,7 @@ const GVG = () => {
         <G id="gE5D">
           <Polygon
             id="E5D"
-            onPress={() => handleShapePress('E5D')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1520,7 +1520,7 @@ const GVG = () => {
         <G id="gE5C">
           <Polygon
             id="E5C"
-            onPress={() => handleShapePress('E5C')}
+            onPress={handleShapePress}
             points="86.603,33.397 86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1545,7 +1545,7 @@ const GVG = () => {
         <G id="gE5B">
           <Polygon
             id="E5B"
-            onPress={() => handleShapePress('E5B')}
+            onPress={handleShapePress}
             points="86.603,73.397 50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 "
             fill="#0000ff"
             fillOpacity={1}
@@ -1570,7 +1570,7 @@ const GVG = () => {
         <G id="gE5A">
           <Polygon
             id="E5A"
-            onPress={() => handleShapePress('E5A')}
+            onPress={handleShapePress}
             points="50,93.397 13.397,73.397 13.397,33.397 50,13.397 86.603,33.397 86.603,73.397 "
             fill="#0000ff"
             fillOpacity={1}
