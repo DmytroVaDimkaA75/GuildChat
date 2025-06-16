@@ -13,7 +13,17 @@ const SVG_HEIGHT = 164.52901;
 
 const GVG = () => {
   const handleShapePress = (id) => {
+    console.log('Pressed shape:', id);
     Alert.alert("ID фігури", id);
+  };
+
+  const MapText = ({ id, children, ...props }) => {
+    const shapeId = id.startsWith('t') ? id.slice(1) : id;
+    return (
+      <Text {...props} pointerEvents="auto" onPress={() => handleShapePress(shapeId)}>
+        {children}
+      </Text>
+    );
   };
 
   return (
@@ -37,7 +47,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,15.267547)"
             />
-            <Text
+            <MapText
               id="tA4A"
               x={62.599838}
               y={29.947001}
@@ -47,11 +57,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A4A')}
             >
               A4A
-            </Text>
+            </MapText>
           </G>
           <G id="gA5A">
             <Polygon
@@ -65,7 +73,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,82.247483,-3.0134026)"
             />
-            <Text
+            <MapText
               id="tA5A"
               x={62.599854}
               y={11.622864}
@@ -75,11 +83,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A5A')}
             >
               A5A
-            </Text>
+            </MapText>
           </G>
           <G id="gA5B">
             <Polygon
@@ -93,7 +99,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,6.1265975)"
             />
-            <Text
+            <MapText
               id="tA5B"
               x={77.609856}
               y={20.762863}
@@ -103,11 +109,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A5B')}
             >
               A5B
-            </Text>
+            </MapText>
           </G>
           <G id="gC5D">
             <Polygon
@@ -120,7 +124,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307514,-0.24307514,0,97.064157,134.0936)"
             />
-            <Text
+            <MapText
               id="tC5D"
               x={77.039581}
               y={148.77287}
@@ -129,11 +133,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C5D')}
             >
               C5D
-            </Text>
+            </MapText>
           </G>
           <G id="gD5A">
             <Polygon
@@ -146,7 +148,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.24748,143.23455)"
             />
-            <Text
+            <MapText
               id="tD5A"
               x={62.127655}
               y={157.87086}
@@ -155,11 +157,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('D5A')}
             >
               D5A
-            </Text>
+            </MapText>
           </G>
           <G id="gA3A">
             <Polygon
@@ -173,7 +173,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,33.548548)"
             />
-            <Text
+            <MapText
               id="tA3A"
               x={62.59985}
               y={48.19342}
@@ -183,11 +183,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A3A')}
             >
               A3A
-            </Text>
+            </MapText>
           </G>
           <G id="gA2A">
             <Polygon
@@ -201,7 +199,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,51.829547)"
             />
-            <Text
+            <MapText
               id="tA2A"
               x={62.598366}
               y={66.521095}
@@ -211,11 +209,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A2A')}
             >
               A2A
-            </Text>
+            </MapText>
           </G>
           <G id="gX1X">
             <Polygon
@@ -228,7 +224,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,70.110546)"
             />
-            <Text
+            <MapText
               id="tX1X"
               x={62.607426}
               y={84.800148}
@@ -238,11 +234,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('X1X')}
             >
               X1X
-            </Text>
+            </MapText>
           </G>
           <G id="gD2A">
             <Polygon
@@ -256,7 +250,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,88.391548)"
             />
-            <Text
+            <MapText
               id="tD2A"
               x={62.128345}
               y={103.08009}
@@ -266,11 +260,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('D2A')}
             >
               D2A
-            </Text>
+            </MapText>
           </G>
           <G id="gD3A">
             <Polygon
@@ -284,7 +276,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,106.67255)"
             />
-            <Text
+            <MapText
               id="tD3A"
               x={62.127663}
               y={121.31742}
@@ -294,11 +286,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('D3A')}
             >
               D3A
-            </Text>
+            </MapText>
           </G>
           <G id="gD4A">
             <Polygon
@@ -312,7 +302,7 @@ const GVG = () => {
               strokeOpacity={0}
               transform="matrix(0,0.24307906,-0.24307508,0,82.247481,124.95355)"
             />
-            <Text
+            <MapText
               id="tD4A"
               x={62.126545}
               y={139.63538}
@@ -322,11 +312,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('D4A')}
             >
               D4A
-            </Text>
+            </MapText>
           </G>
           <G id="gA4B">
             <Polygon
@@ -341,7 +329,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,24.407597)"
             />
-            <Text
+            <MapText
               id="tA4B"
               x={77.610336}
               y={39.087002}
@@ -351,11 +339,9 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A4B')}
             >
               A4B
-            </Text>
+            </MapText>
           </G>
           <G id="gA3B">
             <Polygon
@@ -370,7 +356,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,42.688597)"
             />
-            <Text
+            <MapText
               id="tA3B"
               x={77.609856}
               y={57.33342}
@@ -379,11 +365,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A3B')}
             >
               A3B
-            </Text>
+            </MapText>
           </G>
           <G id="gB2A">
             <Polygon
@@ -398,7 +382,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,60.969596)"
             />
-            <Text
+            <MapText
               id="tB2A"
               x={77.150421}
               y={75.661736}
@@ -407,11 +391,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('B2A')}
             >
               B2A
-            </Text>
+            </MapText>
           </G>
           <G id="gC2A">
             <Polygon
@@ -426,7 +408,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,79.250598)"
             />
-            <Text
+            <MapText
               id="tC2A"
               x={77.042198}
               y={93.929848}
@@ -435,11 +417,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C2A')}
             >
               C2A
-            </Text>
+            </MapText>
           </G>
           <G id="gC3B">
             <Polygon
@@ -454,7 +434,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,97.531595)"
             />
-            <Text
+            <MapText
               id="tC3B"
               x={77.234596}
               y={112.20964}
@@ -463,11 +443,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C3B')}
             >
               C3B
-            </Text>
+            </MapText>
           </G>
           <G id="gC4C">
             <Polygon
@@ -482,7 +460,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,97.064158,115.9126)"
             />
-            <Text
+            <MapText
               id="tC4C"
               x={76.991928}
               y={130.59109}
@@ -491,11 +469,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C4C')}
             >
               C4C
-            </Text>
+            </MapText>
           </G>
           <G id="gA5C">
             <Polygon
@@ -510,7 +486,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,15.266597)"
             />
-            <Text
+            <MapText
               id="tA5C"
               x={92.1828}
               y={29.946138}
@@ -519,11 +495,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A5C')}
             >
               A5C
-            </Text>
+            </MapText>
           </G>
           <G id="gA4C">
             <Polygon
@@ -538,7 +512,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,33.547598)"
             />
-            <Text
+            <MapText
               id="tA4C"
               x={92.183838}
               y={48.226639}
@@ -547,11 +521,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A4C')}
             >
               A4C
-            </Text>
+            </MapText>
           </G>
           <G id="gB3A">
             <Polygon
@@ -566,7 +538,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,51.828597)"
             />
-            <Text
+            <MapText
               id="tB3A"
               x={91.968552}
               y={66.474609}
@@ -575,11 +547,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('B3A')}
             >
               B3A
-            </Text>
+            </MapText>
           </G>
           <G id="gB3B">
             <Polygon
@@ -594,7 +564,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,70.109596)"
             />
-            <Text
+            <MapText
               id="tB3B"
               x={92.162086}
               y={84.755226}
@@ -603,11 +573,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('B3B')}
             >
               B3B
-            </Text>
+            </MapText>
           </G>
           <G id="gC3A">
             <Polygon
@@ -622,7 +590,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,88.390598)"
             />
-            <Text
+            <MapText
               id="tC3A"
               x={91.857758}
               y={103.06917}
@@ -631,11 +599,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C3A')}
             >
               C3A
-            </Text>
+            </MapText>
           </G>
           <G id="gC4B">
             <Polygon
@@ -650,7 +616,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,106.6716)"
             />
-            <Text
+            <MapText
               id="tC4B"
               x={92.052864}
               y={121.34898}
@@ -659,11 +625,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C4B')}
             >
               C4B
-            </Text>
+            </MapText>
           </G>
           <G id="gC5C">
             <Polygon
@@ -678,7 +642,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,111.88149,124.9526)"
             />
-            <Text
+            <MapText
               id="tC5C"
               x={91.80899}
               y={139.63106}
@@ -687,11 +651,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('C5C')}
             >
               C5C
-            </Text>
+            </MapText>
           </G>
           <G id="gA5D">
             <Polygon
@@ -705,7 +667,7 @@ const GVG = () => {
               display="inline"
               transform="matrix(0,0.24307514,-0.24307514,0,126.69849,24.406597)"
             />
-            <Text
+            <MapText
               id="tA5D"
               x={107.04973}
               y={39.042854}
@@ -714,11 +676,9 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="auto"
-              onPress={() => handleShapePress('A5D')}
             >
             A5D
-          </Text>
+          </MapText>
         </G>
         <G id="gB4A">
           <Polygon
@@ -733,7 +693,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,126.69849,42.687597)"
           />
-          <Text
+          <MapText
             id="tB4A"
             x={106.78522}
             y={57.368034}
@@ -742,11 +702,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B4A')}
           >
             B4A
-          </Text>
+          </MapText>
         </G>
         <G id="gB4B">
           <Polygon
@@ -761,7 +719,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,126.69849,60.968596)"
           />
-          <Text
+          <MapText
             id="tB4B"
             x={106.9789}
             y={75.648445}
@@ -770,11 +728,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B4B')}
           >
             B4B
-          </Text>
+          </MapText>
         </G>
         <G id="gB4C">
           <Polygon
@@ -789,7 +745,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,126.69849,79.249598)"
           />
-          <Text
+          <MapText
             id="tB4C"
             x={106.7391}
             y={93.927223}
@@ -798,11 +754,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B4C')}
           >
             B4C
-          </Text>
+          </MapText>
         </G>
         <G id="gC4A">
           <Polygon
@@ -817,7 +771,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,126.69849,97.530597)"
           />
-          <Text
+          <MapText
             id="tC4A"
             x={106.67642}
             y={112.20878}
@@ -826,11 +780,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('C4A')}
           >
             C4A
-          </Text>
+          </MapText>
         </G>
         <G id="gC5B">
           <Polygon
@@ -845,7 +797,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,126.69849,115.8116)"
           />
-          <Text
+          <MapText
             id="tC5B"
             x={106.87006}
             y={130.48888}
@@ -854,11 +806,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('C5B')}
           >
             C5B
-          </Text>
+          </MapText>
         </G>
         <G id="gB5A">
           <Polygon
@@ -872,7 +822,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,141.51549,33.546598)"
           />
-          <Text
+          <MapText
             id="tB5A"
             x={121.60201}
             y={48.183723}
@@ -881,11 +831,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B5A')}
           >
             B5A
-          </Text>
+          </MapText>
         </G>
         <G id="gB5B">
           <Polygon
@@ -900,7 +848,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,141.51549,51.827597)"
           />
-          <Text
+          <MapText
             id="tB5B"
             x={121.79572}
             y={66.464333}
@@ -909,11 +857,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B5B')}
           >
             B5B
-          </Text>
+          </MapText>
         </G>
         <G id="gB5C">
           <Polygon
@@ -928,7 +874,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,141.51549,70.108596)"
           />
-          <Text
+          <MapText
             id="tB5C"
             x={121.55735}
             y={84.786385}
@@ -937,11 +883,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B5C')}
           >
             B5C
-          </Text>
+          </MapText>
         </G>
         <G id="gB5D">
           <Polygon
@@ -956,7 +900,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,141.51549,88.389598)"
           />
-          <Text
+          <MapText
             id="tB5D"
             x={121.60318}
             y={103.02584}
@@ -965,11 +909,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('B5D')}
           >
             B5D
-          </Text>
+          </MapText>
         </G>
         <G id="g36">
           <Polygon
@@ -984,7 +926,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,141.51549,106.6706)"
           />
-          <Text
+          <MapText
             id="text36"
             x={121.60274}
             y={121.30651}
@@ -993,11 +935,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('ext36')}
           >
             B5D
-          </Text>
+          </MapText>
         </G>
         <G id="gF5D">
           <Polygon
@@ -1011,7 +951,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,67.430483,6.1265975)"
           />
-          <Text
+          <MapText
             id="tF5D"
             x={47.684811}
             y={20.76269}
@@ -1020,11 +960,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F5D')}
           >
             F5D
-          </Text>
+          </MapText>
         </G>
         <G id="gF4C">
           <Polygon
@@ -1038,7 +976,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,24.407549)"
           />
-          <Text
+          <MapText
             id="tF4C"
             x={47.636696}
             y={39.086468}
@@ -1047,11 +985,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F4C')}
           >
             F4C
-          </Text>
+          </MapText>
         </G>
         <G id="gF3B">
           <Polygon
@@ -1065,7 +1001,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,42.68855)"
           />
-          <Text
+          <MapText
             id="tF3B"
             x={47.881199}
             y={57.332249}
@@ -1074,11 +1010,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F3B')}
           >
             F3B
-          </Text>
+          </MapText>
         </G>
         <G id="gF2A">
           <Polygon
@@ -1092,7 +1026,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,60.969549)"
           />
-          <Text
+          <MapText
             id="tF2A"
             x={47.68705}
             y={75.659302}
@@ -1101,11 +1035,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F2A')}
           >
             F2A
-          </Text>
+          </MapText>
         </G>
         <G id="gE2A">
           <Polygon
@@ -1119,7 +1051,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,79.250548)"
           />
-          <Text
+          <MapText
             id="tE2A"
             x={47.499283}
             y={93.939438}
@@ -1128,11 +1060,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E2A')}
           >
             E2A
-          </Text>
+          </MapText>
         </G>
         <G id="gD3B">
           <Polygon
@@ -1146,7 +1076,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,97.531547)"
           />
-          <Text
+          <MapText
             id="tD3B"
             x={47.504944}
             y={112.17458}
@@ -1155,11 +1085,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D3B')}
           >
             D3B
-          </Text>
+          </MapText>
         </G>
         <G id="gD4B">
           <Polygon
@@ -1173,7 +1101,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,67.430481,115.81255)"
           />
-          <Text
+          <MapText
             id="tD4B"
             x={47.50412}
             y={130.492}
@@ -1182,11 +1110,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D4B')}
           >
             D4B
-          </Text>
+          </MapText>
         </G>
         <G id="gD5B">
           <Polygon
@@ -1200,7 +1126,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24041965,-0.24041571,0,67.179072,134.12651)"
           />
-          <Text
+          <MapText
             id="tD5B"
             x={47.503651}
             y={148.72986}
@@ -1209,11 +1135,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D5B')}
           >
             D5B
-          </Text>
+          </MapText>
         </G>
         <G id="gF5C">
           <Polygon
@@ -1227,7 +1151,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,52.613483,15.266597)"
           />
-          <Text
+          <MapText
             id="tF5C"
             x={32.819206}
             y={29.945866}
@@ -1236,11 +1160,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F5C')}
           >
             F5C
-          </Text>
+          </MapText>
         </G>
         <G id="gF4B">
           <Polygon
@@ -1254,7 +1176,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.613481,33.54755)"
           />
-          <Text
+          <MapText
             id="tF4B"
             x={33.062668}
             y={48.227001}
@@ -1263,11 +1185,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F4B')}
           >
             F4B
-          </Text>
+          </MapText>
         </G>
         <G id="gF3A">
           <Polygon
@@ -1281,7 +1201,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.613481,51.828549)"
           />
-          <Text
+          <MapText
             id="tF3A"
             x={32.869705}
             y={66.473419}
@@ -1290,11 +1210,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F3A')}
           >
             F3A
-          </Text>
+          </MapText>
         </G>
         <G id="gE3B">
           <Polygon
@@ -1308,7 +1226,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.613481,70.109548)"
           />
-          <Text
+          <MapText
             id="tE3B"
             x={32.875378}
             y={84.752975}
@@ -1317,11 +1235,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E3B')}
           >
             E3B
-          </Text>
+          </MapText>
         </G>
         <G id="gE3A">
           <Polygon
@@ -1335,7 +1251,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.613481,88.39055)"
           />
-          <Text
+          <MapText
             id="tE3A"
             x={32.682163}
             y={103.03514}
@@ -1344,11 +1260,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E3A')}
           >
             E3A
-          </Text>
+          </MapText>
         </G>
         <G id="gD4C">
           <Polygon
@@ -1362,7 +1276,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.613481,106.67155)"
           />
-          <Text
+          <MapText
             id="tD4C"
             x={32.444893}
             y={121.35084}
@@ -1371,11 +1285,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D4C')}
           >
             D4C
-          </Text>
+          </MapText>
         </G>
         <G id="gD5C">
           <Polygon
@@ -1389,7 +1301,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,52.61348,124.95255)"
           />
-          <Text
+          <MapText
             id="tD5C"
             x={32.444176}
             y={139.63164}
@@ -1398,11 +1310,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D5C')}
           >
             D5C
-          </Text>
+          </MapText>
         </G>
         <G id="gF5B">
           <Polygon
@@ -1417,7 +1327,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,37.796483,24.406597)"
           />
-          <Text
+          <MapText
             id="tF5B"
             x={18.522688}
             y={39.285862}
@@ -1426,11 +1336,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F5B')}
           >
             F5B
-          </Text>
+          </MapText>
         </G>
         <G id="gF4A">
           <Polygon
@@ -1444,7 +1352,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,37.796481,42.68755)"
           />
-          <Text
+          <MapText
             id="tF4A"
             x={18.330442}
             y={57.366192}
@@ -1453,11 +1361,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F4A')}
           >
             F4A
-          </Text>
+          </MapText>
         </G>
         <G id="gE4C">
           <Polygon
@@ -1472,7 +1378,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307906,-0.24307508,0,37.796481,60.968549)"
           />
-          <Text
+          <MapText
             id="tE4C"
             x={18.091955}
             y={75.64785}
@@ -1481,11 +1387,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E4C')}
           >
             E4C
-          </Text>
+          </MapText>
         </G>
         <G id="gE4B">
           <Polygon
@@ -1499,7 +1403,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,37.796481,79.249548)"
           />
-          <Text
+          <MapText
             id="tE4B"
             x={18.335117}
             y={93.927666}
@@ -1508,11 +1412,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E4B')}
           >
             E4B
-          </Text>
+          </MapText>
         </G>
         <G id="gE4A">
           <Polygon
@@ -1526,7 +1428,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,37.796481,97.530547)"
           />
-          <Text
+          <MapText
             id="tE4A"
             x={18.142048}
             y={112.20862}
@@ -1535,11 +1437,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E4A')}
           >
             E4A
-          </Text>
+          </MapText>
         </G>
         <G id="gD5D">
           <Polygon
@@ -1553,7 +1453,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,37.796481,115.81155)"
           />
-          <Text
+          <MapText
             id="tD5D"
             x={17.951435}
             y={130.44925}
@@ -1562,11 +1462,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('D5D')}
           >
             D5D
-          </Text>
+          </MapText>
         </G>
         <G id="gF5A">
           <Polygon
@@ -1581,7 +1479,7 @@ const GVG = () => {
             display="inline"
             transform="matrix(0,0.24307514,-0.24307514,0,22.702489,33.546598)"
           />
-          <Text
+          <MapText
             id="tF5A"
             x={3.2352853}
             y={48.424835}
@@ -1590,11 +1488,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('F5A')}
           >
             F5A
-          </Text>
+          </MapText>
         </G>
         <G id="gE5D">
           <Polygon
@@ -1608,7 +1504,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,22.97948,51.827549)"
           />
-          <Text
+          <MapText
             id="tE5D"
             x={3.0458369}
             y={66.464432}
@@ -1617,11 +1513,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E5D')}
           >
             E5D
-          </Text>
+          </MapText>
         </G>
         <G id="gE5C">
           <Polygon
@@ -1635,7 +1529,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,22.97948,70.108548)"
           />
-          <Text
+          <MapText
             id="tE5C"
             x={2.9979608}
             y={84.785988}
@@ -1644,11 +1538,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E5C')}
           >
             E5C
-          </Text>
+          </MapText>
         </G>
         <G id="gE5B">
           <Polygon
@@ -1662,7 +1554,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,22.97948,88.389549)"
           />
-          <Text
+          <MapText
             id="tE5B"
             x={3.2410693}
             y={103.0208}
@@ -1671,11 +1563,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E5B')}
           >
             E5B
-          </Text>
+          </MapText>
         </G>
         <G id="gE5A">
           <Polygon
@@ -1689,7 +1579,7 @@ const GVG = () => {
             strokeOpacity={0}
             transform="matrix(0,0.24307906,-0.24307508,0,22.97948,106.67055)"
           />
-          <Text
+          <MapText
             id="tE5A"
             x={3.0479274}
             y={121.30554}
@@ -1698,11 +1588,9 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="auto"
-            onPress={() => handleShapePress('E5A')}
           >
             E5A
-          </Text>
+          </MapText>
         </G>
         </Svg>
       </View>
