@@ -32,7 +32,7 @@ const GVG = () => {
               stroke="#ffffff"
               strokeWidth={2}
               strokeOpacity={0}
-              transform="matrix(0,0.24307906,-0.24307508,0,82.247481,124.95355)"
+              transform="translate(82.247481,124.95355) rotate(90) scale(0.24307906)"
             />
             <Text
               id="tD4A"
@@ -59,7 +59,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,24.407597)"
+              transform="translate(97.064158,24.407597) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tA4B"
@@ -86,7 +86,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,42.688597)"
+              transform="translate(97.064158,42.688597) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tA3B"
@@ -112,7 +112,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,60.969596)"
+              transform="translate(97.064158,60.969596) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tB2A"
@@ -138,7 +138,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,79.250598)"
+              transform="translate(97.064158,79.250598) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tC2A"
@@ -164,7 +164,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,97.531595)"
+              transform="translate(97.064158,97.531595) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tC3B"
@@ -190,7 +190,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,97.064158,115.9126)"
+              transform="translate(97.064158,115.9126) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tC4C"
@@ -216,7 +216,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,111.88149,15.266597)"
+              transform="translate(111.88149,15.266597) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tA5C"
@@ -242,7 +242,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,111.88149,33.547598)"
+              transform="translate(111.88149,33.547598) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tA4C"
@@ -268,7 +268,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,111.88149,51.828597)"
+              transform="translate(111.88149,51.828597) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tB3A"
@@ -294,7 +294,7 @@ const GVG = () => {
               strokeWidth={2}
               strokeOpacity={0}
               display="inline"
-              transform="matrix(0,0.24307514,-0.24307514,0,111.88149,70.109596)"
+              transform="translate(111.88149,70.109596) rotate(90) scale(0.24307514)"
             />
             <Text
               id="tB3B"
