@@ -2,6 +2,8 @@ import React from "react";
 import { View, StyleSheet, Alert, Dimensions } from "react-native";
 import Svg, { G, Polygon, Text } from "react-native-svg";
 
+// Компонент інтерактивної карти режиму GBG
+
 const { height } = Dimensions.get('window');
 const HALF_HEIGHT = height * 0.5;
 
