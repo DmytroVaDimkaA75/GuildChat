@@ -47,7 +47,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A4A')}
             >
               A4A
             </Text>
@@ -74,7 +75,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A5A')}
             >
               A5A
             </Text>
@@ -101,7 +103,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A5B')}
             >
               A5B
             </Text>
@@ -126,7 +129,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C5D')}
             >
               C5D
             </Text>
@@ -151,7 +155,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('D5A')}
             >
               D5A
             </Text>
@@ -178,7 +183,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A3A')}
             >
               A3A
             </Text>
@@ -205,7 +211,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A2A')}
             >
               A2A
             </Text>
@@ -231,7 +238,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('X1X')}
             >
               X1X
             </Text>
@@ -258,7 +266,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('D2A')}
             >
               D2A
             </Text>
@@ -285,7 +294,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('D3A')}
             >
               D3A
             </Text>
@@ -312,7 +322,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('D4A')}
             >
               D4A
             </Text>
@@ -340,7 +351,8 @@ const GVG = () => {
               fillOpacity={1}
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A4B')}
             >
               A4B
             </Text>
@@ -367,7 +379,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A3B')}
             >
               A3B
             </Text>
@@ -394,7 +407,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('B2A')}
             >
               B2A
             </Text>
@@ -421,7 +435,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C2A')}
             >
               C2A
             </Text>
@@ -448,7 +463,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C3B')}
             >
               C3B
             </Text>
@@ -475,7 +491,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C4C')}
             >
               C4C
             </Text>
@@ -502,7 +519,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A5C')}
             >
               A5C
             </Text>
@@ -529,7 +547,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A4C')}
             >
               A4C
             </Text>
@@ -556,7 +575,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('B3A')}
             >
               B3A
             </Text>
@@ -583,7 +603,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('B3B')}
             >
               B3B
             </Text>
@@ -610,7 +631,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C3A')}
             >
               C3A
             </Text>
@@ -637,7 +659,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C4B')}
             >
               C4B
             </Text>
@@ -664,7 +687,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('C5C')}
             >
               C5C
             </Text>
@@ -690,7 +714,8 @@ const GVG = () => {
               fill="#000000"
               stroke="#131313"
               strokeWidth={0}
-              pointerEvents="none"
+              pointerEvents="auto"
+              onPress={() => handleShapePress('A5D')}
             >
             A5D
           </Text>
@@ -717,7 +742,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B4A')}
           >
             B4A
           </Text>
@@ -744,7 +770,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B4B')}
           >
             B4B
           </Text>
@@ -771,7 +798,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B4C')}
           >
             B4C
           </Text>
@@ -798,7 +826,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('C4A')}
           >
             C4A
           </Text>
@@ -825,7 +854,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('C5B')}
           >
             C5B
           </Text>
@@ -851,7 +881,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B5A')}
           >
             B5A
           </Text>
@@ -878,7 +909,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B5B')}
           >
             B5B
           </Text>
@@ -905,7 +937,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B5C')}
           >
             B5C
           </Text>
@@ -932,7 +965,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('B5D')}
           >
             B5D
           </Text>
@@ -959,7 +993,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('ext36')}
           >
             B5D
           </Text>
@@ -985,7 +1020,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F5D')}
           >
             F5D
           </Text>
@@ -1011,7 +1047,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F4C')}
           >
             F4C
           </Text>
@@ -1037,7 +1074,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F3B')}
           >
             F3B
           </Text>
@@ -1063,7 +1101,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F2A')}
           >
             F2A
           </Text>
@@ -1089,7 +1128,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E2A')}
           >
             E2A
           </Text>
@@ -1115,7 +1155,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D3B')}
           >
             D3B
           </Text>
@@ -1141,7 +1182,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D4B')}
           >
             D4B
           </Text>
@@ -1167,7 +1209,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D5B')}
           >
             D5B
           </Text>
@@ -1193,7 +1236,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F5C')}
           >
             F5C
           </Text>
@@ -1219,7 +1263,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F4B')}
           >
             F4B
           </Text>
@@ -1245,7 +1290,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F3A')}
           >
             F3A
           </Text>
@@ -1271,7 +1317,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E3B')}
           >
             E3B
           </Text>
@@ -1297,7 +1344,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E3A')}
           >
             E3A
           </Text>
@@ -1323,7 +1371,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D4C')}
           >
             D4C
           </Text>
@@ -1349,7 +1398,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D5C')}
           >
             D5C
           </Text>
@@ -1376,7 +1426,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F5B')}
           >
             F5B
           </Text>
@@ -1402,7 +1453,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F4A')}
           >
             F4A
           </Text>
@@ -1429,7 +1481,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E4C')}
           >
             E4C
           </Text>
@@ -1455,7 +1508,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E4B')}
           >
             E4B
           </Text>
@@ -1481,7 +1535,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E4A')}
           >
             E4A
           </Text>
@@ -1507,7 +1562,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('D5D')}
           >
             D5D
           </Text>
@@ -1534,7 +1590,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('F5A')}
           >
             F5A
           </Text>
@@ -1560,7 +1617,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E5D')}
           >
             E5D
           </Text>
@@ -1586,7 +1644,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E5C')}
           >
             E5C
           </Text>
@@ -1612,7 +1671,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E5B')}
           >
             E5B
           </Text>
@@ -1638,7 +1698,8 @@ const GVG = () => {
             fill="#000000"
             stroke="#131313"
             strokeWidth={0}
-            pointerEvents="none"
+            pointerEvents="auto"
+            onPress={() => handleShapePress('E5A')}
           >
             E5A
           </Text>
