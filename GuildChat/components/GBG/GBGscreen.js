@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
+import ColorDropdown from '../CustomElements/ColorDropdown';
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -68,12 +69,22 @@ const getAdjacentIds = (id) => {
 */
 
 
-const GVG = () => {
+const GVG = ({ navigation, route, settingsVisible, setSettingsVisible }) => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [paintModalVisible, setPaintModalVisible] = useState(false);
   const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
+  const [addGuildVisible, setAddGuildVisible] = useState(settingsVisible);
+  const [guildInputs, setGuildInputs] = useState([]);
+
+  useEffect(() => {
+    if (settingsVisible) {
+      setAddGuildVisible(true);
+      setSettingsVisible(false);
+      setGuildInputs([]);
+    }
+  }, [settingsVisible, setSettingsVisible]);
 
   const handleShapePress = (id, event) => {
     const screenWidth = Dimensions.get('window').width;
@@ -97,6 +108,32 @@ const GVG = () => {
     setMenuVisible(false);
     setTimeModalVisible(true);
   };
+
+  const closeAddGuildModal = () => {
+    setAddGuildVisible(false);
+    setGuildInputs([]);
+  };
+
+  const handleAddGuildPress = () => {
+    if (
+      guildInputs.length === 0 ||
+      (guildInputs[guildInputs.length - 1].color &&
+        guildInputs[guildInputs.length - 1].title)
+    ) {
+      setGuildInputs([...guildInputs, { color: '', title: '' }]);
+    }
+  };
+
+  const updateGuildInput = (index, field, value) => {
+    const updated = guildInputs.slice();
+    updated[index][field] = value;
+    setGuildInputs(updated);
+  };
+
+  const addDisabled =
+    guildInputs.length > 0 &&
+    (!guildInputs[guildInputs.length - 1].color ||
+      !guildInputs[guildInputs.length - 1].title);
 
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
@@ -1771,6 +1808,38 @@ const GVG = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={addGuildVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeAddGuildModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {guildInputs.map((input, idx) => (
+              <View style={styles.addGuildRow} key={idx}>
+                <ColorDropdown
+                  value={input.color}
+                  onChange={color => updateGuildInput(idx, 'color', color)}
+                  style={styles.colorPicker}
+                />
+                <TextInput
+                  value={input.title}
+                  onChangeText={text => updateGuildInput(idx, 'title', text)}
+                  style={styles.textInput}
+                />
+              </View>
+            ))}
+            <TouchableOpacity disabled={addDisabled} onPress={handleAddGuildPress}>
+              <Text style={[styles.addGuildText, addDisabled && styles.disabledText]}>Додати гільдію</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={closeAddGuildModal} style={[styles.closeButton, {marginTop:10}]}>
+              <Text style={styles.closeButtonText}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1845,6 +1914,31 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     fontSize: 16,
+  },
+  addGuildRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 10,
+  },
+  colorPicker: {
+    width: 120,
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 4,
+    padding: 8,
+  },
+  addGuildText: {
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  disabledText: {
+    marginTop: 10,
+    opacity: 0.5,
   },
 });
 

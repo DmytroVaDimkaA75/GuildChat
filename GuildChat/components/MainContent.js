@@ -222,16 +222,57 @@ function QuantStack() {
 
 function GBGStack() {
   const { t } = useTranslation();
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [settingsVisible, setSettingsVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchRole = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!userId || !guildId) return;
+        const db = getDatabase();
+        const userRoleRef = ref(db, `users/${userId}/${guildId}/role`);
+        const snap = await get(userRoleRef);
+        if (snap.exists() && snap.val() === 'guildLeader') {
+          setShowSettings(true);
+        } else {
+          setShowSettings(false);
+        }
+      } catch (e) {
+        setShowSettings(false);
+      }
+    };
+    fetchRole();
+  }, []);
+
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
         name="QuantScreen"
-        component={GBGScreen}
-        options={{
-          title: t("gbgStack.gbgScreenTitle"), // переклад для "Квантові вторгнення"
-          headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
+        options={({ navigation }) => {
+          const opts = {
+            title: t("gbgStack.gbgScreenTitle"), // переклад для "Квантові вторгнення"
+            headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
+          };
+          if (showSettings) {
+            opts.headerRight = () => (
+              <TouchableOpacity onPress={() => setSettingsVisible(true)} style={{ marginRight: 15 }}>
+                <Ionicons name="settings-sharp" size={24} color="white" />
+              </TouchableOpacity>
+            );
+          }
+          return opts;
         }}
-      />
+      >
+        {props => (
+          <GBGScreen
+            {...props}
+            settingsVisible={settingsVisible}
+            setSettingsVisible={setSettingsVisible}
+          />
+        )}
+      </Stack.Screen>
     </Stack.Navigator>
   );
 }
