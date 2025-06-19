@@ -1,6 +1,17 @@
-import React from "react";
-import { View, StyleSheet, Alert, Dimensions } from "react-native";
+import React, { useState } from "react";
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  Text,
+  Modal,
+  TouchableWithoutFeedback,
+} from "react-native";
 import Svg, { G, Path } from "react-native-svg";
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faPaintBrush } from "@fortawesome/free-solid-svg-icons";
+import AlarmClockIcon from "../ico/alarm-clock.svg";
 
 // Компонент інтерактивної карти режиму GBG
 
@@ -11,64 +22,77 @@ const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
 // Вектори напрямків для роботи з гексами
-const DIRS = [
-  [1, 0],   // схід
-  [0, 1],   // південний схід
-  [-1, 1],  // південний захід
-  [-1, 0],  // захід
-  [0, -1],  // північний захід
-  [1, -1],  // північний схід
-];
+// const DIRS = [
+//   [1, 0],   // схід
+//   [0, 1],   // південний схід
+//   [-1, 1],  // південний захід
+//   [-1, 0],  // захід
+//   [0, -1],  // північний захід
+//   [1, -1],  // північний схід
+// ];
 
-const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
-const WEDGE_CHARS = 'ABCDEF';
-const INDEX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+// const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
+// const WEDGE_CHARS = 'ABCDEF';
+// const INDEX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-const idToCoord = (id) => {
-  if (id === 'X1X') return { q: 0, r: 0 };
-  const wedge = WEDGE_CHARS.indexOf(id[0]);
-  const ring = parseInt(id[1], 10) - 1;
-  const idx = id.charCodeAt(2) - 65;
+// const idToCoord = (id) => {
+//   if (id === 'X1X') return { q: 0, r: 0 };
+//   const wedge = WEDGE_CHARS.indexOf(id[0]);
+//   const ring = parseInt(id[1], 10) - 1;
+//   const idx = id.charCodeAt(2) - 65;
 
-  let q = DIRS[0][0] * ring;
-  let r = DIRS[0][1] * ring;
-  for (let s = 0; s < wedge; s++) {
-    q += SIDE_DIRS[s][0] * ring;
-    r += SIDE_DIRS[s][1] * ring;
-  }
-  q += SIDE_DIRS[wedge][0] * idx;
-  r += SIDE_DIRS[wedge][1] * idx;
-  return { q, r };
-};
+//   let q = DIRS[0][0] * ring;
+//   let r = DIRS[0][1] * ring;
+//   for (let s = 0; s < wedge; s++) {
+//     q += SIDE_DIRS[s][0] * ring;
+//     r += SIDE_DIRS[s][1] * ring;
+//   }
+//   q += SIDE_DIRS[wedge][0] * idx;
+//   r += SIDE_DIRS[wedge][1] * idx;
+//   return { q, r };
+// };
 
-const coordToId = (q, r) => {
-  if (q === 0 && r === 0) return 'X1X';
-  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
-  if (ring > 4) return null;
-  let cq = DIRS[0][0] * ring;
-  let cr = DIRS[0][1] * ring;
-  for (let s = 0; s < 6; s++) {
-    for (let i = 0; i < ring; i++) {
-      if (q === cq && r === cr) {
-        return `${WEDGE_CHARS[s]}${ring + 1}${INDEX_CHARS[i]}`;
-      }
-      cq += SIDE_DIRS[s][0];
-      cr += SIDE_DIRS[s][1];
-    }
-  }
-  return null;
-};
+// const coordToId = (q, r) => {
+//   if (q === 0 && r === 0) return 'X1X';
+//   const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+//   if (ring > 4) return null;
+//   let cq = DIRS[0][0] * ring;
+//   let cr = DIRS[0][1] * ring;
+//   for (let s = 0; s < 6; s++) {
+//     for (let i = 0; i < ring; i++) {
+//       if (q === cq && r === cr) {
+//         return `${WEDGE_CHARS[s]}${ring + 1}${INDEX_CHARS[i]}`;
+//       }
+//       cq += SIDE_DIRS[s][0];
+//       cr += SIDE_DIRS[s][1];
+//     }
+//   }
+//   return null;
+// };
 
-const getAdjacentIds = (id) => {
-  const { q, r } = idToCoord(id);
-  return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
-};
+// const getAdjacentIds = (id) => {
+//   const { q, r } = idToCoord(id);
+//   return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
+// };
 
 
 const GVG = () => {
+  const [selectedId, setSelectedId] = useState(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [modalType, setModalType] = useState(null); // 'recolor' або 'time'
+
   const handleShapePress = (id) => {
-    const neighbours = getAdjacentIds(id).join(', ');
-    Alert.alert('ID фігури', `${id}\nСусідні: ${neighbours}`);
+    setSelectedId(id);
+    setMenuVisible(true);
+  };
+
+  const openModal = (type) => {
+    setMenuVisible(false);
+    setModalType(type);
+  };
+
+  const closeModal = () => {
+    setModalType(null);
   };
 
   return (
@@ -1673,6 +1697,58 @@ const GVG = () => {
             </G>
           </Svg>
       </View>
+
+      {menuVisible && (
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.popupOverlay}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={styles.popupMenu}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => openModal('recolor')}
+            >
+              <FontAwesomeIcon
+                icon={faPaintBrush}
+                size={20}
+                style={{ marginRight: 8 }}
+              />
+              <Text>Перефарбувати</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => openModal('time')}
+            >
+              <AlarmClockIcon width={20} height={20} style={{ marginRight: 8 }} />
+              <Text>Час до відкриття</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalType !== null}
+        onRequestClose={closeModal}
+      >
+        <TouchableWithoutFeedback onPress={closeModal}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.bottomModal}>
+                <Text style={styles.modalTitle}>ID: {selectedId}</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={closeModal}
+                >
+                  <Text style={styles.closeButtonText}>закрити</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 };
@@ -1692,6 +1768,57 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+  },
+  popupOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  popupMenu: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 10,
+    width: 200,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  bottomModal: {
+    backgroundColor: "#fff",
+    height: HALF_HEIGHT,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  closeButton: {
+    marginTop: 20,
+    alignSelf: "center",
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  closeButtonText: {
+    color: "#fff",
+    fontSize: 16,
   },
 });
 
