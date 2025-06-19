@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert, Modal } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -222,17 +222,87 @@ function QuantStack() {
 
 function GBGStack() {
   const { t } = useTranslation();
+  const [showGear, setShowGear] = React.useState(false);
+  const [modalVisible, setModalVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchRole = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!userId || !guildId) return;
+        const db = getDatabase();
+        const userRoleRef = ref(db, `users/${userId}/${guildId}/role`);
+        const snap = await get(userRoleRef);
+        if (snap.exists() && snap.val() === 'guildLeader') {
+          setShowGear(true);
+        } else {
+          setShowGear(false);
+        }
+      } catch (e) {
+        setShowGear(false);
+      }
+    };
+    fetchRole();
+  }, []);
+
   return (
-    <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen
-        name="QuantScreen"
-        component={GBGScreen}
-        options={{
-          title: t("gbgStack.gbgScreenTitle"), // переклад для "Квантові вторгнення"
-          headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
-        }}
-      />
-    </Stack.Navigator>
+    <>
+      <Stack.Navigator screenOptions={defaultHeaderOptions}>
+        <Stack.Screen
+          name="QuantScreen"
+          component={GBGScreen}
+          options={({ navigation }) => ({
+            title: t("gbgStack.gbgScreenTitle"),
+            headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
+            headerRight: () =>
+              showGear ? (
+                <TouchableOpacity
+                  onPress={() => setModalVisible(true)}
+                  style={{ marginRight: 15 }}
+                >
+                  <Ionicons name="settings-sharp" size={24} color="white" />
+                </TouchableOpacity>
+              ) : null,
+          })}
+        />
+      </Stack.Navigator>
+      {/* Модальне вікно */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.3)",
+          justifyContent: "center",
+          alignItems: "center"
+        }}>
+          <View style={{
+            backgroundColor: "#fff",
+            borderRadius: 12,
+            padding: 24,
+            minWidth: 220,
+            alignItems: "center"
+          }}>
+            <Text style={{ fontSize: 18, marginBottom: 20 }}>тут будуть гільдії</Text>
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              style={{
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                backgroundColor: "#e0e0e0",
+                borderRadius: 8,
+              }}
+            >
+              <Text style={{ fontSize: 16 }}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
