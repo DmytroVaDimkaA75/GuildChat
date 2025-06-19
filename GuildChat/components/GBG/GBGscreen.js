@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import { View, StyleSheet, Alert, Dimensions } from "react-native";
 import Svg, { G, Polygon, Text, Path } from "react-native-svg";
 
@@ -12,17 +12,34 @@ const SVG_HEIGHT = 164.52901;
 
 
 const GVG = () => {
+  const mapRef = useRef(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const handleLayout = () => {
+    mapRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      setOffset({ x: pageX, y: pageY });
+    });
+  };
+
   const handleShapePress = (id, event) => {
     if (event?.nativeEvent) {
-      const { locationX, locationY } = event.nativeEvent;
-      console.log(`Координати тапу: ${locationX.toFixed(2)}, ${locationY.toFixed(2)}`);
+      const { pageX, pageY } = event.nativeEvent;
+      const relativeX = pageX - offset.x;
+      const relativeY = pageY - offset.y;
+      console.log(
+        `Координати тапу відносно контейнера: ${relativeX.toFixed(2)}, ${relativeY.toFixed(2)}`,
+      );
     }
     Alert.alert("ID фігури", id);
   };
 
   return (
     <View style={styles.win}>
-      <View style={styles.mapContainer}>
+      <View
+        style={styles.mapContainer}
+        ref={mapRef}
+        onLayout={handleLayout}
+      >
         <Svg
           width="100%"
           height="100%"
