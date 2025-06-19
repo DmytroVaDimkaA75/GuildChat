@@ -1,6 +1,8 @@
-import React from "react";
-import { View, StyleSheet, Alert, Dimensions } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 
 // Компонент інтерактивної карти режиму GBG
 
@@ -10,14 +12,14 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
-// Вектори напрямків для роботи з гексами
+/* Код для визначення сусідніх секторів (знадобиться пізніше)
 const DIRS = [
-  [1, 0],   // схід
-  [0, 1],   // південний схід
-  [-1, 1],  // південний захід
-  [-1, 0],  // захід
-  [0, -1],  // північний захід
-  [1, -1],  // північний схід
+  [1, 0],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [0, -1],
+  [1, -1],
 ];
 
 const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
@@ -63,13 +65,34 @@ const getAdjacentIds = (id) => {
   const { q, r } = idToCoord(id);
   return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
 };
+*/
 
 
 const GVG = () => {
-  const handleShapePress = (id) => {
-    const neighbours = getAdjacentIds(id).join(', ');
-    Alert.alert('ID фігури', `${id}\nСусідні: ${neighbours}`);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [popupStyle, setPopupStyle] = useState({});
+
+  const handleShapePress = (id, event) => {
+    const screenWidth = Dimensions.get('window').width;
+    const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+      event?.nativeEvent || {};
+    const position =
+      pageX > screenWidth / 2
+        ? { right: screenWidth - pageX, top: pageY }
+        : { left: pageX, top: pageY };
+    setPopupStyle(position);
+    setSelectedId(id);
+    setMenuVisible(true);
   };
+
+  const openModal = () => {
+    setMenuVisible(false);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => setModalVisible(false);
 
   return (
     <View style={styles.win}>
@@ -1673,6 +1696,58 @@ const GVG = () => {
             </G>
           </Svg>
       </View>
+      {menuVisible && (
+        <TouchableOpacity
+          style={styles.popupOverlay}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={[styles.popupMenu, popupStyle]}>
+            <TouchableOpacity style={styles.menuItem} onPress={openModal}>
+              <FontAwesomeIcon
+                icon={faPaintBrush}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Перефарбувати</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={openModal}>
+              <FontAwesomeIcon
+                icon={faClock}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Час до відкриття</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem}>
+              <FontAwesomeIcon
+                icon={faFire}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text style={styles.menuText}>Допомагайте</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalText}>ID: {selectedId}</Text>
+            <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1692,6 +1767,61 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+  },
+  popupOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  popupMenu: {
+    position: "absolute",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 8,
+    elevation: 5,
+    flexDirection: "column",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  menuIcon: {
+    marginRight: 6,
+  },
+  menuText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    width: "100%",
+    height: HALF_HEIGHT,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalText: {
+    fontSize: 18,
+    marginBottom: 20,
+  },
+  closeButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 8,
+  },
+  closeButtonText: {
+    fontSize: 16,
   },
 });
 
