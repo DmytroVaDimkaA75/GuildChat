@@ -1,6 +1,6 @@
 import React from "react";
 import { View, StyleSheet, Alert, Dimensions } from "react-native";
-import Svg, { G, Polygon, Text, Path } from "react-native-svg";
+import Svg, { G, Path } from "react-native-svg";
 
 // Компонент інтерактивної карти режиму GBG
 
@@ -12,11 +12,7 @@ const SVG_HEIGHT = 164.52901;
 
 
 const GVG = () => {
-  const handleShapePress = (id, event) => {
-    if (event?.nativeEvent) {
-      const { locationX, locationY } = event.nativeEvent;
-      console.log(`Координати тапу: ${locationX.toFixed(2)}, ${locationY.toFixed(2)}`);
-    }
+  const handleShapePress = (id) => {
     Alert.alert("ID фігури", id);
   };
 
@@ -28,23 +24,25 @@ const GVG = () => {
           height="100%"
           viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
         >
-            <G onPress={(e) => handleShapePress("C5D", e)}>
+            <G onPress={() => handleShapePress("C5D") }>
             <Path
             id="fC5D"
-            onPress={(e) => handleShapePress("C5D", e)}
+
+            onPressIn={handleShapePress.bind(null, "C5D")}
             style={{
               display: "inline",
               fill: "#0000ff",
               stroke: "#ffffff",
               strokeWidth: 0.48615,
               strokeOpacity: 0,
-              
+
             }}
             d="m 74.361668,146.24736 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z"
             />
             <Path
             id="tC5D"
-            onPress={(e) => handleShapePress("C5D", e)}
+            
+            onPressIn={handleShapePress.bind(null, "C5D")}
             style={{
               fontSize: 7.05587,
               fontFamily: "Arial",
