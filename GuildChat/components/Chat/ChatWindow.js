@@ -67,6 +67,9 @@ import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import FontIcon from '../ico/font.svg';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+const iconColor = '#8C9093';
 
 // =======================
 // Компонент SendOptionsPopup (попап, а не модальне вікно)
@@ -88,7 +91,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
           }}
         >
           <View style={styles.sendOptionContent}>
-            <CalendarclockIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+            <CalendarclockIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
             <Text style={styles.sendOptionText}>Надіслати пізніше</Text>
           </View>
         </TouchableOpacity>
@@ -100,7 +103,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
           }}
         >
           <View style={styles.sendOptionContent}>
-            <ClockIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+            <ClockIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
             <Text style={styles.sendOptionText}>Тимчасове повідомлення</Text>
           </View>
         </TouchableOpacity>
@@ -113,7 +116,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
             }}
           >
             <View style={styles.sendOptionContent}>
-              <UsercheckIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+              <UsercheckIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
               <Text style={styles.sendOptionText}>Надіслати обраним</Text>
             </View>
           </TouchableOpacity>
@@ -126,7 +129,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
           }}
         >
           <View style={styles.sendOptionContent}>
-            <FontIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+            <FontIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
             <Text style={styles.sendOptionText}>Стилізація тексту</Text>
           </View>
         </TouchableOpacity>
@@ -659,6 +662,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [chatType, setChatType] = useState(null);
   const [locale, setLocale] = useState(uk);
   const [selectedMessageId, setSelectedMessageId] = useState(null);
+  const [menuSide, setMenuSide] = useState('right');
+  const [menuPositionX, setMenuPositionX] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [translatedText, setTranslatedText] = useState('');
   const firebaseStorage = getStorage();
@@ -1203,7 +1208,11 @@ const renderReadReceiptOption = (message) => {
     }
   };
 
-  const handlePressMessage = (messageId) => {
+  const handlePressMessage = (messageId, event) => {
+    const { pageX } = event.nativeEvent;
+    const { width } = Dimensions.get('window');
+    setMenuSide(pageX > width / 2 ? 'left' : 'right');
+    setMenuPositionX(pageX);
     setSelectedMessageId(messageId);
   };
 
@@ -1468,7 +1477,7 @@ const renderReadReceiptOption = (message) => {
             ))}
           </ScrollView>
           <TouchableOpacity style={styles.pinIconContainer} onPress={() => { /* додаткова дія */ }}>
-            <PinIcon width={24} height={24} fill="gray" />
+            <PinIcon width={24} height={24} fill={iconColor} />
           </TouchableOpacity>
         </View>
       )}
@@ -1500,7 +1509,7 @@ const renderReadReceiptOption = (message) => {
                       </View>
                     )}
                   <Menu style={styles.menu} key={message.id}>
-                    <MenuTrigger onPress={() => handlePressMessage(message.id)}>
+                    <MenuTrigger onPress={(e) => handlePressMessage(message.id, e)}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         {(chatType !== 'private' && !isCurrentUser) && (
                           <View style={{ width: 30, marginRight: 8, marginTop: 'auto' }}>
@@ -1626,27 +1635,40 @@ const renderReadReceiptOption = (message) => {
                         </View>
                       </View>
                     </MenuTrigger>
-                    <MenuOptions style={isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor}>
+                    <MenuOptions
+                      style={[
+                        isCurrentUser ? styles.popupMenuPersonal : styles.popupMenuInterlocutor,
+                        menuSide === 'right'
+                          ? { left: menuPositionX }
+                          : { right: Dimensions.get('window').width - menuPositionX }
+                      ]}
+                    >
                       {renderGroupReadReceiptOption(message, isCurrentUser)}
                       {isCurrentUser ? (
                         <>
                           {renderReadReceiptOption(message)}
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <ReplyIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Відповісти</Text>
                             </View>
                           </MenuOption>
                           <MenuOption value="copy" onSelect={() => handleCopyMessage(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <CopyIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Копіювати</Text>
+                            </View>
+                          </MenuOption>
+                          <MenuOption value="help" onSelect={() => {}}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Ionicons name="flame-outline" size={20} color={iconColor} style={{ marginRight: 5 }} />
+                              <Text>допомагайте</Text>
                             </View>
                           </MenuOption>
                           {message.pinned && message.pinned.isPinned ? (
                             <MenuOption value="unattach" onSelect={() => {}}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                                <UnpinIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                                 <Text>Відкріпити</Text>
                               </View>
                             </MenuOption>
@@ -1656,14 +1678,14 @@ const renderReadReceiptOption = (message) => {
                               // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
                             }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                                <PinsIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                                 <Text>Закріпити</Text>
                               </View>
                             </MenuOption>
                           )}
                           <MenuOption value="edit" onSelect={() => handleEditMessage(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <PencilIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <PencilIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Редагувати</Text>
                             </View>
                           </MenuOption>
@@ -1672,7 +1694,7 @@ const renderReadReceiptOption = (message) => {
                             setDeleteModalVisible(true);
                           }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <DeleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <DeleteIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Видалити</Text>
                             </View>
                           </MenuOption>
@@ -1681,14 +1703,20 @@ const renderReadReceiptOption = (message) => {
                         <>
                           <MenuOption value="reply" onSelect={() => handleReply(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <ReplyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <ReplyIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Відповісти</Text>
                             </View>
                           </MenuOption>
                           <MenuOption value="copy" onSelect={() => handleCopyMessage(message)}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <CopyIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <CopyIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Копіювати</Text>
+                            </View>
+                          </MenuOption>
+                          <MenuOption value="help" onSelect={() => {}}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Ionicons name="flame-outline" size={20} color={iconColor} style={{ marginRight: 5 }} />
+                              <Text>допомагайте</Text>
                             </View>
                           </MenuOption>
                           {message.pinned && message.pinned.isPinned ? (
@@ -1697,7 +1725,7 @@ const renderReadReceiptOption = (message) => {
                               setUnpinModalVisible(true);
                             }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <UnpinIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                                <UnpinIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                                 <Text>Відкріпити</Text>
                               </View>
                             </MenuOption>
@@ -1707,14 +1735,14 @@ const renderReadReceiptOption = (message) => {
                               // Додаємо виклик handleAttachMessage після підтвердження у модальному вікні
                             }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <PinsIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                                <PinsIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                                 <Text>Закріпити</Text>
                               </View>
                             </MenuOption>
                           )}
                           <MenuOption value="translate" onSelect={() => handleMenuOptionSelect('translate')}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <TransleteIcon width={20} height={20} fill="gray" style={{ marginRight: 5 }} />
+                              <TransleteIcon width={20} height={20} fill={iconColor} style={{ marginRight: 5 }} />
                               <Text>Перекласти</Text>
                             </View>
                           </MenuOption>
@@ -2316,7 +2344,6 @@ const styles = StyleSheet.create({
   },
   popupMenuInterlocutor: {
     position: 'absolute',
-    left: 10,
     top: 0,
     backgroundColor: '#ffffff',
     borderRadius: 8,
@@ -2327,7 +2354,6 @@ const styles = StyleSheet.create({
   popupMenuPersonal: {
     backgroundColor: '#ffffff',
     position: 'absolute',
-    right: -155,
     top: 0,
     fontSize: 20,
     borderRadius: 8,
