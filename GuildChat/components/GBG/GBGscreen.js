@@ -10,10 +10,65 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
+// Вектори напрямків для роботи з гексами
+const DIRS = [
+  [1, 0],   // схід
+  [0, 1],   // південний схід
+  [-1, 1],  // південний захід
+  [-1, 0],  // захід
+  [0, -1],  // північний захід
+  [1, -1],  // північний схід
+];
+
+const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
+const WEDGE_CHARS = 'ABCDEF';
+const INDEX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+const idToCoord = (id) => {
+  if (id === 'X1X') return { q: 0, r: 0 };
+  const wedge = WEDGE_CHARS.indexOf(id[0]);
+  const ring = parseInt(id[1], 10) - 1;
+  const idx = id.charCodeAt(2) - 65;
+
+  let q = DIRS[0][0] * ring;
+  let r = DIRS[0][1] * ring;
+  for (let s = 0; s < wedge; s++) {
+    q += SIDE_DIRS[s][0] * ring;
+    r += SIDE_DIRS[s][1] * ring;
+  }
+  q += SIDE_DIRS[wedge][0] * idx;
+  r += SIDE_DIRS[wedge][1] * idx;
+  return { q, r };
+};
+
+const coordToId = (q, r) => {
+  if (q === 0 && r === 0) return 'X1X';
+  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+  if (ring > 4) return null;
+  let cq = DIRS[0][0] * ring;
+  let cr = DIRS[0][1] * ring;
+  for (let s = 0; s < 6; s++) {
+    for (let i = 0; i < ring; i++) {
+      if (q === cq && r === cr) {
+        return `${WEDGE_CHARS[s]}${ring + 1}${INDEX_CHARS[i]}`;
+      }
+      cq += SIDE_DIRS[s][0];
+      cr += SIDE_DIRS[s][1];
+    }
+  }
+  return null;
+};
+
+const getAdjacentIds = (id) => {
+  const { q, r } = idToCoord(id);
+  return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
+};
+
 
 const GVG = () => {
   const handleShapePress = (id) => {
-    Alert.alert("ID фігури", id);
+    const neighbours = getAdjacentIds(id).join(', ');
+    Alert.alert('ID фігури', `${id}\nСусідні: ${neighbours}`);
   };
 
   return (
