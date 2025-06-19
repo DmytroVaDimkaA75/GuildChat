@@ -67,7 +67,6 @@ const defaultHeaderOptions = {
 function ChatStack() {
   const { t } = useTranslation();
   return (
-    <>
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
         name="ChatScreen"
