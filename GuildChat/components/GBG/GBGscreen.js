@@ -70,7 +70,8 @@ const getAdjacentIds = (id) => {
 
 const GVG = () => {
   const [menuVisible, setMenuVisible] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [paintModalVisible, setPaintModalVisible] = useState(false);
+  const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
 
@@ -87,12 +88,18 @@ const GVG = () => {
     setMenuVisible(true);
   };
 
-  const openModal = () => {
+  const openPaintModal = () => {
     setMenuVisible(false);
-    setModalVisible(true);
+    setPaintModalVisible(true);
   };
 
-  const closeModal = () => setModalVisible(false);
+  const openTimeModal = () => {
+    setMenuVisible(false);
+    setTimeModalVisible(true);
+  };
+
+  const closePaintModal = () => setPaintModalVisible(false);
+  const closeTimeModal = () => setTimeModalVisible(false);
 
   return (
     <View style={styles.win}>
@@ -1702,7 +1709,7 @@ const GVG = () => {
           onPress={() => setMenuVisible(false)}
         >
           <View style={[styles.popupMenu, popupStyle]}>
-            <TouchableOpacity style={styles.menuItem} onPress={openModal}>
+            <TouchableOpacity style={styles.menuItem} onPress={openPaintModal}>
               <FontAwesomeIcon
                 icon={faPaintBrush}
                 size={20}
@@ -1711,7 +1718,7 @@ const GVG = () => {
               />
               <Text style={styles.menuText}>Перефарбувати</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={openModal}>
+            <TouchableOpacity style={styles.menuItem} onPress={openTimeModal}>
               <FontAwesomeIcon
                 icon={faClock}
                 size={20}
@@ -1734,15 +1741,31 @@ const GVG = () => {
       )}
 
       <Modal
-        visible={modalVisible}
-        animationType="slide"
+        visible={paintModalVisible}
+        animationType="fade"
         transparent
-        onRequestClose={closeModal}
+        onRequestClose={closePaintModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalText}>ID: {selectedId}</Text>
-            <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+            <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
+            <TouchableOpacity onPress={closePaintModal} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={timeModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeTimeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalText}>Час до відкриття сектору {selectedId}</Text>
+            <TouchableOpacity onPress={closeTimeModal} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
           </View>
