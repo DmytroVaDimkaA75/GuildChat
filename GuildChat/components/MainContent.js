@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert, Modal } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert, Modal, TextInput, TouchableWithoutFeedback } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -15,6 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { MenuProvider } from 'react-native-popup-menu';
 import { useTranslation } from 'react-i18next';
 import i18n from "../i18n";
+import { Dropdown } from 'react-native-element-dropdown';
 // Імпортуємо ваші екрани
 import GBScreen from "./GB/GBScreen";
 import MyGB from './GB/MyGB';
@@ -138,6 +139,24 @@ function ChatStack() {
 function GBStack() {
   const { t } = useTranslation();
   const [showAddButton, setShowAddButton] = React.useState(false);
+  const [modalVisible, setModalVisible] = React.useState(false);
+  const [blockVisible, setBlockVisible] = React.useState(false);
+  const [selectedColor, setSelectedColor] = React.useState('');
+  const [guildName, setGuildName] = React.useState('');
+
+  const openAddGuildModal = () => {
+    setModalVisible(true);
+    setBlockVisible(false);
+    setSelectedColor('');
+    setGuildName('');
+  };
+
+  const closeAddGuildModal = () => {
+    setModalVisible(false);
+    setBlockVisible(false);
+    setSelectedColor('');
+    setGuildName('');
+  };
 
   React.useEffect(() => {
     const fetchRole = async () => {
@@ -161,6 +180,7 @@ function GBStack() {
   }, []);
 
   return (
+    <>
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
         name="GBScreen"
@@ -172,7 +192,7 @@ function GBStack() {
           };
           if (showAddButton) {
             opts.headerRight = () => (
-              <TouchableOpacity onPress={() => navigation.navigate('NewGBChat')} style={{ marginRight: 15 }}>
+              <TouchableOpacity onPress={openAddGuildModal} style={{ marginRight: 15 }}>
                 <Ionicons name="add" size={24} color="white" />
               </TouchableOpacity>
             );
@@ -201,6 +221,63 @@ function GBStack() {
         options={{ title: t("gbStack.gbNewExpressTitle") }} // переклад для "Експрес прокачка1"
       />
     </Stack.Navigator>
+    <Modal
+      visible={modalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={closeAddGuildModal}
+    >
+      <TouchableWithoutFeedback onPress={closeAddGuildModal}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, minWidth: 220 }}>
+              {blockVisible && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                  <Dropdown
+                    style={{ width: 120, borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 5 }}
+                    data={[
+                      { label: 'Зелений', value: '#32CD32' },
+                      { label: 'Жовтий', value: '#FFFF00' },
+                      { label: 'Сірий', value: '#DCDCDC' },
+                    ]}
+                    labelField="label"
+                    valueField="value"
+                    placeholder="Колір"
+                    value={selectedColor}
+                    onChange={item => setSelectedColor(item.value)}
+                    selectedTextStyle={{ color: selectedColor || '#000' }}
+                    renderItem={item => (
+                      <View style={{ padding: 8 }}>
+                        <Text style={{ color: item.value }}>{item.label}</Text>
+                      </View>
+                    )}
+                  />
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: '#ccc', flex: 1, marginLeft: 10, padding: 5 }}
+                    placeholder="Назва гільдії"
+                    value={guildName}
+                    onChangeText={setGuildName}
+                  />
+                </View>
+              )}
+              <TouchableOpacity
+                disabled={blockVisible && !(selectedColor && guildName)}
+                onPress={() => {
+                  if (!blockVisible) {
+                    setBlockVisible(true);
+                  } else if (selectedColor && guildName) {
+                    closeAddGuildModal();
+                  }
+                }}
+              >
+                <Text style={{ fontSize: 18, color: blockVisible && !(selectedColor && guildName) ? 'grey' : 'blue' }}>
+                  Додати гільдію
+                </Text>
+              </TouchableOpacity>
+            </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+    </>
   );
 }
 
