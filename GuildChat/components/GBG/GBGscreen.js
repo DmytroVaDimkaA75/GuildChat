@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
+import { Picker } from '@react-native-picker/picker';
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -68,12 +69,23 @@ const getAdjacentIds = (id) => {
 */
 
 
-const GVG = () => {
+const GVG = ({ navigation, route, settingsVisible, setSettingsVisible }) => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [paintModalVisible, setPaintModalVisible] = useState(false);
   const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
+  const [addGuildVisible, setAddGuildVisible] = useState(settingsVisible);
+  const [showAddFields, setShowAddFields] = useState(false);
+  const [selectedColor, setSelectedColor] = useState('');
+  const [guildTitle, setGuildTitle] = useState('');
+
+  useEffect(() => {
+    if (settingsVisible) {
+      setAddGuildVisible(true);
+      setSettingsVisible(false);
+    }
+  }, [settingsVisible, setSettingsVisible]);
 
   const handleShapePress = (id, event) => {
     const screenWidth = Dimensions.get('window').width;
@@ -96,6 +108,13 @@ const GVG = () => {
   const openTimeModal = () => {
     setMenuVisible(false);
     setTimeModalVisible(true);
+  };
+
+  const closeAddGuildModal = () => {
+    setAddGuildVisible(false);
+    setShowAddFields(false);
+    setSelectedColor('');
+    setGuildTitle('');
   };
 
   const closePaintModal = () => setPaintModalVisible(false);
@@ -1771,6 +1790,49 @@ const GVG = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={addGuildVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeAddGuildModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {showAddFields && (
+              <View style={styles.addGuildRow}>
+                <Picker
+                  selectedValue={selectedColor}
+                  style={styles.colorPicker}
+                  onValueChange={(v) => setSelectedColor(v)}
+                >
+                  <Picker.Item label="" value="" />
+                  <Picker.Item label="\u0417\u0435\u043b\u0435\u043d\u0438\u0439" value="#32CD32" color="#32CD32" />
+                  <Picker.Item label="\u0416\u043e\u0432\u0442\u0438\u0439" value="#FFFF00" color="#FFFF00" />
+                  <Picker.Item label="\u0421\u0456\u0440\u0438\u0439" value="#DCDCDC" color="#DCDCDC" />
+                </Picker>
+                <TextInput
+                  value={guildTitle}
+                  onChangeText={setGuildTitle}
+                  style={styles.textInput}
+                />
+              </View>
+            )}
+            <TouchableOpacity
+              disabled={showAddFields && (!selectedColor || !guildTitle)}
+              onPress={() => {
+                if (!showAddFields) setShowAddFields(true);
+                else if (selectedColor && guildTitle) closeAddGuildModal();
+              }}
+            >
+              <Text style={[styles.addGuildText, showAddFields && styles.disabledText]}>\u0414\u043e\u0434\u0430\u0442\u0438 \u0433\u0456\u043b\u044c\u0434\u0456\u044e</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={closeAddGuildModal} style={[styles.closeButton, {marginTop:10}]}> 
+              <Text style={styles.closeButtonText}>\u0417\u0430\u043a\u0440\u0438\u0442\u0438</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1845,6 +1907,31 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     fontSize: 16,
+  },
+  addGuildRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 10,
+  },
+  colorPicker: {
+    width: 120,
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 4,
+    padding: 8,
+  },
+  addGuildText: {
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  disabledText: {
+    marginTop: 10,
+    opacity: 0.5,
   },
 });
 
