@@ -1,5 +1,6 @@
 import React from "react";
-import { View, StyleSheet, Alert, Dimensions } from "react-native";
+import { View, StyleSheet, Alert, Dimensions, Pressable, TouchableOpacity, Text } from "react-native";
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import Svg, { G, Path } from "react-native-svg";
 
 // Компонент інтерактивної карти режиму GBG
@@ -66,6 +67,24 @@ const getAdjacentIds = (id) => {
 
 
 const GVG = () => {
+  const [menuVisible, setMenuVisible] = React.useState(false);
+  const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 });
+  const [menuSide, setMenuSide] = React.useState('right');
+  const { width } = Dimensions.get('window');
+
+  const handleLongPress = (event) => {
+    const { pageX, pageY } = event.nativeEvent;
+    if (pageX > width / 2) {
+      setMenuSide('left');
+    } else {
+      setMenuSide('right');
+    }
+    setMenuPosition({ x: pageX, y: pageY });
+    setMenuVisible(true);
+  };
+
+  const closeMenu = () => setMenuVisible(false);
+
   const handleShapePress = (id) => {
     const neighbours = getAdjacentIds(id).join(', ');
     Alert.alert('ID фігури', `${id}\nСусідні: ${neighbours}`);
@@ -73,7 +92,7 @@ const GVG = () => {
 
   return (
     <View style={styles.win}>
-      <View style={styles.mapContainer}>
+      <Pressable style={styles.mapContainer} onLongPress={handleLongPress} onPress={closeMenu}>
         <Svg
           width="100%"
           height="100%"
@@ -1672,7 +1691,23 @@ const GVG = () => {
               />
             </G>
           </Svg>
-      </View>
+      </Pressable>
+      {menuVisible && (
+        <View
+          style={[
+            styles.menuContainer,
+            menuSide === 'right'
+              ? { left: menuPosition.x }
+              : { right: Dimensions.get('window').width - menuPosition.x },
+            { top: menuPosition.y }
+          ]}
+        >
+          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+            <Ionicons name="flame-outline" size={24} color="#8C9093" style={{ marginRight: 5 }} />
+            <Text>допомагайте</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -1692,6 +1727,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+  },
+  menuContainer: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    padding: 8,
+    borderRadius: 6,
+    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 
