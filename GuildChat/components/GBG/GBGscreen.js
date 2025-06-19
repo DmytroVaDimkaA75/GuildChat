@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
-import { Picker } from '@react-native-picker/picker';
+import ColorDropdown from '../CustomElements/ColorDropdown';
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -1801,16 +1801,11 @@ const GVG = ({ navigation, route, settingsVisible, setSettingsVisible }) => {
           <View style={styles.modalContainer}>
             {showAddFields && (
               <View style={styles.addGuildRow}>
-                <Picker
-                  selectedValue={selectedColor}
+                <ColorDropdown
+                  value={selectedColor}
+                  onChange={setSelectedColor}
                   style={styles.colorPicker}
-                  onValueChange={(v) => setSelectedColor(v)}
-                >
-                  <Picker.Item label="" value="" />
-                  <Picker.Item label="\u0417\u0435\u043b\u0435\u043d\u0438\u0439" value="#32CD32" color="#32CD32" />
-                  <Picker.Item label="\u0416\u043e\u0432\u0442\u0438\u0439" value="#FFFF00" color="#FFFF00" />
-                  <Picker.Item label="\u0421\u0456\u0440\u0438\u0439" value="#DCDCDC" color="#DCDCDC" />
-                </Picker>
+                />
                 <TextInput
                   value={guildTitle}
                   onChangeText={setGuildTitle}
