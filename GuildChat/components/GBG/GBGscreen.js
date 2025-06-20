@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { Dropdown } from 'react-native-element-dropdown';
+import { getDatabase, ref, set } from 'firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GuildContext } from "../../GuildContext";
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -77,6 +80,7 @@ const GVG = ({ navigation, route }) => {
   const [guildInputs, setGuildInputs] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
+  const { guildId } = useContext(GuildContext);
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
@@ -115,6 +119,21 @@ const GVG = ({ navigation, route }) => {
 
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
+
+  const handleSaveGuilds = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) {
+        console.error('Guild ID not found');
+        return;
+      }
+      const db = getDatabase();
+      await set(ref(db, `guilds/${id}/GBG`), guildInputs);
+      setSettingsVisible(false);
+    } catch (error) {
+      console.error('Error saving guilds:', error);
+    }
+  };
 
   return (
     <View style={styles.win}>
@@ -1859,6 +1878,9 @@ const GVG = ({ navigation, route }) => {
                 Додати гільдію
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={handleSaveGuilds} style={styles.saveButton}>
+              <Text style={styles.saveButtonText}>Зберегти</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setSettingsVisible(false)} style={[styles.closeButton, { marginTop: 10 }]}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
@@ -1960,14 +1982,16 @@ const styles = StyleSheet.create({
   colorDropdown: {
     width: 80,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#007AFF',
+    backgroundColor: '#ffffff',
     borderRadius: 6,
-    paddingHorizontal: 8,
+    padding: 10,
+    marginBottom: 20,
   },
   colorDropdownContainer: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
+    borderColor: '#007AFF',
+    borderRadius: 8,
   },
   colorItem: {
     padding: 6,
@@ -1981,10 +2005,25 @@ const styles = StyleSheet.create({
   guildInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#007AFF',
     borderRadius: 6,
-    padding: 8,
+    padding: 10,
+    backgroundColor: '#fff',
+    fontSize: 16,
     marginLeft: 10,
+    marginBottom: 20,
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   addGuildText: {
     color: '#007AFF',
