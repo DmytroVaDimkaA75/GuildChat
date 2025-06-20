@@ -131,7 +131,7 @@ const GVG = ({ navigation, route }) => {
         const db = getDatabase();
         const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
         if (snap.exists()) {
-          const now = Date.now();
+          const now = Math.floor(Date.now() / 1000);
           const arr = Object.entries(snap.val()).map(([name, val]) => ({
             name,
             attack: val?.attack,
@@ -251,8 +251,9 @@ const GVG = ({ navigation, route }) => {
       if (id && selectedId) {
         const db = getDatabase();
         const openTime =
-          Date.now() +
-          (hourIndex * 3600 + minuteIndex * 60) * 1000;
+          Math.floor(Date.now() / 1000) +
+          hourIndex * 3600 +
+          minuteIndex * 60;
         await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
         await set(
           ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
@@ -1988,7 +1989,7 @@ const GVG = ({ navigation, route }) => {
             <Text style={styles.sectorName}>{item.name}</Text>
             <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
             <Text style={styles.sectorTime}>
-              {new Date(item.openTime).toLocaleString()}
+              {new Date(item.openTime * 1000).toLocaleString()}
             </Text>
           </View>
         ))}
