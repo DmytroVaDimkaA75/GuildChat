@@ -129,8 +129,12 @@ const GVG = ({ navigation, route }) => {
           const data = snap.val();
           const sectors = {};
           groupIds.forEach(gid => {
-            const color = data[gid] || '#FFFFFF';
-            sectors[gid] = color;
+            let colorEntry = data[gid];
+            const color =
+              colorEntry && typeof colorEntry === 'object'
+                ? colorEntry.color
+                : colorEntry;
+            sectors[gid] = color || '#FFFFFF';
             const refEl = pathRefs.current[gid];
             if (refEl) {
               refEl.setNativeProps({
@@ -231,7 +235,7 @@ const GVG = ({ navigation, route }) => {
       await set(ref(db, `guilds/${id}/GBG`), dataToSave);
       const sectorData = {};
       Object.keys(pathRefs.current).forEach(gid => {
-        sectorData[gid] = sectorColors[gid] || '#FFFFFF';
+        sectorData[gid] = { color: sectorColors[gid] || '#FFFFFF' };
       });
       await set(ref(db, `guilds/${id}/GBG/sectors`), sectorData);
       setSettingsVisible(false);
@@ -1417,8 +1421,8 @@ const GVG = ({ navigation, route }) => {
             </G>
             <G onPress={() => handleShapePress("A5D")}>
               <Path
-                id="fA5A"
-            ref={el => (pathRefs.current['A5A'] = el)}
+                id="fA5D"
+            ref={el => (pathRefs.current['A5D'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
