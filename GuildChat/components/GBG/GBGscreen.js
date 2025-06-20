@@ -217,6 +217,25 @@ const GVG = ({ navigation, route }) => {
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
 
+  const handleTimeSave = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id || !selectedId) return;
+      const db = getDatabase();
+      const timestamp =
+        Date.now() +
+        hourIndex * 60 * 60 * 1000 +
+        minuteIndex * 60 * 1000;
+      await set(
+        ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`),
+        timestamp
+      );
+    } catch (err) {
+      console.error('Error saving open time:', err);
+    }
+    setTimeModalVisible(false);
+  };
+
   const handleColorSelect = async color => {
     if (selectedId && pathRefs.current[selectedId]) {
       const refEl = pathRefs.current[selectedId];
@@ -2048,6 +2067,9 @@ const GVG = ({ navigation, route }) => {
                   </View>
                   <View style={styles.timeSelectionOverlay} pointerEvents="none" />
                 </View>
+                <TouchableOpacity style={styles.timeModalButton} onPress={handleTimeSave}>
+                  <Text style={styles.timeModalButtonText}>Зберегти</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.timeModalButton} onPress={closeTimeModal}>
                   <Text style={styles.timeModalButtonText}>Закрити</Text>
                 </TouchableOpacity>
