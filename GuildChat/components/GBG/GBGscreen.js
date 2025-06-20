@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { Dropdown } from 'react-native-element-dropdown';
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import { getDatabase, ref, set, get } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
@@ -84,11 +85,17 @@ const GVG = ({ navigation, route }) => {
   const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
   const [sectorColors, setSectorColors] = useState({});
+  const [tempColorIndex, setTempColorIndex] = useState(0);
+  const [tempHourIndex, setTempHourIndex] = useState(0);
+  const [tempMinuteIndex, setTempMinuteIndex] = useState(0);
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
     { label: 'w', value: '#DCDCDC' },
   ];
+  const timeColors = ['#0000FF', '#D32F2F'];
+  const hourOptions = Array.from({ length: 4 }, (_, i) => String(i).padStart(2, '0'));
+  const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -2006,18 +2013,51 @@ const GVG = ({ navigation, route }) => {
 
       <Modal
         visible={timeModalVisible}
-        animationType="fade"
+        animationType="slide"
         transparent
         onRequestClose={closeTimeModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalText}>Час до відкриття сектору {selectedId}</Text>
-            <TouchableOpacity onPress={closeTimeModal} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Закрити</Text>
-            </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={closeTimeModal}>
+          <View style={styles.modalBackground}>
+            <TouchableWithoutFeedback>
+              <View style={styles.timeModalContainer}>
+                <Text style={styles.modalTitle}>Час до відкриття сектору {selectedId}</Text>
+                <View style={styles.wheelWrapper}>
+                  <View style={styles.wheelContainer}>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={timeColors}
+                        selectedIndex={tempColorIndex}
+                        onValueChange={(_, idx) => setTempColorIndex(idx)}
+                        renderItem={(item) => (
+                          <View style={{ width: 20, height: 20, backgroundColor: item, borderRadius: 4 }} />
+                        )}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={hourOptions}
+                        selectedIndex={tempHourIndex}
+                        onValueChange={(_, idx) => setTempHourIndex(idx)}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={minuteOptions}
+                        selectedIndex={tempMinuteIndex}
+                        onValueChange={(_, idx) => setTempMinuteIndex(idx)}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.selectionOverlay} pointerEvents="none" />
+                </View>
+                <TouchableOpacity style={styles.modalButtonSave} onPress={closeTimeModal}>
+                  <Text style={styles.modalButtonText}>Закрити</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
       
       <Modal
@@ -2298,6 +2338,57 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#ccc',
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  timeModalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#000',
+    textAlign: 'center',
+  },
+  wheelWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+  },
+  wheelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectionOverlay: {
+    position: 'absolute',
+    top: 70,
+    left: 0,
+    right: 0,
+    height: 40,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#007AFF',
+  },
+  modalButtonSave: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
   hiddenText: {
     width: 0,

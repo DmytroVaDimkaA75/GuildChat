@@ -4,7 +4,7 @@ import { ScrollView, Text, View, StyleSheet, TouchableWithoutFeedback } from 're
 const ITEM_HEIGHT = 36;
 const VISIBLE_ITEMS = 5;
 
-const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
+const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange, renderItem }) => {
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(selectedIndex);
 
@@ -66,17 +66,23 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
         }}
       >
         {data.map((item, index) => (
-          <TouchableWithoutFeedback 
-            key={index} 
+          <TouchableWithoutFeedback
+            key={index}
             onPress={() => handleItemPress(index)}
           >
             <View style={styles.item}>
-              <Text style={[
-                styles.itemText,
-                index === currentIndex && styles.selectedText
-              ]}>
-                {item}
-              </Text>
+              {renderItem ? (
+                renderItem(item, index, index === currentIndex)
+              ) : (
+                <Text
+                  style={[
+                    styles.itemText,
+                    index === currentIndex && styles.selectedText,
+                  ]}
+                >
+                  {item}
+                </Text>
+              )}
             </View>
           </TouchableWithoutFeedback>
         ))}
