@@ -83,6 +83,7 @@ const GVG = ({ navigation, route }) => {
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
+  const [sectorColors, setSectorColors] = useState({});
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
@@ -113,6 +114,48 @@ const GVG = ({ navigation, route }) => {
       }
     };
     fetchGuilds();
+  }, [guildId]);
+
+  useEffect(() => {
+    const loadSectorColors = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
+        const groupIds = Object.keys(pathRefs.current);
+        if (snap.exists()) {
+          const data = snap.val();
+          const sectors = {};
+          groupIds.forEach(gid => {
+            const color = data[gid] || '#FFFFFF';
+            sectors[gid] = color;
+            const refEl = pathRefs.current[gid];
+            if (refEl) {
+              refEl.setNativeProps({
+                fill: color,
+                stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
+                strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
+              });
+            }
+          });
+          setSectorColors(sectors);
+        } else {
+          const sectors = {};
+          groupIds.forEach(gid => {
+            sectors[gid] = '#FFFFFF';
+            const refEl = pathRefs.current[gid];
+            if (refEl) {
+              refEl.setNativeProps({ fill: '#FFFFFF', stroke: '#000000', strokeWidth: 1 });
+            }
+          });
+          setSectorColors(sectors);
+        }
+      } catch (err) {
+        console.error('Error loading sector colors:', err);
+      }
+    };
+    loadSectorColors();
   }, [guildId]);
 
   useEffect(() => {
@@ -164,7 +207,12 @@ const GVG = ({ navigation, route }) => {
 
   const handleColorSelect = color => {
     if (selectedId && pathRefs.current[selectedId]) {
-      pathRefs.current[selectedId].setNativeProps({ fill: color });
+      pathRefs.current[selectedId].setNativeProps({
+        fill: color,
+        stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
+        strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
+      });
+      setSectorColors(prev => ({ ...prev, [selectedId]: color }));
     }
     setPaintModalVisible(false);
   };
@@ -179,6 +227,11 @@ const GVG = ({ navigation, route }) => {
       const dataToSave = guildInputs.filter(g => g.color && g.name);
       const db = getDatabase();
       await set(ref(db, `guilds/${id}/GBG`), dataToSave);
+      const sectorData = {};
+      Object.keys(pathRefs.current).forEach(gid => {
+        sectorData[gid] = sectorColors[gid] || '#FFFFFF';
+      });
+      await set(ref(db, `guilds/${id}/GBG/sectors`), sectorData);
       setSettingsVisible(false);
     } catch (error) {
       console.error('Error saving guilds:', error);
