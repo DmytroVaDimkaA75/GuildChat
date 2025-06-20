@@ -213,7 +213,7 @@ const GVG = ({ navigation, route }) => {
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
 
-  const handleColorSelect = color => {
+  const handleColorSelect = async color => {
     if (selectedId && pathRefs.current[selectedId]) {
       const refEl = pathRefs.current[selectedId];
       const pathId = refEl?.props?.id || '';
@@ -233,6 +233,15 @@ const GVG = ({ navigation, route }) => {
       }
       refEl.setNativeProps(nativeProps);
       setSectorColors(prev => ({ ...prev, [selectedId]: color }));
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (id) {
+          const db = getDatabase();
+          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), { color });
+        }
+      } catch (err) {
+        console.error('Error updating sector color:', err);
+      }
     }
     setPaintModalVisible(false);
   };
@@ -1976,7 +1985,7 @@ const GVG = ({ navigation, route }) => {
         onRequestClose={closePaintModal}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={styles.paintModalContainer}>
             <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
             {guildList.map((item, idx) => (
               <TouchableOpacity
@@ -1988,7 +1997,7 @@ const GVG = ({ navigation, route }) => {
                 <View style={[styles.colorSample, { backgroundColor: item.color }]} />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity onPress={closePaintModal} style={styles.closeButton}>
+            <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
           </View>
@@ -2028,6 +2037,7 @@ const GVG = ({ navigation, route }) => {
                   labelField="label"
                   valueField="value"
                   value={item.color}
+                  selectedTextStyle={styles.hiddenText}
                   onChange={val => {
                     const updated = guildInputs.slice();
                     updated[index].color = val.value;
@@ -2166,6 +2176,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
   },
+  paintModalContainer: {
+    backgroundColor: "#fff",
+    width: "100%",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
   modalText: {
     fontSize: 18,
     marginBottom: 20,
@@ -2176,6 +2195,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0e0e0",
     borderRadius: 8,
     flex: 1,
+  },
+  modalCloseButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 8,
+    marginTop: 10,
   },
   closeButtonText: {
     fontSize: 16,
@@ -2272,6 +2298,13 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#ccc',
+  },
+  hiddenText: {
+    width: 0,
+    height: 0,
+    color: 'transparent',
+    padding: 0,
+    margin: 0,
   },
 });
 
