@@ -1,8 +1,10 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
+import FontAwesome from "react-native-vector-icons/FontAwesome";
+import { Dropdown } from 'react-native-element-dropdown';
 
 // Компонент інтерактивної карти режиму GBG
 
@@ -68,12 +70,27 @@ const getAdjacentIds = (id) => {
 */
 
 
-const GVG = () => {
+const GVG = ({ navigation, route }) => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [paintModalVisible, setPaintModalVisible] = useState(false);
   const [timeModalVisible, setTimeModalVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [guildInputs, setGuildInputs] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
+
+  const colorOptions = [
+    { label: 'g', value: '#32CD32' },
+    { label: 'y', value: '#FFFF00' },
+    { label: 'w', value: '#DCDCDC' },
+  ];
+
+  useEffect(() => {
+    if (route?.params?.openSettings) {
+      setSettingsVisible(true);
+      navigation.setParams({ openSettings: false });
+    }
+  }, [route?.params?.openSettings]);
 
   const handleShapePress = (id, event) => {
     const screenWidth = Dimensions.get('window').width;
@@ -1771,6 +1788,85 @@ const GVG = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={settingsVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <View style={styles.settingsOverlay}>
+          <View style={styles.settingsContainer}>
+            {guildInputs.map((item, index) => (
+              <View key={index} style={styles.inputRow}>
+                <Dropdown
+                  style={styles.colorDropdown}
+                  containerStyle={styles.colorDropdownContainer}
+                  data={colorOptions}
+                  labelField="label"
+                  valueField="value"
+                  value={item.color}
+                  onChange={val => {
+                    const updated = guildInputs.slice();
+                    updated[index].color = val.value;
+                    setGuildInputs(updated);
+                  }}
+                  renderLeftIcon={() =>
+                    item.color ? (
+                      <View style={[styles.colorSample, { backgroundColor: item.color }]} />
+                    ) : null
+                  }
+                  renderItem={option => (
+                    <View style={styles.colorItem}>
+                      <View style={[styles.colorSample, { backgroundColor: option.value }]} />
+                    </View>
+                  )}
+                  renderRightIcon={() => (
+                    <FontAwesome name="chevron-down" size={12} color="#007AFF" />
+                  )}
+                  placeholder=" "
+                />
+                <TextInput
+                  style={styles.guildInput}
+                  value={item.name}
+                  onChangeText={text => {
+                    const updated = guildInputs.slice();
+                    updated[index].name = text;
+                    setGuildInputs(updated);
+                  }}
+                  placeholder="Назва"
+                />
+              </View>
+            ))}
+            <TouchableOpacity
+              disabled={
+                guildInputs.length > 0 &&
+                (!guildInputs[guildInputs.length - 1].color ||
+                  !guildInputs[guildInputs.length - 1].name)
+              }
+              onPress={() =>
+                setGuildInputs([...guildInputs, { color: null, name: '' }])
+              }
+            >
+              <Text
+                style={[
+                  styles.addGuildText,
+                  guildInputs.length > 0 &&
+                    (!guildInputs[guildInputs.length - 1].color ||
+                      !guildInputs[guildInputs.length - 1].name)
+                    ? styles.addGuildDisabled
+                    : null,
+                ]}
+              >
+                Додати гільдію
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSettingsVisible(false)} style={[styles.closeButton, { marginTop: 10 }]}>
+              <Text style={styles.closeButtonText}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1845,6 +1941,60 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     fontSize: 16,
+  },
+  settingsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsContainer: {
+    backgroundColor: '#fff',
+    width: '90%',
+    borderRadius: 8,
+    padding: 20,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  colorDropdown: {
+    width: 80,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+  },
+  colorDropdownContainer: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+  },
+  colorItem: {
+    padding: 6,
+    alignItems: 'center',
+  },
+  colorSample: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+  },
+  guildInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    padding: 8,
+    marginLeft: 10,
+  },
+  addGuildText: {
+    color: '#007AFF',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  addGuildDisabled: {
+    color: '#999',
   },
 });
 
