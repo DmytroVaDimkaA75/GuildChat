@@ -153,14 +153,22 @@ const GVG = ({ navigation, route }) => {
           getAdjacentIds(sec).forEach(adj => namesSet.add(adj));
         });
         const now = Math.floor(Date.now() / 1000);
-        const arr = Array.from(namesSet).map(name => ({
-          name,
-          attack: data[name]?.attack,
-          openTime: data[name]?.openTime,
-        }))
-        .filter(item => item.openTime);
+        const arr = Array.from(namesSet)
+          .map(name => ({
+            name,
+            attack: data[name]?.attack,
+            openTime: data[name]?.openTime,
+          }))
+          .filter(item => item.openTime);
         const result = arr
-          .map(it => ({ ...it, timeRemaining: it.openTime - now }))
+          .map(it => ({
+            ...it,
+            timeRemaining: it.openTime - now,
+            openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }))
           .filter(it => it.timeRemaining > 0)
           .sort((a, b) => a.timeRemaining - b.timeRemaining);
         setSectorSchedule(result);
