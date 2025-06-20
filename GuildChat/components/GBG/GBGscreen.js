@@ -137,10 +137,12 @@ const GVG = ({ navigation, route }) => {
             sectors[gid] = color || '#FFFFFF';
             const refEl = pathRefs.current[gid];
             if (refEl) {
+              const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
               refEl.setNativeProps({
                 fill: color,
-                stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
-                strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
+                stroke: isWhite ? '#000000' : 'none',
+                strokeWidth: isWhite ? 1 : 0,
+                strokeOpacity: isWhite ? 0.7 : 0,
               });
             }
           });
