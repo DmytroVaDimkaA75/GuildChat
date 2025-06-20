@@ -9,6 +9,7 @@ import { getDatabase, ref, set, get } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
+import GVGIcon from '../ico/GVG.svg';
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -91,10 +92,10 @@ const GVG = ({ navigation, route }) => {
   const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
   const [sectorColors, setSectorColors] = useState({});
+  const [sectorStaff, setSectorStaff] = useState({});
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
-    { label: 'w', value: '#DCDCDC' },
     { label: 'b', value: '#0000CC' },
     { label: 'p', value: '#9C27B0' },
     { label: 'r', value: '#D32F2F' },
@@ -167,8 +168,9 @@ const GVG = ({ navigation, route }) => {
             name,
             attack: data[name]?.attack,
             openTime: data[name]?.openTime,
+            staff: data[name]?.staff,
           }))
-          .filter(item => item.openTime);
+          .filter(item => item.openTime && !item.staff);
         const result = arr
           .map(it => ({
             ...it,
@@ -199,13 +201,17 @@ const GVG = ({ navigation, route }) => {
         if (snap.exists()) {
           const data = snap.val();
           const sectors = {};
+          const staffFlags = {};
           groupIds.forEach(gid => {
             let colorEntry = data[gid];
             const color =
               colorEntry && typeof colorEntry === 'object'
                 ? colorEntry.color
                 : colorEntry;
+            const staff =
+              colorEntry && typeof colorEntry === 'object' && colorEntry.staff;
             sectors[gid] = color || '#FFFFFF';
+            staffFlags[gid] = !!staff;
             const refEl = pathRefs.current[gid];
             if (refEl) {
               const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
@@ -218,8 +224,10 @@ const GVG = ({ navigation, route }) => {
             }
           });
           setSectorColors(sectors);
+          setSectorStaff(staffFlags);
         } else {
           const sectors = {};
+          const staffFlags = {};
           groupIds.forEach(gid => {
             sectors[gid] = '#FFFFFF';
             const refEl = pathRefs.current[gid];
@@ -228,6 +236,7 @@ const GVG = ({ navigation, route }) => {
             }
           });
           setSectorColors(sectors);
+          setSectorStaff(staffFlags);
         }
       } catch (err) {
         console.error('Error loading sector colors:', err);
@@ -281,6 +290,27 @@ const GVG = ({ navigation, route }) => {
     setTimeModalVisible(true);
   };
 
+  const handleStaffToggle = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id || !selectedId) return;
+      const db = getDatabase();
+      const newValue = !sectorStaff[selectedId];
+      await set(
+        ref(db, `guilds/${id}/GBG/sectors/${selectedId}/staff`),
+        newValue ? true : null
+      );
+      setSectorStaff(prev => ({ ...prev, [selectedId]: newValue ? true : undefined }));
+      if (newValue) {
+        openPaintModal();
+      } else {
+        setMenuVisible(false);
+      }
+    } catch (err) {
+      console.error('Error toggling staff:', err);
+    }
+  };
+
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
 
@@ -329,7 +359,7 @@ const GVG = ({ navigation, route }) => {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (id) {
           const db = getDatabase();
-          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), { color });
+          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/color`), color);
         }
       } catch (err) {
         console.error('Error updating sector color:', err);
@@ -351,6 +381,9 @@ const GVG = ({ navigation, route }) => {
       const sectorData = {};
       Object.keys(pathRefs.current).forEach(gid => {
         sectorData[gid] = { color: sectorColors[gid] || '#FFFFFF' };
+        if (sectorStaff[gid]) {
+          sectorData[gid].staff = true;
+        }
       });
       await set(ref(db, `guilds/${id}/GBG/sectors`), sectorData);
       setSettingsVisible(false);
@@ -2043,6 +2076,18 @@ const GVG = ({ navigation, route }) => {
           onPress={() => setMenuVisible(false)}
         >
           <View style={[styles.popupMenu, popupStyle]}>
+            {selectedId && selectedId[1] === '5' && !sectorStaff[selectedId] && (
+              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
+                <GVGIcon width={20} height={20} style={styles.menuIcon} />
+                <Text style={styles.menuText}>Штаб</Text>
+              </TouchableOpacity>
+            )}
+            {selectedId && sectorStaff[selectedId] && (
+              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
+                <GVGIcon width={20} height={20} style={styles.menuIcon} />
+                <Text style={styles.menuText}>Штаб</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.menuItem}
               onPress={openPaintModal}
