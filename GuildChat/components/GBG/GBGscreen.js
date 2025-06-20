@@ -223,17 +223,10 @@ const GVG = ({ navigation, route }) => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (id && selectedId) {
         const db = getDatabase();
-        const now = new Date();
-        const openTime = Date.UTC(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          now.getHours() + hourIndex,
-          now.getMinutes() + minuteIndex
-        );
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const nowUtc = Math.floor(Date.now() / 1000);
+        const openTime =
+          nowUtc + hourIndex * 3600 + minuteIndex * 60;
         await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
-        await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/timeZone`), timeZone);
         await set(
           ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
           attackColors[colorIndex]
