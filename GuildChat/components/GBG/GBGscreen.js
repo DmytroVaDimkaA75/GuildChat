@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -8,6 +8,7 @@ import { Dropdown } from 'react-native-element-dropdown';
 import { getDatabase, ref, set, get } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -89,6 +90,9 @@ const GVG = ({ navigation, route }) => {
     { label: 'y', value: '#FFFF00' },
     { label: 'w', value: '#DCDCDC' },
   ];
+  const [colorIndex, setColorIndex] = useState(0);
+  const [hourIndex, setHourIndex] = useState(0);
+  const [minuteIndex, setMinuteIndex] = useState(0);
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -2006,18 +2010,51 @@ const GVG = ({ navigation, route }) => {
 
       <Modal
         visible={timeModalVisible}
-        animationType="fade"
+        animationType="slide"
         transparent
         onRequestClose={closeTimeModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalText}>Час до відкриття сектору {selectedId}</Text>
-            <TouchableOpacity onPress={closeTimeModal} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Закрити</Text>
-            </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={closeTimeModal}>
+          <View style={styles.timeModalBackground}>
+            <TouchableWithoutFeedback>
+              <View style={styles.timeModalContainer}>
+                <Text style={styles.timeModalTitle}>Час до відкриття сектору {selectedId}</Text>
+                <View style={styles.timeWheelWrapper}>
+                  <View style={styles.timeWheelContainer}>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={[
+                          <View style={[styles.colorSquare, { backgroundColor: '#0000FF' }]} />,
+                          <View style={[styles.colorSquare, { backgroundColor: '#D32F2F' }]} />,
+                        ]}
+                        selectedIndex={colorIndex}
+                        onValueChange={(_, idx) => setColorIndex(idx)}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 4 }, (_, i) => String(i))}
+                        selectedIndex={hourIndex}
+                        onValueChange={(_, idx) => setHourIndex(idx)}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))}
+                        selectedIndex={minuteIndex}
+                        onValueChange={(_, idx) => setMinuteIndex(idx)}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.timeSelectionOverlay} pointerEvents="none" />
+                </View>
+                <TouchableOpacity style={styles.timeModalButton} onPress={closeTimeModal}>
+                  <Text style={styles.timeModalButtonText}>Закрити</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
       
       <Modal
@@ -2305,6 +2342,62 @@ const styles = StyleSheet.create({
     color: 'transparent',
     padding: 0,
     margin: 0,
+  },
+  timeModalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  timeModalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
+    padding: 20,
+  },
+  timeModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#000',
+    textAlign: 'center',
+  },
+  timeWheelWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+  },
+  timeWheelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timeSelectionOverlay: {
+    position: 'absolute',
+    top: 70,
+    left: 0,
+    right: 0,
+    height: 40,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#007AFF',
+  },
+  timeModalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  timeModalButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  colorSquare: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
   },
 });
 

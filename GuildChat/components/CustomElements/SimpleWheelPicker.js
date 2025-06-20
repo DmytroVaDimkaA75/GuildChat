@@ -66,17 +66,23 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
         }}
       >
         {data.map((item, index) => (
-          <TouchableWithoutFeedback 
-            key={index} 
+          <TouchableWithoutFeedback
+            key={index}
             onPress={() => handleItemPress(index)}
           >
             <View style={styles.item}>
-              <Text style={[
-                styles.itemText,
-                index === currentIndex && styles.selectedText
-              ]}>
-                {item}
-              </Text>
+              {React.isValidElement(item) ? (
+                item
+              ) : (
+                <Text
+                  style={[
+                    styles.itemText,
+                    index === currentIndex && styles.selectedText,
+                  ]}
+                >
+                  {item}
+                </Text>
+              )}
             </View>
           </TouchableWithoutFeedback>
         ))}
