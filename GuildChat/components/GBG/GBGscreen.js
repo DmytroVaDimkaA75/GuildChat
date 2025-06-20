@@ -93,6 +93,7 @@ const GVG = ({ navigation, route }) => {
   const [colorIndex, setColorIndex] = useState(0);
   const [hourIndex, setHourIndex] = useState(0);
   const [minuteIndex, setMinuteIndex] = useState(0);
+  const attackColors = ['#0000FF', '#D32F2F'];
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -216,6 +217,24 @@ const GVG = ({ navigation, route }) => {
 
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
+
+  const handleSaveTime = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (id && selectedId) {
+        const db = getDatabase();
+        const openTime = Date.now() + hourIndex * 3600000 + minuteIndex * 60000;
+        await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
+        await set(
+          ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
+          attackColors[colorIndex]
+        );
+      }
+    } catch (err) {
+      console.error('Error saving sector time:', err);
+    }
+    setTimeModalVisible(false);
+  };
 
   const handleColorSelect = async color => {
     if (selectedId && pathRefs.current[selectedId]) {
@@ -2048,8 +2067,8 @@ const GVG = ({ navigation, route }) => {
                   </View>
                   <View style={styles.timeSelectionOverlay} pointerEvents="none" />
                 </View>
-                <TouchableOpacity style={styles.timeModalButton} onPress={closeTimeModal}>
-                  <Text style={styles.timeModalButtonText}>Закрити</Text>
+                <TouchableOpacity style={styles.timeModalButton} onPress={handleSaveTime}>
+                  <Text style={styles.timeModalButtonText}>Зберегти</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
