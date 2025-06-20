@@ -94,6 +94,7 @@ const GVG = ({ navigation, route }) => {
   const [hourIndex, setHourIndex] = useState(0);
   const [minuteIndex, setMinuteIndex] = useState(0);
   const attackColors = ['#0000FF', '#D32F2F'];
+  const [sectorSchedule, setSectorSchedule] = useState([]);
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -120,6 +121,32 @@ const GVG = ({ navigation, route }) => {
       }
     };
     fetchGuilds();
+  }, [guildId]);
+
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
+        if (snap.exists()) {
+          const now = Date.now();
+          const arr = Object.entries(snap.val()).map(([name, val]) => ({
+            name,
+            attack: val?.attack,
+            openTime: val?.openTime,
+          })).filter(item => item.openTime && item.openTime > now);
+          arr.sort((a, b) => b.openTime - a.openTime);
+          setSectorSchedule(arr);
+        } else {
+          setSectorSchedule([]);
+        }
+      } catch (err) {
+        console.error('Error fetching sector schedule:', err);
+      }
+    };
+    fetchSchedule();
   }, [guildId]);
 
   useEffect(() => {
@@ -1962,6 +1989,17 @@ const GVG = ({ navigation, route }) => {
             </G>
           </Svg>
       </View>
+      <View style={styles.sectorList}>
+        {sectorSchedule.map(item => (
+          <View key={item.name} style={styles.sectorRow}>
+            <Text style={styles.sectorName}>{item.name}</Text>
+            <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
+            <Text style={styles.sectorTime}>
+              {new Date(item.openTime).toLocaleString()}
+            </Text>
+          </View>
+        ))}
+      </View>
       {menuVisible && (
         <TouchableOpacity
           style={styles.popupOverlay}
@@ -2426,6 +2464,30 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 4,
+  },
+  sectorList: {
+    width: '100%',
+    paddingHorizontal: 10,
+    marginTop: 10,
+  },
+  sectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectorName: {
+    fontSize: 14,
+    marginRight: 6,
+    color: '#000',
+  },
+  attackBox: {
+    width: 12,
+    height: 12,
+    marginRight: 6,
+  },
+  sectorTime: {
+    fontSize: 14,
+    color: '#000',
   },
 });
 
