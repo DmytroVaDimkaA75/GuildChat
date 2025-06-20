@@ -275,7 +275,7 @@ const GVG = ({ navigation, route }) => {
               fill: "#0000ff",
               stroke: "#ffffff",
               strokeWidth: 0.48615,
-              strokeOpacity: 0,
+              strokeOpacity: 0.7,
 
             }}
             d="m 74.361668,146.24736 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z"
@@ -304,7 +304,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 74.129502,146.49108 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
                 onPressIn={handleShapePress.bind(null, "D5A")}
@@ -331,7 +331,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 78.991004,27.4215 -4.861501,8.897423 H 64.406499 L 59.544998,27.4215 64.406499,18.524077 h 9.723004 z"
                 onPressIn={handleShapePress.bind(null, "A4A")}
@@ -359,7 +359,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.48615,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.544994,9.1403544 4.861503,-8.89727935 h 9.723006 l 4.861502,8.89727935 -4.861502,8.8972796 h -9.723006 z"
                 onPressIn={handleShapePress.bind(null, "A5A")}
@@ -386,7 +386,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 74.129503,36.805078 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 z"
                 onPressIn={handleShapePress.bind(null, "A3A")}
@@ -413,7 +413,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 78.991004,63.9835 -4.861501,8.897423 H 64.406499 L 59.544998,63.9835 64.406499,55.086077 h 9.723004 z"
                 onPressIn={handleShapePress.bind(null, "A2A")}
@@ -440,7 +440,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#ff00ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 74.129503,91.161922 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "X1X")}
@@ -467,7 +467,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 64.406499,109.44292 -4.861501,-8.89742 4.861501,-8.897422 h 9.723004 l 4.861501,8.897422 -4.861501,8.89742 z"
                 onPressIn={handleShapePress.bind(null, "D2A")}
@@ -494,7 +494,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.544998,118.8265 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 h -9.723004 z"
                 onPressIn={handleShapePress.bind(null, "D3A")}
@@ -521,7 +521,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 93.80768,91.404355 -4.861502,8.897275 h -9.723006 l -4.861503,-8.897275 4.861503,-8.897279 h 9.723006 zm 64.406499,109.44292 -4.861501,-8.89742 4.861501,-8.897422 h 9.723004 l 4.861501,8.897422 -4.861501,8.89742 z"
                 onPressIn={handleShapePress.bind(null, "C2A")}
@@ -548,7 +548,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 88.946178,64.226074 4.861502,8.897279 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 z"
                 onPressIn={handleShapePress.bind(null, "B2A")}
@@ -575,7 +575,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 49.589499,82.020925 -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "F2A")}
@@ -602,7 +602,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0064ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 44.727998,91.404501 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897419 h -9.723004 z"
                 onPressIn={handleShapePress.bind(null, "E2A")}
@@ -629,7 +629,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 49.589499,100.78808 h 9.723004 l 4.861501,8.89742 -4.861501,8.89742 h -9.723004 l -4.861501,-8.89742 z"
                 onPressIn={handleShapePress.bind(null, "D3B")}
@@ -656,7 +656,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 29.910998,63.982502 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 z"
                 onPressIn={handleShapePress.bind(null, "F3A")}
@@ -683,7 +683,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 34.772499,73.366078 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 z"
                 onPressIn={handleShapePress.bind(null, "E3B")}
@@ -710,7 +710,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 44.495503,91.64708 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
                 onPressIn={handleShapePress.bind(null, "E3A")}
@@ -737,7 +737,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 79.223172,45.945075 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 z"
                 onPressIn={handleShapePress.bind(null, "A3B")}
@@ -764,7 +764,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 88.946178,118.58263 h -9.723006 l -4.861503,-8.89728 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 z"
                 onPressIn={handleShapePress.bind(null, "C3B")}
@@ -791,7 +791,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 108.62501,63.982354 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 z"
                 onPressIn={handleShapePress.bind(null, "B3A")}
@@ -818,7 +818,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 94.040504,91.160632 -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 l 4.8615,8.897279 -4.8615,8.897279 z"
                 onPressIn={handleShapePress.bind(null, "B3B")}
@@ -845,7 +845,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 94.040504,109.44163 -4.861503,-8.89728 4.861503,-8.897274 h 9.723006 l 4.8615,8.897274 -4.8615,8.89728 z"
                 onPressIn={handleShapePress.bind(null, "C3A")}
@@ -872,7 +872,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#94ff00",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.312503,63.739926 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "F3B")}
@@ -899,7 +899,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 74.361669,36.561354 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 z"
                 onPressIn={handleShapePress.bind(null, "A4B")}
@@ -926,7 +926,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 74.361669,128.06636 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z"
                 onPressIn={handleShapePress.bind(null, "C4C")}
@@ -953,7 +953,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 103.76351,36.804076 4.8615,8.897279 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 z"
                 onPressIn={handleShapePress.bind(null, "A4C")}
@@ -980,7 +980,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 94.040504,109.92808 h 9.723006 l 4.8615,8.89728 -4.8615,8.89728 h -9.723006 l -4.861503,-8.89728 z"
                 onPressIn={handleShapePress.bind(null, "C4B")}
@@ -1007,7 +1007,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 118.58051,63.738633 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 z"
                 onPressIn={handleShapePress.bind(null, "B4A")}
@@ -1034,7 +1034,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 108.8575,82.019632 -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 z"
                 onPressIn={handleShapePress.bind(null, "B4B")}
@@ -1061,7 +1061,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 108.8575,82.506076 h 9.72301 l 4.8615,8.897279 -4.8615,8.897275 h -9.72301 l -4.8615,-8.897275 z"
                 onPressIn={handleShapePress.bind(null, "B4C")}
@@ -1088,7 +1088,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 108.8575,100.78707 h 9.72301 l 4.8615,8.89728 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 z"
                 onPressIn={handleShapePress.bind(null, "C4A")}
@@ -1115,7 +1115,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.312503,45.458925 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "F4C")}
@@ -1142,7 +1142,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.312503,119.06908 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
                 onPressIn={handleShapePress.bind(null, "D4B")}
@@ -1169,7 +1169,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 29.910998,45.701503 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 z"
                 onPressIn={handleShapePress.bind(null, "F4B")}
@@ -1196,7 +1196,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 49.357004,118.8255 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 z"
                 onPressIn={handleShapePress.bind(null, "D4C")}
@@ -1223,7 +1223,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 29.678503,45.94408 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 z"
                 onPressIn={handleShapePress.bind(null, "F4A")}
@@ -1250,7 +1250,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 19.955499,64.225079 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 z"
                 onPressIn={handleShapePress.bind(null, "E4C")}
@@ -1277,7 +1277,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 34.540004,91.403501 -4.861501,8.897419 h -9.723004 l -4.861501,-8.897419 4.861501,-8.897423 h 9.723004 z"
                 onPressIn={handleShapePress.bind(null, "E4B")}
@@ -1304,7 +1304,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 29.678503,118.58192 h -9.723004 l -4.861501,-8.89742 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 z"
                 onPressIn={handleShapePress.bind(null, "E4A")}
@@ -1331,7 +1331,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#6161fa",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 64.406499,128.21008 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 z"
                 onPressIn={handleShapePress.bind(null, "D4A")}
@@ -1358,7 +1358,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 79.223172,27.177634 -4.861503,-8.89728 4.861503,-8.8972788 h 9.723006 l 4.861502,8.8972788 -4.861502,8.89728 z"
                 onPressIn={handleShapePress.bind(null, "A5B")}
@@ -1385,7 +1385,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 108.62501,27.420354 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 z"
                 onPressIn={handleShapePress.bind(null, "A5C")}
@@ -1412,7 +1412,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 94.040504,128.20908 h 9.723006 l 4.8615,8.89728 -4.8615,8.89728 h -9.723006 l -4.861503,-8.89728 z"
                 onPressIn={handleShapePress.bind(null, "C5C")}
@@ -1439,7 +1439,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 118.58051,27.663075 4.8615,8.897279 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 z"
                 onPressIn={handleShapePress.bind(null, "A5D")}
@@ -1466,7 +1466,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 123.44201,127.96536 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 4.8615,-8.89728 h 9.72301 z"
                 onPressIn={handleShapePress.bind(null, "C5B")}
@@ -1493,7 +1493,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 138.25901,45.700355 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 z"
                 onPressIn={handleShapePress.bind(null, "B5A")}
@@ -1520,7 +1520,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 118.813,63.981354 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 h -9.72301 z"
                 onPressIn={handleShapePress.bind(null, "B5B")}
@@ -1547,7 +1547,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 123.6745,73.365074 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 z"
                 onPressIn={handleShapePress.bind(null, "B5C")}
@@ -1574,7 +1574,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 138.25901,100.54336 -4.8615,8.89727 h -9.72301 l -4.8615,-8.89727 4.8615,-8.897284 h 9.72301 z"
                 onPressIn={handleShapePress.bind(null, "B5D")}
@@ -1601,7 +1601,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 138.25901,118.82436 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 4.8615,-8.89728 h 9.72301 z"
                 onPressIn={handleShapePress.bind(null, "C5A")}
@@ -1628,7 +1628,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 59.312503,9.3830752 4.861502,8.8972798 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.8972798 z"
                 onPressIn={handleShapePress.bind(null, "F5D")}
@@ -1655,7 +1655,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 49.53328,154.94757 -4.808314,-8.80008 4.808314,-8.80008 h 9.616629 l 4.808314,8.80008 -4.808314,8.80008 z"
                 onPressIn={handleShapePress.bind(null, "D5B")}
@@ -1682,7 +1682,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 44.495503,36.317633 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 z"
                 onPressIn={handleShapePress.bind(null, "F5C")}
@@ -1709,7 +1709,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 34.772498,146.00393 -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 z"
                 onPressIn={handleShapePress.bind(null, "D5C")}
@@ -1736,7 +1736,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 15.093994,36.560354 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 z"
                 onPressIn={handleShapePress.bind(null, "F5B")}
@@ -1763,7 +1763,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 19.955499,136.86293 -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 z"
                 onPressIn={handleShapePress.bind(null, "D5D")}
@@ -1790,7 +1790,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 19.446011,45.700355 -4.861502,8.897279 H 4.8615029 L 1.4942e-7,45.700355 4.8615029,36.803076 h 9.7230061 z"
                 onPressIn={handleShapePress.bind(null, "F5A")}
@@ -1817,7 +1817,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="M 14.861502,72.878925 H 5.1384984 L 0.27699675,63.981502 5.1384984,55.084079 h 9.7230036 l 4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "E5D")}
@@ -1844,7 +1844,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="M 14.861502,91.159924 H 5.1384984 L 0.27699675,82.262501 5.1384984,73.365078 h 9.7230036 l 4.861501,8.897423 z"
                 onPressIn={handleShapePress.bind(null, "E5C")}
@@ -1871,7 +1871,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="M 5.1384984,109.44092 0.27699675,100.5435 5.1384984,91.646079 h 9.7230036 l 4.861501,8.897421 -4.861501,8.89742 z"
                 onPressIn={handleShapePress.bind(null, "E5B")}
@@ -1898,7 +1898,7 @@ const GVG = ({ navigation, route }) => {
                   fill: "#0000ff",
                   stroke: "#ffffff",
                   strokeWidth: 0.486154,
-                  strokeOpacity: 0,
+                  strokeOpacity: 0.7,
                 }}
                 d="m 0.27699675,118.8245 4.86150165,-8.89742 h 9.7230036 l 4.861501,8.89742 -4.861501,8.89743 H 5.1384984 Z"
                 onPressIn={handleShapePress.bind(null, "E5A")}
