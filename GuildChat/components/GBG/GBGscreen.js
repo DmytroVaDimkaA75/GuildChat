@@ -213,11 +213,23 @@ const GVG = ({ navigation, route }) => {
 
   const handleColorSelect = color => {
     if (selectedId && pathRefs.current[selectedId]) {
-      pathRefs.current[selectedId].setNativeProps({
+      const refEl = pathRefs.current[selectedId];
+      const pathId = refEl?.props?.id || '';
+      const nativeProps = {
         fill: color,
-        stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
-        strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
-      });
+        stroke:
+          color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white'
+            ? '#000000'
+            : 'none',
+        strokeWidth:
+          color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white'
+            ? 1
+            : 0,
+      };
+      if (pathId.startsWith('f')) {
+        nativeProps.strokeOpacity = 0.7;
+      }
+      refEl.setNativeProps(nativeProps);
       setSectorColors(prev => ({ ...prev, [selectedId]: color }));
     }
     setPaintModalVisible(false);
