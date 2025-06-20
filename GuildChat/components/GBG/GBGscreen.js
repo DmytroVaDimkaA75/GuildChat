@@ -223,7 +223,11 @@ const GVG = ({ navigation, route }) => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (id && selectedId) {
         const db = getDatabase();
-        const openTime = Date.now() + hourIndex * 3600000 + minuteIndex * 60000;
+        const kievNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
+        const openTime =
+          kievNow.getTime() +
+          parseInt(hourIndex, 10) * 3600000 +
+          parseInt(minuteIndex, 10) * 60000;
         await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
         await set(
           ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
