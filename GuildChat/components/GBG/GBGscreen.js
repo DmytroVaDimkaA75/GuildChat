@@ -2020,7 +2020,7 @@ const GVG = ({ navigation, route }) => {
         <TouchableWithoutFeedback onPress={closeTimeModal}>
           <View style={styles.modalBackground}>
             <TouchableWithoutFeedback>
-              <View style={styles.timeModalContainer}>
+              <View style={styles.modalContainer}>
                 <Text style={styles.modalTitle}>Час до відкриття сектору {selectedId}</Text>
                 <View style={styles.wheelWrapper}>
                   <View style={styles.wheelContainer}>
@@ -2206,16 +2206,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
   },
-  modalContainer: {
-    backgroundColor: "#fff",
-    width: "100%",
-    height: HALF_HEIGHT,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
   paintModalContainer: {
     backgroundColor: "#fff",
     width: "100%",
@@ -2345,7 +2335,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  timeModalContainer: {
+  modalContainer: {
     backgroundColor: '#FFF',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
