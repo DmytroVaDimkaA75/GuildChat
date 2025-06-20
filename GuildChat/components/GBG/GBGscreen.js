@@ -128,6 +128,17 @@ const GVG = ({ navigation, route }) => {
         if (snap.exists()) {
           const data = snap.val();
           const sectors = {};
+          const applyColor = (refEl, color) => {
+            if (!refEl) return;
+            const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
+            refEl.setNativeProps({
+              fill: color,
+              stroke: isWhite ? '#000000' : 'none',
+              strokeWidth: isWhite ? 1 : 0,
+              strokeOpacity: isWhite ? 0 : 0.7,
+            });
+          };
+
           groupIds.forEach(gid => {
             let colorEntry = data[gid];
             const color =
@@ -135,24 +146,25 @@ const GVG = ({ navigation, route }) => {
                 ? colorEntry.color
                 : colorEntry;
             sectors[gid] = color || '#FFFFFF';
-            const refEl = pathRefs.current[gid];
-            if (refEl) {
-              refEl.setNativeProps({
-                fill: color,
-                stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
-                strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
-              });
-            }
+            applyColor(pathRefs.current[gid], color);
           });
           setSectorColors(sectors);
         } else {
           const sectors = {};
+          const applyColor = (refEl, color) => {
+            if (!refEl) return;
+            const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
+            refEl.setNativeProps({
+              fill: color,
+              stroke: isWhite ? '#000000' : 'none',
+              strokeWidth: isWhite ? 1 : 0,
+              strokeOpacity: isWhite ? 0 : 0.7,
+            });
+          };
+
           groupIds.forEach(gid => {
             sectors[gid] = '#FFFFFF';
-            const refEl = pathRefs.current[gid];
-            if (refEl) {
-              refEl.setNativeProps({ fill: '#FFFFFF', stroke: '#000000', strokeWidth: 1 });
-            }
+            applyColor(pathRefs.current[gid], '#FFFFFF');
           });
           setSectorColors(sectors);
         }
@@ -213,10 +225,12 @@ const GVG = ({ navigation, route }) => {
 
   const handleColorSelect = color => {
     if (selectedId && pathRefs.current[selectedId]) {
+      const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
       pathRefs.current[selectedId].setNativeProps({
         fill: color,
-        stroke: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? '#000000' : 'none',
-        strokeWidth: color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white' ? 1 : 0,
+        stroke: isWhite ? '#000000' : 'none',
+        strokeWidth: isWhite ? 1 : 0,
+        strokeOpacity: isWhite ? 0 : 0.7,
       });
       setSectorColors(prev => ({ ...prev, [selectedId]: color }));
     }
