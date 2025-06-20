@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { Dropdown } from 'react-native-element-dropdown';
-import { getDatabase, ref, set } from 'firebase/database';
+import { getDatabase, ref, set, get } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 // Компонент інтерактивної карти режиму GBG
@@ -94,6 +94,27 @@ const GVG = ({ navigation, route }) => {
     }
   }, [route?.params?.openSettings]);
 
+  useEffect(() => {
+    if (settingsVisible) {
+      const fetchData = async () => {
+        try {
+          const id = guildId || await AsyncStorage.getItem('guildId');
+          if (!id) return;
+          const db = getDatabase();
+          const snapshot = await get(ref(db, `guilds/${id}/GBG`));
+          if (snapshot.exists()) {
+            setGuildInputs(snapshot.val());
+          } else {
+            setGuildInputs([]);
+          }
+        } catch (err) {
+          console.error('Error fetching guild data:', err);
+        }
+      };
+      fetchData();
+    }
+  }, [settingsVisible]);
+
   const handleShapePress = (id, event) => {
     const screenWidth = Dimensions.get('window').width;
     const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
@@ -127,8 +148,9 @@ const GVG = ({ navigation, route }) => {
         console.error('Guild ID not found');
         return;
       }
+      const dataToSave = guildInputs.filter(g => g.color && g.name);
       const db = getDatabase();
-      await set(ref(db, `guilds/${id}/GBG`), guildInputs);
+      await set(ref(db, `guilds/${id}/GBG`), dataToSave);
       setSettingsVisible(false);
     } catch (error) {
       console.error('Error saving guilds:', error);
@@ -1878,12 +1900,24 @@ const GVG = ({ navigation, route }) => {
                 Додати гільдію
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleSaveGuilds} style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Зберегти</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setSettingsVisible(false)} style={[styles.closeButton, { marginTop: 10 }]}>
-              <Text style={styles.closeButtonText}>Закрити</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                disabled={!guildInputs.some(g => g.color && g.name)}
+                onPress={handleSaveGuilds}
+                style={[
+                  styles.saveButton,
+                  !guildInputs.some(g => g.color && g.name) && styles.disabledButton,
+                ]}
+              >
+                <Text style={styles.saveButtonText}>Зберегти</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSettingsVisible(false)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>Закрити</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1958,6 +1992,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: "#e0e0e0",
     borderRadius: 8,
+    flex: 1,
   },
   closeButtonText: {
     fontSize: 16,
@@ -2018,7 +2053,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 10,
+    marginRight: 10,
+    flex: 1,
   },
   saveButtonText: {
     color: '#fff',
@@ -2032,6 +2068,14 @@ const styles = StyleSheet.create({
   },
   addGuildDisabled: {
     color: '#999',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
 });
 
