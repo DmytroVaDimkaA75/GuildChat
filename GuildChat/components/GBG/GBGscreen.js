@@ -17,7 +17,7 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
-/* Код для визначення сусідніх секторів (знадобиться пізніше)
+// Код для визначення сусідніх секторів
 const DIRS = [
   [1, 0],
   [0, 1],
@@ -70,7 +70,13 @@ const getAdjacentIds = (id) => {
   const { q, r } = idToCoord(id);
   return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
 };
-*/
+
+const formatTimeLeft = ms => {
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}:${minutes.toString().padStart(2, '0')}`;
+};
 
 
 const GVG = ({ navigation, route }) => {
@@ -95,6 +101,7 @@ const GVG = ({ navigation, route }) => {
   const [minuteIndex, setMinuteIndex] = useState(0);
   const attackColors = ['#0000FF', '#D32F2F'];
   const [sectorSchedule, setSectorSchedule] = useState([]);
+  const [sectorList, setSectorList] = useState([]);
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -122,6 +129,33 @@ const GVG = ({ navigation, route }) => {
     };
     fetchGuilds();
   }, [guildId]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const scheduleMap = sectorSchedule.reduce((acc, item) => {
+      acc[item.name] = item;
+      return acc;
+    }, {});
+    const greyIds = Object.entries(sectorColors)
+      .filter(([, color]) => color && color.toLowerCase() === '#dcdcdc')
+      .map(([id]) => id);
+    const neighborSet = new Set();
+    greyIds.forEach(id => {
+      getAdjacentIds(id).forEach(n => neighborSet.add(n));
+    });
+    const result = Array.from(neighborSet)
+      .map(name => {
+        const data = scheduleMap[name];
+        if (!data || !data.openTime) return null;
+        const timeLeft = data.openTime - now;
+        if (timeLeft <= 0) return null;
+        return { ...data, timeLeft };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timeLeft - b.timeLeft);
+    setSectorList(result);
+  }, [sectorColors, sectorSchedule]);
+
 
   useEffect(() => {
     const fetchSchedule = async () => {
@@ -1989,17 +2023,15 @@ const GVG = ({ navigation, route }) => {
             </G>
           </Svg>
       </View>
-      <View style={styles.sectorList}>
-        {sectorSchedule.map(item => (
-          <View key={item.name} style={styles.sectorRow}>
-            <Text style={styles.sectorName}>{item.name}</Text>
-            <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
-            <Text style={styles.sectorTime}>
-              {new Date(item.openTime).toLocaleString()}
-            </Text>
-          </View>
-        ))}
-      </View>
+        <View style={styles.sectorList}>
+          {sectorList.map(item => (
+            <View key={item.name} style={styles.sectorRow}>
+              <Text style={styles.sectorName}>{item.name}</Text>
+              <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
+              <Text style={styles.sectorTime}>{formatTimeLeft(item.timeLeft)}</Text>
+            </View>
+          ))}
+        </View>
       {menuVisible && (
         <TouchableOpacity
           style={styles.popupOverlay}
@@ -2479,6 +2511,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginRight: 6,
     color: '#000',
+    flex: 1,
   },
   attackBox: {
     width: 12,
@@ -2488,6 +2521,8 @@ const styles = StyleSheet.create({
   sectorTime: {
     fontSize: 14,
     color: '#000',
+    flex: 1,
+    textAlign: 'right',
   },
 });
 
