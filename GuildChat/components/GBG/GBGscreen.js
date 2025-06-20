@@ -17,7 +17,7 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
-/* Код для визначення сусідніх секторів (знадобиться пізніше)
+// Код для визначення сусідніх секторів
 const DIRS = [
   [1, 0],
   [0, 1],
@@ -70,7 +70,13 @@ const getAdjacentIds = (id) => {
   const { q, r } = idToCoord(id);
   return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
 };
-*/
+
+const formatRemaining = seconds => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+};
+
 
 
 const GVG = ({ navigation, route }) => {
@@ -130,24 +136,40 @@ const GVG = ({ navigation, route }) => {
         if (!id) return;
         const db = getDatabase();
         const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
-        if (snap.exists()) {
-          const now = Math.floor(Date.now() / 1000);
-          const arr = Object.entries(snap.val()).map(([name, val]) => ({
-            name,
-            attack: val?.attack,
-            openTime: val?.openTime,
-          })).filter(item => item.openTime && item.openTime > now);
-          arr.sort((a, b) => b.openTime - a.openTime);
-          setSectorSchedule(arr);
-        } else {
+        if (!snap.exists()) {
           setSectorSchedule([]);
+          return;
         }
+        const data = snap.val();
+        const whiteSectors = Object.entries(sectorColors)
+          .filter(([_, color]) => color && color.toLowerCase() === '#dcdcdc')
+          .map(([name]) => name);
+        if (whiteSectors.length === 0) {
+          setSectorSchedule([]);
+          return;
+        }
+        const namesSet = new Set();
+        whiteSectors.forEach(sec => {
+          getAdjacentIds(sec).forEach(adj => namesSet.add(adj));
+        });
+        const now = Math.floor(Date.now() / 1000);
+        const arr = Array.from(namesSet).map(name => ({
+          name,
+          attack: data[name]?.attack,
+          openTime: data[name]?.openTime,
+        }))
+        .filter(item => item.openTime);
+        const result = arr
+          .map(it => ({ ...it, timeRemaining: it.openTime - now }))
+          .filter(it => it.timeRemaining > 0)
+          .sort((a, b) => a.timeRemaining - b.timeRemaining);
+        setSectorSchedule(result);
       } catch (err) {
         console.error('Error fetching sector schedule:', err);
       }
     };
     fetchSchedule();
-  }, [guildId]);
+  }, [guildId, sectorColors]);
 
   useEffect(() => {
     const loadSectorColors = async () => {
@@ -1986,10 +2008,14 @@ const GVG = ({ navigation, route }) => {
       <View style={styles.sectorList}>
         {sectorSchedule.map(item => (
           <View key={item.name} style={styles.sectorRow}>
-            <Text style={styles.sectorName}>{item.name}</Text>
-            <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
-            <Text style={styles.sectorTime}>
-              {new Date(item.openTime * 1000).toLocaleString()}
+            <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}> 
+              {item.name}
+            </Text>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
+            </View>
+            <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}> 
+              {formatRemaining(item.timeRemaining)}
             </Text>
           </View>
         ))}
@@ -2471,13 +2497,11 @@ const styles = StyleSheet.create({
   },
   sectorName: {
     fontSize: 14,
-    marginRight: 6,
     color: '#000',
   },
   attackBox: {
     width: 12,
     height: 12,
-    marginRight: 6,
   },
   sectorTime: {
     fontSize: 14,
