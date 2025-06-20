@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback } from "react-native";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback, Alert } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -17,7 +17,7 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
-/* Код для визначення сусідніх секторів (знадобиться пізніше)
+// Код для визначення сусідніх секторів
 const DIRS = [
   [1, 0],
   [0, 1],
@@ -70,7 +70,6 @@ const getAdjacentIds = (id) => {
   const { q, r } = idToCoord(id);
   return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
 };
-*/
 
 
 const GVG = ({ navigation, route }) => {
@@ -95,6 +94,20 @@ const GVG = ({ navigation, route }) => {
   const [minuteIndex, setMinuteIndex] = useState(0);
   const attackColors = ['#0000FF', '#D32F2F'];
   const [sectorSchedule, setSectorSchedule] = useState([]);
+
+  const showNeighborsOfGrey = (sectors) => {
+    const greyIds = Object.keys(sectors).filter(
+      id => sectors[id] && sectors[id].toLowerCase() === '#dcdcdc'
+    );
+    const neighbors = new Set();
+    greyIds.forEach(id => {
+      getAdjacentIds(id).forEach(n => neighbors.add(n));
+    });
+    greyIds.forEach(id => neighbors.delete(id));
+    if (neighbors.size > 0) {
+      Alert.alert('Сусіди', Array.from(neighbors).join(', '));
+    }
+  };
 
   useEffect(() => {
     if (route?.params?.openSettings) {
@@ -179,6 +192,7 @@ const GVG = ({ navigation, route }) => {
             }
           });
           setSectorColors(sectors);
+          showNeighborsOfGrey(sectors);
         } else {
           const sectors = {};
           groupIds.forEach(gid => {
@@ -189,6 +203,7 @@ const GVG = ({ navigation, route }) => {
             }
           });
           setSectorColors(sectors);
+          showNeighborsOfGrey(sectors);
         }
       } catch (err) {
         console.error('Error loading sector colors:', err);
