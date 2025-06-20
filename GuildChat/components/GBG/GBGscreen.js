@@ -105,7 +105,8 @@ const GVG = ({ navigation, route }) => {
         const db = getDatabase();
         const snap = await get(ref(db, `guilds/${id}/GBG`));
         if (snap.exists()) {
-          setGuildList(snap.val());
+          const data = snap.val();
+          setGuildList(Array.isArray(data) ? data : Object.values(data));
         } else {
           setGuildList([]);
         }
@@ -167,7 +168,8 @@ const GVG = ({ navigation, route }) => {
           const db = getDatabase();
           const snapshot = await get(ref(db, `guilds/${id}/GBG`));
           if (snapshot.exists()) {
-            setGuildInputs(snapshot.val());
+            const data = snapshot.val();
+            setGuildInputs(Array.isArray(data) ? data : Object.values(data));
           } else {
             setGuildInputs([]);
           }
