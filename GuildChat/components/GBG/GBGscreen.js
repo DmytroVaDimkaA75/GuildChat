@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
@@ -78,8 +78,10 @@ const GVG = ({ navigation, route }) => {
   const [timeModalVisible, setTimeModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [guildInputs, setGuildInputs] = useState([]);
+  const [guildList, setGuildList] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
+  const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
@@ -93,6 +95,25 @@ const GVG = ({ navigation, route }) => {
       navigation.setParams({ openSettings: false });
     }
   }, [route?.params?.openSettings]);
+
+  useEffect(() => {
+    const fetchGuilds = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/GBG`));
+        if (snap.exists()) {
+          setGuildList(snap.val());
+        } else {
+          setGuildList([]);
+        }
+      } catch (err) {
+        console.error('Error fetching guild list:', err);
+      }
+    };
+    fetchGuilds();
+  }, [guildId]);
 
   useEffect(() => {
     if (settingsVisible) {
@@ -141,6 +162,13 @@ const GVG = ({ navigation, route }) => {
   const closePaintModal = () => setPaintModalVisible(false);
   const closeTimeModal = () => setTimeModalVisible(false);
 
+  const handleColorSelect = color => {
+    if (selectedId && pathRefs.current[selectedId]) {
+      pathRefs.current[selectedId].setNativeProps({ fill: color });
+    }
+    setPaintModalVisible(false);
+  };
+
   const handleSaveGuilds = async () => {
     try {
       const id = guildId || await AsyncStorage.getItem('guildId');
@@ -168,6 +196,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C5D") }>
             <Path
             id="fC5D"
+            ref={el => (pathRefs.current['C5D'] = el)}
 
             onPressIn={handleShapePress.bind(null, "C5D")}
             style={{
@@ -199,6 +228,7 @@ const GVG = ({ navigation, route }) => {
           <G onPress={() => handleShapePress("D5A")}>
               <Path
                 id="fD5A"
+            ref={el => (pathRefs.current['D5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -225,6 +255,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A4A")}>
               <Path
                 id="fA4A"
+            ref={el => (pathRefs.current['A4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -251,6 +282,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A5A")}>
               <Path
                 id="fA5A"
+            ref={el => (pathRefs.current['A5A'] = el)}
                 style={{
                   display: "inline",
                   fill: "#0000ff",
@@ -278,6 +310,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A3A")}>
               <Path
                 id="fA3A"
+            ref={el => (pathRefs.current['A3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -304,6 +337,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A2A")}>
               <Path
                 id="fA2A"
+            ref={el => (pathRefs.current['A2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -330,6 +364,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("X1X")}>
               <Path
                 id="fX1X"
+            ref={el => (pathRefs.current['X1X'] = el)}
                 style={{
                   fill: "#ff00ff",
                   stroke: "#ffffff",
@@ -356,6 +391,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D2A")}>
               <Path
                 id="fD2A"
+            ref={el => (pathRefs.current['D2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -382,6 +418,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D3A")}>
               <Path
                 id="fD3A"
+            ref={el => (pathRefs.current['D3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -408,6 +445,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C2A")}>
               <Path
                 id="fC2A"
+            ref={el => (pathRefs.current['C2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -434,6 +472,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B2A")}>
               <Path
                 id="fB2A"
+            ref={el => (pathRefs.current['B2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -460,6 +499,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F2A")}>
               <Path
                 id="fF2A"
+            ref={el => (pathRefs.current['F2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -486,6 +526,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E2A")}>
               <Path
                 id="fE2A"
+            ref={el => (pathRefs.current['E2A'] = el)}
                 style={{
                   fill: "#0064ff",
                   stroke: "#ffffff",
@@ -512,6 +553,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D3D")}>
               <Path
                 id="fD3B"
+            ref={el => (pathRefs.current['D3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -538,6 +580,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F3A")}>
               <Path
                 id="fF3A"
+            ref={el => (pathRefs.current['F3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -564,6 +607,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E3B")}>
               <Path
                 id="fE3B"
+            ref={el => (pathRefs.current['E3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -590,6 +634,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E3A")}>
               <Path
                 id="fE3A"
+            ref={el => (pathRefs.current['E3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -616,6 +661,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A3B")}>
               <Path
                 id="fA3B"
+            ref={el => (pathRefs.current['A3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -642,6 +688,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C3B")}>
               <Path
                 id="fC3B"
+            ref={el => (pathRefs.current['C3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -668,6 +715,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B3A")}>
               <Path
                 id="fB3A"
+            ref={el => (pathRefs.current['B3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -694,6 +742,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B3B")}>
               <Path
                 id="fB3B"
+            ref={el => (pathRefs.current['B3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -720,6 +769,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C3A")}>
               <Path
                 id="fC3A"
+            ref={el => (pathRefs.current['C3A'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -746,6 +796,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F3B")}>
               <Path
                 id="fF3B"
+            ref={el => (pathRefs.current['F3B'] = el)}
                 style={{
                   fill: "#94ff00",
                   stroke: "#ffffff",
@@ -772,6 +823,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A4B")}>
               <Path
                 id="fA4B"
+            ref={el => (pathRefs.current['A4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -798,6 +850,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C4C")}>
               <Path
                 id="fC4C"
+            ref={el => (pathRefs.current['C4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -824,6 +877,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A4C")}>
               <Path
                 id="fA4C"
+            ref={el => (pathRefs.current['A4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -850,6 +904,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C4B")}>
               <Path
                 id="fC4B"
+            ref={el => (pathRefs.current['C4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -876,6 +931,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B4A")}>
               <Path
                 id="fB4A"
+            ref={el => (pathRefs.current['B4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -902,6 +958,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B4B")}>
               <Path
                 id="fB4B"
+            ref={el => (pathRefs.current['B4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -928,6 +985,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B4C")}>
               <Path
                 id="fB4C"
+            ref={el => (pathRefs.current['B4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -954,6 +1012,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C4A")}>
               <Path
                 id="fC4A"
+            ref={el => (pathRefs.current['C4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -980,6 +1039,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F4C")}>
               <Path
                 id="fF4C"
+            ref={el => (pathRefs.current['F4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1006,6 +1066,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D4B")}>
               <Path
                 id="fD4B"
+            ref={el => (pathRefs.current['D4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1032,6 +1093,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F4B")}>
               <Path
                 id="fF4B"
+            ref={el => (pathRefs.current['F4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1058,6 +1120,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D4C")}>
               <Path
                 id="fD4C"
+            ref={el => (pathRefs.current['D4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1084,6 +1147,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F4A")}>
               <Path
                 id="fF4A"
+            ref={el => (pathRefs.current['F4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1110,6 +1174,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E4C")}>
               <Path
                 id="fE4C"
+            ref={el => (pathRefs.current['E4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1136,6 +1201,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E4B")}>
               <Path
                 id="fE4B"
+            ref={el => (pathRefs.current['E4B'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1162,6 +1228,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E4A")}>
               <Path
                 id="fE4A"
+            ref={el => (pathRefs.current['E4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1188,6 +1255,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D4A")}>
               <Path
                 id="fD4A"
+            ref={el => (pathRefs.current['D4A'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
@@ -1214,6 +1282,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A5B")}>
               <Path
                 id="fA5B"
+            ref={el => (pathRefs.current['A5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1240,6 +1309,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A5C")}>
               <Path
                 id="fA5C"
+            ref={el => (pathRefs.current['A5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1266,6 +1336,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C5C")}>
               <Path
                 id="fC5C"
+            ref={el => (pathRefs.current['C5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1292,6 +1363,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("A5D")}>
               <Path
                 id="fA5A"
+            ref={el => (pathRefs.current['A5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1318,6 +1390,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C5B")}>
               <Path
                 id="fC5B"
+            ref={el => (pathRefs.current['C5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1344,6 +1417,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B5A")}>
               <Path
                 id="fB5A"
+            ref={el => (pathRefs.current['B5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1370,6 +1444,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B5B")}>
               <Path
                 id="fB5B"
+            ref={el => (pathRefs.current['B5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1396,6 +1471,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B5C")}>
               <Path
                 id="fB5C"
+            ref={el => (pathRefs.current['B5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1422,6 +1498,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("B5D")}>
               <Path
                 id="fB5D"
+            ref={el => (pathRefs.current['B5D'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1448,6 +1525,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("C5A")}>
               <Path
                 id="fC5A"
+            ref={el => (pathRefs.current['C5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1474,6 +1552,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("f5D")}>
               <Path
                 id="fF5D"
+            ref={el => (pathRefs.current['F5D'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1500,6 +1579,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D5B")}>
               <Path
                 id="fD5B"
+            ref={el => (pathRefs.current['D5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1526,6 +1606,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F5C")}>
               <Path
                 id="fF5C"
+            ref={el => (pathRefs.current['F5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1552,6 +1633,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D5C")}>
               <Path
                 id="fD5C"
+            ref={el => (pathRefs.current['D5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1578,6 +1660,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F5B")}>
               <Path
                 id="fF5B"
+            ref={el => (pathRefs.current['F5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1604,6 +1687,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("D5D")}>
               <Path
                 id="fD5D"
+            ref={el => (pathRefs.current['D5D'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1630,6 +1714,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("F5A")}>
               <Path
                 id="fF5A"
+            ref={el => (pathRefs.current['F5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1656,6 +1741,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E5D")}>
               <Path
                 id="fE5D"
+            ref={el => (pathRefs.current['E5D'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1682,6 +1768,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E5C")}>
               <Path
                 id="fE5C"
+            ref={el => (pathRefs.current['E5C'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1708,6 +1795,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E5B")}>
               <Path
                 id="fE5B"
+            ref={el => (pathRefs.current['E5B'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1734,6 +1822,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E5A")}>
               <Path
                 id="fE5A"
+            ref={el => (pathRefs.current['E5A'] = el)}
                 style={{
                   fill: "#0000ff",
                   stroke: "#ffffff",
@@ -1765,14 +1854,25 @@ const GVG = ({ navigation, route }) => {
           onPress={() => setMenuVisible(false)}
         >
           <View style={[styles.popupMenu, popupStyle]}>
-            <TouchableOpacity style={styles.menuItem} onPress={openPaintModal}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={openPaintModal}
+              disabled={guildList.length === 0}
+            >
               <FontAwesomeIcon
                 icon={faPaintBrush}
                 size={20}
                 color="#8C9093"
                 style={styles.menuIcon}
               />
-              <Text style={styles.menuText}>Перефарбувати</Text>
+              <Text
+                style={[
+                  styles.menuText,
+                  guildList.length === 0 && styles.disabledText,
+                ]}
+              >
+                Перефарбувати
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={openTimeModal}>
               <FontAwesomeIcon
@@ -1805,6 +1905,16 @@ const GVG = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
+            {guildList.map((item, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.guildItem}
+                onPress={() => handleColorSelect(item.color)}
+              >
+                <Text style={styles.guildName}>{item.name}</Text>
+                <View style={[styles.colorSample, { backgroundColor: item.color }]} />
+              </TouchableOpacity>
+            ))}
             <TouchableOpacity onPress={closePaintModal} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
@@ -2037,6 +2147,16 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
   },
+  guildItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  guildName: {
+    fontSize: 16,
+    color: '#333',
+  },
   guildInput: {
     flex: 1,
     borderWidth: 1,
@@ -2067,6 +2187,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   addGuildDisabled: {
+    color: '#999',
+  },
+  disabledText: {
     color: '#999',
   },
   buttonRow: {
