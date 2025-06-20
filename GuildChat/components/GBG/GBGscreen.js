@@ -95,6 +95,10 @@ const GVG = ({ navigation, route }) => {
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
     { label: 'w', value: '#DCDCDC' },
+    { label: 'b', value: '#0000CC' },
+    { label: 'p', value: '#9C27B0' },
+    { label: 'r', value: '#D32F2F' },
+    { label: 'o', value: '#F4A623' },
   ];
   const [colorIndex, setColorIndex] = useState(0);
   const [hourIndex, setHourIndex] = useState(0);
@@ -150,7 +154,12 @@ const GVG = ({ navigation, route }) => {
         }
         const namesSet = new Set();
         whiteSectors.forEach(sec => {
-          getAdjacentIds(sec).forEach(adj => namesSet.add(adj));
+                    getAdjacentIds(sec).forEach(adj => {
+            const adjColor = sectorColors[adj];
+            if (!adjColor || adjColor.toLowerCase() !== '#dcdcdc') {
+              namesSet.add(adj);
+            }
+          });
         });
         const now = Math.floor(Date.now() / 1000);
         const arr = Array.from(namesSet)
