@@ -222,15 +222,47 @@ function QuantStack() {
 
 function GBGStack() {
   const { t } = useTranslation();
+  const [showSettingsButton, setShowSettingsButton] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchRole = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!userId || !guildId) return;
+        const db = getDatabase();
+        const userRoleRef = ref(db, `users/${userId}/${guildId}/role`);
+        const snap = await get(userRoleRef);
+        if (snap.exists() && snap.val() === 'guildLeader') {
+          setShowSettingsButton(true);
+        } else {
+          setShowSettingsButton(false);
+        }
+      } catch (e) {
+        setShowSettingsButton(false);
+      }
+    };
+    fetchRole();
+  }, []);
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
         name="QuantScreen"
         component={GBGScreen}
-        options={{
+        options={({ navigation }) => ({
           title: t("gbgStack.gbgScreenTitle"), // переклад для "Квантові вторгнення"
           headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
-        }}
+                  headerRight: showSettingsButton
+            ? () => (
+                <TouchableOpacity
+                  onPress={() => navigation.setParams({ openSettings: true })}
+                  style={{ marginRight: 15 }}
+                >
+                  <Ionicons name="settings-sharp" size={24} color="white" />
+                </TouchableOpacity>
+              )
+            : undefined,
+        })}
       />
     </Stack.Navigator>
   );
