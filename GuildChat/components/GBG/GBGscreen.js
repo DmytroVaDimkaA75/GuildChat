@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { Dropdown } from 'react-native-element-dropdown';
-import { getDatabase, ref, set, get } from 'firebase/database';
+import { getDatabase, ref, set, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
@@ -155,114 +155,146 @@ const GVG = ({ navigation, route }) => {
   }, [guildId]);
 
   useEffect(() => {
-    const fetchSchedule = async () => {
+    let unsubscribe;
+    const init = async () => {
       try {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (!id) return;
         const db = getDatabase();
-        const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
-        if (!snap.exists()) {
-          setSectorSchedule([]);
-          return;
-        }
-        const data = snap.val();
-        const whiteSectors = Object.entries(sectorColors)
-          .filter(([_, color]) => color && color.toLowerCase() === '#dcdcdc')
-          .map(([name]) => name);
-        if (whiteSectors.length === 0) {
-          setSectorSchedule([]);
-          return;
-        }
-        const namesSet = new Set();
-        whiteSectors.forEach(sec => {
-                    getAdjacentIds(sec).forEach(adj => {
-            const adjColor = sectorColors[adj];
-            if (!adjColor || adjColor.toLowerCase() !== '#dcdcdc') {
-              namesSet.add(adj);
+        const sectorRef = ref(db, `guilds/${id}/GBG/sectors`);
+        unsubscribe = onValue(
+          sectorRef,
+          snap => {
+            if (!snap.exists()) {
+              setSectorSchedule([]);
+              return;
             }
-          });
-        });
-        const now = Math.floor(Date.now() / 1000);
-        const arr = Array.from(namesSet)
-          .map(name => ({
-            name,
-            attack: data[name]?.attack,
-            openTime: data[name]?.openTime,
-            staff: data[name]?.staff,
-          }))
-          .filter(item => item.openTime && !item.staff);
-        const result = arr
-          .map(it => ({
-            ...it,
-            timeRemaining: it.openTime - now,
-            openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          }))
-          .filter(it => it.timeRemaining > 0)
-          .sort((a, b) => a.timeRemaining - b.timeRemaining);
-        setSectorSchedule(result);
+            const data = snap.val();
+            const whiteSectors = Object.entries(data)
+              .filter(([_, val]) => {
+                const color =
+                  val && typeof val === 'object' ? val.color : val;
+                return color && color.toLowerCase() === '#dcdcdc';
+              })
+              .map(([name]) => name);
+            if (whiteSectors.length === 0) {
+              setSectorSchedule([]);
+              return;
+            }
+            const namesSet = new Set();
+            whiteSectors.forEach(sec => {
+              getAdjacentIds(sec).forEach(adj => {
+                const adjEntry = data[adj];
+                const adjColor =
+                  adjEntry &&
+                  (typeof adjEntry === 'object' ? adjEntry.color : adjEntry);
+                if (!adjColor || adjColor.toLowerCase() !== '#dcdcdc') {
+                  namesSet.add(adj);
+                }
+              });
+            });
+            const now = Math.floor(Date.now() / 1000);
+            const arr = Array.from(namesSet)
+              .map(name => ({
+                name,
+                attack: data[name]?.attack,
+                openTime: data[name]?.openTime,
+                staff: data[name]?.staff,
+              }))
+              .filter(item => item.openTime && !item.staff);
+            const result = arr
+              .map(it => ({
+                ...it,
+                timeRemaining: it.openTime - now,
+                openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              }))
+              .filter(it => it.timeRemaining > 0)
+              .sort((a, b) => a.timeRemaining - b.timeRemaining);
+            setSectorSchedule(result);
+          },
+          err => {
+            console.error('Error fetching sector schedule:', err);
+          }
+        );
       } catch (err) {
         console.error('Error fetching sector schedule:', err);
       }
     };
-    fetchSchedule();
-  }, [guildId, sectorColors]);
+    init();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [guildId]);
 
   useEffect(() => {
+    let unsubscribe;
     const loadSectorColors = async () => {
       try {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (!id) return;
         const db = getDatabase();
-        const snap = await get(ref(db, `guilds/${id}/GBG/sectors`));
+        const sectorRef = ref(db, `guilds/${id}/GBG/sectors`);
         const groupIds = Object.keys(pathRefs.current);
-        if (snap.exists()) {
-          const data = snap.val();
-          const sectors = {};
-          const staffFlags = {};
-          groupIds.forEach(gid => {
-            let colorEntry = data[gid];
-            const color =
-              colorEntry && typeof colorEntry === 'object'
-                ? colorEntry.color
-                : colorEntry;
-            const staff =
-              colorEntry && typeof colorEntry === 'object' && colorEntry.staff;
-            sectors[gid] = color || '#FFFFFF';
-            staffFlags[gid] = !!staff;
-            const refEl = pathRefs.current[gid];
-            if (refEl) {
-              const isWhite = color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
-              refEl.setNativeProps({
-                fill: color,
-                stroke: isWhite ? '#000000' : 'none',
-                strokeWidth: isWhite ? 1 : 0,
-                strokeOpacity: isWhite ? 0.7 : 0,
+        unsubscribe = onValue(
+          sectorRef,
+          snap => {
+            if (snap.exists()) {
+              const data = snap.val();
+              const sectors = {};
+              const staffFlags = {};
+              groupIds.forEach(gid => {
+                let colorEntry = data[gid];
+                const color =
+                  colorEntry && typeof colorEntry === 'object'
+                    ? colorEntry.color
+                    : colorEntry;
+                const staff =
+                  colorEntry && typeof colorEntry === 'object' && colorEntry.staff;
+                sectors[gid] = color || '#FFFFFF';
+                staffFlags[gid] = !!staff;
+                const refEl = pathRefs.current[gid];
+                if (refEl) {
+                  const isWhite =
+                    color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
+                  refEl.setNativeProps({
+                    fill: color,
+                    stroke: isWhite ? '#000000' : 'none',
+                    strokeWidth: isWhite ? 1 : 0,
+                    strokeOpacity: isWhite ? 0.7 : 0,
+                  });
+                }
               });
+              setSectorColors(sectors);
+              setSectorStaff(staffFlags);
+            } else {
+              const sectors = {};
+              const staffFlags = {};
+              groupIds.forEach(gid => {
+                sectors[gid] = '#FFFFFF';
+                const refEl = pathRefs.current[gid];
+                if (refEl) {
+                  refEl.setNativeProps({ fill: '#FFFFFF', stroke: '#000000', strokeWidth: 1 });
+                }
+              });
+              setSectorColors(sectors);
+              setSectorStaff(staffFlags);
             }
-          });
-          setSectorColors(sectors);
-          setSectorStaff(staffFlags);
-        } else {
-          const sectors = {};
-          const staffFlags = {};
-          groupIds.forEach(gid => {
-            sectors[gid] = '#FFFFFF';
-            const refEl = pathRefs.current[gid];
-            if (refEl) {
-              refEl.setNativeProps({ fill: '#FFFFFF', stroke: '#000000', strokeWidth: 1 });
-            }
-          });
-          setSectorColors(sectors);
-          setSectorStaff(staffFlags);
-        }
+          },
+          err => {
+            console.error('Error loading sector colors:', err);
+          }
+        );
       } catch (err) {
         console.error('Error loading sector colors:', err);
       }
     };
     loadSectorColors();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [guildId]);
 
   useEffect(() => {
