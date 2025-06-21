@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { Dropdown } from 'react-native-element-dropdown';
-import { getDatabase, ref, set, get, onValue } from 'firebase/database';
+import { getDatabase, ref, set, get, onValue, update } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
@@ -377,7 +377,7 @@ const GVG = ({ navigation, route }) => {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (id) {
           const db = getDatabase();
-          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/color`), chosen);
+          await update(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), { color: chosen });
         }
       } catch (err) {
         console.error('Error updating sector color:', err);
