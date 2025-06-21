@@ -141,7 +141,7 @@ const GVG = ({ navigation, route }) => {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (!id) return;
         const db = getDatabase();
-        const snap = await get(ref(db, `guilds/${id}/guildNfmt`));
+        const snap = await get(ref(db, `guilds/${id}/guildName`));
         if (snap.exists()) {
           setOwnGuildName(snap.val());
         } else {
@@ -2477,9 +2477,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   guildColorBox: {
-    width: 12,
-    height: 12,
-    borderRadius: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     marginRight: 20,
   },
   guildName: {
