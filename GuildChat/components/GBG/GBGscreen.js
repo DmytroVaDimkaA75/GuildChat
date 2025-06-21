@@ -10,6 +10,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import GVGIcon from '../ico/GVG.svg';
+// Позиції іконок для секторів штабів
+const STAFF_ICON_POS = {
+  C5D: { x: 81.187661, y: 147.00201 },
+  D5A: { x: 62.672018, y: 157.87086 },
+  A5A: { x: 62.589518, y: 11.622864 },
+  A5B: { x: 77.59952, y: 20.762863 },
+  A5C: { x: 92.173995, y: 29.945639 },
+  C5C: { x: 95.95687, y: 137.86029 },
+  A5D: { x: 107.03939, y: 39.042854 },
+  C5B: { x: 111.01639, y: 128.71987 },
+  B5A: { x: 122.12099, y: 48.182865 },
+  B5B: { x: 122.31399, y: 66.463515 },
+  B5C: { x: 122.07199, y: 84.787869 },
+  B5D: { x: 122.11998, y: 103.02584 },
+  C5A: { x: 125.75064, y: 119.53573 },
+  F5D: { x: 48.263592, y: 20.76269 },
+  D5B: { x: 48.048014, y: 148.72986 },
+  F5C: { x: 33.398008, y: 29.945866 },
+  D5C: { x: 32.988501, y: 139.63164 },
+  F5B: { x: 19.101504, y: 39.285862 },
+  D5D: { x: 18.496, y: 130.44787 },
+  F5A: { x: 3.8140001, y: 48.425513 },
+  E5D: { x: 3.604, y: 66.463519 },
+  E5C: { x: 3.5560004, y: 84.78787 },
+  E5B: { x: 3.7990002, y: 103.02587 },
+  E5A: { x: 3.6060285, y: 121.30554 },
+};
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -310,24 +337,16 @@ const GVG = ({ navigation, route }) => {
     setTimeModalVisible(true);
   };
 
-  const handleStaffToggle = async () => {
+  const handleStaffPress = async () => {
     try {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id || !selectedId) return;
       const db = getDatabase();
-      const newValue = !sectorStaff[selectedId];
-      await set(
-        ref(db, `guilds/${id}/GBG/sectors/${selectedId}/staff`),
-        newValue ? true : null
-      );
-      setSectorStaff(prev => ({ ...prev, [selectedId]: newValue ? true : undefined }));
-      if (newValue) {
-        openPaintModal();
-      } else {
-        setMenuVisible(false);
-      }
+      await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/staff`), true);
+      setSectorStaff(prev => ({ ...prev, [selectedId]: true }));
+      openPaintModal();
     } catch (err) {
-      console.error('Error toggling staff:', err);
+      console.error('Error setting staff:', err);
     }
   };
 
@@ -441,6 +460,7 @@ const GVG = ({ navigation, route }) => {
             
             onPressIn={handleShapePress.bind(null, "C5D")}
             style={{
+              display: sectorStaff['C5D'] ? 'none' : 'inline',
               fontSize: 7.05587,
               fontFamily: "Arial",
               stroke: "#131313",
@@ -468,6 +488,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tD5A"
                 style={{
+              display: sectorStaff['D5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -523,6 +544,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tA5A"
                 style={{
+              display: sectorStaff['A5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1522,6 +1544,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tA5B"
                 style={{
+              display: sectorStaff['A5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1549,6 +1572,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tA5C"
                 style={{
+              display: sectorStaff['A5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1576,6 +1600,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tC5C"
                 style={{
+              display: sectorStaff['C5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1603,6 +1628,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tA5D"
                 style={{
+              display: sectorStaff['A5D'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1630,6 +1656,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tC5B"
                 style={{
+              display: sectorStaff['C5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1657,6 +1684,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tB5A"
                 style={{
+              display: sectorStaff['B5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1684,6 +1712,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tB5B"
                 style={{
+              display: sectorStaff['B5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1711,6 +1740,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tB5C"
                 style={{
+              display: sectorStaff['B5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1738,6 +1768,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tB5D"
                 style={{
+              display: sectorStaff['B5D'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1765,6 +1796,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tC5A"
                 style={{
+              display: sectorStaff['C5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1792,6 +1824,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tF5D"
                 style={{
+              display: sectorStaff['F5D'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1819,6 +1852,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tD5B"
                 style={{
+              display: sectorStaff['D5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1846,6 +1880,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tF5C"
                 style={{
+              display: sectorStaff['F5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1873,6 +1908,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tD5C"
                 style={{
+              display: sectorStaff['D5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1900,6 +1936,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tF5B"
                 style={{
+              display: sectorStaff['F5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1927,6 +1964,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tD5D"
                 style={{
+              display: sectorStaff['D5D'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1954,6 +1992,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tF5A"
                 style={{
+              display: sectorStaff['F5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -1981,6 +2020,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tE5D"
                 style={{
+              display: sectorStaff['E5D'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -2008,6 +2048,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tE5C"
                 style={{
+              display: sectorStaff['E5C'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -2035,6 +2076,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tE5B"
                 style={{
+              display: sectorStaff['E5B'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -2062,6 +2104,7 @@ const GVG = ({ navigation, route }) => {
               <Path
                 id="tE5A"
                 style={{
+              display: sectorStaff['E5A'] ? 'none' : 'inline',
                   fontSize: 7.05605,
                   fontFamily: "Arial",
                   stroke: "#131313",
@@ -2073,6 +2116,18 @@ const GVG = ({ navigation, route }) => {
                 onPressIn={handleShapePress.bind(null, "E5A")}
               />
             </G>
+        {Object.entries(sectorStaff).map(([id, flag]) =>
+          flag && id[1] === "5" && STAFF_ICON_POS[id] ? (
+            <GVGIcon
+              key={`staff-${id}`}
+              width={8}
+              height={8}
+              x={STAFF_ICON_POS[id].x - 4}
+              y={STAFF_ICON_POS[id].y - 4}
+            />
+          ) : null
+        )}
+
           </Svg>
       </View>
       <View style={styles.sectorList}>
@@ -2096,14 +2151,8 @@ const GVG = ({ navigation, route }) => {
           onPress={() => setMenuVisible(false)}
         >
           <View style={[styles.popupMenu, popupStyle]}>
-            {selectedId && selectedId[1] === '5' && !sectorStaff[selectedId] && (
-              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
-                <GVGIcon width={20} height={20} style={styles.menuIcon} />
-                <Text style={styles.menuText}>Штаб</Text>
-              </TouchableOpacity>
-            )}
-            {selectedId && sectorStaff[selectedId] && (
-              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
+            {selectedId && selectedId[1] === '5' && (
+              <TouchableOpacity style={styles.menuItem} onPress={handleStaffPress}>
                 <GVGIcon width={20} height={20} style={styles.menuIcon} />
                 <Text style={styles.menuText}>Штаб</Text>
               </TouchableOpacity>
@@ -2111,7 +2160,7 @@ const GVG = ({ navigation, route }) => {
             <TouchableOpacity
               style={styles.menuItem}
               onPress={openPaintModal}
-              disabled={guildList.length === 0}
+              disabled={guildList.length === 0 || (selectedId && selectedId[1] === '5' && sectorStaff[selectedId])}
             >
               <FontAwesomeIcon
                 icon={faPaintBrush}
@@ -2128,7 +2177,11 @@ const GVG = ({ navigation, route }) => {
                 Перефарбувати
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={openTimeModal}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={openTimeModal}
+              disabled={selectedId && selectedId[1] === '5' && sectorStaff[selectedId]}
+            >
               <FontAwesomeIcon
                 icon={faClock}
                 size={20}
@@ -2137,7 +2190,10 @@ const GVG = ({ navigation, route }) => {
               />
               <Text style={styles.menuText}>Час до відкриття</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              disabled={selectedId && selectedId[1] === '5' && sectorStaff[selectedId]}
+            >
               <FontAwesomeIcon
                 icon={faFire}
                 size={20}
