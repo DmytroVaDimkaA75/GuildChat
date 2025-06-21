@@ -344,6 +344,30 @@ const GVG = ({ navigation, route }) => {
     setTimeModalVisible(false);
   };
 
+  const animateSector = id => {
+    const path = pathRefs.current[id];
+    if (!path) return;
+    let cycle = 0;
+    let step = 0;
+    let direction = -1;
+    const steps = 10;
+    const interval = setInterval(() => {
+      step++;
+      const progress = step / steps;
+      const opacity = direction === -1 ? 0.7 * (1 - progress) : 0.7 * progress;
+      path.setNativeProps({ strokeOpacity: opacity });
+      if (step >= steps) {
+        step = 0;
+        if (direction === 1) cycle++;
+        direction *= -1;
+        if (cycle >= 2) {
+          clearInterval(interval);
+          path.setNativeProps({ strokeOpacity: 0.7 });
+        }
+      }
+    }, 50);
+  };
+
   const handleColorSelect = async color => {
     if (selectedId && pathRefs.current[selectedId]) {
       const refEl = pathRefs.current[selectedId];
@@ -2358,21 +2382,27 @@ const GVG = ({ navigation, route }) => {
             </G>
           </Svg>
       </View>
-      <View style={styles.sectorList}>
-        {sectorSchedule.map(item => (
-          <View key={item.name} style={styles.sectorRow}>
-            <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}> 
-              {item.name}
-            </Text>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
-            </View>
-            <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}> 
-              {formatRemaining(item.timeRemaining)}
-            </Text>
-          </View>
-        ))}
-      </View>
+        <View style={styles.sectorList}>
+          {sectorSchedule.map(item => (
+            <TouchableOpacity
+              key={item.name}
+              style={styles.sectorRow}
+              onPress={() => animateSector(item.name)}
+            >
+              <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}>
+                {item.name}
+              </Text>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <View
+                  style={[styles.attackBox, { backgroundColor: item.attack }]}
+                />
+              </View>
+              <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}>
+                {formatRemaining(item.timeRemaining)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       {menuVisible && (
         <TouchableOpacity
           style={styles.popupOverlay}
