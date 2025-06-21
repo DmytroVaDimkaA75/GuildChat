@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback } from "react-native";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback, ScrollView } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
@@ -2473,7 +2473,7 @@ const GVG = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.paintModalContainer}>
             <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
-            <View style={styles.sectorList}>
+            <ScrollView style={styles.sectorList}>
               {ownGuildName ? (
                 <TouchableOpacity
                   style={styles.guildItem}
@@ -2493,7 +2493,7 @@ const GVG = ({ navigation, route }) => {
                   <Text style={styles.guildName}>{item.name}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
             <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
@@ -2909,6 +2909,7 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 10,
     marginTop: 10,
+    maxHeight: HALF_HEIGHT,
   },
   sectorRow: {
     flexDirection: 'row',
