@@ -97,7 +97,7 @@ const GVG = ({ navigation, route }) => {
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
-    { label: 'b', value: '#B0C4DE' },
+    { label: 'b', value: '#3643ff' },
     { label: 'p', value: '#9C27B0' },
     { label: 'r', value: '#D32F2F' },
     { label: 'o', value: '#F4A623' },
@@ -288,7 +288,7 @@ const GVG = ({ navigation, route }) => {
       const gid = guildId || await AsyncStorage.getItem('guildId');
       if (!gid) return;
       const db = getDatabase();
-      const snap = await get(ref(db, `guilds/${gid}/GVG`));
+      const snap = await get(ref(db, `guilds/${gid}/GBG`));
       if (!snap.exists()) return;
       const position =
         pageX > screenWidth / 2
@@ -298,7 +298,7 @@ const GVG = ({ navigation, route }) => {
       setSelectedId(id);
       setMenuVisible(true);
     } catch (err) {
-      console.error('Error checking GVG folder:', err);
+      console.error('Error checking GBG folder:', err);
     }
   };
 
