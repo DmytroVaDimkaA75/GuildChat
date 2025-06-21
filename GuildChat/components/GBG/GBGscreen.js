@@ -87,6 +87,7 @@ const GVG = ({ navigation, route }) => {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [guildInputs, setGuildInputs] = useState([]);
   const [guildList, setGuildList] = useState([]);
+  const [ownGuildName, setOwnGuildName] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
@@ -132,6 +133,25 @@ const GVG = ({ navigation, route }) => {
       }
     };
     fetchGuilds();
+  }, [guildId]);
+
+  useEffect(() => {
+    const fetchOwnName = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/guildNfmt`));
+        if (snap.exists()) {
+          setOwnGuildName(snap.val());
+        } else {
+          setOwnGuildName('');
+        }
+      } catch (err) {
+        console.error('Error fetching own guild name:', err);
+      }
+    };
+    fetchOwnName();
   }, [guildId]);
 
   useEffect(() => {
@@ -2139,14 +2159,23 @@ const GVG = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.paintModalContainer}>
             <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
+            {ownGuildName ? (
+              <TouchableOpacity
+                style={styles.guildItem}
+                onPress={() => handleColorSelect('#DCDCDC')}
+              >
+                <View style={[styles.guildColorBox, { backgroundColor: '#DCDCDC' }]} />
+                <Text style={styles.guildName}>{ownGuildName}</Text>
+              </TouchableOpacity>
+            ) : null}
             {guildList.map((item, idx) => (
               <TouchableOpacity
                 key={idx}
                 style={styles.guildItem}
                 onPress={() => handleColorSelect(item.color)}
               >
+                <View style={[styles.guildColorBox, { backgroundColor: item.color }]} />
                 <Text style={styles.guildName}>{item.name}</Text>
-                <View style={[styles.colorSample, { backgroundColor: item.color }]} />
               </TouchableOpacity>
             ))}
             <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
@@ -2433,9 +2462,15 @@ const styles = StyleSheet.create({
   },
   guildItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 6,
+    marginBottom: 4,
+  },
+  guildColorBox: {
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    marginRight: 20,
   },
   guildName: {
     fontSize: 16,
