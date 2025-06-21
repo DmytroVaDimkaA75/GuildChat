@@ -97,7 +97,7 @@ const GVG = ({ navigation, route }) => {
   const colorOptions = [
     { label: 'g', value: '#32CD32' },
     { label: 'y', value: '#FFFF00' },
-    { label: 'b', value: '#0000CC' },
+    { label: 'b', value: '#B0C4DE' },
     { label: 'p', value: '#9C27B0' },
     { label: 'r', value: '#D32F2F' },
     { label: 'o', value: '#F4A623' },
