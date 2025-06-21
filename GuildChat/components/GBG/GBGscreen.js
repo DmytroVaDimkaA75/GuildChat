@@ -169,18 +169,21 @@ const GVG = ({ navigation, route }) => {
           const staffFlags = {};
           groupIds.forEach(gid => {
             let colorEntry = data[gid];
-            const color =
+            let color =
               colorEntry && typeof colorEntry === 'object'
                 ? colorEntry.color
                 : colorEntry;
             const staff =
               colorEntry && typeof colorEntry === 'object' && colorEntry.staff;
-            sectors[gid] = color || '#FFFFFF';
+            if (!color) {
+              color = '#FFFFFF';
+            }
+            sectors[gid] = color;
             staffFlags[gid] = !!staff;
             const refEl = pathRefs.current[gid];
             if (refEl) {
-              const isWhite =
-                color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white';
+              const lower = color.toLowerCase();
+              const isWhite = lower === '#ffffff' || lower === 'white';
               refEl.setNativeProps({
                 fill: color,
                 stroke: isWhite ? '#000000' : 'none',
@@ -202,7 +205,8 @@ const GVG = ({ navigation, route }) => {
             whiteSectors.forEach(sec => {
               getAdjacentIds(sec).forEach(adj => {
                 const adjColor = sectors[adj];
-                if (!adjColor || adjColor.toLowerCase() !== '#dcdcdc') {
+                const adjLower = (adjColor || '').toLowerCase();
+                if (!adjColor || adjLower !== '#dcdcdc') {
                   namesSet.add(adj);
                 }
               });
@@ -348,27 +352,23 @@ const GVG = ({ navigation, route }) => {
     if (selectedId && pathRefs.current[selectedId]) {
       const refEl = pathRefs.current[selectedId];
       const pathId = refEl?.props?.id || '';
+      const chosen = color || '#FFFFFF';
+      const lower = chosen.toLowerCase();
       const nativeProps = {
-        fill: color,
-        stroke:
-          color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white'
-            ? '#000000'
-            : 'none',
-        strokeWidth:
-          color.toLowerCase() === '#ffffff' || color.toLowerCase() === 'white'
-            ? 1
-            : 0,
+        fill: chosen,
+        stroke: lower === '#ffffff' || lower === 'white' ? '#000000' : 'none',
+        strokeWidth: lower === '#ffffff' || lower === 'white' ? 1 : 0,
       };
       if (pathId.startsWith('f')) {
         nativeProps.strokeOpacity = 0.7;
       }
       refEl.setNativeProps(nativeProps);
-      setSectorColors(prev => ({ ...prev, [selectedId]: color }));
+      setSectorColors(prev => ({ ...prev, [selectedId]: chosen }));
       try {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (id) {
           const db = getDatabase();
-          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/color`), color);
+          await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/color`), chosen);
         }
       } catch (err) {
         console.error('Error updating sector color:', err);
