@@ -1437,7 +1437,7 @@ const GVG = ({ navigation, route }) => {
             <G onPress={() => handleShapePress("E4C")}>
               <Path
                 id="fE4C"
-            ref={el => (pathRefs.current['E4C'] = el)}
+                ref={el => (pathRefs.current['E4C'] = el)}
                 style={{
                   fill: "#6161fa",
                   stroke: "#ffffff",
