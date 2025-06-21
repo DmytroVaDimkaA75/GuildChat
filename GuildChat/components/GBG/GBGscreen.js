@@ -2159,25 +2159,27 @@ const GVG = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.paintModalContainer}>
             <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
-            {ownGuildName ? (
-              <TouchableOpacity
-                style={styles.guildItem}
-                onPress={() => handleColorSelect('#DCDCDC')}
-              >
-                <View style={[styles.guildColorBox, { backgroundColor: '#DCDCDC' }]} />
-                <Text style={styles.guildName}>{ownGuildName}</Text>
-              </TouchableOpacity>
-            ) : null}
-            {guildList.map((item, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.guildItem}
-                onPress={() => handleColorSelect(item.color)}
-              >
-                <View style={[styles.guildColorBox, { backgroundColor: item.color }]} />
-                <Text style={styles.guildName}>{item.name}</Text>
-              </TouchableOpacity>
-            ))}
+            <View style={styles.sectorList}>
+              {ownGuildName ? (
+                <TouchableOpacity
+                  style={styles.guildItem}
+                  onPress={() => handleColorSelect('#DCDCDC')}
+                >
+                  <View style={[styles.guildColorBox, { backgroundColor: '#DCDCDC' }]} />
+                  <Text style={styles.guildName}>{ownGuildName}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {guildList.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.guildItem}
+                  onPress={() => handleColorSelect(item.color)}
+                >
+                  <View style={[styles.guildColorBox, { backgroundColor: item.color }]} />
+                  <Text style={styles.guildName}>{item.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
               <Text style={styles.closeButtonText}>Закрити</Text>
             </TouchableOpacity>
@@ -2378,7 +2380,8 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "flex-end",
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   modalContainer: {
     backgroundColor: "#fff",
@@ -2391,34 +2394,39 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   paintModalContainer: {
-    backgroundColor: "#fff",
-    width: "100%",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
     padding: 20,
+    alignItems: 'flex-start',
   },
   modalText: {
-    fontSize: 18,
-    marginBottom: 20,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#000',
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   closeButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: '#e0e0e0',
     borderRadius: 8,
     flex: 1,
   },
   modalCloseButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 15,
   },
   closeButtonText: {
+    color: '#FFF',
     fontSize: 16,
+    fontWeight: '500',
   },
     settingsOverlay: {
     flex: 1,
@@ -2465,6 +2473,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     marginBottom: 4,
+    paddingHorizontal: 10,
+    width: '100%',
   },
   guildColorBox: {
     width: 12,
@@ -2473,8 +2483,8 @@ const styles = StyleSheet.create({
     marginRight: 20,
   },
   guildName: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#000',
   },
   guildInput: {
     flex: 1,
