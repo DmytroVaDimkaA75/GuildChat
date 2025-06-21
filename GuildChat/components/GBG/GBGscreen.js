@@ -377,7 +377,11 @@ const GVG = ({ navigation, route }) => {
         const id = guildId || await AsyncStorage.getItem('guildId');
         if (id) {
           const db = getDatabase();
-          await update(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), { color: chosen });
+          await update(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), {
+            color: chosen,
+            openTime: null,
+            attack: null,
+          });
         }
       } catch (err) {
         console.error('Error updating sector color:', err);
