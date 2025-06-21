@@ -349,16 +349,18 @@ const GVG = ({ navigation, route }) => {
     if (!path) return;
     let cycle = 0;
     let step = 0;
-    let direction = -1;
+    let direction = 1; // 1 - збільшення, -1 - зменшення
     const steps = 10;
+    path.setNativeProps({ strokeOpacity: 0 });
     const interval = setInterval(() => {
       step++;
       const progress = step / steps;
-      const opacity = direction === -1 ? 0.7 * (1 - progress) : 0.7 * progress;
+      const opacity =
+        direction === 1 ? 0.7 * progress : 0.7 * (1 - progress);
       path.setNativeProps({ strokeOpacity: opacity });
       if (step >= steps) {
         step = 0;
-        if (direction === 1) cycle++;
+        if (direction === -1) cycle++;
         direction *= -1;
         if (cycle >= 2) {
           clearInterval(interval);
