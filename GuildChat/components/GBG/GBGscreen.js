@@ -280,17 +280,26 @@ const GVG = ({ navigation, route }) => {
     }
   }, [settingsVisible]);
 
-  const handleShapePress = (id, event) => {
-    const screenWidth = Dimensions.get('window').width;
-    const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
-      event?.nativeEvent || {};
-    const position =
-      pageX > screenWidth / 2
-        ? { right: screenWidth - pageX, top: pageY }
-        : { left: pageX, top: pageY };
-    setPopupStyle(position);
-    setSelectedId(id);
-    setMenuVisible(true);
+  const handleShapePress = async (id, event) => {
+    try {
+      const screenWidth = Dimensions.get('window').width;
+      const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+        event?.nativeEvent || {};
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) return;
+      const db = getDatabase();
+      const snap = await get(ref(db, `guilds/${gid}/GVG`));
+      if (!snap.exists()) return;
+      const position =
+        pageX > screenWidth / 2
+          ? { right: screenWidth - pageX, top: pageY }
+          : { left: pageX, top: pageY };
+      setPopupStyle(position);
+      setSelectedId(id);
+      setMenuVisible(true);
+    } catch (err) {
+      console.error('Error checking GVG folder:', err);
+    }
   };
 
   const openPaintModal = () => {
