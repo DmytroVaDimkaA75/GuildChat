@@ -2390,7 +2390,7 @@ const GVG = ({ navigation, route }) => {
             <TouchableOpacity
               style={styles.menuItem}
               onPress={openPaintModal}
-              disabled={guildList.length === 0}
+              disabled={guildList.length === 0 || sectorStaff[selectedId]}
             >
               <FontAwesomeIcon
                 icon={faPaintBrush}
@@ -2401,29 +2401,51 @@ const GVG = ({ navigation, route }) => {
               <Text
                 style={[
                   styles.menuText,
-                  guildList.length === 0 && styles.disabledText,
+                  (guildList.length === 0 || sectorStaff[selectedId]) &&
+                    styles.disabledText,
                 ]}
               >
                 Перефарбувати
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={openTimeModal}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={openTimeModal}
+              disabled={sectorStaff[selectedId]}
+            >
               <FontAwesomeIcon
                 icon={faClock}
                 size={20}
                 color="#8C9093"
                 style={styles.menuIcon}
               />
-              <Text style={styles.menuText}>Час до відкриття</Text>
+              <Text
+                style={[
+                  styles.menuText,
+                  sectorStaff[selectedId] && styles.disabledText,
+                ]}
+              >
+                Час до відкриття
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              disabled={sectorStaff[selectedId]}
+            >
               <FontAwesomeIcon
                 icon={faFire}
                 size={20}
                 color="#8C9093"
                 style={styles.menuIcon}
               />
-              <Text style={styles.menuText}>Допомагайте</Text>
+              <Text
+                style={[
+                  styles.menuText,
+                  sectorStaff[selectedId] && styles.disabledText,
+                ]}
+              >
+                Допомагайте
+              </Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
