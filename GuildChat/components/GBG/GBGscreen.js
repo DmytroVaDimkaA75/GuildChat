@@ -401,6 +401,21 @@ const GVG = ({ navigation, route }) => {
     }
   };
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSectorSchedule(prev =>
+        prev
+          .map(item => ({
+            ...item,
+            timeRemaining: item.openTime - Math.floor(Date.now() / 1000),
+          }))
+          .filter(item => item.timeRemaining > 0)
+          .sort((a, b) => a.timeRemaining - b.timeRemaining)
+      );
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <View style={styles.win}>
       <View style={styles.mapContainer}>
