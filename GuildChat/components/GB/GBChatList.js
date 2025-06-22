@@ -99,6 +99,10 @@ const GBChatList = () => {
               setUserMayInvest(arcData.mayInvest);
             } else {
               console.log(t("gbChatList.arcNotFound"));
+              // Встановлюємо рівень арки та mayInvest у 0, щоб фільтрація чатів
+              // коректно спрацьовувала навіть за відсутності даних
+              setUserArcLevel(0);
+              setUserMayInvest(0);
             }
           });
         }
