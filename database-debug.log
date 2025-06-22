@@ -1,0 +1,13 @@
+11:42:28.367 [NamespaceSystem-akka.actor.default-dispatcher-6] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+11:42:28.599 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
+11:44:43.695 [NamespaceSystem-akka.actor.default-dispatcher-7] INFO com.firebase.core.namespace.NamespaceActor - fake-server successfully activated FBKV (SurveyIdle(0)) wait: 183ms, init: 0ms
+11:58:23.755 [FirebaseWorkerPool-1-4] WARN com.firebase.core.persistence.backend.dummy.EmulatorMetadataPersistence - Multiple projectIds are not recommended in single project mode. Requested 
+namespace guildchat-5d8c1-default-rtdb, but the emulator is configured for fake-server. To 
+opt-out of single project mode add/set the singleProjectMode: false property in 
+the firebase.json emulators config. 
+11:58:23.764 [NamespaceSystem-akka.actor.default-dispatcher-14] INFO com.firebase.core.namespace.NamespaceActor - guildchat-5d8c1-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 4ms, init: 0ms
+12:41:50.471 [Thread-0] INFO com.firebase.server.forge.App$ - Attempting graceful shutdown.
+12:41:50.481 [NamespaceSystem-akka.actor.default-dispatcher-24] INFO com.firebase.core.namespace.Terminator$Terminator - 2 actors left to terminate: fake-server, guildchat-5d8c1-default-rtdb
+12:41:50.488 [NamespaceSystem-akka.actor.default-dispatcher-25] INFO com.firebase.core.namespace.NamespaceActor - stopped namespace actor for fake-server
+12:41:50.490 [NamespaceSystem-akka.actor.default-dispatcher-24] INFO com.firebase.core.namespace.NamespaceActor - stopped namespace actor for guildchat-5d8c1-default-rtdb
+12:41:50.494 [Thread-0] INFO com.firebase.server.forge.App$ - Graceful shutdown complete.

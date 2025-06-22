@@ -1,0 +1,115 @@
+[debug] [2025-06-22T07:24:01.103Z] ----------------------------------------------------------------------
+[debug] [2025-06-22T07:24:01.106Z] Command:       /usr/local/share/nvm/versions/node/v20.19.0/bin/node /home/codespace/nvm/current/bin/firebase emulators:start --only functions,database
+[debug] [2025-06-22T07:24:01.106Z] CLI Version:   14.7.0
+[debug] [2025-06-22T07:24:01.106Z] Platform:      linux
+[debug] [2025-06-22T07:24:01.106Z] Node Version:  v20.19.0
+[debug] [2025-06-22T07:24:01.107Z] Time:          Sun Jun 22 2025 07:24:01 GMT+0000 (Coordinated Universal Time)
+[debug] [2025-06-22T07:24:01.107Z] Env Overrides: GITHUB_API_URL, GITHUB_API_URL
+[debug] [2025-06-22T07:24:01.107Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-06-22T07:24:01.383Z] Field "/functions" in "firebase.json" is possibly invalid: must be object
+[debug] [2025-06-22T07:24:01.384Z] Object "/functions/0" in "firebase.json" has unknown property: {"additionalProperty":"region"}
+[debug] [2025-06-22T07:24:01.384Z] Field "/functions" in "firebase.json" is possibly invalid: must match a schema in anyOf
+[debug] [2025-06-22T07:24:01.387Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-06-22T07:24:01.387Z] > authorizing via signed-in user (vadimkaa75@gmail.com)
+[debug] [2025-06-22T07:24:01.727Z] openjdk version "21.0.6" 2025-01-21 LTS
+OpenJDK Runtime Environment Microsoft-10800198 (build 21.0.6+7-LTS)
+OpenJDK 64-Bit Server VM Microsoft-10800198 (build 21.0.6+7-LTS, mixed mode, sharing)
+
+[debug] [2025-06-22T07:24:01.735Z] Parsed Java major version: 21
+[info] i  emulators: Starting emulators: functions, database {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions, database"}}
+[debug] [2025-06-22T07:24:01.744Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-06-22T07:24:01.744Z] [database] Database Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-06-22T07:24:01.745Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"database":[{"address":"127.0.0.1","family":"IPv4","port":9000}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-06-22T07:24:01.750Z] [hub] writing locator at /tmp/hub-guildchat-5d8c1.json
+[debug] [2025-06-22T07:24:01.754Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-06-22T07:24:01.755Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-06-22T07:24:01.755Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-06-22T07:24:01.755Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"database":[{"address":"127.0.0.1","family":"IPv4","port":9000}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] ⚠  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, firestore, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2025-06-22T07:24:01.774Z] defaultcredentials: writing to file /home/codespace/.config/firebase/vadimkaa75_gmail_com_application_default_credentials.json
+[debug] [2025-06-22T07:24:01.776Z] Setting GAC to /home/codespace/.config/firebase/vadimkaa75_gmail_com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to /home/codespace/.config/firebase/vadimkaa75_gmail_com_application_default_credentials.json"}}
+[debug] [2025-06-22T07:24:01.777Z] Checked if tokens are valid: true, expires at: 1750578205292
+[debug] [2025-06-22T07:24:01.777Z] Checked if tokens are valid: true, expires at: 1750578205292
+[debug] [2025-06-22T07:24:01.777Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1/adminSdkConfig [none]
+[debug] [2025-06-22T07:24:02.499Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1/adminSdkConfig 200
+[debug] [2025-06-22T07:24:02.499Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1/adminSdkConfig {"projectId":"guildchat-5d8c1","databaseURL":"https://guildchat-5d8c1-default-rtdb.europe-west1.firebasedatabase.app","storageBucket":"guildchat-5d8c1.appspot.com","locationId":"europe-west"}
+[debug] [2025-06-22T07:24:02.507Z] Checked if tokens are valid: true, expires at: 1750578205292
+[debug] [2025-06-22T07:24:02.507Z] Checked if tokens are valid: true, expires at: 1750578205292
+[debug] [2025-06-22T07:24:02.507Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 [none]
+[debug] [2025-06-22T07:24:02.727Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 200
+[debug] [2025-06-22T07:24:02.727Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 {"projectId":"guildchat-5d8c1","projectNumber":"220187331504","displayName":"GuildChat","name":"projects/guildchat-5d8c1","resources":{"hostingSite":"guildchat-5d8c1","realtimeDatabaseInstance":"guildchat-5d8c1-default-rtdb","locationId":"europe-west"},"state":"ACTIVE","etag":"1_d1288af1-46e8-4d18-97d3-50ece9b19a47"}
+[debug] [2025-06-22T07:24:02.727Z] database rules config:  []
+[warn] ⚠  database: Did not find a Realtime Database rules file specified in a firebase.json config file. The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration. {"metadata":{"emulator":{"name":"database"},"message":"Did not find a Realtime Database rules file specified in a firebase.json config file. The emulator will default to allowing all reads and writes. Learn more about this option: https://firebase.google.com/docs/emulator-suite/install_and_configure#security_rules_configuration."}}
+[info] i  database: downloading firebase-database-emulator-v4.11.2.jar... {"metadata":{"emulator":{"name":"database"},"message":"downloading firebase-database-emulator-v4.11.2.jar..."}}
+[debug] [2025-06-22T07:24:02.729Z] >>> [apiv2][query] GET https://storage.googleapis.com/firebase-preview-drop/emulator/firebase-database-emulator-v4.11.2.jar 
+[debug] [2025-06-22T07:24:02.911Z] <<< [apiv2][status] GET https://storage.googleapis.com/firebase-preview-drop/emulator/firebase-database-emulator-v4.11.2.jar 200
+[debug] [2025-06-22T07:24:02.912Z] <<< [apiv2][body] GET https://storage.googleapis.com/firebase-preview-drop/emulator/firebase-database-emulator-v4.11.2.jar [stream]
+[debug] [2025-06-22T07:24:04.680Z] Ignoring unsupported arg: projectId {"metadata":{"emulator":{"name":"database"},"message":"Ignoring unsupported arg: projectId"}}
+[debug] [2025-06-22T07:24:04.680Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"database"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2025-06-22T07:24:04.680Z] Ignoring unsupported arg: rules {"metadata":{"emulator":{"name":"database"},"message":"Ignoring unsupported arg: rules"}}
+[debug] [2025-06-22T07:24:04.680Z] Starting Database Emulator with command {"binary":"java","args":["-Duser.language=en","-jar","/home/codespace/.cache/firebase/emulators/firebase-database-emulator-v4.11.2.jar","--host","127.0.0.1","--port",9000,"--single_project_mode","Warning","--functions_emulator_host","127.0.0.1","--functions_emulator_port",5001],"optionalArgs":["port","host","functions_emulator_port","functions_emulator_host","single_project_mode"],"joinArgs":false,"shell":false,"port":9000} {"metadata":{"emulator":{"name":"database"},"message":"Starting Database Emulator with command {\"binary\":\"java\",\"args\":[\"-Duser.language=en\",\"-jar\",\"/home/codespace/.cache/firebase/emulators/firebase-database-emulator-v4.11.2.jar\",\"--host\",\"127.0.0.1\",\"--port\",9000,\"--single_project_mode\",\"Warning\",\"--functions_emulator_host\",\"127.0.0.1\",\"--functions_emulator_port\",5001],\"optionalArgs\":[\"port\",\"host\",\"functions_emulator_port\",\"functions_emulator_host\",\"single_project_mode\"],\"joinArgs\":false,\"shell\":false,\"port\":9000}"}}
+[info] i  database: Database Emulator logging to database-debug.log {"metadata":{"emulator":{"name":"database"},"message":"Database Emulator logging to \u001b[1mdatabase-debug.log\u001b[22m"}}
+[debug] [2025-06-22T07:24:06.305Z] 07:24:06.301 [NamespaceSystem-akka.actor.default-dispatcher-6] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+ {"metadata":{"emulator":{"name":"database"},"message":"07:24:06.301 [NamespaceSystem-akka.actor.default-dispatcher-6] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started\n"}}
+[debug] [2025-06-22T07:24:06.528Z] 07:24:06.527 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
+ {"metadata":{"emulator":{"name":"database"},"message":"07:24:06.527 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000\n"}}
+[info] i  functions: Watching "/workspaces/GuildChat/functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"/workspaces/GuildChat/functions\" for Cloud Functions..."}}
+[debug] [2025-06-22T07:24:06.731Z] Validating nodejs source
+[debug] [2025-06-22T07:24:07.217Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2025-06-22T07:24:07.218Z] Building nodejs source
+[debug] [2025-06-22T07:24:07.218Z] Failed to find version of module node: reached end of search path /workspaces/GuildChat/functions/node_modules
+[info] ✔  functions: Using node@20 from host. 
+[debug] [2025-06-22T07:24:07.220Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-06-22T07:24:07.223Z] Found firebase-functions binary at '/workspaces/GuildChat/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8651
+
+[debug] [2025-06-22T07:24:07.474Z] Got response from /__/functions.yaml {"endpoints":{"executeDueEvents":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["europe-west1"],"labels":{},"scheduleTrigger":{"schedule":"every 1 minutes","retryConfig":{},"timeZone":"Europe/Kyiv"},"entryPoint":"executeDueEvents"}},"specVersion":"v1alpha1","requiredAPIs":[{"api":"cloudscheduler.googleapis.com","reason":"Needed for scheduled functions."}],"extensions":{}}
+[info] ✔  functions: Loaded functions definitions from source: executeDueEvents. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: executeDueEvents."}}
+[info] i  functions[europe-west1-executeDueEvents]: function ignored because the pubsub emulator does not exist or is not running. {"metadata":{"emulator":{"name":"functions"},"message":"function ignored because the pubsub emulator does not exist or is not running."}}
+[debug] [2025-06-22T07:24:11.501Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Database  │ 127.0.0.1:9000 │ http://127.0.0.1:4000/database  │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[debug] [2025-06-22T07:54:34.512Z] 07:54:34.511 [NamespaceSystem-akka.actor.default-dispatcher-7] INFO com.firebase.core.namespace.NamespaceActor - fake-server successfully activated FBKV (SurveyIdle(0)) wait: 248ms, init: 0ms
+ {"metadata":{"emulator":{"name":"database"},"message":"07:54:34.511 [NamespaceSystem-akka.actor.default-dispatcher-7] INFO com.firebase.core.namespace.NamespaceActor - fake-server successfully activated FBKV (SurveyIdle(0)) wait: 248ms, init: 0ms\n"}}
