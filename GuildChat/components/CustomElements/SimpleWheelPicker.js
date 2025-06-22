@@ -7,14 +7,15 @@ const VISIBLE_ITEMS = 5;
 const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
   const scrollViewRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(selectedIndex);
+  const [layoutReady, setLayoutReady] = useState(false);
 
-  // Scroll to selected index when component mounts or selectedIndex changes externally
+  // Scroll to selected index when layout is ready or selectedIndex changes externally
   useEffect(() => {
-    if (scrollViewRef.current && selectedIndex != null) {
+    if (layoutReady && scrollViewRef.current && selectedIndex != null) {
       scrollToIndex(selectedIndex, false);
       setCurrentIndex(selectedIndex);
     }
-  }, [selectedIndex]);
+  }, [selectedIndex, layoutReady]);
 
   // Helper function to scroll to a specific index
   const scrollToIndex = (index, animated = true) => {
@@ -23,6 +24,12 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
         y: Math.max(0, ITEM_HEIGHT * index),
         animated,
       });
+    }
+  };
+
+  const handleLayout = () => {
+    if (!layoutReady) {
+      setLayoutReady(true);
     }
   };
 
@@ -55,6 +62,7 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
     <View style={styles.container}>
       <ScrollView
         ref={scrollViewRef}
+        onLayout={handleLayout}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
         decelerationRate="fast"
