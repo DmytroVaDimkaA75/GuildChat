@@ -8,40 +8,40 @@ import i18n from "./i18n";
 import * as Localization from "expo-localization";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
-// Імпортуємо контекст
+// НОВЕ: сервіс реєстрації push-токена
+import { registerFcmToken } from "./scr/notifications/registerToken";
+
+// контекст гільдії
 import { GuildProvider, GuildContext } from "./GuildContext";
 
-// Імпортуємо навігацію та необхідні компоненти
+// навігація
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import AdminSettingsScreen from "./components/AdminSettingsScreen";
-import UserSettingsScreen from "./components/UserSettingsScreen";
-import MainContent from "./components/MainContent";
+import UserSettingsScreen   from "./components/UserSettingsScreen";
+import MainContent          from "./components/MainContent";
 
 const Stack = createStackNavigator();
 
 const AppContent = () => {
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const { guildId } = useContext(GuildContext);
-  // Видаляємо selectedRole – перемикання ролей тепер через навігацію
-  const [selectedOption, setSelectedOption] = useState(i18n.t("server"));
-  const [userData, setUserData] = useState(false);
-  const [checked, setChecked] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // Ініціалізація мови
+  const [selectedOption, setSelectedOption] = useState(i18n.t("server"));
+  const [userData, setUserData]     = useState(false);
+  const [checked,  setChecked]      = useState(false);
+  const [loading,  setLoading]      = useState(true);
+
+  /* ───────── 1. завантаження/вибір мови ───────── */
   useEffect(() => {
     const initLanguage = async () => {
-      const supportedLanguages = ["uk", "ru", "be", "de"];
+      const supported = ["uk", "ru", "be", "de"];
       let lang = await AsyncStorage.getItem("userLanguage");
-      if (!lang || !supportedLanguages.includes(lang)) {
-        const locales = Localization.locales;
-        lang = locales[0]?.substring(0, 2);
-        if (!supportedLanguages.includes(lang)) {
-          lang = "uk";
-        }
+      if (!lang || !supported.includes(lang)) {
+        lang = (Localization.locales[0] || "uk").substring(0, 2);
+        if (!supported.includes(lang)) lang = "uk";
         await AsyncStorage.setItem("userLanguage", lang);
       }
       i18n.changeLanguage(lang);
@@ -50,134 +50,96 @@ const AppContent = () => {
     initLanguage();
   }, []);
 
-  // Отримання даних та логування даних гравця
+  /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
+  useEffect(() => {
+    const saveToken = async () => {
+      const uid = await AsyncStorage.getItem("userId");
+      console.log('🔔 about to call registerFcmToken, uid =', uid)
+      if (uid) registerFcmToken(uid);
+    };
+    saveToken();
+  }, []);
+
+  /* ──────────────────────────────────────────────────────────────────────── */
+       // ← важливо: порожній масив, викликається один раз
+
+  /* ───────── 3. логування даних гравця + завантаження userData ───────── */
   useEffect(() => {
     const checkAndLogWorldData = async () => {
       try {
-        const userId = await AsyncStorage.getItem("userId");
-        const storedGuildId = await AsyncStorage.getItem("guildId");
-        if (userId && storedGuildId) {
-          const worldId = storedGuildId.split("_")[0];
+        const userId   = await AsyncStorage.getItem("userId");
+        const guildStr = await AsyncStorage.getItem("guildId");
+        if (userId && guildStr) {
+          const worldId = guildStr.split("_")[0];
           const url = `https://foe.scoredb.io/${worldId}/Player/${userId}`;
-          const response = await fetch(url);
-          const html = await response.text();
-          const playerData = parsePlayerBlock(html);
-
-          if (playerData) {
-            console.log("Імʼя гравця:", playerData.userName);
-            console.log("Аватар:", playerData.avatarUrl);
-            console.log("ID гільдії:", playerData.guildId);
-            console.log("Назва гільдії:", playerData.guildName);
-          } else {
-            console.log("Дані не знайдено у вмісті сторінки");
+          const html = await (await fetch(url)).text();
+          const data = parsePlayerBlock(html);
+          if (data) {
+            console.log("Імʼя гравця:", data.userName);
+            console.log("Аватар:",     data.avatarUrl);
+            console.log("ID гільдії:", data.guildId);
+            console.log("Назва гільдії:", data.guildName);
           }
         }
-      } catch (error) {
-        console.log("Помилка при формуванні або парсингу посилання:", error);
-      }
+      } catch (e) { console.log("Помилка парсингу:", e); }
+
+      if (guildId) fetchUserData();
+      else { setLoading(false); setChecked(true); }
     };
 
     checkAndLogWorldData();
-
-    if (guildId) {
-      fetchUserData();
-    } else {
-      setLoading(false);
-      setChecked(true);
-    }
   }, [guildId]);
 
   const fetchUserData = async () => {
     try {
       const userId = await AsyncStorage.getItem("userId");
       if (guildId && userId) {
-        const userRef = ref(database, `users/${userId}`);
-        onValue(userRef, (snapshot) => {
-          if (snapshot.exists()) {
-            setUserData(true);
-          } else {
-            setUserData(false);
-          }
+        onValue(ref(database, `users/${userId}`), snap => {
+          setUserData(snap.exists());
           setLoading(false);
         });
-      } else {
-        setUserData(false);
-        setLoading(false);
-      }
-    } catch (error) {
-      setLoading(false);
-    } finally {
-      setChecked(true);
-    }
+      } else { setUserData(false); setLoading(false); }
+    } catch (_) { setLoading(false); }
+    finally { setChecked(true); }
   };
 
-  const handleRefresh = () => {
-    fetchUserData();
-  };
+  /* ───────── 4. UI-гілки ───────── */
+  if (!languageLoaded || loading)
+    return (<View style={styles.container}><ActivityIndicator size="large" color="#0000ff" /></View>);
 
-  if (!languageLoaded || loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
+  if (!checked) return null;
 
-  if (!checked) {
-    return null;
-  }
+  if (userData) return <MainContent key={guildId} />;
 
-  // Якщо дані користувача є, переходимо до основного контенту
-  if (userData) {
-    return <MainContent key={guildId} />;
-  }
-
-  // Якщо даних користувача немає – надаємо екран навігації для вибору ролі
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="RoleSelectionScreen">
-        <Stack.Screen
-          name="RoleSelectionScreen"
-          options={{ headerShown: false }}
-        >
-          {(props) => (
-            <RoleSelectionScreen
-              {...props}
+        <Stack.Screen name="RoleSelectionScreen" options={{ headerShown: false }}>
+          {props => (
+            <RoleSelectionScreen {...props}
               selectedOption={selectedOption}
-              onCountryPress={(country) => {
-                setSelectedOption(country.name);
-              }}
+              onCountryPress={c => setSelectedOption(c.name)}
             />
           )}
         </Stack.Screen>
-        <Stack.Screen
-          name="AdminSettingsScreen"
-          options={{ headerShown: false }}
-        >
-          {(props) => (
-            <AdminSettingsScreen
-              {...props}
+
+        <Stack.Screen name="AdminSettingsScreen" options={{ headerShown: false }}>
+          {props => (
+            <AdminSettingsScreen {...props}
               selectedOption={selectedOption}
-              onCountryPress={(country) => {
-                setSelectedOption(country.name);
-              }}
+              onCountryPress={c => setSelectedOption(c.name)}
               onConfirm={() => setUserData(true)}
-              fetch={handleRefresh}
+              fetch={fetchUserData}
             />
           )}
         </Stack.Screen>
-        <Stack.Screen
-          name="UserSettingsScreen"
-          options={{ headerShown: false }}
-        >
-          {(props) => (
-            <UserSettingsScreen
-              {...props}
+
+        <Stack.Screen name="UserSettingsScreen" options={{ headerShown: false }}>
+          {props => (
+            <UserSettingsScreen {...props}
               selectedOption={selectedOption}
-              onCountryPress={(country) => {
-                setSelectedOption(country.name);
-              }}
-              fetch={handleRefresh}
+              onCountryPress={c => setSelectedOption(c.name)}
+              fetch={fetchUserData}
             />
           )}
         </Stack.Screen>
@@ -189,15 +151,11 @@ const AppContent = () => {
 export default function App() {
   return (
     <GuildProvider>
-      <AppContent />
+      <AppContent/>
     </GuildProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  container: { flex: 1, alignItems: "center", justifyContent: "center" }
 });
