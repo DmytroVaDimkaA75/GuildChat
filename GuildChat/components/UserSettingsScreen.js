@@ -48,7 +48,8 @@ const UserSettingsScreen = ({ fetch }) => {
     }
 
     await AsyncStorage.setItem("userId", user.userId);
-
+    //Пуш-токен: якщо він уже кешований — пишемо у БД
+    await uploadCachedToken(selectedUserId, database);
     const userGuilds = await getGuildsByUser(user);
 
     if (userGuilds.length <= 0) {

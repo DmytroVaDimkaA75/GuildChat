@@ -51,14 +51,6 @@ const AppContent = () => {
   }, []);
 
   /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
-  useEffect(() => {
-    const saveToken = async () => {
-      const uid = await AsyncStorage.getItem("userId");
-      console.log('🔔 about to call registerFcmToken, uid =', uid)
-      if (uid) registerFcmToken(uid);
-    };
-    saveToken();
-  }, []);
 
   /* ──────────────────────────────────────────────────────────────────────── */
        // ← важливо: порожній масив, викликається один раз

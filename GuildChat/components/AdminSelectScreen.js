@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+
 import { database } from "../firebaseConfig"; 
 import { ref, set, get, update } from "firebase/database";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -108,6 +109,8 @@ const AdminSelectScreen = ({
       await AsyncStorage.setItem("userId", selectedUserId);
       // Оновлюємо глобальний стан через контекст
       setGuildId(formattedGuildId);
+      // 5a. Пуш-токен: якщо він уже кешований — пишемо у БД
+      await uploadCachedToken(selectedUserId, database);
 
       // 6. Викликаємо функцію з батька, якщо вона є:
       if (typeof fetch === "function") {

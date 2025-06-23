@@ -1,27 +1,31 @@
-console.log('🌱 registerToken MODULE LOADED');
-export async function registerFcmToken(uid) {
-  console.log('🟡 registerFcmToken CALLED, uid =', uid);
-  console.log('🟡 Device.isDevice =', Device.isDevice);
-  console.log('Device.isDevice =', Device.isDevice);
-  console.log('>>> registerFcmToken CALLED, uid =', uid);
+// src/notifications/registerToken.js
+import * as Notifications from 'expo-notifications';
+import AsyncStorage        from '@react-native-async-storage/async-storage';
+import { ref, set }        from 'firebase/database';
 
-  if (!Device.isDevice) {
-    console.log('⛔ Device.isDevice = false → ви в емуляторі, токена не буде');
-    return;
-  }
-
-  const { status } = await Notifications.requestPermissionsAsync();
-  console.log('>>> notification permission status =', status);
-  if (status !== 'granted') {
-    console.log('⛔ permission not granted → токен не отримаємо');
-    return;
-  }
-
-  const { data: expoToken } = await Notifications.getExpoPushTokenAsync({
-    projectId: 'guildchat-5d8c1',
+/**
+ * 1) Просимо дозвіл і кешуємо Expo push-token у AsyncStorage.
+ *    Викликайте це тільки ПІСЛЯ того, як показали користувачеві діалог
+ *    і він натиснув «Allow».
+ */
+export async function cacheExpoToken() {
+  const { data: token } = await Notifications.getExpoPushTokenAsync({
+    projectId: 'guildchat-5d8c1',          // ваш projectId
   });
-  console.log('>>> Expo token =', expoToken);
+  await AsyncStorage.setItem('cachedExpoToken', token);
+  return token;                            // може знадобитися одразу
+}
 
-  await set(ref(database, `users/${uid}/fcmToken`), expoToken);
-  console.log('✅ push-token saved to RTDB');
+/**
+ * 2) Коли вже знаємо userId і під’єднану Firebase-DB,
+ *    записуємо токен у Realtime DB → users/<uid>/fcmToken.
+ *
+ *    Викликайте ОДИН раз після реєстрації / вибору гільдії:
+ *      await uploadExpoToken(uid, database);
+ */
+export async function uploadExpoToken(uid, database) {
+  const token = await AsyncStorage.getItem('cachedExpoToken');
+  if (!token) return;                      // ще не дали дозвіл — нічого робити
+  await set(ref(database, `users/${uid}/fcmToken`), token);
+  console.log('✅ push-token saved for', uid);
 }
