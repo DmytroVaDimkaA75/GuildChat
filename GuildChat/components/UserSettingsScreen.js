@@ -15,6 +15,7 @@ import { ref, get } from "firebase/database";
 import { database } from "../firebaseConfig";
 import { GuildContext } from "../GuildContext";
 import { useTranslation } from "react-i18next";
+import { uploadExpoToken } from "../scr/notifications/registerToken";
 
 const UserSettingsScreen = ({ fetch }) => {
   const { t } = useTranslation();
@@ -49,7 +50,8 @@ const UserSettingsScreen = ({ fetch }) => {
 
     await AsyncStorage.setItem("userId", user.userId);
     //Пуш-токен: якщо він уже кешований — пишемо у БД
-    await uploadCachedToken(selectedUserId, database);
+    await uploadExpoToken(user.userId, database);
+
     const userGuilds = await getGuildsByUser(user);
 
     if (userGuilds.length <= 0) {
