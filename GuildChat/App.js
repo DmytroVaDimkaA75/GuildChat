@@ -9,7 +9,7 @@ import * as Localization from "expo-localization";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
 // НОВЕ: сервіс реєстрації push-токена
-import { registerFcmToken } from "./scr/notifications/registerToken";
+import { cacheExpoToken } from "./scr/notifications/registerToken";
 
 // контекст гільдії
 import { GuildProvider, GuildContext } from "./GuildContext";
@@ -51,9 +51,13 @@ const AppContent = () => {
   }, []);
 
   /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
+  useEffect(() => {
+    cacheExpoToken().catch(e =>
+      console.log('Помилка отримання push-token:', e)
+    );
+  }, []); // ← важливо: порожній масив, викликається один раз
 
   /* ──────────────────────────────────────────────────────────────────────── */
-       // ← важливо: порожній масив, викликається один раз
 
   /* ───────── 3. логування даних гравця + завантаження userData ───────── */
   useEffect(() => {

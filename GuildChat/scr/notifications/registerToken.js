@@ -1,7 +1,7 @@
 // src/notifications/registerToken.js
 import * as Notifications from 'expo-notifications';
-import AsyncStorage        from '@react-native-async-storage/async-storage';
-import { ref, set }        from 'firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ref, set } from 'firebase/database';
 
 /**
  * 1) Просимо дозвіл і кешуємо Expo push-token у AsyncStorage.
@@ -9,11 +9,15 @@ import { ref, set }        from 'firebase/database';
  *    і він натиснув «Allow».
  */
 export async function cacheExpoToken() {
+  // Просимо дозвіл у користувача
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== 'granted') return null;
+
   const { data: token } = await Notifications.getExpoPushTokenAsync({
-    projectId: 'guildchat-5d8c1',          // ваш projectId
+    projectId: 'guildchat-5d8c1', // ваш projectId
   });
   await AsyncStorage.setItem('cachedExpoToken', token);
-  return token;                            // може знадобитися одразу
+  return token; // може знадобитися одразу
 }
 
 /**
