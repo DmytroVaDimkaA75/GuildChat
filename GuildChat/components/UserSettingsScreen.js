@@ -15,7 +15,7 @@ import { ref, get } from "firebase/database";
 import { database } from "../firebaseConfig";
 import { GuildContext } from "../GuildContext";
 import { useTranslation } from "react-i18next";
-import { uploadExpoToken } from "../scr/notifications/registerToken";
+import { uploadExpoToken } from "../src/notifications/registerToken";
 
 const UserSettingsScreen = ({ fetch }) => {
   const { t } = useTranslation();

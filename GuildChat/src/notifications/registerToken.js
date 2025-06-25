@@ -14,7 +14,7 @@ export async function cacheExpoToken() {
   if (status !== 'granted') return null;
 
   const { data: token } = await Notifications.getExpoPushTokenAsync({
-    projectId: 'guildchat-5d8c1', // ваш projectId
+    projectId: '2328cf5f-c10d-48c0-83b1-56dd8f6c3f38', // ваш projectId
   });
   await AsyncStorage.setItem('cachedExpoToken', token);
   return token; // може знадобитися одразу

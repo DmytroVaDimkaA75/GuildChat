@@ -16,7 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import CryptoJS from "react-native-crypto-js";
 import { GuildContext } from "../GuildContext"; // Скоригуйте шлях, якщо потрібно
 import { useTranslation } from "react-i18next";
-import { uploadExpoToken } from "../scr/notifications/registerToken";
+import { uploadExpoToken } from "../src/notifications/registerToken";
 
 const AdminSelectScreen = ({
   guildData,      // масив даних про учасників гільдії

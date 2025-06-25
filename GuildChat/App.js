@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect, useContext } from "react";
-import { StyleSheet, View, ActivityIndicator } from "react-native";
+import { StyleSheet, View, ActivityIndicator, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
@@ -9,7 +9,7 @@ import * as Localization from "expo-localization";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
 // НОВЕ: сервіс реєстрації push-токена
-import { cacheExpoToken } from "./scr/notifications/registerToken";
+import { cacheExpoToken } from "./src/notifications/registerToken";
 
 // контекст гільдії
 import { GuildProvider, GuildContext } from "./GuildContext";
@@ -52,9 +52,13 @@ const AppContent = () => {
 
   /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
   useEffect(() => {
-    cacheExpoToken().catch(e =>
-      console.log('Помилка отримання push-token:', e)
-    );
+    cacheExpoToken()
+      .then(token => {
+        if (token) alert(token);
+      })
+      .catch(e =>
+        console.log('Помилка отримання push-token:', e)
+      );
   }, []); // ← важливо: порожній масив, викликається один раз
 
   /* ──────────────────────────────────────────────────────────────────────── */
