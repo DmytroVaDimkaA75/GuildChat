@@ -1,35 +1,29 @@
 // src/notifications/registerToken.js
+import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, set } from 'firebase/database';
+import { database } from '../../firebaseConfig';
 
-/**
- * 1) Просимо дозвіл і кешуємо Expo push-token у AsyncStorage.
- *    Викликайте це тільки ПІСЛЯ того, як показали користувачеві діалог
- *    і він натиснув «Allow».
- */
-export async function cacheExpoToken() {
-  // Просимо дозвіл у користувача
+export async function registerFcmToken(uid) {
+  if (!Device.isDevice) return;
+
+  // права
   const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') return null;
+  if (status !== 'granted') return;
 
-  const { data: token } = await Notifications.getExpoPushTokenAsync({
-    projectId: '2328cf5f-c10d-48c0-83b1-56dd8f6c3f38', // ваш projectId
+  // 1. Expo-токен (про всяк випадок)
+  const { data: expoToken } = await Notifications.getExpoPushTokenAsync({
+    projectId: 'guildchat-5d8c1',
   });
-  await AsyncStorage.setItem('cachedExpoToken', token);
-  return token; // може знадобитися одразу
-}
 
-/**
- * 2) Коли вже знаємо userId і під’єднану Firebase-DB,
- *    записуємо токен у Realtime DB → users/<uid>/fcmToken.
- *
- *    Викликайте ОДИН раз після реєстрації / вибору гільдії:
- *      await uploadExpoToken(uid, database);
- */
-export async function uploadExpoToken(uid, database) {
-  const token = await AsyncStorage.getItem('cachedExpoToken');
-  if (!token) return;                      // ще не дали дозвіл — нічого робити
-  await set(ref(database, `users/${uid}/fcmToken`), token);
-  console.log('✅ push-token saved for', uid);
+  // 2. Нативний FCM-токен
+  const { data: fcmToken } =
+        await Notifications.getDevicePushTokenAsync({ type: 'fcm' });
+
+  // 3. Пишемо обидва
+  await set(ref(database, `users/${uid}/pushTokens`), {
+    expo: expoToken,
+    fcm : fcmToken,
+  });
+  console.log('✅ tokens saved', { expoToken, fcmToken });
 }

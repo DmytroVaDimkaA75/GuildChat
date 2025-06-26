@@ -2,6 +2,7 @@
   "dependencies": {
     "expo-device": "^7.1.4",
     "expo-notifications": "~0.31.3",
+    "firebase-admin": "^13.4.0",
     "react-native-element-dropdown": "^2.12.1"
   }
 }
