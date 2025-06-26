@@ -1,29 +1,41 @@
-// src/notifications/registerToken.js
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ref, set } from 'firebase/database';
 import { database } from '../../firebaseConfig';
 
-export async function registerFcmToken(uid) {
-  if (!Device.isDevice) return;
-
-  // права
+/**
+ * Просимо дозвіл та кешуємо Expo й FCM токени.
+ * Повертає обʼєкт { expo, fcm } або null, якщо дозвіл не надано.
+ */
+export async function cacheExpoToken() {
+  if (!Device.isDevice) return null;
   const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') return;
+  if (status !== 'granted') return null;
 
-  // 1. Expo-токен (про всяк випадок)
-  const { data: expoToken } = await Notifications.getExpoPushTokenAsync({
+  const { data: expo } = await Notifications.getExpoPushTokenAsync({
     projectId: 'guildchat-5d8c1',
   });
 
-  // 2. Нативний FCM-токен
-  const { data: fcmToken } =
-        await Notifications.getDevicePushTokenAsync({ type: 'fcm' });
+  let fcm = null;
+  try {
+    const { data } = await Notifications.getDevicePushTokenAsync({ type: 'fcm' });
+    fcm = data;
+  } catch (_) {}
 
-  // 3. Пишемо обидва
-  await set(ref(database, `users/${uid}/pushTokens`), {
-    expo: expoToken,
-    fcm : fcmToken,
-  });
-  console.log('✅ tokens saved', { expoToken, fcmToken });
+  const tokens = { expo, fcm };
+  await AsyncStorage.setItem('cachedExpoToken', JSON.stringify(tokens));
+  return tokens;
+}
+
+/**
+ * Записує збережений токен у Firebase Realtime Database.
+ * Викликайте після того, як отримали uid користувача.
+ */
+export async function uploadExpoToken(uid, db = database) {
+  const saved = await AsyncStorage.getItem('cachedExpoToken');
+  if (!saved) return;
+  const tokens = JSON.parse(saved);
+  await set(ref(db, `users/${uid}/pushTokens`), tokens);
+  console.log('✅ push-tokens saved for', uid);
 }
