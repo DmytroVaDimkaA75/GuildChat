@@ -41,6 +41,8 @@ exports.executeDueEvents = onSchedule(
       });
 
       await db.ref("scheduledEvents").update(removals);
-      console.log(`✅ Removed ${Object.keys(removals).length} event(s)`);
-    },
+  console.log(`✅ Removed ${Object.keys(removals).length} event(s)`);
+  },
 );
+
+exports.sendPushNow = require('./sendPushNow').sendPushNow;

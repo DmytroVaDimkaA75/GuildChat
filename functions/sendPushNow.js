@@ -1,13 +1,22 @@
 const { onRequest }   = require('firebase-functions/v2/https');
 const { getMessaging } = require('firebase-admin/messaging');
+const { getDatabase } = require('firebase-admin/database');
 require('./init.js');
 
 exports.sendPushNow = onRequest(
   { region: 'europe-west1' },
   async (req, res) => {
-    const { token, title, body, data = {}, sound = 'default' } = req.body || {};
-    if (!token || !title || !body) {
-      return res.status(400).json({ error: 'token, title, body required' });
+    const { uid, title, body, data = {}, sound = 'default' } = req.body || {};
+    if (!uid || !title || !body) {
+      return res.status(400).json({ error: 'uid, title, body required' });
+    }
+
+    const snap = await getDatabase()
+                      .ref(`users/${uid}/fcmToken`)
+                      .once('value');
+    const token = snap.val();
+    if (!token) {
+      return res.status(404).json({ error: 'Token not found' });
     }
 
     await getMessaging().send({
