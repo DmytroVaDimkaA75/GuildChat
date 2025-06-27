@@ -6,15 +6,18 @@ require('./init.js');
 exports.sendPushNow = onRequest(
   { region: 'europe-west1' },
   async (req, res) => {
-    const { uid, title, body, data = {}, sound = 'default' } = req.body || {};
-    if (!uid || !title || !body) {
-      return res.status(400).json({ error: 'uid, title, body required' });
+    const { uid, token: explicitToken, title, body, data = {}, sound = 'default' } = req.body || {};
+    if ((!uid && !explicitToken) || !title || !body) {
+      return res.status(400).json({ error: 'uid or token plus title and body required' });
     }
 
-    const snap = await getDatabase()
-                      .ref(`users/${uid}/fcmToken`)
-                      .once('value');
-    const token = snap.val();
+    let token = explicitToken;
+    if (!token && uid) {
+      const snap = await getDatabase()
+                        .ref(`users/${uid}/fcmToken`)
+                        .once('value');
+      token = snap.val();
+    }
     if (!token) {
       return res.status(404).json({ error: 'Token not found' });
     }
