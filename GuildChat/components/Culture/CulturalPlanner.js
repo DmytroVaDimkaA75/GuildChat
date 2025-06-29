@@ -12,7 +12,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
-import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
+
 
 const CulturalPlanner = () => {
   const navigation = useNavigation();
@@ -29,36 +29,7 @@ const CulturalPlanner = () => {
     );
   }
 
-  // При першому mount, якщо start=true, формуємо prompt і відправляємо асистенту
-  useEffect(() => {
-    if (start) {
-      (async () => {
-        try {
-          const language =
-            (await AsyncStorage.getItem('language')) || 'ukrainian';
-          const data = { settlement_name: settlementName, language };
-          const prompt = `Будь ласка, згенеруй детальний план розвитку культурного поселення на основі цих даних:\n${JSON.stringify(
-            data,
-            null,
-            2
-          )}`;
 
-          console.log('DEBUG: prompt для асистента:', prompt);
-          const reply = await callAssistant(prompt);
-          console.log('DEBUG: відповідь від асистента:', reply);
-
-          if (reply && reply.length) {
-            Alert.alert('Результат планування', reply);
-          } else {
-            Alert.alert('Помилка', 'Асистент не надав відповіді.');
-          }
-        } catch (e) {
-          console.error('ERROR при callAssistant:', e);
-          Alert.alert('Помилка', e.message);
-        }
-      })();
-    }
-  }, [start, settlementName]);
 
   // Видалити запис у Firebase і повернутися до вибору поселення
   const clearAndBack = async () => {
