@@ -5,7 +5,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Dimensions,
+  PanResponder,
+  Animated
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -20,6 +23,37 @@ const CulturalPlanner = () => {
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const start = route.params?.start;
+
+  const { width: screenWidth } = Dimensions.get('window');
+  const ratio = 1.2; // Відношення ширини до висоти оригінальної карти
+  const scale = 1 / 0.75; // Масштаб, щоб видимою була приблизно 75%
+  const containerWidth = screenWidth;
+  const containerHeight = containerWidth / ratio;
+  const mapWidth = containerWidth * scale;
+  const mapHeight = mapWidth / ratio;
+  const initialX = -((mapWidth - containerWidth) / 2);
+  const initialY = -((mapHeight - containerHeight) / 2);
+
+  const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
+  const offset = React.useRef({ x: initialX, y: initialY });
+  const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gesture) => {
+        const newX = clamp(offset.current.x + gesture.dx, containerWidth - mapWidth, 0);
+        const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
+        pan.setValue({ x: newX, y: newY });
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const newX = clamp(offset.current.x + gesture.dx, containerWidth - mapWidth, 0);
+        const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
+        offset.current = { x: newX, y: newY };
+        pan.setValue(offset.current);
+      }
+    })
+  ).current;
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -86,7 +120,18 @@ const CulturalPlanner = () => {
       <Text style={styles.title}>
         Тут логіка планувальника для {settlementName}
       </Text>
-      <VikingMap width={250} height={250} style={styles.map} />
+      <View style={[styles.mapContainer, { width: containerWidth, height: containerHeight }]}>
+        <Animated.View
+          style={{
+            width: mapWidth,
+            height: mapHeight,
+            transform: [{ translateX: pan.x }, { translateY: pan.y }]
+          }}
+          {...panResponder.panHandlers}
+        >
+          <VikingMap width={mapWidth} height={mapHeight} />
+        </Animated.View>
+      </View>
       {/* Ваша подальша реалізація UI планувальника */}
     </View>
   );
@@ -96,7 +141,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
   title: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  map: { alignSelf: 'center', marginBottom: 16 }
+  mapContainer: {
+    alignSelf: 'center',
+    marginBottom: 16,
+    overflow: 'hidden'
+  }
 });
 
 export default CulturalPlanner;
