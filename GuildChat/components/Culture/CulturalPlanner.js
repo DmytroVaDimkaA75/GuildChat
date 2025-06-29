@@ -69,8 +69,13 @@ const CulturalPlanner = () => {
       await asset.downloadAsync();
       const svgText = await FileSystem.readAsStringAsync(asset.localUri || asset.uri);
 
-      const groupMatch = svgText.match(/<g[^>]*id="M5:P8"[^>]*transform="translate\(([^,]+),([^\)]+)\)"/);
-      if (!groupMatch) return;
+      const groupMatch = svgText.match(
+        /<g[^>]*id="M5:P8"[^>]*transform="translate\(([^,]+),([^\)]+)\)"/
+      );
+      if (!groupMatch) {
+        console.warn('Не знайдено групу M5:P8 у SVG.');
+        return;
+      }
       const groupX = parseFloat(groupMatch[1]);
       const groupY = parseFloat(groupMatch[2]);
 
@@ -81,12 +86,20 @@ const CulturalPlanner = () => {
         return;
       }
 
-      const parseStart = d => {
-        const m = d.match(/m\s*([0-9.]+),([0-9.]+)/);
+      const parseStart = (d) => {
+        const m = d.match(/m\s*([\d.-]+),([\d.-]+)/);
+        if (!m) {
+          console.warn('Не вдалося розібрати стартові координати');
+          return { x: 0, y: 0 };
+        }
         return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
       };
-      const parseSize = d => {
-        const m = d.match(/c\s*[0-9.]+,0\s*[0-9.]+,0\s*([0-9.]+),0/);
+      const parseSize = (d) => {
+        const m = d.match(/c\s*[\d.-]+,0\s*[\d.-]+,0\s*([\d.-]+),0/);
+        if (!m) {
+          console.warn('Не вдалося розібрати розмір клітинки');
+          return 0;
+        }
         return parseFloat(m[1]);
       };
 
