@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
 import VikingMap from './Map/Viking.svg';
 import Svg, { Rect } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
 
 const CulturalPlanner = () => {
   const navigation = useNavigation();
@@ -55,6 +57,72 @@ const CulturalPlanner = () => {
       }
     })
   ).current;
+
+  const rectRef = useRef(null);
+
+  const [m5TopLeft, setM5TopLeft] = useState(null);
+  const [p7BottomRight, setP7BottomRight] = useState(null);
+
+  useEffect(() => {
+    const loadSvgData = async () => {
+      const asset = Asset.fromModule(require('./Map/Viking.svg'));
+      await asset.downloadAsync();
+      const svgText = await FileSystem.readAsStringAsync(asset.localUri || asset.uri);
+
+      const groupMatch = svgText.match(/<g[^>]*id="M5:P8"[^>]*transform="translate\(([^,]+),([^\)]+)\)"/);
+      if (!groupMatch) return;
+      const groupX = parseFloat(groupMatch[1]);
+      const groupY = parseFloat(groupMatch[2]);
+
+      const pathM5 = svgText.match(/<path[^>]*id="M5"[^>]*d="([^"]+)"/);
+      const pathP7 = svgText.match(/<path[^>]*id="P7"[^>]*d="([^"]+)"/);
+      if (!pathM5 || !pathP7) return;
+
+      const parseStart = d => {
+        const m = d.match(/m\s*([0-9.]+),([0-9.]+)/);
+        return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+      };
+      const parseSize = d => {
+        const m = d.match(/c\s*[0-9.]+,0\s*[0-9.]+,0\s*([0-9.]+),0/);
+        return parseFloat(m[1]);
+      };
+
+      const m5Start = parseStart(pathM5[1]);
+      const cellSize = parseSize(pathM5[1]);
+      const p7Start = parseStart(pathP7[1]);
+      const p7Size = parseSize(pathP7[1]);
+
+      const topLeft = { x: groupX + m5Start.x, y: groupY + m5Start.y };
+      const bottomRight = {
+        x: groupX + p7Start.x + p7Size,
+        y: groupY + p7Start.y + p7Size
+      };
+
+      setM5TopLeft(topLeft);
+      setP7BottomRight(bottomRight);
+
+      console.log('M5 top-left:', topLeft);
+      console.log('P7 bottom-right:', bottomRight);
+    };
+
+    loadSvgData();
+  }, []);
+
+  const rectWidth =
+    p7BottomRight && m5TopLeft ? p7BottomRight.x - m5TopLeft.x : 0;
+  const rectHeight =
+    p7BottomRight && m5TopLeft ? p7BottomRight.y - m5TopLeft.y : 0;
+
+  useEffect(() => {
+    if (!m5TopLeft || !p7BottomRight) return;
+    setTimeout(() => {
+      if (rectRef.current && rectRef.current.getBBox) {
+        const box = rectRef.current.getBBox();
+        console.log('Rect top-left:', box.x, box.y);
+        console.log('Rect bottom-right:', box.x + box.width, box.y + box.height);
+      }
+    }, 0);
+  }, [m5TopLeft, p7BottomRight]);
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -137,15 +205,19 @@ const CulturalPlanner = () => {
               height={mapHeight}
               style={StyleSheet.absoluteFill}
             >
-              <Rect
-                x={120.08294}
-                y={40.082945}
-                width={39.702}
-                height={39.702232}
-                stroke="red"
-                strokeWidth={0.5}
-                fill="rgba(255,0,0,0.2)"
-              />
+              {/* Прямокутник між верхнім лівим кутом M5 та нижнім правим P7 */}
+              {m5TopLeft && p7BottomRight && (
+                <Rect
+                  ref={rectRef}
+                  x={m5TopLeft.x}
+                  y={m5TopLeft.y}
+                  width={rectWidth}
+                  height={rectHeight}
+                  stroke="red"
+                  strokeWidth={0.5}
+                  fill="rgba(255,0,0,0.2)"
+                />
+              )}
             </Svg>
           </View>
         </Animated.View>
