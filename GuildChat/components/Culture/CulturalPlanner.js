@@ -17,6 +17,7 @@ import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
 import VikingMap from './Map/Viking.svg';
+import Svg, { Rect } from 'react-native-svg';
 
 const CulturalPlanner = () => {
   const navigation = useNavigation();
@@ -129,7 +130,24 @@ const CulturalPlanner = () => {
           }}
           {...panResponder.panHandlers}
         >
-          <VikingMap width={mapWidth} height={mapHeight} />
+          <View>
+            <VikingMap width={mapWidth} height={mapHeight} />
+            <Svg
+              width={mapWidth}
+              height={mapHeight}
+              style={StyleSheet.absoluteFill}
+            >
+              <Rect
+                x={120.08294}
+                y={40.082945}
+                width={39.702}
+                height={39.702232}
+                stroke="red"
+                strokeWidth={0.5}
+                fill="rgba(255,0,0,0.2)"
+              />
+            </Svg>
+          </View>
         </Animated.View>
       </View>
       {/* Ваша подальша реалізація UI планувальника */}
