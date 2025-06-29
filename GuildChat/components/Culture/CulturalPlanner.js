@@ -13,6 +13,7 @@ import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
+import VikingMap from './Map/Viking.svg';
 
 const CulturalPlanner = () => {
   const navigation = useNavigation();
@@ -114,6 +115,7 @@ const CulturalPlanner = () => {
       <Text style={styles.title}>
         Тут логіка планувальника для {settlementName}
       </Text>
+      <VikingMap width={250} height={250} style={styles.map} />
       {/* Ваша подальша реалізація UI планувальника */}
     </View>
   );
@@ -122,7 +124,8 @@ const CulturalPlanner = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
   title: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  map: { alignSelf: 'center', marginBottom: 16 }
 });
 
 export default CulturalPlanner;
