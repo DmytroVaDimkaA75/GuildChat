@@ -76,7 +76,10 @@ const CulturalPlanner = () => {
 
       const pathM5 = svgText.match(/<path[^>]*id="M5"[^>]*d="([^"]+)"/);
       const pathP7 = svgText.match(/<path[^>]*id="P7"[^>]*d="([^"]+)"/);
-      if (!pathM5 || !pathP7) return;
+      if (!pathM5 || !pathP7) {
+        console.warn('Не знайдено шляхи M5 або P7 у SVG.');
+        return;
+      }
 
       const parseStart = d => {
         const m = d.match(/m\s*([0-9.]+),([0-9.]+)/);
@@ -101,8 +104,12 @@ const CulturalPlanner = () => {
       setM5TopLeft(topLeft);
       setP7BottomRight(bottomRight);
 
-      console.log('M5 top-left:', topLeft);
-      console.log('P7 bottom-right:', bottomRight);
+      console.log(
+        `Координати M5 (верхній лівий): x=${topLeft.x}, y=${topLeft.y}`
+      );
+      console.log(
+        `Координати P7 (правий нижній): x=${bottomRight.x}, y=${bottomRight.y}`
+      );
     };
 
     loadSvgData();
@@ -116,11 +123,17 @@ const CulturalPlanner = () => {
   useEffect(() => {
     if (!m5TopLeft || !p7BottomRight) return;
     setTimeout(() => {
-      if (rectRef.current && rectRef.current.getBBox) {
-        const box = rectRef.current.getBBox();
-        console.log('Rect top-left:', box.x, box.y);
-        console.log('Rect bottom-right:', box.x + box.width, box.y + box.height);
-      }
+        if (rectRef.current && rectRef.current.getBBox) {
+          const box = rectRef.current.getBBox();
+          console.log(
+            `Прямокутник топ-лівий: x=${box.x}, y=${box.y}`
+          );
+          console.log(
+            `Прямокутник низ-правий: x=${box.x + box.width}, y=${
+              box.y + box.height
+            }`
+          );
+        }
     }, 0);
   }, [m5TopLeft, p7BottomRight]);
 
