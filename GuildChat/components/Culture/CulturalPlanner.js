@@ -101,7 +101,7 @@ const CulturalPlanner = () => {
       headerTitle: `План поселення: ${settlementName}`,
       headerLeft: () => (
         <TouchableOpacity
-          onPress={start ? onClose : () => navigation.getParent()?.goBack()}
+          onPress={() => navigation.getParent()?.goBack()}
           style={{ marginLeft: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
