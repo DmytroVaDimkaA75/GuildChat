@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Dimensions,
   PanResponder,
-  Animated
+  Animated,
+  TextInput
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,7 +17,7 @@ import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
-import { SvgXml } from 'react-native-svg';
+import { SvgXml, Svg, Rect } from 'react-native-svg';
 
 
 const vikingMapXml = `<svg
@@ -1951,6 +1952,34 @@ const CulturalPlanner = () => {
   const initialX = -((mapWidth - containerWidth) / 2);
   const initialY = -((mapHeight - containerHeight) / 2);
 
+  const cellSize = 9.638672;
+
+  const cellPositions = useMemo(() => {
+    const positions = {};
+    const groupRegex = /<g[^>]*transform="translate\(([^,]+),([^\)]+)\)"[^>]*>/g;
+    let match;
+    while ((match = groupRegex.exec(vikingMapXml)) !== null) {
+      const gX = parseFloat(match[1]);
+      const gY = parseFloat(match[2]);
+      const start = match.index + match[0].length;
+      const end = vikingMapXml.indexOf('</g>', start);
+      const block = vikingMapXml.slice(start, end);
+      const pathRegex = /<path[^>]*id="([A-Z]\d+)"[^>]*d="m ([0-9.]+),([0-9.]+)/g;
+      let p;
+      while ((p = pathRegex.exec(block)) !== null) {
+        const id = p[1];
+        const x = parseFloat(p[2]);
+        const y = parseFloat(p[3]);
+        positions[id] = { x: gX + x, y: gY + y };
+      }
+      groupRegex.lastIndex = end + 4;
+    }
+    return positions;
+  }, []);
+
+  const [inputValue, setInputValue] = useState('');
+  const [rect, setRect] = useState(null);
+
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
   const offset = React.useRef({ x: initialX, y: initialY });
   const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
@@ -2032,6 +2061,32 @@ const CulturalPlanner = () => {
     });
   }, [navigation, settlementName, start]);
 
+  const factor = mapWidth / 239.99976;
+
+  const onDraw = () => {
+    const match = inputValue.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
+    if (!match) {
+      Alert.alert('Помилка', 'Невірна адреса');
+      return;
+    }
+    const startId = match[1];
+    const endId = match[2];
+    const startPos = cellPositions[startId];
+    const endPos = cellPositions[endId];
+    if (!startPos || !endPos) {
+      Alert.alert('Помилка', 'Координати не знайдено');
+      return;
+    }
+    const startTop = { x: startPos.x, y: startPos.y - cellSize };
+    const endBottom = { x: endPos.x + cellSize, y: endPos.y };
+    setRect({
+      x: startTop.x * factor,
+      y: startTop.y * factor,
+      width: (endBottom.x - startTop.x) * factor,
+      height: (endBottom.y - startTop.y) * factor
+    });
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
@@ -2047,9 +2102,36 @@ const CulturalPlanner = () => {
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
+          {rect && (
+            <Svg
+              width={mapWidth}
+              height={mapHeight}
+              style={StyleSheet.absoluteFill}
+            >
+              <Rect
+                x={rect.x}
+                y={rect.y}
+                width={rect.width}
+                height={rect.height}
+                fill="none"
+                stroke="red"
+                strokeWidth="1"
+              />
+            </Svg>
+          )}
         </Animated.View>
       </View>
-      {/* Ваша подальша реалізація UI планувальника */}
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          value={inputValue}
+          onChangeText={setInputValue}
+          placeholder="M5:P7"
+        />
+        <TouchableOpacity style={styles.button} onPress={onDraw}>
+          <Text style={{ color: '#fff' }}>Намалювати</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -2062,6 +2144,24 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 16,
     overflow: 'hidden'
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8
+  },
+  button: {
+    backgroundColor: '#2196f3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4
   }
 });
 
