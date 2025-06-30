@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,99 @@ import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml, Svg, Rect } from 'react-native-svg';
+
+const apiData = {
+  actions: [
+    {
+      action: 'move',
+      building: 'Ратуша',
+      from: 'M5:P7',
+      to: 'K7:N9',
+      description: 'Змістити Ратушу в центр поселення.',
+      reason:
+        'Центральне розміщення мінімізує витрати на дороги для підключення інших будівель.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      locations: ['I5:J6', 'L5:M6', 'O5:P6'],
+      count: 3,
+      description: 'Побудувати 3 халупи.',
+      reason: 'Для виконання завдання 1 і створення базового населення.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['J7', 'N6'],
+      description: 'Прокласти 2 плитки дороги для підключення халуп.',
+      reason: 'Будівлі не функціонують без підключення до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      locations: ['I7', 'K5', 'K6', 'N5'],
+      count: 4,
+      description: 'Побудувати 4 рунних камені.',
+      reason: 'Для виконання завдання 2.'
+    },
+    {
+      action: 'build',
+      building: 'Кузня сокир',
+      location: 'I10:K12',
+      description: 'Побудувати Кузню сокир.',
+      reason: 'Для виконання завдання 3.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['L10'],
+      description: 'Прокласти дорогу до Кузні сокир.',
+      reason: 'Кузня потребує підключення до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
+      count: 6,
+      description: 'Побудувати 6 рунних каменів.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
+      count: 6,
+      description: 'Знести 6 рунних каменів.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      locations: ['I8:J9', 'O7:P8', 'L11:M12'],
+      count: 3,
+      description: 'Побудувати ще 3 халупи.',
+      reason:
+        'Збільшення населення для будівництва ще однієї Кузні сокир.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['O9'],
+      description: 'Прокласти дорогу до халупи L11:M12.',
+      reason: 'Підключення нової житлової будівлі до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Кузня сокир',
+      location: 'N10:P12',
+      description: 'Побудувати другу Кузню сокир.',
+      reason: 'Збільшення темпу виробництва сокир.',
+      completion_time: 1751186100
+    }
+  ]
+};
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 
 const vikingMapXml = `<svg
@@ -1934,97 +2027,6 @@ const vikingMapXml = `<svg
   </g>
 </svg>
 `;
-
-// Тимчасові дані, які в майбутньому будуть отримані з API
-const apiData = {
-  actions: [
-    {
-      action: 'move',
-      building: 'Ратуша',
-      location: 'K7:N9',
-      description: 'Змістити Ратушу в центр поселення.',
-      reason:
-        'Центральне розміщення мінімізує витрати на дороги для підключення інших будівель.'
-    },
-    {
-      action: 'build',
-      building: 'Халупа',
-      locations: ['I5:J6', 'L5:M6', 'O5:P6'],
-      count: 3,
-      description: 'Побудувати 3 халупи.',
-      reason: 'Для виконання завдання 1 і створення базового населення.'
-    },
-    {
-      action: 'build',
-      building: 'Дорога',
-      locations: ['J7', 'N6'],
-      description: 'Прокласти 2 плитки дороги для підключення халуп.',
-      reason: 'Будівлі не функціонують без підключення до Ратуші.'
-    },
-    {
-      action: 'build',
-      building: 'Рунний камінь',
-      locations: ['I7', 'K5', 'K6', 'N5'],
-      count: 4,
-      description: 'Побудувати 4 рунних камені.',
-      reason: 'Для виконання завдання 2.'
-    },
-    {
-      action: 'build',
-      building: 'Кузня сокир',
-      location: 'I10:K12',
-      description: 'Побудувати Кузню сокир.',
-      reason: 'Для виконання завдання 3.'
-    },
-    {
-      action: 'build',
-      building: 'Дорога',
-      locations: ['L10'],
-      description: 'Прокласти дорогу до Кузні сокир.',
-      reason: 'Кузня потребує підключення до Ратуші.'
-    },
-    {
-      action: 'build',
-      building: 'Рунний камінь',
-      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
-      count: 6,
-      description: 'Побудувати 6 рунних каменів.',
-      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
-    },
-    {
-      action: 'destroy',
-      building: 'Рунний камінь',
-      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
-      count: 6,
-      description: 'Знести 6 рунних каменів.',
-      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
-    },
-    {
-      action: 'build',
-      building: 'Халупа',
-      locations: ['I8:J9', 'O7:P8', 'L11:M12'],
-      count: 3,
-      description: 'Побудувати ще 3 халупи.',
-      reason:
-        'Збільшення населення для будівництва ще однієї Кузні сокир.'
-    },
-    {
-      action: 'build',
-      building: 'Дорога',
-      locations: ['O9'],
-      description: 'Прокласти дорогу до халупи L11:M12.',
-      reason: 'Підключення нової житлової будівлі до Ратуші.'
-    },
-    {
-      action: 'build',
-      building: 'Кузня сокир',
-      location: 'N10:P12',
-      description: 'Побудувати другу Кузню сокир.',
-      reason: 'Збільшення темпу виробництва сокир.',
-      completion_time: 1751186100
-    }
-  ]
-};
 const CulturalPlanner = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -2069,8 +2071,9 @@ const CulturalPlanner = () => {
   const actions = apiData.actions;
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
 
-  const [inputValue, setInputValue] = useState('M5:P7');
-  const [rect, setRect] = useState(null);
+  const [moveRect, setMoveRect] = useState(null);
+  const animatedPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const animationRef = useRef(null);
 
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
   const offset = React.useRef({ x: initialX, y: initialY });
@@ -2155,31 +2158,32 @@ const CulturalPlanner = () => {
 
   const factor = mapWidth / 239.99976;
 
-  const onDraw = () => {
-    const match = inputValue.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
-    if (!match) {
-      Alert.alert('Помилка', 'Невірна адреса');
-      return;
-    }
-    const startId = match[1];
-    const endId = match[2];
-    const startPos = cellPositions[startId];
-    const endPos = cellPositions[endId];
-    if (!startPos || !endPos) {
-      Alert.alert('Помилка', 'Координати не знайдено');
-      return;
-    }
+  const parseRange = (range) => {
+    const match = range.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
+    if (!match) return null;
+    const startPos = cellPositions[match[1]];
+    const endPos = cellPositions[match[2]];
+    if (!startPos || !endPos) return null;
     const startTop = { x: startPos.x, y: startPos.y - cellSize };
     const endBottom = { x: endPos.x + cellSize, y: endPos.y };
-    setRect({
+    return {
       x: startTop.x * factor,
       y: startTop.y * factor,
       width: (endBottom.x - startTop.x) * factor,
       height: (endBottom.y - startTop.y) * factor
-    });
+    };
   };
 
   const handleDone = () => {
+    const action = actions[currentActionIndex];
+    if (action?.action === 'move' && moveRect) {
+      if (animationRef.current) animationRef.current.stop();
+      const toRect = parseRange(action.to);
+      if (toRect) {
+        animatedPos.setValue({ x: toRect.x, y: toRect.y });
+        setMoveRect({ width: toRect.width, height: toRect.height });
+      }
+    }
     if (currentActionIndex < actions.length - 1) {
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
@@ -2188,9 +2192,42 @@ const CulturalPlanner = () => {
   };
 
   useEffect(() => {
-    onDraw();
+    const action = actions[currentActionIndex];
+    if (!action) return;
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+    if (action.action === 'move') {
+      const fromRect = parseRange(action.from);
+      const toRect = parseRange(action.to);
+      if (fromRect && toRect) {
+        setMoveRect({ width: fromRect.width, height: fromRect.height });
+        animatedPos.setValue({ x: fromRect.x, y: fromRect.y });
+        const anim = Animated.loop(
+          Animated.sequence([
+            Animated.timing(animatedPos, {
+              toValue: { x: toRect.x, y: toRect.y },
+              duration: 1000,
+              useNativeDriver: false
+            }),
+            Animated.delay(1000),
+            Animated.timing(animatedPos, {
+              toValue: { x: fromRect.x, y: fromRect.y },
+              duration: 0,
+              useNativeDriver: false
+            }),
+            Animated.delay(1000)
+          ])
+        );
+        animationRef.current = anim;
+        anim.start();
+      }
+    } else {
+      setMoveRect(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentActionIndex]);
 
   return (
     <View style={styles.container}>
@@ -2207,17 +2244,17 @@ const CulturalPlanner = () => {
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
-          {rect && (
+          {moveRect && (
             <Svg
               width={mapWidth}
               height={mapHeight}
               style={StyleSheet.absoluteFill}
             >
-              <Rect
-                x={rect.x}
-                y={rect.y}
-                width={rect.width}
-                height={rect.height}
+              <AnimatedRect
+                x={animatedPos.x}
+                y={animatedPos.y}
+                width={moveRect.width}
+                height={moveRect.height}
                 fill="#8b0000"
               />
             </Svg>
