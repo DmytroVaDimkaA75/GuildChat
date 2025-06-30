@@ -8,8 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   PanResponder,
-  Animated,
-  TextInput
+  Animated
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -1935,6 +1934,97 @@ const vikingMapXml = `<svg
   </g>
 </svg>
 `;
+
+// Тимчасові дані, які в майбутньому будуть отримані з API
+const apiData = {
+  actions: [
+    {
+      action: 'move',
+      building: 'Ратуша',
+      location: 'K7:N9',
+      description: 'Змістити Ратушу в центр поселення.',
+      reason:
+        'Центральне розміщення мінімізує витрати на дороги для підключення інших будівель.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      locations: ['I5:J6', 'L5:M6', 'O5:P6'],
+      count: 3,
+      description: 'Побудувати 3 халупи.',
+      reason: 'Для виконання завдання 1 і створення базового населення.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['J7', 'N6'],
+      description: 'Прокласти 2 плитки дороги для підключення халуп.',
+      reason: 'Будівлі не функціонують без підключення до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      locations: ['I7', 'K5', 'K6', 'N5'],
+      count: 4,
+      description: 'Побудувати 4 рунних камені.',
+      reason: 'Для виконання завдання 2.'
+    },
+    {
+      action: 'build',
+      building: 'Кузня сокир',
+      location: 'I10:K12',
+      description: 'Побудувати Кузню сокир.',
+      reason: 'Для виконання завдання 3.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['L10'],
+      description: 'Прокласти дорогу до Кузні сокир.',
+      reason: 'Кузня потребує підключення до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
+      count: 6,
+      description: 'Побудувати 6 рунних каменів.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
+      count: 6,
+      description: 'Знести 6 рунних каменів.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      locations: ['I8:J9', 'O7:P8', 'L11:M12'],
+      count: 3,
+      description: 'Побудувати ще 3 халупи.',
+      reason:
+        'Збільшення населення для будівництва ще однієї Кузні сокир.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      locations: ['O9'],
+      description: 'Прокласти дорогу до халупи L11:M12.',
+      reason: 'Підключення нової житлової будівлі до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Кузня сокир',
+      location: 'N10:P12',
+      description: 'Побудувати другу Кузню сокир.',
+      reason: 'Збільшення темпу виробництва сокир.',
+      completion_time: 1751186100
+    }
+  ]
+};
 const CulturalPlanner = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -1975,6 +2065,9 @@ const CulturalPlanner = () => {
     }
     return positions;
   }, []);
+
+  const actions = apiData.actions;
+  const [currentActionIndex, setCurrentActionIndex] = useState(0);
 
   const [inputValue, setInputValue] = useState('M5:P7');
   const [rect, setRect] = useState(null);
@@ -2086,6 +2179,14 @@ const CulturalPlanner = () => {
     });
   };
 
+  const handleDone = () => {
+    if (currentActionIndex < actions.length - 1) {
+      setCurrentActionIndex(currentActionIndex + 1);
+    } else {
+      Alert.alert('Готово', 'Усі кроки виконано');
+    }
+  };
+
   useEffect(() => {
     onDraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2124,15 +2225,14 @@ const CulturalPlanner = () => {
         </Animated.View>
       </View>
       <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={inputValue}
-          onChangeText={setInputValue}
-          placeholder="M5:P7"
-        />
-        <TouchableOpacity style={styles.button} onPress={onDraw}>
-          <Text style={{ color: '#fff' }}>Намалювати</Text>
-        </TouchableOpacity>
+        <Text style={styles.actionText}>
+          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
+        </Text>
+        {currentActionIndex < actions.length && (
+          <TouchableOpacity style={styles.button} onPress={handleDone}>
+            <Text style={{ color: '#fff' }}>Зроблено</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -2151,14 +2251,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 8
-  },
+  actionText: { flex: 1, marginRight: 8 },
   button: {
     backgroundColor: '#2196f3',
     paddingHorizontal: 12,
