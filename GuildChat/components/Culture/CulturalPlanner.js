@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -1976,7 +1976,7 @@ const CulturalPlanner = () => {
     return positions;
   }, []);
 
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState('M5:P7');
   const [rect, setRect] = useState(null);
 
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
@@ -2086,6 +2086,11 @@ const CulturalPlanner = () => {
     });
   };
 
+  useEffect(() => {
+    onDraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
@@ -2112,9 +2117,7 @@ const CulturalPlanner = () => {
                 y={rect.y}
                 width={rect.width}
                 height={rect.height}
-                fill="none"
-                stroke="red"
-                strokeWidth="1"
+                fill="#8b0000"
               />
             </Svg>
           )}
