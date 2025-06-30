@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
 import { ref, remove } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
-import { callAssistant } from '../../assistantApi'; // Ваш файл з axios-логікою
 import { SvgXml, Svg, Rect } from 'react-native-svg';
 
 
