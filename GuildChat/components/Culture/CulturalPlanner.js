@@ -2166,6 +2166,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [moveRect, setMoveRect] = useState(
     initialFromRect ? { width: initialFromRect.width, height: initialFromRect.height } : null
   );
+  const [staticRect, setStaticRect] = useState(null);
   const animatedPos = useRef(
     new Animated.ValueXY(
       initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
@@ -2262,7 +2263,8 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       const toRect = parseRange(action.to);
       if (toRect) {
         animatedPos.setValue({ x: toRect.x, y: toRect.y });
-        setMoveRect({ width: toRect.width, height: toRect.height });
+        setStaticRect({ x: toRect.x, y: toRect.y, width: toRect.width, height: toRect.height });
+        setMoveRect(null);
       }
     }
     if (currentActionIndex < actions.length - 1) {
@@ -2325,19 +2327,30 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
-          {moveRect && (
+          {(moveRect || staticRect) && (
             <Svg
               width={mapWidth}
               height={mapHeight}
               style={StyleSheet.absoluteFill}
             >
-              <AnimatedRect
-                x={animatedPos.x}
-                y={animatedPos.y}
-                width={moveRect.width}
-                height={moveRect.height}
-                fill="#8b0000"
-              />
+              {moveRect && (
+                <AnimatedRect
+                  x={animatedPos.x}
+                  y={animatedPos.y}
+                  width={moveRect.width}
+                  height={moveRect.height}
+                  fill="#8b0000"
+                />
+              )}
+              {staticRect && (
+                <Rect
+                  x={staticRect.x}
+                  y={staticRect.y}
+                  width={staticRect.width}
+                  height={staticRect.height}
+                  fill="#8b0000"
+                />
+              )}
             </Svg>
           )}
         </Animated.View>
