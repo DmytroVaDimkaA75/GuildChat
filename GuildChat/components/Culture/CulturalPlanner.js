@@ -13,7 +13,17 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
-import { ref, remove, set, push } from 'firebase/database';
+import {
+  ref,
+  remove,
+  set,
+  push,
+  get,
+  update,
+  query,
+  orderByChild,
+  equalTo
+} from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml, Svg, Rect } from 'react-native-svg';
 
@@ -2256,7 +2266,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   }, [navigation, settlementName, start]);
 
 
-  const handleDone = () => {
+  const handleDone = async () => {
     const action = actions[currentActionIndex];
     if (action?.action === 'move' && moveRect) {
       if (animationRef.current) animationRef.current.stop();
@@ -2265,6 +2275,28 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         animatedPos.setValue({ x: toRect.x, y: toRect.y });
         setStaticRect({ x: toRect.x, y: toRect.y, width: toRect.width, height: toRect.height });
         setMoveRect(null);
+        try {
+          const userId = await AsyncStorage.getItem('userId');
+          const guildId = await AsyncStorage.getItem('guildId');
+          const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/constructedBuildings`;
+          const q = query(
+            ref(database, basePath),
+            orderByChild('cellRange'),
+            equalTo(action.from)
+          );
+          const snap = await get(q);
+          if (snap.exists()) {
+            const updates = {};
+            snap.forEach(childSnap => {
+              updates[`${childSnap.key}/cellRange`] = action.to;
+            });
+            if (Object.keys(updates).length > 0) {
+              await update(ref(database, basePath), updates);
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
     if (currentActionIndex < actions.length - 1) {
