@@ -19,10 +19,7 @@ import {
   set,
   push,
   get,
-  update,
-  query,
-  orderByChild,
-  equalTo
+  update
 } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml, Svg, Rect } from 'react-native-svg';
@@ -2279,17 +2276,22 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           const userId = await AsyncStorage.getItem('userId');
           const guildId = await AsyncStorage.getItem('guildId');
           const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/constructedBuildings`;
-          const q = query(
-            ref(database, basePath),
-            orderByChild('cellRange'),
-            equalTo(action.from)
-          );
-          const snap = await get(q);
+          const snap = await get(ref(database, basePath));
           if (snap.exists()) {
+            const constructedBuildings = snap.val();
             const updates = {};
-            snap.forEach(childSnap => {
-              updates[`${childSnap.key}/cellRange`] = action.to;
-            });
+            const collectUpdates = (node, path) => {
+              if (node && typeof node === 'object') {
+                if (node.cellRange === action.from) {
+                  updates[`${path}/cellRange`] = action.to;
+                }
+                Object.keys(node).forEach(key => {
+                  const childPath = path ? `${path}/${key}` : key;
+                  collectUpdates(node[key], childPath);
+                });
+              }
+            };
+            collectUpdates(constructedBuildings, '');
             if (Object.keys(updates).length > 0) {
               await update(ref(database, basePath), updates);
             }
