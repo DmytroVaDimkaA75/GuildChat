@@ -140,6 +140,18 @@ const initialQuestline = {
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
+const buildingTypes = {
+  'Халупа': 'residential',
+  'Рунний камінь': 'diplomatic',
+  'Кузня сокир': 'production'
+};
+
+const buildingColors = {
+  residential: '#4b0082',
+  diplomatic: '#4b0082',
+  production: '#ffcc00'
+};
+
 
 const vikingMapXml = `<svg
    width="239.99976mm"
@@ -2101,7 +2113,20 @@ const cellPositions = useMemo(() => {
 }, []);
 
  const parseRange = (range) => {
-   const match = range.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
+   const clean = range.trim().toUpperCase();
+   if (/^[A-Z]\d+$/.test(clean)) {
+     const pos = cellPositions[clean];
+     if (!pos) return null;
+     const topLeft = { x: pos.x, y: pos.y - cellSize };
+     const bottomRight = { x: pos.x + cellSize, y: pos.y };
+     return {
+       x: topLeft.x * factor,
+       y: topLeft.y * factor,
+       width: (bottomRight.x - topLeft.x) * factor,
+       height: (bottomRight.y - topLeft.y) * factor
+     };
+   }
+   const match = clean.match(/^([A-Z]\d+):([A-Z]\d+)$/);
    if (!match) return null;
    const startPos = cellPositions[match[1]];
    const endPos = cellPositions[match[2]];
@@ -2174,6 +2199,8 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
     initialFromRect ? { width: initialFromRect.width, height: initialFromRect.height } : null
   );
   const [staticRect, setStaticRect] = useState(null);
+  const [buildRects, setBuildRects] = useState([]);
+  const buildOpacity = useRef(new Animated.Value(0)).current;
   const animatedPos = useRef(
     new Animated.ValueXY(
       initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
@@ -2301,6 +2328,13 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         }
       }
     }
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+    setBuildRects([]);
+    buildOpacity.setValue(0);
+
     if (currentActionIndex < actions.length - 1) {
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
@@ -2315,6 +2349,9 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       animationRef.current.stop();
       animationRef.current = null;
     }
+    setBuildRects([]);
+    buildOpacity.setValue(0);
+
     if (action.action === 'move') {
       const fromRect = parseRange(action.from);
       const toRect = parseRange(action.to);
@@ -2340,6 +2377,29 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         animationRef.current = anim;
         anim.start();
       }
+    } else if (action.action === 'build') {
+      const locs = action.locations || (action.location ? [action.location] : []);
+      const rects = locs.map(parseRange).filter(Boolean);
+      setMoveRect(null);
+      setBuildRects(rects);
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(buildOpacity, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: false
+          }),
+          Animated.delay(1000),
+          Animated.timing(buildOpacity, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: false
+          }),
+          Animated.delay(1000)
+        ])
+      );
+      animationRef.current = anim;
+      anim.start();
     } else {
       setMoveRect(null);
     }
@@ -2361,7 +2421,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
-          {(moveRect || staticRect) && (
+          {(moveRect || staticRect || buildRects.length > 0) && (
             <Svg
               width={mapWidth}
               height={mapHeight}
@@ -2385,6 +2445,22 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
                   fill="#8b0000"
                 />
               )}
+              {buildRects.map((r, idx) => {
+                const action = actions[currentActionIndex];
+                const type = buildingTypes[action?.building] || 'residential';
+                const color = buildingColors[type] || '#4b0082';
+                return (
+                  <AnimatedRect
+                    key={idx}
+                    x={r.x}
+                    y={r.y}
+                    width={r.width}
+                    height={r.height}
+                    fill={color}
+                    opacity={buildOpacity}
+                  />
+                );
+              })}
             </Svg>
           )}
         </Animated.View>
