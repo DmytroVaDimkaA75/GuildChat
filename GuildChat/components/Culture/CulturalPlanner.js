@@ -108,6 +108,69 @@ const apiData = {
   ]
 };
 
+const initialQuestline = [
+  { id: 1, text: 'Побудувати 3 халупи.', completed: false },
+  { id: 2, text: 'Побудувати 4 рунних каменя.', completed: false },
+  { id: 3, text: 'Побудувати кузню сокир.', completed: false },
+  {
+    id: 4,
+    text: 'Мати 55 очок дипломатії або зібрати 20 сокир.',
+    completed: false
+  },
+  { id: 5, text: 'Побудувати 2 святині.', completed: false },
+  { id: 6, text: 'Побудувати медоварню', completed: false },
+  {
+    id: 7,
+    text: 'Отримати 195 очок дипломатії або зібрати 30 бутлів меду.',
+    completed: false
+  },
+  { id: 8, text: 'Отримати 2 хатини.', completed: false },
+  {
+    id: 9,
+    text: 'Отримати 280 очок дипломатії або зібрати 40 сокир.',
+    completed: false
+  },
+  { id: 10, text: 'Отримати мисливця на звірів.', completed: false },
+  {
+    id: 11,
+    text: 'Отримати 375 очок дипломатії або зібрати 50 рогів',
+    completed: false
+  },
+  {
+    id: 12,
+    text: 'Отримати 4 тотеми клану або зібрати 50 бутлів меду.',
+    completed: false
+  },
+  {
+    id: 13,
+    text: 'Побудувати 4 тотеми клану або зібрати 50  меду.',
+    completed: false
+  },
+  {
+    id: 14,
+    text: 'Мати 595 очок дипломатії або зібрати 60 рогів.',
+    completed: false
+  },
+  { id: 15, text: 'Отримати вовняну ферму.', completed: false },
+  {
+    id: 16,
+    text: 'Отримати 855 очок дипломатії або зібрати 60 тюків вовни.',
+    completed: false
+  },
+  {
+    id: 17,
+    text: 'Мати 720 очок дипломатії або зібрати 60 вовни.',
+    completed: false
+  },
+  { id: 18, text: 'Побудувати стару вербу', completed: false },
+  { id: 19, text: 'Побудувати медову залу.', completed: false },
+  {
+    id: 20,
+    text: 'Зібрати 2500 монет і по 10 кожного товару',
+    completed: false
+  }
+];
+
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 
@@ -2080,6 +2143,7 @@ const CulturalPlanner = () => {
         const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements`;
         await set(ref(database, basePath), {
           settlementName,
+          questline: initialQuestline,
           availableBuildings: [
             {
               name: 'Халупа',
