@@ -38,24 +38,73 @@ const apiData = {
     {
       action: 'build',
       building: 'Халупа',
-      locations: ['I5:J6', 'L5:M6', 'O5:P6'],
-      count: 3,
-      description: 'Побудувати 3 халупи.',
+      location: 'I5:J6',
+      count: 1,
+      description: 'Побудувати халупу.',
+      reason: 'Для виконання завдання 1 і створення базового населення.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      location: 'L5:M6',
+      count: 1,
+      description: 'Побудувати халупу.',
+      reason: 'Для виконання завдання 1 і створення базового населення.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      location: 'O5:P6',
+      count: 1,
+      description: 'Побудувати халупу.',
       reason: 'Для виконання завдання 1 і створення базового населення.'
     },
     {
       action: 'build',
       building: 'Дорога',
-      locations: ['J7', 'N6'],
-      description: 'Прокласти 2 плитки дороги для підключення халуп.',
+      location: 'J7',
+      count: 1,
+      description: 'Прокласти дорогу для підключення халуп.',
+      reason: 'Будівлі не функціонують без підключення до Ратуші.'
+    },
+    {
+      action: 'build',
+      building: 'Дорога',
+      location: 'N6',
+      count: 1,
+      description: 'Прокласти дорогу для підключення халуп.',
       reason: 'Будівлі не функціонують без підключення до Ратуші.'
     },
     {
       action: 'build',
       building: 'Рунний камінь',
-      locations: ['I7', 'K5', 'K6', 'N5'],
-      count: 4,
-      description: 'Побудувати 4 рунних камені.',
+      location: 'I7',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Для виконання завдання 2.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'K5',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Для виконання завдання 2.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'K6',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Для виконання завдання 2.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'N5',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
       reason: 'Для виконання завдання 2.'
     },
     {
@@ -68,39 +117,139 @@ const apiData = {
     {
       action: 'build',
       building: 'Дорога',
-      locations: ['L10'],
+      location: 'L10',
+      count: 1,
       description: 'Прокласти дорогу до Кузні сокир.',
       reason: 'Кузня потребує підключення до Ратуші.'
     },
     {
       action: 'build',
       building: 'Рунний камінь',
-      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
-      count: 6,
-      description: 'Побудувати 6 рунних каменів.',
+      location: 'O7',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'P7',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'O8',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'P8',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'O9',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
+      reason: 'Отримати 60 дипломатії для виконання завдання 4.'
+    },
+    {
+      action: 'build',
+      building: 'Рунний камінь',
+      location: 'P9',
+      count: 1,
+      description: 'Побудувати рунний камінь.',
       reason: 'Отримати 60 дипломатії для виконання завдання 4.'
     },
     {
       action: 'destroy',
       building: 'Рунний камінь',
-      locations: ['O7', 'P7', 'O8', 'P8', 'O9', 'P9'],
-      count: 6,
-      description: 'Знести 6 рунних каменів.',
+      location: 'O7',
+      count: 1,
+      description: 'Знести рунний камінь.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      location: 'P7',
+      count: 1,
+      description: 'Знести рунний камінь.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      location: 'O8',
+      count: 1,
+      description: 'Знести рунний камінь.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      location: 'P8',
+      count: 1,
+      description: 'Знести рунний камінь.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      location: 'O9',
+      count: 1,
+      description: 'Знести рунний камінь.',
+      reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
+    },
+    {
+      action: 'destroy',
+      building: 'Рунний камінь',
+      location: 'P9',
+      count: 1,
+      description: 'Знести рунний камінь.',
       reason: 'Дипломатія зарахована, а будівлі більше не потрібні.'
     },
     {
       action: 'build',
       building: 'Халупа',
-      locations: ['I8:J9', 'O7:P8', 'L11:M12'],
-      count: 3,
-      description: 'Побудувати ще 3 халупи.',
+      location: 'I8:J9',
+      count: 1,
+      description: 'Побудувати халупу.',
+      reason:
+        'Збільшення населення для будівництва ще однієї Кузні сокир.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      location: 'O7:P8',
+      count: 1,
+      description: 'Побудувати халупу.',
+      reason:
+        'Збільшення населення для будівництва ще однієї Кузні сокир.'
+    },
+    {
+      action: 'build',
+      building: 'Халупа',
+      location: 'L11:M12',
+      count: 1,
+      description: 'Побудувати халупу.',
       reason:
         'Збільшення населення для будівництва ще однієї Кузні сокир.'
     },
     {
       action: 'build',
       building: 'Дорога',
-      locations: ['O9'],
+      location: 'O9',
+      count: 1,
       description: 'Прокласти дорогу до халупи L11:M12.',
       reason: 'Підключення нової житлової будівлі до Ратуші.'
     },
