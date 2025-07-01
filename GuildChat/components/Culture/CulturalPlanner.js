@@ -2061,14 +2061,16 @@ const CulturalPlanner = () => {
   const scale = 1 / 0.75; // Масштаб, щоб видимою була приблизно 75%
   const containerWidth = screenWidth;
   const containerHeight = containerWidth / ratio;
-  const mapWidth = containerWidth * scale;
-  const mapHeight = mapWidth / ratio;
-  const initialX = -((mapWidth - containerWidth) / 2);
-  const initialY = -((mapHeight - containerHeight) / 2);
+const mapWidth = containerWidth * scale;
+const mapHeight = mapWidth / ratio;
+const initialX = -((mapWidth - containerWidth) / 2);
+const initialY = -((mapHeight - containerHeight) / 2);
+
+const factor = mapWidth / 239.99976;
 
   const cellSize = 9.638672;
 
-  const cellPositions = useMemo(() => {
+const cellPositions = useMemo(() => {
     const positions = {};
     const groupRegex = /<g[^>]*transform="translate\(([^,]+),([^\)]+)\)"[^>]*>/g;
     let match;
@@ -2089,10 +2091,27 @@ const CulturalPlanner = () => {
       groupRegex.lastIndex = end + 4;
     }
     return positions;
-  }, []);
+}, []);
 
-  const actions = apiData.actions;
-  const [currentActionIndex, setCurrentActionIndex] = useState(0);
+ const parseRange = (range) => {
+   const match = range.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
+   if (!match) return null;
+   const startPos = cellPositions[match[1]];
+   const endPos = cellPositions[match[2]];
+   if (!startPos || !endPos) return null;
+   const startTop = { x: startPos.x, y: startPos.y - cellSize };
+   const endBottom = { x: endPos.x + cellSize, y: endPos.y };
+   return {
+     x: startTop.x * factor,
+     y: startTop.y * factor,
+     width: (endBottom.x - startTop.x) * factor,
+     height: (endBottom.y - startTop.y) * factor
+   };
+ };
+
+const actions = apiData.actions;
+ const initialFromRect = parseRange(actions[0].from);
+const [currentActionIndex, setCurrentActionIndex] = useState(0);
 
   useEffect(() => {
     if (!start) return;
@@ -2144,8 +2163,14 @@ const CulturalPlanner = () => {
     })();
   }, [start, settlementName]);
 
-  const [moveRect, setMoveRect] = useState(null);
-  const animatedPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const [moveRect, setMoveRect] = useState(
+    initialFromRect ? { width: initialFromRect.width, height: initialFromRect.height } : null
+  );
+  const animatedPos = useRef(
+    new Animated.ValueXY(
+      initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
+    )
+  ).current;
   const animationRef = useRef(null);
 
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
@@ -2229,23 +2254,6 @@ const CulturalPlanner = () => {
     });
   }, [navigation, settlementName, start]);
 
-  const factor = mapWidth / 239.99976;
-
-  const parseRange = (range) => {
-    const match = range.trim().toUpperCase().match(/^([A-Z]\d+):([A-Z]\d+)$/);
-    if (!match) return null;
-    const startPos = cellPositions[match[1]];
-    const endPos = cellPositions[match[2]];
-    if (!startPos || !endPos) return null;
-    const startTop = { x: startPos.x, y: startPos.y - cellSize };
-    const endBottom = { x: endPos.x + cellSize, y: endPos.y };
-    return {
-      x: startTop.x * factor,
-      y: startTop.y * factor,
-      width: (endBottom.x - startTop.x) * factor,
-      height: (endBottom.y - startTop.y) * factor
-    };
-  };
 
   const handleDone = () => {
     const action = actions[currentActionIndex];
