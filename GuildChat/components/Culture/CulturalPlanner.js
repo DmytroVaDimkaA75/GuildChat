@@ -2285,24 +2285,16 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       if (fromRect && toRect) {
         setMoveRect({ width: fromRect.width, height: fromRect.height });
         animatedPos.setValue({ x: fromRect.x, y: fromRect.y });
-        const anim = Animated.loop(
-          Animated.sequence([
-            Animated.timing(animatedPos, {
-              toValue: { x: toRect.x, y: toRect.y },
-              duration: 1000,
-              useNativeDriver: false
-            }),
-            Animated.delay(1000),
-            Animated.timing(animatedPos, {
-              toValue: { x: fromRect.x, y: fromRect.y },
-              duration: 0,
-              useNativeDriver: false
-            }),
-            Animated.delay(1000)
-          ])
-        );
+        const anim = Animated.timing(animatedPos, {
+          toValue: { x: toRect.x, y: toRect.y },
+          duration: 1000,
+          useNativeDriver: false
+        });
         animationRef.current = anim;
-        anim.start();
+        anim.start(() => {
+          animatedPos.setValue({ x: toRect.x, y: toRect.y });
+          setMoveRect({ width: toRect.width, height: toRect.height });
+        });
       }
     } else {
       setMoveRect(null);
