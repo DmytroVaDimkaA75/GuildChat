@@ -292,13 +292,15 @@ const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const buildingTypes = {
   'Халупа': 'residential',
   'Рунний камінь': 'diplomatic',
-  'Кузня сокир': 'production'
+  'Кузня сокир': 'production',
+  'Дорога': 'road'
 };
 
 const buildingColors = {
   residential: '#4b0082',
   diplomatic: '#4b0082',
-  production: '#ffcc00'
+  production: '#ffcc00',
+  road: '#000'
 };
 
 
@@ -2349,6 +2351,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   );
   const [staticRect, setStaticRect] = useState(null);
   const [buildRects, setBuildRects] = useState([]);
+  const [finalizedRects, setFinalizedRects] = useState([]);
   const buildOpacity = useRef(new Animated.Value(0)).current;
   const animatedPos = useRef(
     new Animated.ValueXY(
@@ -2477,6 +2480,27 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         }
       }
     }
+    if (action?.action === 'build' && buildRects.length > 0) {
+      if (animationRef.current) animationRef.current.stop();
+      const type = buildingTypes[action.building] || 'residential';
+      const color = buildingColors[type] || '#4b0082';
+      const finalized = buildRects.map(r => ({ ...r, color }));
+      setFinalizedRects(prev => [...prev, ...finalized]);
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/constructedBuildings`;
+        const cellRange = action.location || (action.locations ? action.locations.join(',') : '');
+        const buildingRef = push(ref(database, basePath));
+        await set(buildingRef, {
+          name: action.building,
+          type,
+          cellRange
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
     if (animationRef.current) {
       animationRef.current.stop();
       animationRef.current = null;
@@ -2570,7 +2594,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
-          {(moveRect || staticRect || buildRects.length > 0) && (
+          {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0) && (
             <Svg
               width={mapWidth}
               height={mapHeight}
@@ -2594,6 +2618,16 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
                   fill="#8b0000"
                 />
               )}
+              {finalizedRects.map((r, idx) => (
+                <Rect
+                  key={`f-${idx}`}
+                  x={r.x}
+                  y={r.y}
+                  width={r.width}
+                  height={r.height}
+                  fill={r.color}
+                />
+              ))}
               {buildRects.map((r, idx) => {
                 const action = actions[currentActionIndex];
                 const type = buildingTypes[action?.building] || 'residential';
