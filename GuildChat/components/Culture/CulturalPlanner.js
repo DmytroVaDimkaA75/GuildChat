@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -2264,7 +2264,7 @@ const CulturalPlanner = () => {
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const action = actions[currentActionIndex];
     if (!action) return;
     if (animationRef.current) {
