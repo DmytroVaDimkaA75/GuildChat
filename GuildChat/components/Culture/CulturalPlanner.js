@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { database } from '../../firebaseConfig';
-import { ref, remove } from 'firebase/database';
+import { ref, remove, set, push } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml, Svg, Rect } from 'react-native-svg';
 
@@ -2070,6 +2070,55 @@ const CulturalPlanner = () => {
 
   const actions = apiData.actions;
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
+
+  useEffect(() => {
+    if (!start) return;
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements`;
+        await set(ref(database, basePath), {
+          settlementName,
+          availableBuildings: [
+            {
+              name: 'Халупа',
+              type: 'residential',
+              size: '2x2',
+              population: 16,
+              produces: 'мідні монети',
+              production: { '5h': 108 },
+              requires_road: true
+            },
+            {
+              name: 'Рунний камінь',
+              type: 'diplomatic',
+              size: '1x1',
+              diplomacy: 6,
+              requires_road: false
+            },
+            {
+              name: 'Кузня сокир',
+              type: 'production',
+              size: '3x3',
+              population: 45,
+              produces: 'сокири',
+              production: { '5h': 5, '10h': 10, '20h': 20 },
+              requires_road: true
+            }
+          ]
+        });
+        const buildingRef = push(ref(database, `${basePath}/constructedBuildings`));
+        await set(buildingRef, {
+          name: 'Ратуша',
+          type: 'Town Hall',
+          cellRange: 'M5:P7'
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [start, settlementName]);
 
   const [moveRect, setMoveRect] = useState(null);
   const animatedPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
