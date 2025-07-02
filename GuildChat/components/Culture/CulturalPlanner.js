@@ -2670,16 +2670,29 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
                   fill="#8b0000"
                 />
               )}
-              {finalizedRects.map((r, idx) => (
-                <Rect
-                  key={`f-${idx}`}
-                  x={r.x}
-                  y={r.y}
-                  width={r.width}
-                  height={r.height}
-                  fill={r.color}
-                />
-              ))}
+              {finalizedRects.map((r, idx) => {
+                const action = actions[currentActionIndex];
+                const hide =
+                  action?.action === 'destroy' &&
+                  buildRects.some(
+                    br =>
+                      br.x === r.x &&
+                      br.y === r.y &&
+                      br.width === r.width &&
+                      br.height === r.height
+                  );
+                if (hide) return null;
+                return (
+                  <Rect
+                    key={`f-${idx}`}
+                    x={r.x}
+                    y={r.y}
+                    width={r.width}
+                    height={r.height}
+                    fill={r.color}
+                  />
+                );
+              })}
               {buildRects.map((r, idx) => {
                 const action = actions[currentActionIndex];
                 const type = buildingTypes[action?.building] || 'residential';
