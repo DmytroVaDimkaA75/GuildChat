@@ -2692,7 +2692,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
                     width={r.width}
                     height={r.height}
                     fill={color}
-                    opacity={buildOpacity}
+                    style={{ opacity: buildOpacity }}
                   />
                 );
               })}
