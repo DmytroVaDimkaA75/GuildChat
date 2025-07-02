@@ -2497,6 +2497,17 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           type,
           cellRange
         });
+
+        const questlinePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/questline`;
+        if (action.building === 'Халупа' && cellRange === 'O5:P6') {
+          await remove(ref(database, `${questlinePath}/0`));
+        } else if (action.building === 'Рунний камінь' && cellRange === 'N5') {
+          await remove(ref(database, `${questlinePath}/1`));
+        } else if (action.building === 'Кузня сокир' && cellRange === 'I10:K12') {
+          await remove(ref(database, `${questlinePath}/2`));
+        } else if (action.building === 'Рунний камінь' && cellRange === 'P9') {
+          await remove(ref(database, `${questlinePath}/3`));
+        }
       } catch (e) {
         console.error(e);
       }
