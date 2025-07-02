@@ -2501,6 +2501,34 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         console.error(e);
       }
     }
+    if (action?.action === 'destroy' && buildRects.length > 0) {
+      if (animationRef.current) animationRef.current.stop();
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/constructedBuildings`;
+        const cellRange = action.location || (action.locations ? action.locations.join(',') : '');
+        const snap = await get(ref(database, basePath));
+        if (snap.exists()) {
+          const constructedBuildings = snap.val();
+          const updates = {};
+          Object.keys(constructedBuildings).forEach(key => {
+            const rec = constructedBuildings[key];
+            if (rec && rec.cellRange === cellRange) {
+              updates[key] = null;
+            }
+          });
+          if (Object.keys(updates).length > 0) {
+            await update(ref(database, basePath), updates);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      setFinalizedRects(prev =>
+        prev.filter(r => !buildRects.some(br => br.x === r.x && br.y === r.y && br.width === r.width && br.height === r.height))
+      );
+    }
     if (animationRef.current) {
       animationRef.current.stop();
       animationRef.current = null;
@@ -2568,7 +2596,31 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
             duration: 0,
             useNativeDriver: false
           }),
-          Animated.delay(1000)
+        Animated.delay(1000)
+      ])
+      );
+      animationRef.current = anim;
+      anim.start();
+    } else if (action.action === 'destroy') {
+      const locs = action.locations || (action.location ? [action.location] : []);
+      const rects = locs.map(parseRange).filter(Boolean);
+      setMoveRect(null);
+      setBuildRects(rects);
+      buildOpacity.setValue(1);
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.delay(1000),
+          Animated.timing(buildOpacity, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: false
+          }),
+          Animated.delay(1000),
+          Animated.timing(buildOpacity, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: false
+          })
         ])
       );
       animationRef.current = anim;
