@@ -299,6 +299,22 @@ const CulturalPlanner = () => {
             </Text>
           ))}
         </ScrollView>
+        {showObstaclePrompt && (
+          <View style={styles.obstaclePrompt}>
+            <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+            <View style={styles.arrowContainer}>
+              <TouchableOpacity onPress={() => handleArrowPress('horizontal')}>
+                <Ionicons name="swap-horizontal" size={32} color="#0088cc" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleArrowPress('vertical')}
+                style={{ marginLeft: 20 }}
+              >
+                <Ionicons name="swap-vertical" size={32} color="#0088cc" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
         <TextInput
           style={styles.input}
           value={input}
@@ -310,19 +326,6 @@ const CulturalPlanner = () => {
           onPress={sendMessage}
           disabled={isLoading}
         />
-        {showObstaclePrompt && (
-          <View style={styles.obstaclePrompt}>
-            <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
-            <View style={styles.arrowContainer}>
-              <TouchableOpacity onPress={() => handleArrowPress('horizontal')}>
-                <Ionicons name="swap-horizontal" size={32} color="#0088cc" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleArrowPress('vertical')} style={{marginLeft: 20}}>
-                <Ionicons name="swap-vertical" size={32} color="#0088cc" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </View>
     </View>
   );
