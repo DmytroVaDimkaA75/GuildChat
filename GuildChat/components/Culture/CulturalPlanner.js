@@ -2363,6 +2363,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
 
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
   const offset = React.useRef({ x: initialX, y: initialY });
+  const mapRef = useRef(null);
   const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
 
   const panResponder = React.useRef(
@@ -2404,24 +2405,27 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   ).current;
 
   const handleMapTap = evt => {
-    const { locationX, locationY } = evt.nativeEvent;
-    const mapX = (locationX - offset.current.x) / factor;
-    const mapY = (locationY - offset.current.y) / factor;
-    let found = null;
-    for (const [id, pos] of Object.entries(cellPositions)) {
-      if (
-        mapX >= pos.x &&
-        mapX <= pos.x + cellSize &&
-        mapY >= pos.y - cellSize &&
-        mapY <= pos.y
-      ) {
-        found = id;
-        break;
+    if (!mapRef.current) return;
+    mapRef.current.measure((fx, fy, width, height, px, py) => {
+      const { pageX, pageY } = evt.nativeEvent;
+      const mapX = (pageX - px - offset.current.x) / factor;
+      const mapY = (pageY - py - offset.current.y) / factor;
+      let found = null;
+      for (const [id, pos] of Object.entries(cellPositions)) {
+        if (
+          mapX >= pos.x &&
+          mapX <= pos.x + cellSize &&
+          mapY >= pos.y - cellSize &&
+          mapY <= pos.y
+        ) {
+          found = id;
+          break;
+        }
       }
-    }
-    if (found) {
-      console.log('Tapped cell:', found);
-    }
+      if (found) {
+        console.log('Tapped cell:', found);
+      }
+    });
   };
 
   // Поки не завантажився settlementName, показуємо лоадер
@@ -2693,6 +2697,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       </Text>
       <View style={[styles.mapContainer, { width: containerWidth, height: containerHeight }]}>
         <Animated.View
+          ref={mapRef}
           style={{
             width: mapWidth,
             height: mapHeight,
