@@ -2369,15 +2369,36 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderMove: (_, gesture) => {
-        const newX = clamp(offset.current.x + gesture.dx, containerWidth - mapWidth, 0);
-        const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
+        const newX = clamp(
+          offset.current.x + gesture.dx,
+          containerWidth - mapWidth,
+          0
+        );
+        const newY = clamp(
+          offset.current.y + gesture.dy,
+          containerHeight - mapHeight,
+          0
+        );
         pan.setValue({ x: newX, y: newY });
       },
-      onPanResponderRelease: (_, gesture) => {
-        const newX = clamp(offset.current.x + gesture.dx, containerWidth - mapWidth, 0);
-        const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
+      onPanResponderRelease: (evt, gesture) => {
+        const newX = clamp(
+          offset.current.x + gesture.dx,
+          containerWidth - mapWidth,
+          0
+        );
+        const newY = clamp(
+          offset.current.y + gesture.dy,
+          containerHeight - mapHeight,
+          0
+        );
         offset.current = { x: newX, y: newY };
         pan.setValue(offset.current);
+
+        const moved = Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5;
+        if (!moved) {
+          handleMapTap(evt);
+        }
       }
     })
   ).current;
@@ -2678,9 +2699,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
             height: mapHeight,
             transform: [{ translateX: pan.x }, { translateY: pan.y }]
           }}
-          {...(selectionMode ? {} : panResponder.panHandlers)}
-          onStartShouldSetResponder={() => !!selectionMode}
-          onResponderRelease={handleMapTap}
+          {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
           {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0) && (
