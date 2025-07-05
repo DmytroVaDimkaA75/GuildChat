@@ -2352,6 +2352,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [staticRect, setStaticRect] = useState(null);
   const [buildRects, setBuildRects] = useState([]);
   const [finalizedRects, setFinalizedRects] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(null); // 'horizontal' | 'vertical' | null
   const buildOpacity = useRef(new Animated.Value(0)).current;
   const animatedPos = useRef(
     new Animated.ValueXY(
@@ -2380,6 +2381,28 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       }
     })
   ).current;
+
+  const handleMapTap = evt => {
+    if (!selectionMode) return;
+    const { locationX, locationY } = evt.nativeEvent;
+    const mapX = (locationX - offset.current.x) / factor;
+    const mapY = (locationY - offset.current.y) / factor;
+    let found = null;
+    for (const [id, pos] of Object.entries(cellPositions)) {
+      if (
+        mapX >= pos.x &&
+        mapX <= pos.x + cellSize &&
+        mapY >= pos.y - cellSize &&
+        mapY <= pos.y
+      ) {
+        found = id;
+        break;
+      }
+    }
+    if (found) {
+      console.log('Tapped cell:', found);
+    }
+  };
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -2551,6 +2574,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
       Alert.alert('Готово', 'Усі кроки виконано');
+      setCurrentActionIndex(actions.length);
     }
   };
 
@@ -2654,7 +2678,9 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
             height: mapHeight,
             transform: [{ translateX: pan.x }, { translateY: pan.y }]
           }}
-          {...panResponder.panHandlers}
+          {...(selectionMode ? {} : panResponder.panHandlers)}
+          onStartShouldSetResponder={() => !!selectionMode}
+          onResponderRelease={handleMapTap}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
           {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0) && (
@@ -2724,16 +2750,58 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           )}
         </Animated.View>
       </View>
-      <View style={styles.inputRow}>
-        <Text style={styles.actionText}>
-          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
-        </Text>
-        {currentActionIndex < actions.length && (
-          <TouchableOpacity style={styles.button} onPress={handleDone}>
-            <Text style={{ color: '#fff' }}>Зроблено</Text>
+      {currentActionIndex >= actions.length ? (
+        <>
+          <View style={styles.inputRow}>
+            <Text style={styles.actionText}>Вкажіть перешкоди на мапі</Text>
+          </View>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                selectionMode === 'horizontal' && styles.toggleButtonActive
+              ]}
+              onPress={() =>
+                setSelectionMode(prev =>
+                  prev === 'horizontal' ? null : 'horizontal'
+                )
+              }
+            >
+              <Ionicons name="arrow-forward" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                selectionMode === 'vertical' && styles.toggleButtonActive
+              ]}
+              onPress={() =>
+                setSelectionMode(prev =>
+                  prev === 'vertical' ? null : 'vertical'
+                )
+              }
+            >
+              <Ionicons name="arrow-down" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, { alignSelf: 'flex-start', marginTop: 8 }]}
+            onPress={() => setSelectionMode(null)}
+          >
+            <Text style={{ color: '#fff' }}>Готово</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </>
+      ) : (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>
+            {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
+          </Text>
+          {currentActionIndex < actions.length && (
+            <TouchableOpacity style={styles.button} onPress={handleDone}>
+              <Text style={{ color: '#fff' }}>Зроблено</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 };
@@ -2757,6 +2825,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    marginTop: 8
+  },
+  toggleButton: {
+    backgroundColor: '#757575',
+    padding: 8,
+    borderRadius: 4,
+    marginRight: 8
+  },
+  toggleButtonActive: {
+    backgroundColor: '#2196f3'
   }
 });
 
