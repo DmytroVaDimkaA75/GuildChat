@@ -29,6 +29,7 @@ const CulturalPlanner = () => {
   const [threadId, setThreadId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showObstaclePrompt, setShowObstaclePrompt] = useState(false);
+  const [obstacleDirection, setObstacleDirection] = useState(null);
 
   useEffect(() => {
     if (!start) {
@@ -134,6 +135,8 @@ const CulturalPlanner = () => {
 
   const handleArrowPress = direction => {
     const text = direction === 'horizontal' ? 'зліва направо' : 'зверху вниз';
+    setObstacleDirection(direction);
+    setShowObstaclePrompt(false);
     Alert.alert('Напрямок перешкоди', `Ви обрали напрямок ${text}`);
   };
 
@@ -315,6 +318,12 @@ const CulturalPlanner = () => {
             </View>
           </View>
         )}
+        {obstacleDirection && (
+          <Text style={styles.obstacleChoice}>
+            Обраний напрямок:{' '}
+            {obstacleDirection === 'horizontal' ? 'зліва направо' : 'зверху вниз'}
+          </Text>
+        )}
         <TextInput
           style={styles.input}
           value={input}
@@ -341,7 +350,8 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 20, padding: 10, marginBottom: 10 },
   obstaclePrompt: { alignItems: 'center', marginTop: 20 },
   obstacleText: { fontSize: 16, marginBottom: 10 },
-  arrowContainer: { flexDirection: 'row' }
+  arrowContainer: { flexDirection: 'row' },
+  obstacleChoice: { marginTop: 10, textAlign: 'center', fontStyle: 'italic' }
 });
 
 export default CulturalPlanner;
