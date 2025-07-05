@@ -2420,11 +2420,12 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   ).current;
 
   const handleMapTap = evt => {
+    if (!selectionMode) return;
     const { locationX, locationY } = evt.nativeEvent;
     const mapX = (locationX - offset.current.x) / factor;
     const mapY = (locationY - offset.current.y) / factor;
     const col = Math.floor((mapX - minCoords.x) / cellSize);
-    const row = Math.floor((mapY - minCoords.y) / cellSize);
+    const row = Math.floor((mapY - minCoords.y) / cellSize) + 1;
     const found = cellIndexMap[`${col},${row}`];
     if (found) {
       console.log('Tapped cell:', found);
