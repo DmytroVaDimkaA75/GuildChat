@@ -2263,6 +2263,22 @@ const cellPositions = useMemo(() => {
     return positions;
 }, []);
 
+const [minCoords, cellIndexMap] = useMemo(() => {
+    let minX = Infinity;
+    let minY = Infinity;
+    const indexMap = {};
+    for (const [id, pos] of Object.entries(cellPositions)) {
+      if (pos.x < minX) minX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+    }
+    for (const [id, pos] of Object.entries(cellPositions)) {
+      const col = Math.floor((pos.x - minX) / cellSize);
+      const row = Math.floor((pos.y - minY) / cellSize);
+      indexMap[`${col},${row}`] = id;
+    }
+    return [{ x: minX, y: minY }, indexMap];
+}, [cellPositions]);
+
  const parseRange = (range) => {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
@@ -2407,18 +2423,9 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
     const { locationX, locationY } = evt.nativeEvent;
     const mapX = (locationX - offset.current.x) / factor;
     const mapY = (locationY - offset.current.y) / factor;
-    let found = null;
-    for (const [id, pos] of Object.entries(cellPositions)) {
-      if (
-        mapX >= pos.x &&
-        mapX <= pos.x + cellSize &&
-        mapY >= pos.y - cellSize &&
-        mapY <= pos.y
-      ) {
-        found = id;
-        break;
-      }
-    }
+    const col = Math.floor((mapX - minCoords.x) / cellSize);
+    const row = Math.floor((mapY - minCoords.y) / cellSize);
+    const found = cellIndexMap[`${col},${row}`];
     if (found) {
       console.log('Tapped cell:', found);
     }
