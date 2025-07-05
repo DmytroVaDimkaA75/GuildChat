@@ -23,6 +23,7 @@ import {
 } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { SvgXml, Svg, Rect } from 'react-native-svg';
+import { Pressable } from 'react-native';
 
 const apiData = {
   actions: [
@@ -2295,6 +2296,7 @@ const cellPositions = useMemo(() => {
 const actions = apiData.actions;
  const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
+const [obstacleDirection, setObstacleDirection] = useState(null);
 
   useEffect(() => {
     if (!start) return;
@@ -2380,6 +2382,35 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
       }
     })
   ).current;
+
+  const getCellIdFromCoords = (x, y) => {
+    const origX = x / factor;
+    const origY = y / factor;
+    for (const [id, pos] of Object.entries(cellPositions)) {
+      const left = pos.x;
+      const top = pos.y - cellSize;
+      if (
+        origX >= left &&
+        origX <= left + cellSize &&
+        origY >= top &&
+        origY <= pos.y
+      ) {
+        return id;
+      }
+    }
+    return null;
+  };
+
+  const handleMapPress = e => {
+    if (!obstacleDirection) return;
+    const { locationX, locationY } = e.nativeEvent;
+    const mapX = locationX - offset.current.x;
+    const mapY = locationY - offset.current.y;
+    const id = getCellIdFromCoords(mapX, mapY);
+    if (id) {
+      console.log('Tapped cell ID:', id);
+    }
+  };
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -2654,9 +2685,9 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
             height: mapHeight,
             transform: [{ translateX: pan.x }, { translateY: pan.y }]
           }}
-          {...panResponder.panHandlers}
         >
-          <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
+          <Pressable onPress={handleMapPress} {...panResponder.panHandlers}>
+            <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
           {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0) && (
             <Svg
               width={mapWidth}
@@ -2722,18 +2753,57 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
               })}
             </Svg>
           )}
+          </Pressable>
         </Animated.View>
       </View>
-      <View style={styles.inputRow}>
-        <Text style={styles.actionText}>
-          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
-        </Text>
-        {currentActionIndex < actions.length && (
+      {currentActionIndex < actions.length ? (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>
+            {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
+          </Text>
           <TouchableOpacity style={styles.button} onPress={handleDone}>
             <Text style={{ color: '#fff' }}>Зроблено</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.obstacleContainer}>
+          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDirection === 'horizontal' && styles.activeToggle
+              ]}
+              onPress={() =>
+                setObstacleDirection(
+                  obstacleDirection === 'horizontal' ? null : 'horizontal'
+                )
+              }
+            >
+              <Ionicons name="swap-horizontal" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDirection === 'vertical' && styles.activeToggle
+              ]}
+              onPress={() =>
+                setObstacleDirection(
+                  obstacleDirection === 'vertical' ? null : 'vertical'
+                )
+              }
+            >
+              <Ionicons name="swap-vertical" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, { marginTop: 8 }]}
+            onPress={() => setObstacleDirection(null)}
+          >
+            <Text style={{ color: '#fff' }}>Готово</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -2757,7 +2827,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
-  }
+  },
+  obstacleContainer: { marginTop: 8, alignItems: 'center' },
+  obstacleText: { marginBottom: 8 },
+  toggleRow: { flexDirection: 'row', marginBottom: 8 },
+  toggleButton: {
+    backgroundColor: '#2196f3',
+    padding: 8,
+    marginHorizontal: 4,
+    borderRadius: 4
+  },
+  activeToggle: { backgroundColor: '#1976d2' }
 });
 
 export default CulturalPlanner;
