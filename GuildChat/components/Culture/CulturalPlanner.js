@@ -28,6 +28,15 @@ const CulturalPlanner = () => {
   const [messages, setMessages] = useState([]);
   const [threadId, setThreadId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showObstaclePrompt, setShowObstaclePrompt] = useState(false);
+
+  useEffect(() => {
+    if (!start) {
+      setShowObstaclePrompt(true);
+    } else {
+      setShowObstaclePrompt(false);
+    }
+  }, [start]);
 
   // Поки не завантажився settlementName, показуємо лоадер
   if (!settlementName) {
@@ -121,6 +130,11 @@ const CulturalPlanner = () => {
         ]
       );
     }
+  };
+
+  const handleArrowPress = direction => {
+    const text = direction === 'horizontal' ? 'зліва направо' : 'зверху вниз';
+    Alert.alert('Напрямок перешкоди', `Ви обрали напрямок ${text}`);
   };
 
   // Налаштовуємо заголовок і кнопки у шапці
@@ -296,6 +310,19 @@ const CulturalPlanner = () => {
           onPress={sendMessage}
           disabled={isLoading}
         />
+        {showObstaclePrompt && (
+          <View style={styles.obstaclePrompt}>
+            <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+            <View style={styles.arrowContainer}>
+              <TouchableOpacity onPress={() => handleArrowPress('horizontal')}>
+                <Ionicons name="swap-horizontal" size={32} color="#0088cc" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleArrowPress('vertical')} style={{marginLeft: 20}}>
+                <Ionicons name="swap-vertical" size={32} color="#0088cc" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -308,7 +335,10 @@ const styles = StyleSheet.create({
   chat: { flex: 1, marginBottom: 10 },
   user: { alignSelf: 'flex-end', backgroundColor: '#dcf8c6', borderRadius: 10, padding: 10, marginVertical: 5 },
   assistant: { alignSelf: 'flex-start', backgroundColor: '#f1f0f0', borderRadius: 10, padding: 10, marginVertical: 5 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 20, padding: 10, marginBottom: 10 }
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 20, padding: 10, marginBottom: 10 },
+  obstaclePrompt: { alignItems: 'center', marginTop: 20 },
+  obstacleText: { fontSize: 16, marginBottom: 10 },
+  arrowContainer: { flexDirection: 'row' }
 });
 
 export default CulturalPlanner;
