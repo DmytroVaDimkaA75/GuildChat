@@ -2404,7 +2404,6 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   ).current;
 
   const handleMapTap = evt => {
-    if (!selectionMode) return;
     const { locationX, locationY } = evt.nativeEvent;
     const mapX = (locationX - offset.current.x) / factor;
     const mapY = (locationY - offset.current.y) / factor;
