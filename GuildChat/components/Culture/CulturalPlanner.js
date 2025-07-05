@@ -2421,6 +2421,12 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
     }
     if (found) {
       console.log('Tapped cell:', found);
+    } else {
+      console.log(
+        'Tapped coordinates:',
+        mapX.toFixed(2),
+        mapY.toFixed(2)
+      );
     }
   };
 
