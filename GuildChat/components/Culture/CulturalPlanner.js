@@ -2352,6 +2352,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [staticRect, setStaticRect] = useState(null);
   const [buildRects, setBuildRects] = useState([]);
   const [finalizedRects, setFinalizedRects] = useState([]);
+  const [obstacleDir, setObstacleDir] = useState(null);
   const buildOpacity = useRef(new Animated.Value(0)).current;
   const animatedPos = useRef(
     new Animated.ValueXY(
@@ -2724,16 +2725,48 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           )}
         </Animated.View>
       </View>
-      <View style={styles.inputRow}>
-        <Text style={styles.actionText}>
-          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
-        </Text>
-        {currentActionIndex < actions.length && (
-          <TouchableOpacity style={styles.button} onPress={handleDone}>
-            <Text style={{ color: '#fff' }}>Зроблено</Text>
+      {currentActionIndex < actions.length ? (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>
+            {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
+          </Text>
+          {currentActionIndex < actions.length && (
+            <TouchableOpacity style={styles.button} onPress={handleDone}>
+              <Text style={{ color: '#fff' }}>Зроблено</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <View style={styles.obstacleContainer}>
+          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDir === 'horizontal' && styles.toggleButtonActive
+              ]}
+              onPress={() => setObstacleDir('horizontal')}
+            >
+              <Ionicons name="swap-horizontal" size={24} color="#000" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDir === 'vertical' && styles.toggleButtonActive
+              ]}
+              onPress={() => setObstacleDir('vertical')}
+            >
+              <Ionicons name="swap-vertical" size={24} color="#000" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, { marginTop: 8 }]}
+            onPress={() => Alert.alert('Готово')}
+          >
+            <Text style={{ color: '#fff' }}>Готово</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -2757,6 +2790,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
+  },
+  obstacleContainer: {
+    alignItems: 'center'
+  },
+  obstacleText: {
+    marginBottom: 8
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    marginBottom: 8
+  },
+  toggleButton: {
+    borderWidth: 1,
+    borderColor: '#2196f3',
+    padding: 8,
+    borderRadius: 4,
+    marginHorizontal: 8
+  },
+  toggleButtonActive: {
+    backgroundColor: '#2196f3'
   }
 });
 
