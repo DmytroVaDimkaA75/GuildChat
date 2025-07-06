@@ -2295,7 +2295,7 @@ const cellPositions = useMemo(() => {
 const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
-const [obstacleDirection, setObstacleDirection] = useState('horizontal');
+const [obstacleDirection, setObstacleDirection] = useState(null);
 const [obstaclesConfirmed, setObstaclesConfirmed] = useState(false);
 
   useEffect(() => {
