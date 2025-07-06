@@ -2310,6 +2310,7 @@ const { minX, minY, cellIndex } = useMemo(() => {
     if (pos.x < minX) minX = pos.x;
     if (pos.y < minY) minY = pos.y;
   });
+  // Побудова індексу для швидкого пошуку клітин за координатами
   const index = {};
   Object.entries(cellPositions).forEach(([id, pos]) => {
     const col = Math.floor((pos.x - minX) / cellSize);
