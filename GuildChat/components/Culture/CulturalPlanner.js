@@ -2354,12 +2354,11 @@ const getColumnRowFromCoords = (x, y) => {
   const originalY = y / factor;
 
   const getIndex = (meta, value, size) => {
-    for (let i = 0; i < meta.length - 1; i++) {
-      if (value >= meta[i].start && value < meta[i].start + size) return i;
-    }
-    const last = meta[meta.length - 1];
-    if (value >= last.start && value <= last.start + size) return meta.length - 1;
-    return -1;
+    const firstStart = meta[0].start;
+    let idx = Math.floor((value - firstStart) / size);
+    if (idx < 0) return -1;
+    if (idx >= meta.length) return meta.length - 1;
+    return idx;
   };
 
   const colIndex = getIndex(COLUMN_META, originalX, SECTOR_WIDTH);
