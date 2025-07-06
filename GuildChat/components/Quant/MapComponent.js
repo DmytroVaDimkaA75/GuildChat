@@ -3,25 +3,23 @@ import {
   View,
   Image,
   StyleSheet,
-  Switch,
   Animated,
   PanResponder,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
 const SQUARE_SIZE = 60;
 
 export default function MapComponent() {
-  const [up, setUp] = useState(false);
-  const [down, setDown] = useState(false);
-  const [left, setLeft] = useState(false);
-  const [right, setRight] = useState(false);
+  const [activeArrow, setActiveArrow] = useState(null); // 'up' | 'down' | 'left' | 'right'
 
   const position = useRef(new Animated.ValueXY()).current;
 
   const handleTap = (nativeEvent) => {
-    if (!(up || down || left || right)) return;
+    if (!activeArrow) return;
     const { locationX, locationY } = nativeEvent;
     const col = Math.floor(locationX / SQUARE_SIZE);
     const row = Math.floor(locationY / SQUARE_SIZE);
@@ -52,10 +50,21 @@ export default function MapComponent() {
   return (
     <View style={styles.container}>
       <View style={styles.switchRow}>
-        <Switch value={up} onValueChange={setUp} />
-        <Switch value={down} onValueChange={setDown} />
-        <Switch value={left} onValueChange={setLeft} />
-        <Switch value={right} onValueChange={setRight} />
+        {['up', 'down', 'left', 'right'].map(dir => (
+          <TouchableOpacity
+            key={dir}
+            onPress={() =>
+              setActiveArrow(activeArrow === dir ? null : dir)
+            }
+            style={styles.arrowButton}
+          >
+            <Ionicons
+              name={`arrow-${dir}`}
+              size={28}
+              color={activeArrow === dir ? '#0066CC' : '#999'}
+            />
+          </TouchableOpacity>
+        ))}
       </View>
       <Animated.View
         {...panResponder.panHandlers}
@@ -65,6 +74,15 @@ export default function MapComponent() {
           source={require('../menu-icon.png')}
           style={{ width: GRID_COLS * SQUARE_SIZE, height: GRID_ROWS * SQUARE_SIZE }}
         />
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {Array.from({ length: GRID_ROWS }).map((_, row) => (
+            <View key={row} style={{ flexDirection: 'row', flex: 1 }}>
+              {Array.from({ length: GRID_COLS }).map((_, col) => (
+                <View key={col} style={styles.gridSquare} />
+              ))}
+            </View>
+          ))}
+        </View>
       </Animated.View>
     </View>
   );
@@ -80,8 +98,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 20,
   },
+  arrowButton: {
+    marginHorizontal: 10,
+  },
   imageWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  gridSquare: {
+    flex: 1,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.2)',
   },
 });
