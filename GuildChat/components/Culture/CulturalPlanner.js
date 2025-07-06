@@ -2413,12 +2413,15 @@ useEffect(() => {
         offset.current = { x: newX, y: newY };
         pan.setValue(offset.current);
 
-        if (obstacleModeRef.current && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
-          const adjustedX = evt.nativeEvent.locationX;
-          const adjustedY = evt.nativeEvent.locationY;
+        if (
+          obstacleModeRef.current &&
+          Math.abs(gesture.dx) < 5 &&
+          Math.abs(gesture.dy) < 5
+        ) {
+          const adjustedX = evt.nativeEvent.locationX - offset.current.x;
+          const adjustedY = evt.nativeEvent.locationY - offset.current.y;
           const cellId = getCellByCoords(adjustedX, adjustedY);
-          console.log('натиснуто');
-          console.log(cellId);
+          console.log('натиснуто', cellId);
         }
       }
     })
