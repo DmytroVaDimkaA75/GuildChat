@@ -2349,6 +2349,18 @@ const ROW_META = [
 const SECTOR_WIDTH = 39.6386717;
 const SECTOR_HEIGHT = 39.6386719;
 
+const IGNORED_SECTORS = new Set([
+  'A1:D4',
+  'U1:X4',
+  'U5:X8',
+  'A17:D20',
+  'U17:X20',
+  'I5:L8',
+  'M5:P8',
+  'I9:L12',
+  'M9:P12'
+]);
+
 const getColumnRowFromCoords = (x, y) => {
   const originalX = x / factor;
   const originalY = y / factor;
@@ -2518,7 +2530,9 @@ useEffect(() => {
           const { column, row } = getColumnRowFromCoords(adjustedX, adjustedY);
           const excelRange = getExcelRange(column, row);
           if (excelRange) {
-            console.log(`тап відбувся в секторі '${excelRange}'`);
+            if (!IGNORED_SECTORS.has(excelRange)) {
+              console.log(`тап відбувся в секторі '${excelRange}'`);
+            }
           } else {
             console.log('тап у стовпчику', column, 'рядку', row);
           }
