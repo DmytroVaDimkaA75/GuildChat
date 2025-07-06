@@ -2353,12 +2353,17 @@ const getColumnRowFromCoords = (x, y) => {
   const originalX = x / factor;
   const originalY = y / factor;
 
-  const colIndex = COLUMN_META.findIndex(
-    (c) => originalX >= c.start && originalX < c.start + SECTOR_WIDTH
-  );
-  const rowIndex = ROW_META.findIndex(
-    (r) => originalY >= r.start && originalY < r.start + SECTOR_HEIGHT
-  );
+  const getIndex = (meta, value, size) => {
+    for (let i = 0; i < meta.length - 1; i++) {
+      if (value >= meta[i].start && value < meta[i].start + size) return i;
+    }
+    const last = meta[meta.length - 1];
+    if (value >= last.start && value <= last.start + size) return meta.length - 1;
+    return -1;
+  };
+
+  const colIndex = getIndex(COLUMN_META, originalX, SECTOR_WIDTH);
+  const rowIndex = getIndex(ROW_META, originalY, SECTOR_HEIGHT);
 
   if (colIndex === -1 || rowIndex === -1) {
     return { column: null, row: null };
