@@ -2414,7 +2414,7 @@ const [obstacleMode, setObstacleMode] = useState(null);
           const adjustedY = evt.nativeEvent.locationY - pan.y._value;
           const cellId = getCellByCoords(adjustedX, adjustedY);
           if (cellId) {
-            console.log('Tapped cell:', cellId);
+            console.log(`ID сектору: ${cellId}`);
           }
         }
       }
