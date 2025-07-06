@@ -2329,6 +2329,44 @@ const getGroupByCoords = (x, y) => {
   return null;
 };
 
+const COLUMN_META = [
+  { label: 'A:D', start: 0.18060093 },
+  { label: 'E:H', start: 40.18060125 },
+  { label: 'I:L', start: 80.18060125 },
+  { label: 'M:P', start: 120.18059625 },
+  { label: 'Q:T', start: 160.18059625 },
+  { label: 'U:X', start: 200.18059625 }
+];
+
+const ROW_META = [
+  { label: '1:4', start: 0.18060078000000068 },
+  { label: '5:8', start: 40.180601100000004 },
+  { label: '9:12', start: 80.18060109999999 },
+  { label: '13:16', start: 120.18059609999999 },
+  { label: '17:20', start: 160.1805961 }
+];
+
+const SECTOR_WIDTH = 39.6386717;
+const SECTOR_HEIGHT = 39.6386719;
+
+const getColumnRowFromCoords = (x, y) => {
+  const originalX = x / factor;
+  const originalY = y / factor;
+
+  const colIndex = COLUMN_META.findIndex(
+    (c) => originalX >= c.start && originalX < c.start + SECTOR_WIDTH
+  );
+  const rowIndex = ROW_META.findIndex(
+    (r) => originalY >= r.start && originalY < r.start + SECTOR_HEIGHT
+  );
+
+  if (colIndex === -1 || rowIndex === -1) {
+    return { column: null, row: null };
+  }
+
+  return { column: COLUMN_META[colIndex].label, row: ROW_META[rowIndex].label };
+};
+
 function parseRange(range) {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
@@ -2476,9 +2514,8 @@ useEffect(() => {
         if (Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
           const adjustedX = evt.nativeEvent.locationX - offset.current.x;
           const adjustedY = evt.nativeEvent.locationY - offset.current.y;
-          const cellId = getCellByCoords(adjustedX, adjustedY);
-          const groupId = cellGroupMap[cellId];
-          console.log('натиснуто групу', groupId);
+          const { column, row } = getColumnRowFromCoords(adjustedX, adjustedY);
+          console.log('тап у стовпчику', column, 'рядку', row);
         }
       }
     })
