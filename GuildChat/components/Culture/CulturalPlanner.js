@@ -2413,9 +2413,7 @@ const [obstacleMode, setObstacleMode] = useState(null);
           const adjustedX = evt.nativeEvent.locationX - pan.x._value;
           const adjustedY = evt.nativeEvent.locationY - pan.y._value;
           const cellId = getCellByCoords(adjustedX, adjustedY);
-          if (cellId) {
-            console.log(`ID сектору: ${cellId}`);
-          }
+          console.log(`ID сектору: ${cellId}`);
         }
       }
     })
