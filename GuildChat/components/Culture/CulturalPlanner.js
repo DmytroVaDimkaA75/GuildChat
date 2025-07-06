@@ -2303,26 +2303,26 @@ const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
 
-const cellBounds = useMemo(() => {
-  const bounds = {};
-  Object.entries(cellPositions).forEach(([id, pos]) => {
-    bounds[id] = {
-      left: pos.x * factor,
-      right: (pos.x + cellSize) * factor,
-      top: (pos.y - cellSize) * factor,
-      bottom: pos.y * factor
-    };
+const { minX, minY, cellIndex } = useMemo(() => {
+  let minX = Infinity;
+  let minY = Infinity;
+  Object.values(cellPositions).forEach((pos) => {
+    if (pos.x < minX) minX = pos.x;
+    if (pos.y < minY) minY = pos.y;
   });
-  return bounds;
-}, [cellPositions, factor]);
+  const index = {};
+  Object.entries(cellPositions).forEach(([id, pos]) => {
+    const col = Math.floor((pos.x - minX) / cellSize);
+    const row = Math.floor((pos.y - minY) / cellSize);
+    index[`${col},${row}`] = id;
+  });
+  return { minX, minY, cellIndex: index };
+}, [cellPositions]);
 
 const getCellByCoords = (x, y) => {
-  for (const [id, b] of Object.entries(cellBounds)) {
-    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
-      return id;
-    }
-  }
-  return null;
+  const col = Math.floor((x - minX * factor) / (cellSize * factor));
+  const row = Math.floor((y - minY * factor) / (cellSize * factor));
+  return cellIndex[`${col},${row}`] ?? null;
 };
 
 const [obstacleMode, setObstacleMode] = useState(null);
