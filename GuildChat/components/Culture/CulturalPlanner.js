@@ -2414,8 +2414,8 @@ useEffect(() => {
         pan.setValue(offset.current);
 
         if (obstacleModeRef.current && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
-          const adjustedX = evt.nativeEvent.locationX - pan.x._value;
-          const adjustedY = evt.nativeEvent.locationY - pan.y._value;
+          const adjustedX = evt.nativeEvent.locationX;
+          const adjustedY = evt.nativeEvent.locationY;
           const cellId = getCellByCoords(adjustedX, adjustedY);
           console.log('натиснуто');
           console.log(cellId);
