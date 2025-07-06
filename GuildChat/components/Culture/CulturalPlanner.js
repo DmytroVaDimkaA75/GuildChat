@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useLayoutEffect
+} from 'react';
 import {
   View,
   Text,
@@ -2293,8 +2299,32 @@ const cellPositions = useMemo(() => {
  };
 
 const actions = apiData.actions;
- const initialFromRect = parseRange(actions[0].from);
+const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
+
+const cellBounds = useMemo(() => {
+  const bounds = {};
+  Object.entries(cellPositions).forEach(([id, pos]) => {
+    bounds[id] = {
+      left: pos.x * factor,
+      right: (pos.x + cellSize) * factor,
+      top: (pos.y - cellSize) * factor,
+      bottom: pos.y * factor
+    };
+  });
+  return bounds;
+}, [cellPositions, factor]);
+
+const getCellByCoords = (x, y) => {
+  for (const [id, b] of Object.entries(cellBounds)) {
+    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
+      return id;
+    }
+  }
+  return null;
+};
+
+const [obstacleMode, setObstacleMode] = useState(null);
 
   useEffect(() => {
     if (!start) return;
@@ -2372,11 +2402,18 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
         const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
         pan.setValue({ x: newX, y: newY });
       },
-      onPanResponderRelease: (_, gesture) => {
+      onPanResponderRelease: (evt, gesture) => {
         const newX = clamp(offset.current.x + gesture.dx, containerWidth - mapWidth, 0);
         const newY = clamp(offset.current.y + gesture.dy, containerHeight - mapHeight, 0);
         offset.current = { x: newX, y: newY };
         pan.setValue(offset.current);
+
+        if (obstacleMode && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
+          const cellId = getCellByCoords(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+          if (cellId) {
+            console.log('Tapped cell:', cellId);
+          }
+        }
       }
     })
   ).current;
@@ -2734,6 +2771,35 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           </TouchableOpacity>
         )}
       </View>
+      {currentActionIndex >= actions.length && (
+        <View style={styles.obstacleContainer}>
+          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
+              onPress={() =>
+                setObstacleMode(prev => (prev === 'horizontal' ? null : 'horizontal'))
+              }
+            >
+              <Ionicons name="arrow-forward" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, obstacleMode === 'vertical' && styles.toggleActive]}
+              onPress={() =>
+                setObstacleMode(prev => (prev === 'vertical' ? null : 'vertical'))
+              }
+            >
+              <Ionicons name="arrow-down" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, { alignSelf: 'flex-start', marginTop: 8 }]}
+            onPress={() => setObstacleMode(null)}
+          >
+            <Text style={{ color: '#fff' }}>Готово</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -2757,7 +2823,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
-  }
+  },
+  obstacleContainer: { marginTop: 12 },
+  obstacleText: { marginBottom: 8 },
+  toggleRow: { flexDirection: 'row', marginBottom: 8 },
+  toggleButton: {
+    backgroundColor: '#9e9e9e',
+    padding: 8,
+    marginRight: 8,
+    borderRadius: 4
+  },
+  toggleActive: { backgroundColor: '#2196f3' }
 });
 
 export default CulturalPlanner;
+
