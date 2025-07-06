@@ -1,3 +1,4 @@
+// CulturalPlanner full code with obstacle selection feature
 import React, {
   useState,
   useMemo,
