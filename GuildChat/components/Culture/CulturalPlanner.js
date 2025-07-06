@@ -2249,11 +2249,12 @@ const factor = mapWidth / 239.99976;
 
 const cellPositions = useMemo(() => {
     const positions = {};
-    const groupRegex = /<g[^>]*transform="translate\(([^,]+),([^\)]+)\)"[^>]*>/g;
+    const groupRegex = /<g[^>]*id="([^"]+)"[^>]*transform="translate\(([^,]+),([^)]+)\)"[^>]*>/g;
     let match;
     while ((match = groupRegex.exec(vikingMapXml)) !== null) {
-      const gX = parseFloat(match[1]);
-      const gY = parseFloat(match[2]);
+      const groupId = match[1];
+      const gX = parseFloat(match[2]);
+      const gY = parseFloat(match[3]);
       const start = match.index + match[0].length;
       const end = vikingMapXml.indexOf('</g>', start);
       const block = vikingMapXml.slice(start, end);
@@ -2263,12 +2264,20 @@ const cellPositions = useMemo(() => {
         const id = p[1];
         const x = parseFloat(p[2]);
         const y = parseFloat(p[3]);
-        positions[id] = { x: gX + x, y: gY + y };
+        positions[id] = { x: gX + x, y: gY + y, group: groupId };
       }
       groupRegex.lastIndex = end + 4;
     }
     return positions;
 }, []);
+
+const cellGroupMap = useMemo(() => {
+  const map = {};
+  Object.entries(cellPositions).forEach(([id, data]) => {
+    map[id] = data.group;
+  });
+  return map;
+}, [cellPositions]);
 
  const parseRange = (range) => {
    const clean = range.trim().toUpperCase();
@@ -2422,7 +2431,8 @@ useEffect(() => {
           const adjustedX = evt.nativeEvent.locationX - offset.current.x;
           const adjustedY = evt.nativeEvent.locationY - offset.current.y;
           const cellId = getCellByCoords(adjustedX, adjustedY);
-          console.log('натиснуто', cellId);
+          const groupId = cellGroupMap[cellId];
+          console.log('натиснуто групу', groupId);
         }
       }
     })
