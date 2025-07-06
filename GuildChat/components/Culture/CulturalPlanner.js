@@ -2554,6 +2554,9 @@ useEffect(() => {
           if (excelRange && !IGNORED_SECTORS.has(excelRange)) {
             console.log(`тап відбувся в секторі '${excelRange}'`);
             setSelectedSector(excelRange);
+            if (currentActionIndex >= actions.length) {
+              setObstacleModalVisible(true);
+            }
           } else {
             console.log('тап у стовпчику', column, 'рядку', row);
           }
@@ -2921,12 +2924,6 @@ useEffect(() => {
       )}
       {currentActionIndex >= actions.length && (
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setObstacleModalVisible(true)}
-          >
-            <Text style={styles.buttonText}>Вказати перешкоди</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => Alert.alert('Вартість технологій', '')}
