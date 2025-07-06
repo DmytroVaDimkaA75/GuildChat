@@ -11,6 +11,7 @@ import {
 const GRID_ROWS = 5;
 const GRID_COLS = 5;
 const SQUARE_SIZE = 60;
+const TAP_MOVE_THRESHOLD = 5; // Максимальне зміщення, яке вважається тапом
 
 export default function MapComponent() {
   const [up, setUp] = useState(false);
@@ -42,7 +43,10 @@ export default function MapComponent() {
       ),
       onPanResponderRelease: (evt, gestureState) => {
         position.flattenOffset();
-        if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
+        if (
+          Math.abs(gestureState.dx) < TAP_MOVE_THRESHOLD &&
+          Math.abs(gestureState.dy) < TAP_MOVE_THRESHOLD
+        ) {
           handleTap(evt.nativeEvent);
         }
       },
