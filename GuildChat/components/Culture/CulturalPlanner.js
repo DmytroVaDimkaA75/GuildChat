@@ -2279,6 +2279,34 @@ const cellGroupMap = useMemo(() => {
   return map;
 }, [cellPositions]);
 
+const groupBounds = useMemo(() => {
+  const bounds = {};
+  Object.values(cellPositions).forEach(({ x, y, group }) => {
+    const left = x * factor;
+    const top = (y - cellSize) * factor;
+    const right = (x + cellSize) * factor;
+    const bottom = y * factor;
+    if (!bounds[group]) {
+      bounds[group] = { left, top, right, bottom };
+    } else {
+      if (left < bounds[group].left) bounds[group].left = left;
+      if (top < bounds[group].top) bounds[group].top = top;
+      if (right > bounds[group].right) bounds[group].right = right;
+      if (bottom > bounds[group].bottom) bounds[group].bottom = bottom;
+    }
+  });
+  return bounds;
+}, [cellPositions, factor]);
+
+const getGroupByCoords = (x, y) => {
+  for (const [group, b] of Object.entries(groupBounds)) {
+    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
+      return group;
+    }
+  }
+  return null;
+};
+
  const parseRange = (range) => {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
@@ -2430,8 +2458,7 @@ useEffect(() => {
         ) {
           const adjustedX = evt.nativeEvent.locationX - offset.current.x;
           const adjustedY = evt.nativeEvent.locationY - offset.current.y;
-          const cellId = getCellByCoords(adjustedX, adjustedY);
-          const groupId = cellGroupMap[cellId];
+          const groupId = getGroupByCoords(adjustedX, adjustedY);
           console.log('натиснуто групу', groupId);
         }
       }
