@@ -2588,6 +2588,7 @@ const [obstacleMode, setObstacleMode] = useState(null);
     if (currentActionIndex < actions.length - 1) {
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
+      setCurrentActionIndex(actions.length);
       Alert.alert('Готово', 'Усі кроки виконано');
     }
   };
