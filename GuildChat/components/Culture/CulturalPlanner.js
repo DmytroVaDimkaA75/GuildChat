@@ -2293,8 +2293,10 @@ const cellPositions = useMemo(() => {
  };
 
 const actions = apiData.actions;
- const initialFromRect = parseRange(actions[0].from);
+const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
+const [obstacleDirection, setObstacleDirection] = useState('horizontal');
+const [obstaclesConfirmed, setObstaclesConfirmed] = useState(false);
 
   useEffect(() => {
     if (!start) return;
@@ -2550,7 +2552,7 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
     if (currentActionIndex < actions.length - 1) {
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
-      Alert.alert('Готово', 'Усі кроки виконано');
+      setCurrentActionIndex(actions.length);
     }
   };
 
@@ -2724,16 +2726,60 @@ const [currentActionIndex, setCurrentActionIndex] = useState(0);
           )}
         </Animated.View>
       </View>
-      <View style={styles.inputRow}>
-        <Text style={styles.actionText}>
-          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
-        </Text>
-        {currentActionIndex < actions.length && (
+      {currentActionIndex < actions.length ? (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>
+            {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
+          </Text>
           <TouchableOpacity style={styles.button} onPress={handleDone}>
             <Text style={{ color: '#fff' }}>Зроблено</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      ) : !obstaclesConfirmed ? (
+        <View style={styles.obstacleContainer}>
+          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDirection === 'horizontal' && styles.toggleButtonActive
+              ]}
+              onPress={() => setObstacleDirection('horizontal')}
+            >
+              <Ionicons
+                name="arrow-forward"
+                size={24}
+                color={
+                  obstacleDirection === 'horizontal' ? '#fff' : '#2196f3'
+                }
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                obstacleDirection === 'vertical' && styles.toggleButtonActive
+              ]}
+              onPress={() => setObstacleDirection('vertical')}
+            >
+              <Ionicons
+                name="arrow-down"
+                size={24}
+                color={obstacleDirection === 'vertical' ? '#fff' : '#2196f3'}
+              />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, { alignSelf: 'center' }]}
+            onPress={() => setObstaclesConfirmed(true)}
+          >
+            <Text style={{ color: '#fff' }}>Готово</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>Усі кроки виконано</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -2757,7 +2803,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
-  }
+  },
+  obstacleContainer: { alignItems: 'center' },
+  obstacleText: { marginBottom: 8, textAlign: 'center' },
+  toggleRow: { flexDirection: 'row', marginBottom: 8 },
+  toggleButton: {
+    borderWidth: 1,
+    borderColor: '#2196f3',
+    padding: 8,
+    marginHorizontal: 4,
+    borderRadius: 4
+  },
+  toggleButtonActive: { backgroundColor: '#2196f3' }
 });
 
 export default CulturalPlanner;
