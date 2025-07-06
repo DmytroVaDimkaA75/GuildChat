@@ -15,7 +15,8 @@ import {
   ActivityIndicator,
   Dimensions,
   PanResponder,
-  Animated
+  Animated,
+  Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -2417,6 +2418,14 @@ function parseRange(range) {
   };
 }
 
+const getGroupSvgXml = groupId => {
+  if (!groupId) return null;
+  const regex = new RegExp(`<g[^>]*id="${groupId}"[^>]*>[\\s\\S]*?<\\/g>`);
+  const match = vikingMapXml.match(regex);
+  if (!match) return null;
+  return `<svg xmlns="http://www.w3.org/2000/svg">${match[0]}</svg>`;
+};
+
 const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
@@ -2446,6 +2455,8 @@ const getCellByCoords = (x, y) => {
 
 const [obstacleMode, setObstacleMode] = useState(null);
 const obstacleModeRef = useRef(null);
+const [obstacleModalVisible, setObstacleModalVisible] = useState(false);
+const [selectedSector, setSelectedSector] = useState(null);
 useEffect(() => {
   obstacleModeRef.current = obstacleMode;
 }, [obstacleMode]);
@@ -2540,10 +2551,9 @@ useEffect(() => {
             pageY - containerOffset.current.y - offset.current.y;
           const { column, row } = getColumnRowFromCoords(adjustedX, adjustedY);
           const excelRange = getExcelRange(column, row);
-          if (excelRange) {
-            if (!IGNORED_SECTORS.has(excelRange)) {
-              console.log(`тап відбувся в секторі '${excelRange}'`);
-            }
+          if (excelRange && !IGNORED_SECTORS.has(excelRange)) {
+            console.log(`тап відбувся в секторі '${excelRange}'`);
+            setSelectedSector(excelRange);
           } else {
             console.log('тап у стовпчику', column, 'рядку', row);
           }
@@ -2910,34 +2920,74 @@ useEffect(() => {
         </View>
       )}
       {currentActionIndex >= actions.length && (
-        <View style={styles.obstacleContainer}>
-          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
-              onPress={() =>
-                setObstacleMode(prev => (prev === 'horizontal' ? null : 'horizontal'))
-              }
-            >
-              <Ionicons name="arrow-forward" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleButton, obstacleMode === 'vertical' && styles.toggleActive]}
-              onPress={() =>
-                setObstacleMode(prev => (prev === 'vertical' ? null : 'vertical'))
-              }
-            >
-              <Ionicons name="arrow-down" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.button, { alignSelf: 'flex-start', marginTop: 8 }]}
-            onPress={() => setObstacleMode(null)}
+            style={styles.actionButton}
+            onPress={() => setObstacleModalVisible(true)}
           >
-            <Text style={{ color: '#fff' }}>Готово</Text>
+            <Text style={styles.buttonText}>Вказати перешкоди</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => Alert.alert('Вартість технологій', '')}
+          >
+            <Text style={styles.buttonText}>Вартість технологій</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={onClose}>
+            <Text style={styles.buttonText}>Закінчити</Text>
           </TouchableOpacity>
         </View>
       )}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={obstacleModalVisible}
+        onRequestClose={() => setObstacleModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {selectedSector && (
+              <SvgXml
+                xml={getGroupSvgXml(selectedSector) || ''}
+                width="100%"
+                height="60%"
+              />
+            )}
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
+                onPress={() =>
+                  setObstacleMode(prev => (prev === 'horizontal' ? null : 'horizontal'))
+                }
+              >
+                <Ionicons name="arrow-forward" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleButton, obstacleMode === 'vertical' && styles.toggleActive]}
+                onPress={() =>
+                  setObstacleMode(prev => (prev === 'vertical' ? null : 'vertical'))
+                }
+              >
+                <Ionicons name="arrow-down" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, marginRight: 8 }]}
+                onPress={() => setObstacleMode(null)}
+              >
+                <Text style={{ color: '#fff' }}>Очистити</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1 }]}
+                onPress={() => setObstacleModalVisible(false)}
+              >
+                <Text style={{ color: '#fff' }}>Застосувати</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -2962,6 +3012,30 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 4
   },
+  actionsContainer: { marginTop: 20, alignItems: 'center' },
+  actionButton: {
+    backgroundColor: '#2196f3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4,
+    marginBottom: 10,
+    width: '60%',
+    alignItems: 'center'
+  },
+  buttonText: { color: '#fff' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    padding: 16,
+    height: '50%'
+  },
+  modalButtonsRow: { flexDirection: 'row', marginTop: 8 },
   obstacleContainer: { marginTop: 12 },
   obstacleText: { marginBottom: 8 },
   toggleRow: { flexDirection: 'row', marginBottom: 8 },
