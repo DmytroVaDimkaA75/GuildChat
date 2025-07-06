@@ -2410,7 +2410,9 @@ const [obstacleMode, setObstacleMode] = useState(null);
         pan.setValue(offset.current);
 
         if (obstacleMode && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
-          const cellId = getCellByCoords(evt.nativeEvent.locationX, evt.nativeEvent.locationY);
+          const adjustedX = evt.nativeEvent.locationX - pan.x._value;
+          const adjustedY = evt.nativeEvent.locationY - pan.y._value;
+          const cellId = getCellByCoords(adjustedX, adjustedY);
           if (cellId) {
             console.log('Tapped cell:', cellId);
           }
@@ -2589,7 +2591,6 @@ const [obstacleMode, setObstacleMode] = useState(null);
       setCurrentActionIndex(currentActionIndex + 1);
     } else {
       setCurrentActionIndex(actions.length);
-      Alert.alert('Готово', 'Усі кроки виконано');
     }
   };
 
@@ -2763,16 +2764,16 @@ const [obstacleMode, setObstacleMode] = useState(null);
           )}
         </Animated.View>
       </View>
-      <View style={styles.inputRow}>
-        <Text style={styles.actionText}>
-          {actions[currentActionIndex]?.description || 'Усі кроки виконано'}
-        </Text>
-        {currentActionIndex < actions.length && (
+      {currentActionIndex < actions.length && (
+        <View style={styles.inputRow}>
+          <Text style={styles.actionText}>
+            {actions[currentActionIndex].description}
+          </Text>
           <TouchableOpacity style={styles.button} onPress={handleDone}>
             <Text style={{ color: '#fff' }}>Зроблено</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
       {currentActionIndex >= actions.length && (
         <View style={styles.obstacleContainer}>
           <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
