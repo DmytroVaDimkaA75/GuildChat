@@ -2330,8 +2330,8 @@ const { minX, minY, cellIndex } = useMemo(() => {
 }, [cellPositions]);
 
 const getCellByCoords = (x, y) => {
-  const col = Math.floor((x - minX * factor) / (cellSize * factor));
-  const row = Math.floor((y - minY * factor) / (cellSize * factor));
+  const col = Math.round((x - minX * factor) / (cellSize * factor));
+  const row = Math.round((y - minY * factor) / (cellSize * factor));
   return cellIndex[`${col},${row}`] ?? null;
 };
 
