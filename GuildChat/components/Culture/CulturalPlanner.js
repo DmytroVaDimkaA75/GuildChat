@@ -2279,6 +2279,7 @@ const cellPositions = useMemo(() => {
     return positions;
 }, []);
 
+
 const cellGroupMap = useMemo(() => {
   const map = {};
   Object.entries(cellPositions).forEach(([id, data]) => {
@@ -2369,6 +2370,24 @@ const IGNORED_SECTORS = new Set([
   'M9:P12'
 ]);
 
+const groupXmlMap = useMemo(() => {
+  const map = {};
+  const groupRegex = /<g[^>]*id="([^"]+)"[^>]*transform="translate\(([^,]+),([^)]+)\)"[^>]*>/g;
+  let match;
+  while ((match = groupRegex.exec(vikingMapXml)) !== null) {
+    const groupId = match[1];
+    const start = match.index;
+    const end = vikingMapXml.indexOf('</g>', start) + 4;
+    const content = vikingMapXml.slice(start, end);
+    const rect = GROUP_BOUNDS_RAW[groupId];
+    const w = rect ? rect.width : SECTOR_WIDTH;
+    const h = rect ? rect.height : SECTOR_HEIGHT;
+    map[groupId] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">${content}</svg>`;
+    groupRegex.lastIndex = end;
+  }
+  return map;
+}, []);
+
 const getColumnRowFromCoords = (x, y) => {
   const originalX = x / factor;
   const originalY = y / factor;
@@ -2449,6 +2468,28 @@ const obstacleModeRef = useRef(null);
 useEffect(() => {
   obstacleModeRef.current = obstacleMode;
 }, [obstacleMode]);
+
+const modalHeight = Dimensions.get('window').height / 2;
+
+const [selectedSector, setSelectedSector] = useState(null);
+const modalAnim = useRef(new Animated.Value(0)).current;
+
+const openSectorModal = (sector) => {
+  setSelectedSector(sector);
+  Animated.timing(modalAnim, {
+    toValue: 1,
+    duration: 300,
+    useNativeDriver: true
+  }).start();
+};
+
+const closeSectorModal = () => {
+  Animated.timing(modalAnim, {
+    toValue: 0,
+    duration: 300,
+    useNativeDriver: true
+  }).start(() => setSelectedSector(null));
+};
 
   useEffect(() => {
     if (!start) return;
@@ -2542,7 +2583,11 @@ useEffect(() => {
           const excelRange = getExcelRange(column, row);
           if (excelRange) {
             if (!IGNORED_SECTORS.has(excelRange)) {
-              console.log(`тап відбувся в секторі '${excelRange}'`);
+              if (currentActionIndex >= actions.length) {
+                openSectorModal(excelRange);
+              } else {
+                console.log(`тап відбувся в секторі '${excelRange}'`);
+              }
             }
           } else {
             console.log('тап у стовпчику', column, 'рядку', row);
@@ -2909,9 +2954,31 @@ useEffect(() => {
           </TouchableOpacity>
         </View>
       )}
-      {currentActionIndex >= actions.length && (
-        <View style={styles.obstacleContainer}>
-          <Text style={styles.obstacleText}>Вкажіть перешкоди на мапі</Text>
+      {selectedSector && (
+        <Animated.View
+          style={[
+            styles.sectorModal,
+            {
+              transform: [
+                {
+                  translateY: modalAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [modalHeight, 0]
+                  })
+                }
+              ],
+              height: modalHeight
+            }
+          ]}
+        >
+          <Text style={styles.modalTitle}>Сектор {selectedSector}</Text>
+          {groupXmlMap[selectedSector] && (
+            <SvgXml
+              xml={groupXmlMap[selectedSector]}
+              width={SECTOR_WIDTH * 4}
+              height={SECTOR_HEIGHT * 4}
+            />
+          )}
           <View style={styles.toggleRow}>
             <TouchableOpacity
               style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
@@ -2930,13 +2997,18 @@ useEffect(() => {
               <Ionicons name="arrow-down" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.button, { alignSelf: 'flex-start', marginTop: 8 }]}
-            onPress={() => setObstacleMode(null)}
-          >
-            <Text style={{ color: '#fff' }}>Готово</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={{ flexDirection: 'row', marginTop: 8 }}>
+            <TouchableOpacity style={styles.button} onPress={closeSectorModal}>
+              <Text style={{ color: '#fff' }}>Очистити</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, { marginLeft: 8 }]}
+              onPress={closeSectorModal}
+            >
+              <Text style={{ color: '#fff' }}>Застосувати</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -2971,7 +3043,18 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 4
   },
-  toggleActive: { backgroundColor: '#2196f3' }
+  toggleActive: { backgroundColor: '#2196f3' },
+  sectorModal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12
+  },
+  modalTitle: { fontWeight: 'bold', marginBottom: 8 }
 });
 
 export default CulturalPlanner;
