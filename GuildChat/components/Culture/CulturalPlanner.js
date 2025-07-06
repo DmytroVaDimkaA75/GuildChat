@@ -2279,20 +2279,45 @@ const cellGroupMap = useMemo(() => {
   return map;
 }, [cellPositions]);
 
+const GROUP_RANGES = [
+  'E1:H4',
+  'I1:L4',
+  'M1:P4',
+  'Q1:T4',
+  'A5:D8',
+  'E5:H8',
+  'I5:L8',
+  'M5:P8',
+  'Q5:T8',
+  'A9:D12',
+  'E9:H12',
+  'I9:L12',
+  'M9:P12',
+  'Q9:T12',
+  'U9:X12',
+  'A13:D16',
+  'E13:H16',
+  'I13:L16',
+  'M13:P16',
+  'Q13:T16',
+  'U13:X16',
+  'E17:H20',
+  'I17:L20',
+  'M17:P20',
+  'Q17:T20'
+];
+
 const groupBounds = useMemo(() => {
   const bounds = {};
-  Object.values(cellPositions).forEach(({ x, y, group }) => {
-    const left = x * factor;
-    const top = (y - cellSize) * factor;
-    const right = (x + cellSize) * factor;
-    const bottom = y * factor;
-    if (!bounds[group]) {
-      bounds[group] = { left, top, right, bottom };
-    } else {
-      if (left < bounds[group].left) bounds[group].left = left;
-      if (top < bounds[group].top) bounds[group].top = top;
-      if (right > bounds[group].right) bounds[group].right = right;
-      if (bottom > bounds[group].bottom) bounds[group].bottom = bottom;
+  GROUP_RANGES.forEach((range) => {
+    const rect = parseRange(range);
+    if (rect) {
+      bounds[range] = {
+        left: rect.x,
+        top: rect.y,
+        right: rect.x + rect.width,
+        bottom: rect.y + rect.height
+      };
     }
   });
   return bounds;
@@ -2307,7 +2332,7 @@ const getGroupByCoords = (x, y) => {
   return null;
 };
 
- const parseRange = (range) => {
+function parseRange(range) {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
      const pos = cellPositions[clean];
@@ -2328,13 +2353,13 @@ const getGroupByCoords = (x, y) => {
    if (!startPos || !endPos) return null;
    const startTop = { x: startPos.x, y: startPos.y - cellSize };
    const endBottom = { x: endPos.x + cellSize, y: endPos.y };
-   return {
-     x: startTop.x * factor,
-     y: startTop.y * factor,
-     width: (endBottom.x - startTop.x) * factor,
-     height: (endBottom.y - startTop.y) * factor
-   };
- };
+  return {
+    x: startTop.x * factor,
+    y: startTop.y * factor,
+    width: (endBottom.x - startTop.x) * factor,
+    height: (endBottom.y - startTop.y) * factor
+  };
+}
 
 const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
