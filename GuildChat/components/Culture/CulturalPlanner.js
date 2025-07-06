@@ -2944,11 +2944,14 @@ useEffect(() => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             {selectedSector && (
-              <SvgXml
-                xml={getGroupSvgXml(selectedSector) || ''}
-                width="100%"
-                height="60%"
-              />
+              <>
+                <Text style={styles.modalTitle}>{`Сектор ${selectedSector}`}</Text>
+                <SvgXml
+                  xml={getGroupSvgXml(selectedSector) || ''}
+                  width="100%"
+                  height="60%"
+                />
+              </>
             )}
             <View style={styles.toggleRow}>
               <TouchableOpacity
@@ -3031,6 +3034,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 10,
     padding: 16,
     height: '50%'
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8
   },
   modalButtonsRow: { flexDirection: 'row', marginTop: 8 },
   obstacleContainer: { marginTop: 12 },
