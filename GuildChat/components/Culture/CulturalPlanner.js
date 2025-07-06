@@ -2429,6 +2429,7 @@ const getGroupSvgXml = groupId => {
 const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
+const currentActionIndexRef = useRef(0);
 
 const { minX, minY, cellIndex } = useMemo(() => {
   let minX = Infinity;
@@ -2460,6 +2461,9 @@ const [selectedSector, setSelectedSector] = useState(null);
 useEffect(() => {
   obstacleModeRef.current = obstacleMode;
 }, [obstacleMode]);
+useEffect(() => {
+  currentActionIndexRef.current = currentActionIndex;
+}, [currentActionIndex]);
 
   useEffect(() => {
     if (!start) return;
@@ -2554,7 +2558,7 @@ useEffect(() => {
           if (excelRange && !IGNORED_SECTORS.has(excelRange)) {
             console.log(`тап відбувся в секторі '${excelRange}'`);
             setSelectedSector(excelRange);
-            if (currentActionIndex >= actions.length) {
+            if (currentActionIndexRef.current >= actions.length) {
               setObstacleModalVisible(true);
             }
           } else {
