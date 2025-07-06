@@ -2367,6 +2367,15 @@ const getColumnRowFromCoords = (x, y) => {
   return { column, row };
 };
 
+const getExcelRange = (columnIndex, rowIndex) => {
+  const columnLabel = COLUMN_META[columnIndex]?.label;
+  const rowLabel = ROW_META[rowIndex]?.label;
+  if (!columnLabel || !rowLabel) return null;
+  const [colStart, colEnd] = columnLabel.split(':');
+  const [rowStart, rowEnd] = rowLabel.split(':');
+  return `${colStart}${rowStart}:${colEnd}${rowEnd}`;
+};
+
 function parseRange(range) {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
@@ -2518,7 +2527,12 @@ useEffect(() => {
           const adjustedY =
             pageY - containerOffset.current.y - offset.current.y;
           const { column, row } = getColumnRowFromCoords(adjustedX, adjustedY);
-          console.log('тап у стовпчику', column, 'рядку', row);
+          const excelRange = getExcelRange(column, row);
+          if (excelRange) {
+            console.log(`тап відбувся в секторі '${excelRange}'`);
+          } else {
+            console.log('тап у стовпчику', column, 'рядку', row);
+          }
         }
       }
     })
