@@ -2279,6 +2279,34 @@ const cellGroupMap = useMemo(() => {
   return map;
 }, [cellPositions]);
 
+const groupBounds = useMemo(() => {
+  const bounds = {};
+  Object.values(cellPositions).forEach(({ x, y, group }) => {
+    const left = x * factor;
+    const top = (y - cellSize) * factor;
+    const right = (x + cellSize) * factor;
+    const bottom = y * factor;
+    if (!bounds[group]) {
+      bounds[group] = { left, top, right, bottom };
+    } else {
+      if (left < bounds[group].left) bounds[group].left = left;
+      if (top < bounds[group].top) bounds[group].top = top;
+      if (right > bounds[group].right) bounds[group].right = right;
+      if (bottom > bounds[group].bottom) bounds[group].bottom = bottom;
+    }
+  });
+  return bounds;
+}, [cellPositions, factor]);
+
+const getGroupByCoords = (x, y) => {
+  for (const [group, b] of Object.entries(groupBounds)) {
+    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) {
+      return group;
+    }
+  }
+  return null;
+};
+
  const parseRange = (range) => {
    const clean = range.trim().toUpperCase();
    if (/^[A-Z]\d+$/.test(clean)) {
@@ -2330,8 +2358,8 @@ const { minX, minY, cellIndex } = useMemo(() => {
 }, [cellPositions]);
 
 const getCellByCoords = (x, y) => {
-  const col = Math.floor((x - minX * factor) / (cellSize * factor));
-  const row = Math.floor((y - minY * factor) / (cellSize * factor));
+  const col = Math.round((x - minX * factor) / (cellSize * factor));
+  const row = Math.round((y - minY * factor) / (cellSize * factor));
   return cellIndex[`${col},${row}`] ?? null;
 };
 
@@ -2427,10 +2455,8 @@ useEffect(() => {
           const adjustedX = evt.nativeEvent.locationX - offset.current.x;
           const adjustedY = evt.nativeEvent.locationY - offset.current.y;
           const cellId = getCellByCoords(adjustedX, adjustedY);
-          if (cellId) {
-            const groupId = cellGroupMap[cellId];
-            console.log('натиснуто групу', groupId);
-          }
+          const groupId = cellGroupMap[cellId];
+          console.log('натиснуто групу', groupId);
         }
       }
     })
