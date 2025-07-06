@@ -2245,6 +2245,14 @@ const initialY = -((mapHeight - containerHeight) / 2);
 
 const factor = mapWidth / 239.99976;
 
+  const containerRef = useRef(null);
+  const containerOffset = useRef({ x: 0, y: 0 });
+  const handleContainerLayout = () => {
+    containerRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      containerOffset.current = { x: pageX, y: pageY };
+    });
+  };
+
   const cellSize = 9.638672;
 
 const cellPositions = useMemo(() => {
@@ -2504,8 +2512,11 @@ useEffect(() => {
         pan.setValue(offset.current);
 
         if (Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
-          const adjustedX = evt.nativeEvent.locationX - offset.current.x;
-          const adjustedY = evt.nativeEvent.locationY - offset.current.y;
+          const { pageX, pageY } = evt.nativeEvent;
+          const adjustedX =
+            pageX - containerOffset.current.x - offset.current.x;
+          const adjustedY =
+            pageY - containerOffset.current.y - offset.current.y;
           const { column, row } = getColumnRowFromCoords(adjustedX, adjustedY);
           console.log('тап у стовпчику', column, 'рядку', row);
         }
@@ -2779,7 +2790,11 @@ useEffect(() => {
       <Text style={styles.title}>
         Тут логіка планувальника для {settlementName}
       </Text>
-      <View style={[styles.mapContainer, { width: containerWidth, height: containerHeight }]}>
+      <View
+        style={[styles.mapContainer, { width: containerWidth, height: containerHeight }]}
+        ref={containerRef}
+        onLayout={handleContainerLayout}
+      >
         <Animated.View
           style={{
             width: mapWidth,
