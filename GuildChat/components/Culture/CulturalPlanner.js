@@ -2353,22 +2353,10 @@ const getColumnRowFromCoords = (x, y) => {
   const originalX = x / factor;
   const originalY = y / factor;
 
-  const getIndex = (meta, value, size) => {
-    const firstStart = meta[0].start;
-    let idx = Math.floor((value - firstStart) / size);
-    if (idx < 0) return -1;
-    if (idx >= meta.length) return meta.length - 1;
-    return idx;
-  };
+  const column = Math.floor(originalX / 40);
+  const row = Math.floor(originalY / 40);
 
-  const colIndex = getIndex(COLUMN_META, originalX, SECTOR_WIDTH);
-  const rowIndex = getIndex(ROW_META, originalY, SECTOR_HEIGHT);
-
-  if (colIndex === -1 || rowIndex === -1) {
-    return { column: null, row: null };
-  }
-
-  return { column: COLUMN_META[colIndex].label, row: ROW_META[rowIndex].label };
+  return { column, row };
 };
 
 function parseRange(range) {
