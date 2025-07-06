@@ -1,26 +1,71 @@
-import React, { useState } from 'react';
-import { View, TextInput, Button, Text, StyleSheet } from 'react-native';
-import { callAssistant } from '../../assistantApi'; // Імпорт функції, яку ми щойно створили
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Image,
+  StyleSheet,
+  Switch,
+  Animated,
+  PanResponder,
+} from 'react-native';
 
-export default function AssistantTestScreen() {
-  const [input, setInput] = useState('');
-  const [response, setResponse] = useState('');
+const GRID_ROWS = 5;
+const GRID_COLS = 5;
+const SQUARE_SIZE = 60;
 
-  const handleSend = async () => {
-    const reply = await callAssistant(input);
-    setResponse(reply);
+export default function MapComponent() {
+  const [up, setUp] = useState(false);
+  const [down, setDown] = useState(false);
+  const [left, setLeft] = useState(false);
+  const [right, setRight] = useState(false);
+
+  const position = useRef(new Animated.ValueXY()).current;
+
+  const handleTap = (nativeEvent) => {
+    if (!(up || down || left || right)) return;
+    const { locationX, locationY } = nativeEvent;
+    const col = Math.floor(locationX / SQUARE_SIZE);
+    const row = Math.floor(locationY / SQUARE_SIZE);
+    const id = `square_${row}_${col}`;
+    console.log('Tapped square id:', id);
   };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        position.setOffset({ x: position.x._value, y: position.y._value });
+        position.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: position.x, dy: position.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: (evt, gestureState) => {
+        position.flattenOffset();
+        if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
+          handleTap(evt.nativeEvent);
+        }
+      },
+    })
+  ).current;
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.input}
-        placeholder="Введи запит..."
-        value={input}
-        onChangeText={setInput}
-      />
-      <Button title="Відправити запит" onPress={handleSend} />
-      <Text style={styles.response}>{response}</Text>
+      <View style={styles.switchRow}>
+        <Switch value={up} onValueChange={setUp} />
+        <Switch value={down} onValueChange={setDown} />
+        <Switch value={left} onValueChange={setLeft} />
+        <Switch value={right} onValueChange={setRight} />
+      </View>
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[styles.imageWrapper, position.getLayout()]}
+      >
+        <Image
+          source={require('../menu-icon.png')}
+          style={{ width: GRID_COLS * SQUARE_SIZE, height: GRID_ROWS * SQUARE_SIZE }}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -28,18 +73,15 @@ export default function AssistantTestScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  input: {
-    height: 50,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 10,
+  switchRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
   },
-  response: {
-    marginTop: 20,
-    fontSize: 16,
+  imageWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
