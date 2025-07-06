@@ -2326,6 +2326,10 @@ const getCellByCoords = (x, y) => {
 };
 
 const [obstacleMode, setObstacleMode] = useState(null);
+const obstacleModeRef = useRef(null);
+useEffect(() => {
+  obstacleModeRef.current = obstacleMode;
+}, [obstacleMode]);
 
   useEffect(() => {
     if (!start) return;
@@ -2409,7 +2413,7 @@ const [obstacleMode, setObstacleMode] = useState(null);
         offset.current = { x: newX, y: newY };
         pan.setValue(offset.current);
 
-        if (obstacleMode && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
+        if (obstacleModeRef.current && Math.abs(gesture.dx) < 5 && Math.abs(gesture.dy) < 5) {
           const adjustedX = evt.nativeEvent.locationX - pan.x._value;
           const adjustedY = evt.nativeEvent.locationY - pan.y._value;
           const cellId = getCellByCoords(adjustedX, adjustedY);
