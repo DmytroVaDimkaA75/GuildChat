@@ -3010,7 +3010,6 @@ useEffect(() => {
             <View style={styles.toggleRow}>
               <TouchableOpacity
                 style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
-                disabled
                 onPress={() =>
                   setObstacleMode(prev => (prev === 'horizontal' ? null : 'horizontal'))
                 }
@@ -3019,7 +3018,6 @@ useEffect(() => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleButton, obstacleMode === 'vertical' && styles.toggleActive]}
-                disabled
                 onPress={() =>
                   setObstacleMode(prev => (prev === 'vertical' ? null : 'vertical'))
                 }
