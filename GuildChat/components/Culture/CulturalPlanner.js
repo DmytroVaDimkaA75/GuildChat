@@ -309,7 +309,7 @@ const buildingColors = {
   residential: '#a200ec',
   diplomatic: '#0080ec',
   production: '#2bff2e',
-  road: '#000'
+  road: '#a8a8a8'
 };
 
 
