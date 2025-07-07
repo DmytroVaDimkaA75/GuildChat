@@ -16,7 +16,8 @@ import {
   Dimensions,
   PanResponder,
   Animated,
-  Modal
+  Modal,
+  Pressable
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -2469,6 +2470,28 @@ const [obstacleMode, setObstacleMode] = useState(null);
 const obstacleModeRef = useRef(null);
 const [obstacleModalVisible, setObstacleModalVisible] = useState(false);
 const [selectedSector, setSelectedSector] = useState(null);
+const [modalSvgSize, setModalSvgSize] = useState({ width: 0, height: 0 });
+
+const handleModalPress = e => {
+  if (!selectedSector) return;
+  const { locationX, locationY } = e.nativeEvent;
+  if (!modalSvgSize.width || !modalSvgSize.height) return;
+  const match = selectedSector.match(/^([A-Z])(\d+):/);
+  if (!match) return;
+  const startCol = match[1].charCodeAt(0);
+  const startRow = parseInt(match[2], 10);
+  const colOffset = Math.min(
+    3,
+    Math.floor((locationX / modalSvgSize.width) * 4)
+  );
+  const rowOffset = Math.min(
+    3,
+    Math.floor((locationY / modalSvgSize.height) * 4)
+  );
+  const cellId = `${String.fromCharCode(startCol + colOffset)}${startRow + rowOffset}`;
+  console.log(`тап по квадрату '${cellId}'`);
+  Alert.alert(`Квадрат ${cellId}`);
+};
 useEffect(() => {
   obstacleModeRef.current = obstacleMode;
 }, [obstacleMode]);
@@ -2961,11 +2984,25 @@ useEffect(() => {
             {selectedSector && (
               <>
                 <Text style={styles.modalTitle}>{`Сектор ${selectedSector}`}</Text>
-                <SvgXml
-                  xml={getGroupSvgXml(selectedSector) || ''}
-                  width="100%"
-                  height="60%"
-                />
+                <View
+                  style={styles.modalSvgWrapper}
+                  onLayout={e =>
+                    setModalSvgSize({
+                      width: e.nativeEvent.layout.width,
+                      height: e.nativeEvent.layout.height
+                    })
+                  }
+                >
+                  <SvgXml
+                    xml={getGroupSvgXml(selectedSector) || ''}
+                    width="100%"
+                    height="100%"
+                  />
+                  <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={handleModalPress}
+                  />
+                </View>
               </>
             )}
             <View style={styles.toggleRow}>
@@ -3066,6 +3103,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 4
   },
+  modalSvgWrapper: { width: '100%', height: '60%' },
   toggleActive: { backgroundColor: '#2196f3' }
 });
 
