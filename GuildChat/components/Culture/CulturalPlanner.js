@@ -2423,7 +2423,13 @@ const getGroupSvgXml = groupId => {
   const regex = new RegExp(`<g[^>]*id="${groupId}"[^>]*>[\\s\\S]*?<\\/g>`);
   const match = vikingMapXml.match(regex);
   if (!match) return null;
-  return `<svg xmlns="http://www.w3.org/2000/svg">${match[0]}</svg>`;
+
+  let group = match[0].replace(/transform="translate\([^\"]+\)"/, '');
+  const bounds = GROUP_BOUNDS_RAW[groupId];
+  if (!bounds) {
+    return `<svg xmlns="http://www.w3.org/2000/svg">${group}</svg>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}">${group}</svg>`;
 };
 
 const actions = apiData.actions;
