@@ -2423,13 +2423,18 @@ const getGroupSvgXml = groupId => {
   const regex = new RegExp(`<g[^>]*id="${groupId}"[^>]*>[\\s\\S]*?<\\/g>`);
   const match = vikingMapXml.match(regex);
   if (!match) return null;
+  let group = match[0];
+  const transRegex = /transform="translate\(([^,]+),([^)]+)\)"/;
+  group = group.replace(transRegex, '');
 
-  let group = match[0].replace(/transform="translate\([^\"]+\)"/, '');
-  const bounds = GROUP_BOUNDS_RAW[groupId];
-  if (!bounds) {
-    return `<svg xmlns="http://www.w3.org/2000/svg">${group}</svg>`;
+  const rect = group.match(/<rect[^>]*width="([0-9.]+)"[^>]*height="([0-9.]+)"[^>]*x="([0-9.]+)"[^>]*y="([0-9.]+)"[^>]*>/);
+  if (rect) {
+    const width = parseFloat(rect[1]) + parseFloat(rect[3]);
+    const height = parseFloat(rect[2]) + parseFloat(rect[4]);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${group}</svg>`;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}">${group}</svg>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg">${group}</svg>`;
 };
 
 const actions = apiData.actions;
