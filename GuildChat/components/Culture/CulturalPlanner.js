@@ -2488,6 +2488,8 @@ const handleModalPress = e => {
     3,
     Math.floor((locationY / modalSvgSize.height) * 4)
   );
+  if (colOffset === 3 || rowOffset === 3) return;
+  if (!obstacleModeRef.current) return;
   const cellId = `${String.fromCharCode(startCol + colOffset)}${startRow + rowOffset}`;
   console.log(`тап по квадрату '${cellId}'`);
   Alert.alert(`Квадрат ${cellId}`);
@@ -3008,6 +3010,7 @@ useEffect(() => {
             <View style={styles.toggleRow}>
               <TouchableOpacity
                 style={[styles.toggleButton, obstacleMode === 'horizontal' && styles.toggleActive]}
+                disabled
                 onPress={() =>
                   setObstacleMode(prev => (prev === 'horizontal' ? null : 'horizontal'))
                 }
@@ -3016,6 +3019,7 @@ useEffect(() => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleButton, obstacleMode === 'vertical' && styles.toggleActive]}
+                disabled
                 onPress={() =>
                   setObstacleMode(prev => (prev === 'vertical' ? null : 'vertical'))
                 }
@@ -3026,12 +3030,14 @@ useEffect(() => {
             <View style={styles.modalButtonsRow}>
               <TouchableOpacity
                 style={[styles.button, { flex: 1, marginRight: 8 }]}
+                disabled
                 onPress={() => setObstacleMode(null)}
               >
                 <Text style={{ color: '#fff' }}>Очистити</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, { flex: 1 }]}
+                disabled
                 onPress={() => setObstacleModalVisible(false)}
               >
                 <Text style={{ color: '#fff' }}>Застосувати</Text>
