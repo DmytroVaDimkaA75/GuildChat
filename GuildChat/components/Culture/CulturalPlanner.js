@@ -3027,18 +3027,24 @@ useEffect(() => {
             </View>
             <View style={styles.modalButtonsRow}>
               <TouchableOpacity
-                style={[styles.button, { flex: 1, marginRight: 8 }]}
+                style={[styles.button, styles.disabledButton, { flex: 1, marginRight: 8 }]}
                 disabled
                 onPress={() => setObstacleMode(null)}
               >
-                <Text style={{ color: '#fff' }}>Очистити</Text>
+                <Text style={[styles.buttonText, styles.disabledButtonText]}>Очистити</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, { flex: 1 }]}
+                style={[styles.button, styles.disabledButton, { flex: 1 }]}
                 disabled
                 onPress={() => setObstacleModalVisible(false)}
               >
-                <Text style={{ color: '#fff' }}>Застосувати</Text>
+                <Text style={[styles.buttonText, styles.disabledButtonText]}>Застосувати</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, marginLeft: 8 }]}
+                onPress={() => setObstacleModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Закрити</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3068,6 +3074,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 4
   },
+  disabledButton: {
+    backgroundColor: '#b0b0b0'
+  },
   actionsContainer: { marginTop: 20, alignItems: 'center' },
   actionButton: {
     backgroundColor: '#2196f3',
@@ -3079,6 +3088,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   buttonText: { color: '#fff' },
+  disabledButtonText: { color: '#eeeeee' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
