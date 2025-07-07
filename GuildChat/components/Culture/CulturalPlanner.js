@@ -2984,7 +2984,7 @@ useEffect(() => {
             {selectedSector && (
               <>
                 <Text style={styles.modalTitle}>{`Сектор ${selectedSector}`}</Text>
-                <View
+                <Pressable
                   style={styles.modalSvgWrapper}
                   onLayout={e =>
                     setModalSvgSize({
@@ -2992,17 +2992,14 @@ useEffect(() => {
                       height: e.nativeEvent.layout.height
                     })
                   }
+                  onPress={handleModalPress}
                 >
                   <SvgXml
                     xml={getGroupSvgXml(selectedSector) || ''}
                     width="100%"
                     height="100%"
                   />
-                  <Pressable
-                    style={StyleSheet.absoluteFill}
-                    onPress={handleModalPress}
-                  />
-                </View>
+                </Pressable>
               </>
             )}
             <View style={styles.toggleRow}>
@@ -3103,7 +3100,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 4
   },
-  modalSvgWrapper: { width: '100%', height: '60%' },
+  modalSvgWrapper: { width: '100%', aspectRatio: 1 },
   toggleActive: { backgroundColor: '#2196f3' }
 });
 
