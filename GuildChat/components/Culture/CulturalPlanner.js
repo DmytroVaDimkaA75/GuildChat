@@ -3105,7 +3105,7 @@ const styles = StyleSheet.create({
   },
   modalSvgWrapper: {
     width: '100%',
-    aspectRatio: 1,
+    height: '60%',
     alignSelf: 'center'
   },
   toggleActive: { backgroundColor: '#2196f3' }
