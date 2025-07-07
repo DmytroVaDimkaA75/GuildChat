@@ -2489,10 +2489,24 @@ const handleModalPress = e => {
     Math.floor((locationY / modalSvgSize.height) * 4)
   );
   if (colOffset === 3 || rowOffset === 3) return;
-  if (!obstacleModeRef.current) return;
+  const mode = obstacleModeRef.current;
+  if (!mode) return;
   const cellId = `${String.fromCharCode(startCol + colOffset)}${startRow + rowOffset}`;
-  console.log(`тап по квадрату '${cellId}'`);
-  Alert.alert(`Квадрат ${cellId}`);
+  let targetCellId = null;
+  if (mode === 'vertical') {
+    const nextRow = startRow + rowOffset + 1;
+    if (nextRow > startRow + 3) return;
+    targetCellId = `${String.fromCharCode(startCol + colOffset)}${nextRow}`;
+  } else if (mode === 'horizontal') {
+    const nextCol = startCol + colOffset + 1;
+    if (nextCol > startCol + 3) return;
+    targetCellId = `${String.fromCharCode(nextCol)}${startRow + rowOffset}`;
+  }
+  if (!targetCellId) return;
+  const rect = parseRange(`${cellId}:${targetCellId}`);
+  if (rect) {
+    setObstacleRects(prev => [...prev, rect]);
+  }
 };
 useEffect(() => {
   obstacleModeRef.current = obstacleMode;
@@ -2557,6 +2571,7 @@ useEffect(() => {
   const [staticRect, setStaticRect] = useState(null);
   const [buildRects, setBuildRects] = useState([]);
   const [finalizedRects, setFinalizedRects] = useState([]);
+  const [obstacleRects, setObstacleRects] = useState([]);
   const buildOpacity = useRef(new Animated.Value(0)).current;
   const animatedPos = useRef(
     new Animated.ValueXY(
@@ -2885,7 +2900,7 @@ useEffect(() => {
           {...panResponder.panHandlers}
         >
           <SvgXml xml={vikingMapXml} width={mapWidth} height={mapHeight} />
-          {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0) && (
+          {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0 || obstacleRects.length > 0) && (
             <Svg
               width={mapWidth}
               height={mapHeight}
@@ -2932,6 +2947,16 @@ useEffect(() => {
                   />
                 );
               })}
+              {obstacleRects.map((r, idx) => (
+                <Rect
+                  key={`o-${idx}`}
+                  x={r.x}
+                  y={r.y}
+                  width={r.width}
+                  height={r.height}
+                  fill="#4a4a4a"
+                />
+              ))}
               {buildRects.map((r, idx) => {
                 const action = actions[currentActionIndex];
                 const type = buildingTypes[action?.building] || 'residential';
