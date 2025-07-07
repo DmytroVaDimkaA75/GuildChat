@@ -3103,7 +3103,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 4
   },
-  modalSvgWrapper: { width: '100%', height: '60%' },
+  modalSvgWrapper: {
+    width: '100%',
+    aspectRatio: 1,
+    alignSelf: 'center'
+  },
   toggleActive: { backgroundColor: '#2196f3' }
 });
 
