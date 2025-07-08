@@ -2538,6 +2538,24 @@ useEffect(() => {
   currentActionIndexRef.current = currentActionIndex;
 }, [currentActionIndex]);
 
+useEffect(() => {
+  if (!settlementName) return;
+  (async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actionIndex`;
+      const snap = await get(ref(database, path));
+      if (snap.exists()) {
+        const idx = snap.val();
+        if (typeof idx === 'number') setCurrentActionIndex(idx);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  })();
+}, [settlementName]);
+
   useEffect(() => {
     if (!start) return;
     (async () => {
@@ -2548,6 +2566,7 @@ useEffect(() => {
         await set(ref(database, basePath), {
           settlementName,
           questline: initialQuestline,
+          actionIndex: 0,
           availableBuildings: [
             {
               name: 'Халупа',
@@ -2664,6 +2683,21 @@ useEffect(() => {
       }
     })();
   }, [obstacleRects]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        await set(
+          ref(database, `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actionIndex`),
+          currentActionIndex
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [currentActionIndex]);
   const animatedPos = useRef(
     new Animated.ValueXY(
       initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
