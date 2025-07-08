@@ -2438,6 +2438,22 @@ const getGroupSvgXml = groupId => {
   return `<svg xmlns="http://www.w3.org/2000/svg">${group}</svg>`;
 };
 
+const convertRectToSector = (rect, sectorId, size) => {
+  if (!rect || !sectorId || !size?.width || !size?.height) return null;
+  const raw = GROUP_BOUNDS_RAW[sectorId];
+  if (!raw) return null;
+  const sectorX = raw.x * factor;
+  const sectorY = raw.y * factor;
+  const sectorW = raw.width * factor;
+  const sectorH = raw.height * factor;
+  return {
+    x: ((rect.x - sectorX) / sectorW) * size.width,
+    y: ((rect.y - sectorY) / sectorH) * size.height,
+    width: (rect.width / sectorW) * size.width,
+    height: (rect.height / sectorH) * size.height
+  };
+};
+
 const actions = apiData.actions;
 const initialFromRect = parseRange(actions[0].from);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
@@ -3030,6 +3046,37 @@ useEffect(() => {
                     width="100%"
                     height="100%"
                   />
+                  {(moveRect || staticRect || buildRects.length > 0 || finalizedRects.length > 0 || obstacleRects.length > 0) && (
+                    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+                      {moveRect && (() => {
+                        const pos = animatedPos.__getValue();
+                        const r = convertRectToSector({ x: pos.x, y: pos.y, width: moveRect.width, height: moveRect.height }, selectedSector, modalSvgSize);
+                        return r ? <Rect x={r.x} y={r.y} width={r.width} height={r.height} fill="#8b0000" /> : null;
+                      })()}
+                      {staticRect && (() => {
+                        const r = convertRectToSector(staticRect, selectedSector, modalSvgSize);
+                        return r ? <Rect x={r.x} y={r.y} width={r.width} height={r.height} fill="#8b0000" /> : null;
+                      })()}
+                      {finalizedRects.map((r, idx) => {
+                        const conv = convertRectToSector(r, selectedSector, modalSvgSize);
+                        if (!conv) return null;
+                        return <Rect key={`f-m-${idx}`} x={conv.x} y={conv.y} width={conv.width} height={conv.height} fill={r.color} />;
+                      })}
+                      {obstacleRects.map((r, idx) => {
+                        const conv = convertRectToSector(r, selectedSector, modalSvgSize);
+                        if (!conv) return null;
+                        return <Rect key={`o-m-${idx}`} x={conv.x} y={conv.y} width={conv.width} height={conv.height} fill="#4a4a4a" />;
+                      })}
+                      {buildRects.map((r, idx) => {
+                        const action = actions[currentActionIndex];
+                        const type = buildingTypes[action?.building] || 'residential';
+                        const color = buildingColors[type] || '#4b0082';
+                        const conv = convertRectToSector(r, selectedSector, modalSvgSize);
+                        if (!conv) return null;
+                        return <Rect key={`b-m-${idx}`} x={conv.x} y={conv.y} width={conv.width} height={conv.height} fill={color} />;
+                      })}
+                    </Svg>
+                  )}
                   <Pressable
                     style={StyleSheet.absoluteFill}
                     onPress={handleModalPress}
