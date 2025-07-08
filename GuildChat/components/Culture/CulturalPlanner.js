@@ -3201,7 +3201,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   modalSvgWrapper: {
-    width: '60%',
+    width: '50%',
     aspectRatio: 1,
     alignSelf: 'center',
     marginBottom: 12
