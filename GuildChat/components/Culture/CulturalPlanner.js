@@ -2488,9 +2488,14 @@ const handleModalPress = e => {
     3,
     Math.floor((locationY / modalSvgSize.height) * 4)
   );
-  if (colOffset === 3 || rowOffset === 3) return;
   const mode = obstacleModeRef.current;
   if (!mode) return;
+  if (
+    (rowOffset === 3 && colOffset === 3) ||
+    (rowOffset === 3 && colOffset < 3 && mode === 'vertical') ||
+    (colOffset === 3 && rowOffset < 3 && mode === 'horizontal')
+  )
+    return;
   const cellId = `${String.fromCharCode(startCol + colOffset)}${startRow + rowOffset}`;
   let targetCellId = null;
   if (mode === 'vertical') {
