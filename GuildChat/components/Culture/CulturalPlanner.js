@@ -2524,7 +2524,10 @@ const handleModalPress = e => {
   if (!targetCellId) return;
   const rect = parseRange(`${cellId}:${targetCellId}`);
   if (rect) {
-    setObstacleRects(prev => [...prev, rect]);
+    setObstacleRects(prev => {
+      const filtered = prev.filter(o => o.sector !== selectedSector);
+      return [...filtered, { sector: selectedSector, rect }];
+    });
   }
 };
 useEffect(() => {
@@ -2900,6 +2903,10 @@ useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActionIndex]);
 
+  const hasObstacle = selectedSector
+    ? obstacleRects.some(o => o.sector === selectedSector)
+    : false;
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
@@ -2966,13 +2973,13 @@ useEffect(() => {
                   />
                 );
               })}
-              {obstacleRects.map((r, idx) => (
+              {obstacleRects.map((o, idx) => (
                 <Rect
                   key={`o-${idx}`}
-                  x={r.x}
-                  y={r.y}
-                  width={r.width}
-                  height={r.height}
+                  x={o.rect.x}
+                  y={o.rect.y}
+                  width={o.rect.width}
+                  height={o.rect.height}
                   fill="#4a4a4a"
                 />
               ))}
@@ -3060,11 +3067,26 @@ useEffect(() => {
                         if (!conv) return null;
                         return <Rect key={`f-m-${idx}`} x={conv.x} y={conv.y} width={conv.width} height={conv.height} fill={r.color} />;
                       })}
-                      {obstacleRects.map((r, idx) => {
-                        const conv = convertRectToSector(r, selectedSector, modalSvgSize);
-                        if (!conv) return null;
-                        return <Rect key={`o-m-${idx}`} x={conv.x} y={conv.y} width={conv.width} height={conv.height} fill="#4a4a4a" />;
-                      })}
+                      {obstacleRects
+                        .filter(o => o.sector === selectedSector)
+                        .map((o, idx) => {
+                          const conv = convertRectToSector(
+                            o.rect,
+                            selectedSector,
+                            modalSvgSize
+                          );
+                          if (!conv) return null;
+                          return (
+                            <Rect
+                              key={`o-m-${idx}`}
+                              x={conv.x}
+                              y={conv.y}
+                              width={conv.width}
+                              height={conv.height}
+                              fill="#4a4a4a"
+                            />
+                          );
+                        })}
                       {buildRects.map((r, idx) => {
                         const action = actions[currentActionIndex];
                         const type = buildingTypes[action?.building] || 'residential';
@@ -3102,18 +3124,21 @@ useEffect(() => {
             </View>
             <View style={styles.modalButtonsRow}>
               <TouchableOpacity
-                style={[styles.button, styles.disabledButton, { flex: 1, marginRight: 8 }]}
-                disabled
-                onPress={() => setObstacleMode(null)}
+                style={[styles.button, !hasObstacle && styles.disabledButton, { flex: 1, marginRight: 8 }]}
+                disabled={!hasObstacle}
+                onPress={() => {
+                  setObstacleRects(prev => prev.filter(o => o.sector !== selectedSector));
+                  setObstacleMode(null);
+                }}
               >
-                <Text style={[styles.buttonText, styles.disabledButtonText]}>Очистити</Text>
+                <Text style={[styles.buttonText, !hasObstacle && styles.disabledButtonText]}>Очистити</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, styles.disabledButton, { flex: 1 }]}
-                disabled
+                style={[styles.button, !hasObstacle && styles.disabledButton, { flex: 1 }]}
+                disabled={!hasObstacle}
                 onPress={() => setObstacleModalVisible(false)}
               >
-                <Text style={[styles.buttonText, styles.disabledButtonText]}>Застосувати</Text>
+                <Text style={[styles.buttonText, !hasObstacle && styles.disabledButtonText]}>Застосувати</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, { flex: 1, marginLeft: 8 }]}
