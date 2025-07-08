@@ -2440,15 +2440,13 @@ const getGroupSvgXml = groupId => {
 
 const convertRectToSector = (rect, sectorId, size) => {
   if (!rect || !sectorId || !size?.width || !size?.height) return null;
-  const raw = GROUP_BOUNDS_RAW[sectorId];
-  if (!raw) return null;
-  const sectorX = raw.x * factor;
-  const sectorY = raw.y * factor;
-  const sectorW = raw.width * factor;
-  const sectorH = raw.height * factor;
+  const bounds = groupBounds[sectorId];
+  if (!bounds) return null;
+  const sectorW = bounds.right - bounds.left;
+  const sectorH = bounds.bottom - bounds.top;
   return {
-    x: ((rect.x - sectorX) / sectorW) * size.width,
-    y: ((rect.y - sectorY) / sectorH) * size.height,
+    x: ((rect.x - bounds.left) / sectorW) * size.width,
+    y: ((rect.y - bounds.top) / sectorH) * size.height,
     width: (rect.width / sectorW) * size.width,
     height: (rect.height / sectorH) * size.height
   };
@@ -3196,7 +3194,7 @@ const styles = StyleSheet.create({
   },
   modalSvgWrapper: {
     width: '60%',
-    height: '60%',
+    aspectRatio: 1,
     alignSelf: 'center'
   },
   toggleActive: { backgroundColor: '#2196f3' }
