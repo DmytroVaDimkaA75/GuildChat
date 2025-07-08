@@ -2620,6 +2620,35 @@ useEffect(() => {
   const buildOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!settlementName) return;
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path =
+          `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/constructedBuildings`;
+        const snap = await get(ref(database, path));
+        if (snap.exists()) {
+          const data = snap.val();
+          const rects = [];
+          Object.values(data).forEach(b => {
+            const ranges = b.cellRange ? b.cellRange.split(',') : [];
+            const type = b.type || buildingTypes[b.name] || 'residential';
+            const color = buildingColors[type] || '#4b0082';
+            ranges
+              .map(r => parseRange(r))
+              .filter(Boolean)
+              .forEach(r => rects.push({ ...r, color }));
+          });
+          setFinalizedRects(rects);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [settlementName]);
+
+  useEffect(() => {
     (async () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
