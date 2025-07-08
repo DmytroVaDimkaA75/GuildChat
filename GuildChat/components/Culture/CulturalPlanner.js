@@ -2522,11 +2522,12 @@ const handleModalPress = e => {
     targetCellId = `${String.fromCharCode(nextCol)}${startRow + rowOffset}`;
   }
   if (!targetCellId) return;
-  const rect = parseRange(`${cellId}:${targetCellId}`);
+  const range = `${cellId}:${targetCellId}`;
+  const rect = parseRange(range);
   if (rect) {
     setObstacleRects(prev => {
       const filtered = prev.filter(o => o.sector !== selectedSector);
-      return [...filtered, { sector: selectedSector, rect }];
+      return [...filtered, { sector: selectedSector, rect, range }];
     });
   }
 };
@@ -2587,6 +2588,28 @@ useEffect(() => {
     })();
   }, [start, settlementName]);
 
+  useEffect(() => {
+    if (!settlementName) return;
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/obstacles`;
+        const snap = await get(ref(database, path));
+        if (snap.exists()) {
+          const data = snap.val();
+          const arr = Object.entries(data).map(([sector, range]) => {
+            const rect = parseRange(range);
+            return rect ? { sector, rect, range } : null;
+          }).filter(Boolean);
+          setObstacleRects(arr);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [settlementName]);
+
   const [moveRect, setMoveRect] = useState(
     initialFromRect ? { width: initialFromRect.width, height: initialFromRect.height } : null
   );
@@ -2595,6 +2618,23 @@ useEffect(() => {
   const [finalizedRects, setFinalizedRects] = useState([]);
   const [obstacleRects, setObstacleRects] = useState([]);
   const buildOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/obstacles`;
+        const data = {};
+        obstacleRects.forEach(o => {
+          if (o.range) data[o.sector] = o.range;
+        });
+        await set(ref(database, path), data);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [obstacleRects]);
   const animatedPos = useRef(
     new Animated.ValueXY(
       initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
