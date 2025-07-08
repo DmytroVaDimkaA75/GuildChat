@@ -3182,10 +3182,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8
   },
-  modalButtonsRow: { flexDirection: 'row', marginTop: 8 },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8
+  },
   obstacleContainer: { marginTop: 12 },
   obstacleText: { marginBottom: 8 },
-  toggleRow: { flexDirection: 'row', marginBottom: 8 },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 8
+  },
   toggleButton: {
     backgroundColor: '#9e9e9e',
     padding: 8,
@@ -3195,7 +3203,8 @@ const styles = StyleSheet.create({
   modalSvgWrapper: {
     width: '60%',
     aspectRatio: 1,
-    alignSelf: 'center'
+    alignSelf: 'center',
+    marginBottom: 12
   },
   toggleActive: { backgroundColor: '#2196f3' }
 });
