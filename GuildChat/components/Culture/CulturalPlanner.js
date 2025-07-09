@@ -2452,8 +2452,7 @@ const convertRectToSector = (rect, sectorId, size) => {
   };
 };
 
-const actions = apiData.actions;
-const initialFromRect = parseRange(actions[0].from);
+const [actions, setActions] = useState([]);
 const [currentActionIndex, setCurrentActionIndex] = useState(0);
 const currentActionIndexRef = useRef(0);
 
@@ -2538,23 +2537,6 @@ useEffect(() => {
   currentActionIndexRef.current = currentActionIndex;
 }, [currentActionIndex]);
 
-useEffect(() => {
-  if (!settlementName) return;
-  (async () => {
-    try {
-      const userId = await AsyncStorage.getItem('userId');
-      const guildId = await AsyncStorage.getItem('guildId');
-      const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actionIndex`;
-      const snap = await get(ref(database, path));
-      if (snap.exists()) {
-        const idx = snap.val();
-        if (typeof idx === 'number') setCurrentActionIndex(idx);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  })();
-}, [settlementName]);
 
   useEffect(() => {
     if (!start) return;
@@ -2566,7 +2548,7 @@ useEffect(() => {
         await set(ref(database, basePath), {
           settlementName,
           questline: initialQuestline,
-          actionIndex: 0,
+          actions: apiData.actions,
           availableBuildings: [
             {
               name: 'Халупа',
@@ -2629,9 +2611,26 @@ useEffect(() => {
     })();
   }, [settlementName]);
 
-  const [moveRect, setMoveRect] = useState(
-    initialFromRect ? { width: initialFromRect.width, height: initialFromRect.height } : null
-  );
+  useEffect(() => {
+    if (!settlementName) return;
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actions`;
+        const snap = await get(ref(database, path));
+        if (snap.exists()) {
+          const data = snap.val();
+          const arr = Array.isArray(data) ? data.filter(Boolean) : Object.values(data);
+          setActions(arr);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [settlementName]);
+
+  const [moveRect, setMoveRect] = useState(null);
   const [staticRect, setStaticRect] = useState(null);
   const [buildRects, setBuildRects] = useState([]);
   const [finalizedRects, setFinalizedRects] = useState([]);
@@ -2684,25 +2683,7 @@ useEffect(() => {
     })();
   }, [obstacleRects]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        const guildId = await AsyncStorage.getItem('guildId');
-        await set(
-          ref(database, `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actionIndex`),
-          currentActionIndex
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    })();
-  }, [currentActionIndex]);
-  const animatedPos = useRef(
-    new Animated.ValueXY(
-      initialFromRect ? { x: initialFromRect.x, y: initialFromRect.y } : { x: 0, y: 0 }
-    )
-  ).current;
+  const animatedPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animationRef = useRef(null);
 
   const pan = React.useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
@@ -2911,11 +2892,17 @@ useEffect(() => {
     setBuildRects([]);
     buildOpacity.setValue(0);
 
-    if (currentActionIndex < actions.length - 1) {
-      setCurrentActionIndex(currentActionIndex + 1);
-    } else {
-      setCurrentActionIndex(actions.length);
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      const basePath = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/actions`;
+      const remaining = actions.slice(1);
+      await set(ref(database, basePath), remaining);
+      setActions(remaining);
+    } catch (e) {
+      console.error(e);
     }
+    setCurrentActionIndex(0);
   };
 
   useLayoutEffect(() => {
@@ -3004,7 +2991,7 @@ useEffect(() => {
       setMoveRect(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentActionIndex]);
+  }, [currentActionIndex, actions]);
 
   const hasObstacle = selectedSector
     ? obstacleRects.some(o => o.sector === selectedSector)
