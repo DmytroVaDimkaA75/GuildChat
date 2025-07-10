@@ -3124,6 +3124,12 @@ useEffect(() => {
           >
             <Text style={styles.buttonText}>Вартість технологій</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Planning')}
+          >
+            <Text style={styles.buttonText}>Планування</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={onClose}>
             <Text style={styles.buttonText}>Закінчити</Text>
           </TouchableOpacity>
