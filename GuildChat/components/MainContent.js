@@ -38,6 +38,7 @@ import SleepSchedule from './Profile/SleepSchedule';
 import LanguageSelector from './Profile/LanguageSelector';
 import CulturalPlanner from './Culture/CulturalPlanner';
 import CulturalSettlements from './Culture/CulturalSettlements';
+import Planning from './Culture/Planning';
 import AdminMain from './Admin/AdminMain';
 
 import GB from "./ico/GB.svg";
@@ -365,6 +366,18 @@ function CultureStack() {
           ),
         };
       }}
+    />
+    <Stack.Screen
+      name="Planning"
+      component={Planning}
+      options={({ navigation }) => ({
+        title: 'Планування',
+        headerLeft: () => (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        ),
+      })}
     />
 
 
