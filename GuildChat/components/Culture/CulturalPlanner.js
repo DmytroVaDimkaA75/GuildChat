@@ -2373,7 +2373,7 @@ const IGNORED_SECTORS = new Set([
 
 const sectors = {
   open_sectors: ['I5:L8', 'M5:P8', 'I9:L12', 'M9:P12'],
-  potential_sectors: ['E1:H4', 'I1:L4']
+  potential_sectors: ['E1:H4', 'I1:L4', 'M1:P4', 'Q1:T4', 'A5:D8', 'E5:H8', 'Q5:T8', 'A9:D12', 'E9:H12', 'Q9:T12', 'U9:X12', 'A13:D16', 'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16', 'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20'],
 };
 
 const getColumnRowFromCoords = (x, y) => {
