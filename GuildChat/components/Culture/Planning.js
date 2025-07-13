@@ -1987,6 +1987,33 @@ const Planning = () => {
   }
 
   const [rects, setRects] = useState(null);
+  const [mapXml, setMapXml] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/sectors`;
+        const snap = await get(ref(database, path));
+        if (snap.exists()) {
+          const { open_sectors = [], potential_sectors = [] } = snap.val();
+          const allowed = new Set([...open_sectors, ...potential_sectors]);
+          const groupRegex = /<g[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/g>/g;
+          setMapXml(
+            openMapXml.replace(groupRegex, (m, id) =>
+              allowed.has(id) ? m : ''
+            )
+          );
+        } else {
+          setMapXml(openMapXml);
+        }
+      } catch (e) {
+        console.error(e);
+        setMapXml(openMapXml);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -2016,7 +2043,7 @@ const Planning = () => {
     })();
   }, []);
 
-  if (!rects) {
+  if (!rects || !mapXml) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" />
@@ -2026,7 +2053,7 @@ const Planning = () => {
 
   return (
     <View style={[styles.container, { width: containerWidth, height: containerHeight }]}>
-      <SvgXml xml={openMapXml} width={mapWidth} height={mapHeight} />
+      <SvgXml xml={mapXml} width={mapWidth} height={mapHeight} />
       {rects.length > 0 && (
         <Svg width={mapWidth} height={mapHeight} style={StyleSheet.absoluteFill}>
           {rects.map((r, idx) => (
