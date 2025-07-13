@@ -2159,7 +2159,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: '#fff',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    overflow: 'hidden'
   },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
