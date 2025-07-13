@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
-import { SvgXml, Svg, Rect } from 'react-native-svg';
+import { SvgXml, Svg, Rect, Text as SvgText } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { ref, get } from 'firebase/database';
@@ -1922,6 +1922,21 @@ const openMapXml = `<svg
   </g>
 </svg>
 `;
+
+const buildingTypes = {
+  'Халупа': 'residential',
+  'Рунний камінь': 'diplomatic',
+  'Кузня сокир': 'production',
+  'Дорога': 'road'
+};
+
+const buildingColors = {
+  residential: '#a200ec',
+  diplomatic: '#0080ec',
+  production: '#2bff2e',
+  road: '#a8a8a8'
+};
+
 const Planning = () => {
   const { width: screenWidth } = Dimensions.get('window');
   const ratio = 1.2;
@@ -1957,6 +1972,27 @@ const Planning = () => {
     return positions;
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        const path = `guilds/${guildId}/guildUsers/${userId}/culturalSettlements/obstacles`;
+        const snap = await get(ref(database, path));
+        if (snap.exists()) {
+          const data = snap.val();
+          const arr = Object.values(data).map(r => parseRange(r)).filter(Boolean);
+          setObstacleRects(arr);
+        } else {
+          setObstacleRects([]);
+        }
+      } catch (e) {
+        console.error(e);
+        setObstacleRects([]);
+      }
+    })();
+  }, []);
+
   function parseRange(range) {
     const clean = range.trim().toUpperCase();
     if (/^[A-Z]\d+$/.test(clean)) {
@@ -1988,6 +2024,8 @@ const Planning = () => {
 
   const [rects, setRects] = useState(null);
   const [mapXml, setMapXml] = useState(null);
+  const [obstacleRects, setObstacleRects] = useState([]);
+  const [potentialSectors, setPotentialSectors] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -1998,7 +2036,11 @@ const Planning = () => {
         const snap = await get(ref(database, path));
         if (snap.exists()) {
           const { open_sectors = [], potential_sectors = [] } = snap.val();
-          const allowed = new Set([...open_sectors, ...potential_sectors]);
+          const pSectors = Array.isArray(potential_sectors)
+            ? potential_sectors
+            : Object.values(potential_sectors);
+          setPotentialSectors(pSectors);
+          const allowed = new Set([...open_sectors, ...pSectors]);
           const groupRegex = /<g[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/g>/g;
           setMapXml(
             openMapXml.replace(groupRegex, (m, id) =>
@@ -2027,10 +2069,12 @@ const Planning = () => {
           const res = [];
           Object.values(data).forEach(b => {
             const ranges = b.cellRange ? b.cellRange.split(',') : [];
+            const type = b.type || buildingTypes[b.name] || 'residential';
+            const color = buildingColors[type] || '#4b0082';
             ranges
               .map(r => parseRange(r))
               .filter(Boolean)
-              .forEach(r => res.push(r));
+              .forEach(r => res.push({ ...r, color }));
           });
           setRects(res);
         } else {
@@ -2054,19 +2098,59 @@ const Planning = () => {
   return (
     <View style={[styles.container, { width: containerWidth, height: containerHeight }]}>
       <SvgXml xml={mapXml} width={mapWidth} height={mapHeight} />
-      {rects.length > 0 && (
-        <Svg width={mapWidth} height={mapHeight} style={StyleSheet.absoluteFill}>
-          {rects.map((r, idx) => (
-            <Rect key={idx} x={r.x} y={r.y} width={r.width} height={r.height} fill="#8b0000" />
-          ))}
-        </Svg>
-      )}
+      <Svg width={mapWidth} height={mapHeight} style={StyleSheet.absoluteFill}>
+        {rects.map((r, idx) => (
+          <Rect
+            key={`b-${idx}`}
+            x={r.x}
+            y={r.y}
+            width={r.width}
+            height={r.height}
+            fill={r.color}
+          />
+        ))}
+        {obstacleRects.map((r, idx) => (
+          <Rect
+            key={`o-${idx}`}
+            x={r.x}
+            y={r.y}
+            width={r.width}
+            height={r.height}
+            fill="#4a4a4a"
+          />
+        ))}
+        {potentialSectors.map((s, idx) => {
+          const pr = parseRange(s);
+          if (!pr) return null;
+          const fontSize = pr.height * 0.8;
+          const cx = pr.x + pr.width / 2;
+          const cy = pr.y + pr.height / 2;
+          return (
+            <SvgText
+              key={`p-${idx}`}
+              x={cx}
+              y={cy}
+              fill="rgba(0,0,0,0.4)"
+              fontSize={fontSize}
+              textAnchor="middle"
+              alignmentBaseline="middle"
+            >
+              {idx + 1}
+            </SvgText>
+          );
+        })}
+      </Svg>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { alignSelf: 'center', backgroundColor: '#fff' },
+  container: {
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
 
