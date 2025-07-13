@@ -2371,6 +2371,11 @@ const IGNORED_SECTORS = new Set([
   'M9:P12'
 ]);
 
+const sectors = {
+  open_sectors: ['I5:L8', 'M5:P8', 'I9:L12', 'M9:P12'],
+  potential_sectors: ['E1:H4', 'I1:L4']
+};
+
 const getColumnRowFromCoords = (x, y) => {
   const originalX = x / factor;
   const originalY = y / factor;
@@ -2549,6 +2554,7 @@ useEffect(() => {
           settlementName,
           questline: initialQuestline,
           actions: apiData.actions,
+          sectors,
           availableBuildings: [
             {
               name: 'Халупа',
