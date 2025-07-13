@@ -1945,6 +1945,8 @@ const Planning = () => {
   const containerHeight = containerWidth / ratio;
   const mapWidth = containerWidth * scale;
   const mapHeight = mapWidth / ratio;
+  const initialX = -((mapWidth - containerWidth) / 2);
+  const initialY = -((mapHeight - containerHeight) / 2);
   const factor = mapWidth / 239.99976;
 
   const cellSize = 9.638672;
@@ -2097,11 +2099,18 @@ const Planning = () => {
 
   return (
     <View style={[styles.container, { width: containerWidth, height: containerHeight }]}>
-      <SvgXml xml={mapXml} width={mapWidth} height={mapHeight} />
-      <Svg width={mapWidth} height={mapHeight} style={StyleSheet.absoluteFill}>
-        {rects.map((r, idx) => (
-          <Rect
-            key={`b-${idx}`}
+      <View
+        style={{
+          width: mapWidth,
+          height: mapHeight,
+          transform: [{ translateX: initialX }, { translateY: initialY }]
+        }}
+      >
+        <SvgXml xml={mapXml} width={mapWidth} height={mapHeight} />
+        <Svg width={mapWidth} height={mapHeight} style={StyleSheet.absoluteFill}>
+          {rects.map((r, idx) => (
+            <Rect
+              key={`b-${idx}`}
             x={r.x}
             y={r.y}
             width={r.width}
@@ -2133,13 +2142,14 @@ const Planning = () => {
               fill="rgba(0,0,0,0.4)"
               fontSize={fontSize}
               textAnchor="middle"
-              alignmentBaseline="middle"
-            >
-              {idx + 1}
-            </SvgText>
-          );
-        })}
-      </Svg>
+          alignmentBaseline="middle"
+        >
+          {idx + 1}
+        </SvgText>
+        );
+      })}
+        </Svg>
+      </View>
     </View>
   );
 };
