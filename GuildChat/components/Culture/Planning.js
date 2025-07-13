@@ -4,8 +4,6 @@ import Svg, { Rect } from 'react-native-svg';
 
 // Розмір однієї клітинки карти
 const TILE_SIZE = 50;
-const ROWS = 6;
-const COLS = 6;
 
 // Відкриті сектори (можна налаштувати за потреби)
 const openSectors = [
@@ -23,12 +21,18 @@ const openSectors = [
   { row: 4, col: 2 }
 ];
 
+// Вираховуємо розміри сітки динамічно
+const ROWS = Math.max(...openSectors.map(s => s.row)) + 1;
+const COLS = Math.max(...openSectors.map(s => s.col)) + 1;
+
 // Побудовані будівлі та їх розташування
 const builtBuildings = [
   { row: 0, col: 0, img: require('./Vikings.png') },
   { row: 1, col: 1, img: require('./Japan.png') },
   { row: 2, col: 2, img: require('./Egypt.png') }
 ];
+
+const openSet = new Set(openSectors.map(s => `${s.row}-${s.col}`));
 
 const Planning = () => {
   return (
@@ -47,7 +51,9 @@ const Planning = () => {
             />
           ))}
         </Svg>
-        {builtBuildings.map((b, idx) => (
+        {builtBuildings
+          .filter(b => openSet.has(`${b.row}-${b.col}`))
+          .map((b, idx) => (
           <Image
             key={idx}
             source={b.img}
