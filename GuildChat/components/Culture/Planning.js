@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { database } from '../../firebaseConfig';
 import { ref, get } from 'firebase/database';
 
-const openMapXml = `
+const openMapXml = `<svg
    width="239.99976mm"
    height="200mm"
    viewBox="0 0 239.99976 200"
