@@ -2066,7 +2066,7 @@ const Planning = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { alignSelf: 'center', backgroundColor: '#fff' },
+  container: { alignSelf: 'center', alignItems: 'center', backgroundColor: '#fff' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
 
