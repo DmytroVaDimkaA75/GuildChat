@@ -1939,15 +1939,23 @@ const buildingColors = {
 
 const Planning = () => {
   const { width: screenWidth } = Dimensions.get('window');
-  const ratio = 1.2;
   const scale = 1 / 0.75;
+
+  const [bbox, setBbox] = useState({
+    x: 0,
+    y: 0,
+    width: 239.99976,
+    height: 200
+  });
+
+  const ratio = bbox.width / bbox.height;
   const containerWidth = screenWidth;
   const containerHeight = containerWidth / ratio;
   const mapWidth = containerWidth * scale;
-  const mapHeight = mapWidth / ratio;
+  const mapHeight = containerHeight * scale;
   const initialX = -((mapWidth - containerWidth) / 2);
   const initialY = -((mapHeight - containerHeight) / 2);
-  const factor = mapWidth / 239.99976;
+  const factor = mapWidth / bbox.width;
 
   const cellSize = 9.638672;
 
@@ -1995,13 +2003,42 @@ const Planning = () => {
     })();
   }, []);
 
-  function parseRange(range) {
+  function parseRangeRaw(range) {
     const clean = range.trim().toUpperCase();
     if (/^[A-Z]\d+$/.test(clean)) {
       const pos = cellPositions[clean];
       if (!pos) return null;
       const topLeft = { x: pos.x, y: pos.y - cellSize };
       const bottomRight = { x: pos.x + cellSize, y: pos.y };
+      return {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y
+      };
+    }
+    const match = clean.match(/^([A-Z]\d+):([A-Z]\d+)$/);
+    if (!match) return null;
+    const startPos = cellPositions[match[1]];
+    const endPos = cellPositions[match[2]];
+    if (!startPos || !endPos) return null;
+    const startTop = { x: startPos.x, y: startPos.y - cellSize };
+    const endBottom = { x: endPos.x + cellSize, y: endPos.y };
+    return {
+      x: startTop.x,
+      y: startTop.y,
+      width: endBottom.x - startTop.x,
+      height: endBottom.y - startTop.y
+    };
+  }
+
+  function parseRange(range) {
+    const clean = range.trim().toUpperCase();
+    if (/^[A-Z]\d+$/.test(clean)) {
+      const pos = cellPositions[clean];
+      if (!pos) return null;
+      const topLeft = { x: pos.x - bbox.x, y: pos.y - cellSize - bbox.y };
+      const bottomRight = { x: pos.x + cellSize - bbox.x, y: pos.y - bbox.y };
       return {
         x: topLeft.x * factor,
         y: topLeft.y * factor,
@@ -2014,8 +2051,8 @@ const Planning = () => {
     const startPos = cellPositions[match[1]];
     const endPos = cellPositions[match[2]];
     if (!startPos || !endPos) return null;
-    const startTop = { x: startPos.x, y: startPos.y - cellSize };
-    const endBottom = { x: endPos.x + cellSize, y: endPos.y };
+    const startTop = { x: startPos.x - bbox.x, y: startPos.y - cellSize - bbox.y };
+    const endBottom = { x: endPos.x + cellSize - bbox.x, y: endPos.y - bbox.y };
     return {
       x: startTop.x * factor,
       y: startTop.y * factor,
@@ -2043,13 +2080,36 @@ const Planning = () => {
             : Object.values(potential_sectors);
           setPotentialSectors(pSectors);
           const allowed = new Set([...open_sectors, ...pSectors]);
-          const groupRegex = /<g[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/g>/g;
-          setMapXml(
-            openMapXml.replace(groupRegex, (m, id) =>
+
+          const allRanges = Array.from(allowed)
+            .map(r => parseRangeRaw(r))
+            .filter(Boolean);
+
+          if (allRanges.length) {
+            let minX = Infinity,
+              minY = Infinity,
+              maxX = -Infinity,
+              maxY = -Infinity;
+            allRanges.forEach(r => {
+              minX = Math.min(minX, r.x);
+              minY = Math.min(minY, r.y);
+              maxX = Math.max(maxX, r.x + r.width);
+              maxY = Math.max(maxY, r.y + r.height);
+            });
+            const newBox = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+            setBbox(newBox);
+            const groupRegex = /<g[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/g>/g;
+            const xml = openMapXml.replace(groupRegex, (m, id) =>
               allowed.has(id) ? m : ''
-            )
-          );
+            );
+            const xmlWithView = xml.replace(/viewBox="[^"]+"/, `viewBox="${newBox.x} ${newBox.y} ${newBox.width} ${newBox.height}"`);
+            setMapXml(xmlWithView);
+          } else {
+            setBbox({ x: 0, y: 0, width: 239.99976, height: 200 });
+            setMapXml(openMapXml);
+          }
         } else {
+          setBbox({ x: 0, y: 0, width: 239.99976, height: 200 });
           setMapXml(openMapXml);
         }
       } catch (e) {
