@@ -2157,7 +2157,7 @@ const Planning = () => {
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'center',
-    backgroundColor: '#fff',
+    alignItems: 'center', backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden'
