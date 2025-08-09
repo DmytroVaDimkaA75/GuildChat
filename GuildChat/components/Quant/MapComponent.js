@@ -11,6 +11,10 @@ export default function MapComponent() {
         source={{ uri: 'https://ru11.forgeofempires.com/' }}
         style={styles.webview}
         userAgent={desktopUserAgent}
+        javaScriptEnabled
+        domStorageEnabled
+        thirdPartyCookiesEnabled
+        mixedContentMode="always"
       />
     </View>
   );
