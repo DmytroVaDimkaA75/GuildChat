@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect, useContext } from "react";
-import { StyleSheet, View, ActivityIndicator, Alert } from "react-native";
+import { StyleSheet, View, ActivityIndicator, Alert, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
@@ -44,6 +44,16 @@ const AppContent = () => {
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
 
+ useEffect(() => {
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'alert.mp3',
+      });
+    }
+  }, []);
+
   /* ───────── 1. завантаження/вибір мови ───────── */
   useEffect(() => {
     const initLanguage = async () => {
@@ -70,6 +80,22 @@ const AppContent = () => {
         console.log('Помилка отримання push-token:', e)
       );
   }, []); // ← важливо: порожній масив, викликається один раз
+
+    /* ───────── 3. показуємо вміст AsyncStorage ───────── */
+  useEffect(() => {
+    const showStorage = async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const entries = await AsyncStorage.multiGet(keys);
+        const obj = Object.fromEntries(entries);
+        Alert.alert("AsyncStorage", JSON.stringify(obj));
+      } catch (e) {
+        console.log('Помилка читання AsyncStorage:', e);
+      }
+    };
+    showStorage();
+  }, []);
+
 
   useEffect(() => {
     const subscription = Notifications.addNotificationReceivedListener(notification => {

@@ -22,7 +22,9 @@
       "permissions": ["CAMERA", "POST_NOTIFICATIONS", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE"]
     },
 
+    "notification": { "sound": "./assets/alert.mp3" },
     "web": { "favicon": "./assets/favicon.png" },
     "extra": { "eas": { "projectId": "2328cf5f-c10d-48c0-83b1-56dd8f6c3f38" } }
   }
+  
 }
