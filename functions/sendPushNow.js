@@ -26,7 +26,7 @@ exports.sendPushNow = onRequest(
       android: {
         notification: {
           // ВАЖЛИВО: канал має збігатися з тим, що ти створюєш у додатку
-          channelId: "custom-alerts",
+          channelId: "custom-alerts-v2",
           // На Android 8+ звук визначає канал, але вкажемо для сумісності:
           sound: "alert", // ім'я без розширення
         },

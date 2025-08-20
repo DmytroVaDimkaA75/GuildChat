@@ -46,7 +46,7 @@ const AppContent = () => {
   // 🔔 Створення кастомного каналу для Android (із звуком)
   useEffect(() => {
     if (Platform.OS === "android") {
-      Notifications.setNotificationChannelAsync("custom-alerts", {
+      Notifications.setNotificationChannelAsync("custom-alerts-v2", {
         name: "Custom Alerts",
         importance: Notifications.AndroidImportance.MAX,
         sound: "alert", // важливо: БЕЗ розширення .mp3
