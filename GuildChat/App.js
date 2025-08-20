@@ -8,9 +8,9 @@ import i18n from "./i18n";
 import * as Localization from "expo-localization";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
-// НОВЕ: сервіс реєстрації push-токена
+// 🔔 Push Notifications
+import * as Notifications from "expo-notifications";
 import { cacheExpoToken } from "./src/notifications/registerToken";
-import * as Notifications from 'expo-notifications';
 
 // контекст гільдії
 import { GuildProvider, GuildContext } from "./GuildContext";
@@ -18,7 +18,6 @@ import { GuildProvider, GuildContext } from "./GuildContext";
 // навігація
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import AdminSettingsScreen from "./components/AdminSettingsScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
@@ -26,10 +25,10 @@ import MainContent from "./components/MainContent";
 
 const Stack = createStackNavigator();
 
-// Set up notification handler for when app is in foreground
+// 🔔 Обробка сповіщень у foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,  // Show alert even when app is in foreground
+    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -44,17 +43,21 @@ const AppContent = () => {
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
 
- useEffect(() => {
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+  // 🔔 Створення кастомного каналу для Android (із звуком)
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      Notifications.setNotificationChannelAsync("custom-alerts", {
+        name: "Custom Alerts",
         importance: Notifications.AndroidImportance.MAX,
-        sound: 'alert.mp3',
+        sound: "alert", // важливо: БЕЗ розширення .mp3
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#FF231F7C",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
   }, []);
 
-  /* ───────── 1. завантаження/вибір мови ───────── */
+  // 🌐 Ініціалізація мови
   useEffect(() => {
     const initLanguage = async () => {
       const supported = ["uk", "ru", "be", "de"];
@@ -70,42 +73,39 @@ const AppContent = () => {
     initLanguage();
   }, []);
 
-  /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
+  // 🔐 Реєстрація push-токена
   useEffect(() => {
     cacheExpoToken()
       .then(token => {
-        if (token) alert(token);
+        if (token) console.log("Expo Push Token:", token);
       })
-      .catch(e =>
-        console.log('Помилка отримання push-token:', e)
-      );
-  }, []); // ← важливо: порожній масив, викликається один раз
+      .catch(e => console.log("Помилка отримання push-token:", e));
+  }, []);
 
-    /* ───────── 3. показуємо вміст AsyncStorage ───────── */
+  // 🔍 AsyncStorage лог
   useEffect(() => {
     const showStorage = async () => {
       try {
         const keys = await AsyncStorage.getAllKeys();
         const entries = await AsyncStorage.multiGet(keys);
         const obj = Object.fromEntries(entries);
-        Alert.alert("AsyncStorage", JSON.stringify(obj));
+        console.log("🔍 AsyncStorage:", obj);
       } catch (e) {
-        console.log('Помилка читання AsyncStorage:', e);
+        console.log("Помилка читання AsyncStorage:", e);
       }
     };
     showStorage();
   }, []);
 
-
+  // 🔔 Отримання сповіщень
   useEffect(() => {
     const subscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('📲 Notification received:', notification);
+      console.log("📲 Notification received:", notification);
     });
-
     return () => subscription.remove();
   }, []);
 
-  /* ───────── 3. логування даних гравця + завантаження userData ───────── */
+  // 📡 Завантаження даних гравця
   useEffect(() => {
     const checkAndLogWorldData = async () => {
       try {
@@ -123,10 +123,15 @@ const AppContent = () => {
             console.log("Назва гільдії:", data.guildName);
           }
         }
-      } catch (e) { console.log("Помилка парсингу:", e); }
+      } catch (e) {
+        console.log("Помилка парсингу:", e);
+      }
 
       if (guildId) fetchUserData();
-      else { setLoading(false); setChecked(true); }
+      else {
+        setLoading(false);
+        setChecked(true);
+      }
     };
 
     checkAndLogWorldData();
@@ -140,17 +145,26 @@ const AppContent = () => {
           setUserData(snap.exists());
           setLoading(false);
         });
-      } else { setUserData(false); setLoading(false); }
-    } catch (_) { setLoading(false); }
-    finally { setChecked(true); }
+      } else {
+        setUserData(false);
+        setLoading(false);
+      }
+    } catch (_) {
+      setLoading(false);
+    } finally {
+      setChecked(true);
+    }
   };
 
-  /* ───────── 4. UI-гілки ───────── */
+  // 💡 Екран завантаження
   if (!languageLoaded || loading)
-    return (<View style={styles.container}><ActivityIndicator size="large" color="#0000ff" /></View>);
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
 
   if (!checked) return null;
-
   if (userData) return <MainContent key={guildId} />;
 
   return (
@@ -158,7 +172,8 @@ const AppContent = () => {
       <Stack.Navigator initialRouteName="RoleSelectionScreen">
         <Stack.Screen name="RoleSelectionScreen" options={{ headerShown: false }}>
           {props => (
-            <RoleSelectionScreen {...props}
+            <RoleSelectionScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
             />
@@ -167,7 +182,8 @@ const AppContent = () => {
 
         <Stack.Screen name="AdminSettingsScreen" options={{ headerShown: false }}>
           {props => (
-            <AdminSettingsScreen {...props}
+            <AdminSettingsScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
               onConfirm={() => setUserData(true)}
@@ -178,7 +194,8 @@ const AppContent = () => {
 
         <Stack.Screen name="UserSettingsScreen" options={{ headerShown: false }}>
           {props => (
-            <UserSettingsScreen {...props}
+            <UserSettingsScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
               fetch={fetchUserData}
@@ -199,5 +216,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center" }
+  container: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
