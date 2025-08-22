@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect, useContext } from "react";
-import { StyleSheet, View, ActivityIndicator, Alert, Platform } from "react-native";
+import { StyleSheet, View, ActivityIndicator, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
@@ -43,18 +43,29 @@ const AppContent = () => {
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 🔔 Створення кастомного каналу для Android (із звуком)
+  // 🔔 Створення НОВОГО кастомного каналу для Android (із звуком з res/raw/alert.*)
+  // ВАЖЛИВО: ім'я звуку БЕЗ розширення. Канали незмінні після створення — тому 'custom-alerts-v3'.
   useEffect(() => {
-    if (Platform.OS === "android") {
-      Notifications.setNotificationChannelAsync("custom-alerts-v2", {
-        name: "Custom Alerts",
-        importance: Notifications.AndroidImportance.MAX,
-        sound: "alert", // важливо: БЕЗ розширення .mp3
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#FF231F7C",
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      });
+    async function setupChannel() {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("custom-alerts-v3", {
+          name: "Custom Alerts v3",
+          importance: Notifications.AndroidImportance.MAX,
+          sound: "alert", // ← БЕЗ .wav/.mp3; має відповідати файлу res/raw/alert.*
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#FF231F7C",
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+
+        // Легкий дебаг: подивитися всі канали і який у них sound
+        const channels = await Notifications.getNotificationChannelsAsync();
+        console.log(
+          "📢 Android channels:",
+          channels?.map(c => ({ id: c.id, sound: c.sound, importance: c.importance }))
+        );
+      }
     }
+    setupChannel();
   }, []);
 
   // 🌐 Ініціалізація мови
@@ -82,7 +93,7 @@ const AppContent = () => {
       .catch(e => console.log("Помилка отримання push-token:", e));
   }, []);
 
-  // 🔍 AsyncStorage лог
+  // 🔍 AsyncStorage лог (для діагностики)
   useEffect(() => {
     const showStorage = async () => {
       try {
@@ -97,7 +108,7 @@ const AppContent = () => {
     showStorage();
   }, []);
 
-  // 🔔 Отримання сповіщень
+  // 🔔 Отримання сповіщень у рантаймі
   useEffect(() => {
     const subscription = Notifications.addNotificationReceivedListener(notification => {
       console.log("📲 Notification received:", notification);
