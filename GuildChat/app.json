@@ -12,13 +12,14 @@
       "backgroundColor": "#ffffff"
     },
     "plugins": [
-      ["expo-build-properties", { "android": { "newArchEnabled": true }, "ios": { "newArchEnabled": true } }],
-      ["./plugins/withAndroidNotificationSound.js", {
-        "soundFile": "./assets/alert.wav",
-        "destName": "alert.wav"
-      }]
+      ["expo-notifications", { "sounds": ["./assets/alert.wav"] }],
+      ["expo-build-properties", { }]
     ],
-    "ios": { "supportsTablet": true },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vadimkaa75.guildchat",
+      "newArchEnabled": true
+    },
     "android": {
       "package": "com.vadimkaa75.guildchat",
       "versionCode": 1,
@@ -27,18 +28,16 @@
         "backgroundColor": "#ffffff"
       },
       "googleServicesFile": "./google-services.json",
-      "permissions": ["CAMERA", "POST_NOTIFICATIONS", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE"]
+      "newArchEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "POST_NOTIFICATIONS",
+        "READ_MEDIA_IMAGES"
+      ]
     },
-    "notification": {
-      "sound": "./assets/alert.wav"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "web": { "favicon": "./assets/favicon.png" },
     "extra": {
-      "eas": {
-        "projectId": "2328cf5f-c10d-48c0-83b1-56dd8f6c3f38"
-      }
+      "eas": { "projectId": "2328cf5f-c10d-48c0-83b1-56dd8f6c3f38" }
     }
   }
 }

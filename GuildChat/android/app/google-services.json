@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "220187331504",
+    "firebase_url": "https://guildchat-5d8c1-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "guildchat-5d8c1",
+    "storage_bucket": "guildchat-5d8c1.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:220187331504:android:da5c77c879e5e647946475",
+        "android_client_info": {
+          "package_name": "com.vadimkaa75.guildchat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5S5-xMX5HA93xesJ1M4OEAxl5y6331Ko"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
