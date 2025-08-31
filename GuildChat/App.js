@@ -44,12 +44,12 @@ const AppContent = () => {
   const [loading, setLoading] = useState(true);
 
   // 🔔 Створення НОВОГО кастомного каналу для Android (із звуком з res/raw/alert.*)
-  // ВАЖЛИВО: ім'я звуку БЕЗ розширення. Канали незмінні після створення — тому 'custom-alerts-v3'.
+  // ВАЖЛИВО: ім'я звуку БЕЗ розширення. Канали незмінні після створення — тому 'custom-alerts-v4'.
   useEffect(() => {
     async function setupChannel() {
       if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("custom-alerts-v3", {
-          name: "Custom Alerts v3",
+        await Notifications.setNotificationChannelAsync("custom-alerts-v4", {
+          name: "Custom Alerts v4",
           importance: Notifications.AndroidImportance.MAX,
           sound: "alert", // ← БЕЗ .wav/.mp3; має відповідати файлу res/raw/alert.*
           vibrationPattern: [0, 250, 250, 250],
@@ -86,11 +86,11 @@ const AppContent = () => {
 
   // 🔐 Реєстрація push-токена
   useEffect(() => {
-    cacheExpoToken()
+        requestFcmToken()
       .then(token => {
-        if (token) console.log("Expo Push Token:", token);
+        if (token) console.log("FCM Token:", token);
       })
-      .catch(e => console.log("Помилка отримання push-token:", e));
+      .catch(e => console.log("Помилка отримання FCM-token:", e));
   }, []);
 
   // 🔍 AsyncStorage лог (для діагностики)

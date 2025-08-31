@@ -16,7 +16,7 @@ require("./init.js");
  *
  * Для ANDROID 8+:
  *  - звук визначається КАНАЛОМ
- *  - у додатку створено канал "custom-alerts-v3" зі sound: "alert" (без розширення)
+ *  - у додатку створено канал "custom-alerts-v4" зі sound: "alert" (без розширення)
  *  - тут надсилаємо в цей самий channelId
  */
 exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => {
@@ -50,7 +50,7 @@ exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => 
       android: {
         priority: "high",
         notification: {
-          channelId: "custom-alerts-v3",
+          channelId: "custom-alerts-v4",
           // Для Android < 8 може вплинути. Для 8+ звук визначається каналом.
           sound: "alert" // <-- без розширення; відповідає res/raw/alert.(wav|mp3)
         }

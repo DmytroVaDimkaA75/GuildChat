@@ -14,7 +14,8 @@
 		96905EF65AED1B983A6B3ABC /* libPods-GuildChat.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-GuildChat.a */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		D941F420CBFC4A138C1C7E62 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBD899E30694EC19BE39965 /* noop-file.swift */; };
+		559A6B0E9B3144E0A8FB91EC /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE24559FDB5349C4A8ED7B9E /* noop-file.swift */; };
+		9A361DBAD118413AAC47D42F /* alert.wav in Resources */ = {isa = PBXBuildFile; fileRef = D1483BFB289846B3A3C93719 /* alert.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,8 +32,9 @@
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-GuildChat/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		FDBD899E30694EC19BE39965 /* noop-file.swift */ = {isa = PBXFileReference; name = "noop-file.swift"; path = "GuildChat/noop-file.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
-		C7320285C2BF4DC9AF75C4AA /* GuildChat-Bridging-Header.h */ = {isa = PBXFileReference; name = "GuildChat-Bridging-Header.h"; path = "GuildChat/GuildChat-Bridging-Header.h"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; explicitFileType = undefined; includeInIndex = 0; };
+		EE24559FDB5349C4A8ED7B9E /* noop-file.swift */ = {isa = PBXFileReference; name = "noop-file.swift"; path = "GuildChat/noop-file.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
+		F10BA257F3524DB9B532A342 /* GuildChat-Bridging-Header.h */ = {isa = PBXFileReference; name = "GuildChat-Bridging-Header.h"; path = "GuildChat/GuildChat-Bridging-Header.h"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; explicitFileType = undefined; includeInIndex = 0; };
+		D1483BFB289846B3A3C93719 /* alert.wav */ = {isa = PBXFileReference; name = "alert.wav"; path = "GuildChat/alert.wav"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,8 +59,9 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				FDBD899E30694EC19BE39965 /* noop-file.swift */,
-				C7320285C2BF4DC9AF75C4AA /* GuildChat-Bridging-Header.h */,
+				EE24559FDB5349C4A8ED7B9E /* noop-file.swift */,
+				F10BA257F3524DB9B532A342 /* GuildChat-Bridging-Header.h */,
+				D1483BFB289846B3A3C93719 /* alert.wav */,
 			);
 			name = GuildChat;
 			sourceTree = "<group>";
@@ -198,7 +201,8 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				03628F7211B148269949F387 /* GuildChat-Bridging-Header.h in Resources */,
+				599E8F8B5D444D218F8EE865 /* GuildChat-Bridging-Header.h in Resources */,
+				9A361DBAD118413AAC47D42F /* alert.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -274,7 +278,7 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
-				D941F420CBFC4A138C1C7E62 /* noop-file.swift in Sources */,
+				559A6B0E9B3144E0A8FB91EC /* noop-file.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

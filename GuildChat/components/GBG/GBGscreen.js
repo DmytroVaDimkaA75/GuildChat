@@ -313,51 +313,53 @@ const GVG = ({ navigation, route }) => {
   };
 
   const handleHelpPress = async (id, event) => {
-    try {
-      const db = getDatabase();
+  try {
+    const db = getDatabase();
 
-      const gid = guildId || await AsyncStorage.getItem('guildId');
-      if (!gid) {
-        console.warn('⚠️ guildId not found');
-        return;
-      }
-
-      const text = `${id} необхідна допомога`;
-
-      const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
-      const members = snapshot.val() || {};
-      const recipientUids = Object.keys(members);
-
-      const tokens = [];
-      for (const uid of recipientUids) {
-        const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
-        const fcmToken = userSnap.val();
-        console.log(`FCM token for ${uid}:`, fcmToken);
-        if (fcmToken) tokens.push(fcmToken);
-      }
-
-      if (tokens.length > 0) {
-        const messages = tokens.map(token => ({
-          to: token,
-          title: "Поле битви",
-          body: text,
-        }));
-
-        const res = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(messages),
-        });
-
-        const data = await res.json();
-        console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
-      } else {
-        console.log('No FCM tokens found.');
-      }
-    } catch (err) {
-      console.error('❌ Error in handleHelpPress:', err);
+    const gid = guildId || await AsyncStorage.getItem('guildId');
+    if (!gid) {
+      console.warn('⚠️ guildId not found');
+      return;
     }
-  };
+
+    const text = `${id} необхідна допомога`;
+
+    const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
+    const members = snapshot.val() || {};
+    const recipientUids = Object.keys(members);
+
+    const tokens = [];
+    for (const uid of recipientUids) {
+      const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+      const fcmToken = userSnap.val();
+      console.log(`FCM token for ${uid}:`, fcmToken);
+      if (fcmToken) tokens.push(fcmToken);
+    }
+
+    if (tokens.length > 0) {
+      const messages = tokens.map(token => ({
+        to: token,
+        title: "Поле битви",
+        body: text,
+        sound: "alert", // або "alert" якщо твій файл називається alert.wav
+        channelId: "custom-alerts-v3" // Додаємо кастомний канал
+      }));
+
+      const res = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messages),
+      });
+
+      const data = await res.json();
+      console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
+    } else {
+      console.log('No FCM tokens found.');
+    }
+  } catch (err) {
+    console.error('❌ Error in handleHelpPress:', err);
+  }
+};
 
   
 
