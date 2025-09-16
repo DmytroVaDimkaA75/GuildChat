@@ -10,7 +10,7 @@ import { parsePlayerBlock } from "./parsePlayerBlock";
 
 // 🔔 Push Notifications
 import * as Notifications from "expo-notifications";
-import { cacheExpoToken } from "./src/notifications/registerToken";
+import { requestFcmToken } from "./src/notifications/registerToken";
 
 // контекст гільдії
 import { GuildProvider, GuildContext } from "./GuildContext";
