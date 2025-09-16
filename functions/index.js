@@ -1,11 +1,60 @@
 // functions/index.js  (CommonJS)
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { onValueCreated } = require("firebase-functions/v2/database");
-const fetch = require('node-fetch');
+const { getMessaging } = require("firebase-admin/messaging");
+const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
 
-initializeApp();
+if (!admin.apps.length) {
+  const options = {};
+
+  const serviceAccountFromEnv = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+  if (serviceAccountFromEnv) {
+    try {
+      const serviceAccount = JSON.parse(serviceAccountFromEnv);
+      options.credential = admin.credential.cert(serviceAccount);
+    } catch (error) {
+      console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", error);
+    }
+  }
+
+  if (!options.credential) {
+    const serviceAccountPath =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+      process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+      path.join(__dirname, "..", "fcm-service-account.json");
+
+    if (fs.existsSync(serviceAccountPath)) {
+      try {
+        const serviceAccount = require(serviceAccountPath);
+        options.credential = admin.credential.cert(serviceAccount);
+      } catch (error) {
+        console.error("Failed to load service account from file:", error);
+      }
+    }
+  }
+
+  if (!options.credential) {
+    try {
+      options.credential = admin.credential.applicationDefault();
+    } catch (error) {
+      console.warn("Falling back to unauthenticated Firebase Admin initialization:", error);
+    }
+  }
+
+  if (process.env.FIREBASE_DATABASE_URL) {
+    options.databaseURL = process.env.FIREBASE_DATABASE_URL;
+  }
+
+  if (Object.keys(options).length > 0) {
+    admin.initializeApp(options);
+  } else {
+    admin.initializeApp();
+  }
+}
 
 exports.executeDueEvents = onSchedule(
   {
@@ -59,12 +108,17 @@ exports.onMessageCreate = onValueCreated(
     const message = snap.val();
     const { guildId, chatId } = event.params;
 
-    const admin = require('firebase-admin');
     const db = getDatabase();
 
     const senderId = message.senderId;
-    const senderName = (await db.ref(`/users/${senderId}/userName`).once('value')).val();
-    const text = message.text;
+    const senderNameSnap = await db.ref(`/users/${senderId}/userName`).once('value');
+    const senderNameValue = senderNameSnap.val();
+    const senderName =
+      senderNameValue === undefined || senderNameValue === null
+        ? 'GuildChat'
+        : senderNameValue;
+    const text =
+      message.text === undefined || message.text === null ? '' : message.text;
 
     const chatSnap = await db.ref(`/guilds/${guildId}/chats/${chatId}/members`).once('value');
     const members = chatSnap.val() || {};
@@ -79,33 +133,32 @@ exports.onMessageCreate = onValueCreated(
       if (fcmToken) tokens.push(fcmToken);
     }
 
-    if (tokens.length > 0) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tokens.map(token => ({
-          to: token,
-          title: senderName,
-          body: text,
-        }))),
-      });
-      console.log(`Notification sent to ${tokens.length} user(s).`);
-    } else {
-      console.log('No FCM tokens found.');
-    }
-
     try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tokens.map(token => ({
-          to: token,
+      if (tokens.length === 0) {
+        console.log('No FCM tokens found.');
+        return;
+      }
+
+      const response = await getMessaging().sendMulticast({
+        tokens,
+        notification: {
           title: senderName,
           body: text,
-        }))),
+        },
       });
-      const result = await response.json();
-      console.log('Push notification result:', result);
+
+      console.log(
+        `Push notifications sent. Success: ${response.successCount}, failures: ${response.failureCount}.`,
+      );
+
+      response.responses.forEach((messageResponse, index) => {
+        if (!messageResponse.success) {
+          console.error(
+            `Failed to send notification to token ${tokens[index]}:`,
+            messageResponse.error,
+          );
+        }
+      });
     } catch (error) {
       console.error('Error sending push notification:', error);
     }
