@@ -73,6 +73,7 @@ exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => 
     return res.json({ status: "sent" });
   } catch (err) {
     console.error("sendPushNow error:", err);
-    return res.status(500).json({ error: String(err?.message || err) });
+    const errorMessage = err && err.message ? err.message : err;
+    return res.status(500).json({ error: String(errorMessage) });
   }
 });
