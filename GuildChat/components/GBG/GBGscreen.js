@@ -337,22 +337,44 @@ const GVG = ({ navigation, route }) => {
     }
 
     if (tokens.length > 0) {
-      const messages = tokens.map(token => ({
-        to: token,
+      const payloads = tokens.map(token => ({
+        token,
         title: "Поле битви",
         body: text,
-        sound: "alert", // або "alert" якщо твій файл називається alert.wav
-        channelId: "custom-alerts-v3" // Додаємо кастомний канал
       }));
 
-      const res = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messages),
-      });
+      const results = await Promise.all(
+        payloads.map(async payload => {
+          try {
+            const response = await fetch('https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
 
-      const data = await res.json();
-      console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
+            const rawBody = await response.text();
+            let parsedBody = null;
+            try {
+              parsedBody = rawBody ? JSON.parse(rawBody) : null;
+            } catch (parseErr) {
+              console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
+            }
+
+            if (response.ok) {
+              console.log('✅ Повідомлення прийняте FCM для токена:', payload.token, parsedBody ?? rawBody);
+              return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
+            }
+
+            console.error('❌ FCM повернув помилку для токена:', payload.token, response.status, parsedBody ?? rawBody);
+            return { token: payload.token, ok: false, status: response.status, body: parsedBody ?? rawBody };
+          } catch (sendErr) {
+            console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
+            return { token: payload.token, ok: false, error: sendErr };
+          }
+        })
+      );
+
+      console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
     } else {
       console.log('No FCM tokens found.');
     }
