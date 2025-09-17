@@ -56,6 +56,8 @@ if (!admin.apps.length) {
   }
 }
 
+exports.sendPushNow = require("./sendPushNow").sendPushNow;
+
 exports.executeDueEvents = onSchedule(
   {
     schedule: "every 1 minutes",
