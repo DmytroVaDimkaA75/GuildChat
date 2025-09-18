@@ -50,7 +50,14 @@ const UserSettingsScreen = ({ fetch }) => {
 
     await AsyncStorage.setItem("userId", user.userId);
     //Пуш-токен: якщо він уже кешований — пишемо у БД
-    await uploadFcmToken(user.userId, database);
+    const uploaded = await uploadFcmToken(user.userId, database);
+    if (uploaded === false) {
+      Alert.alert(
+        t("notifications.permissionTitle"),
+        t("notifications.permissionMessage"),
+        [{ text: t("notifications.permissionButton") }]
+      );
+    }
 
     const userGuilds = await getGuildsByUser(user);
 

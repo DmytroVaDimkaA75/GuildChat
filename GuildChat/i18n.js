@@ -34,6 +34,12 @@ const resources = {
         close: "Закрити",
         ok: "OK"
       },
+      notifications: {
+        permissionTitle: "Дозвольте сповіщення",
+        permissionMessage:
+          "Щоб отримувати оновлення гільдії, дозвольте push-сповіщення у налаштуваннях пристрою.",
+        permissionButton: "Зрозуміло"
+      },
       chatStack: {
         chatScreenTitle: "Альтанка",
         guildMembersListTitle: "Нове повідомлення",
@@ -239,6 +245,12 @@ const resources = {
         close: "Закрыть",
         ok: "OK"
       },
+      notifications: {
+        permissionTitle: "Разрешите уведомления",
+        permissionMessage:
+          "Чтобы получать обновления гильдии, разрешите push-уведомления в настройках устройства.",
+        permissionButton: "Понятно"
+      },
       chatStack: {
         chatScreenTitle: "Альтанка",
         guildMembersListTitle: "Новое сообщение",
@@ -441,6 +453,12 @@ const resources = {
         close: "Закрыць",
         ok: "OK"
       },
+      notifications: {
+        permissionTitle: "Дазвольце апавяшчэнні",
+        permissionMessage:
+          "Каб атрымліваць навіны гільдыі, дазвольце push-апавяшчэнні ў наладках прылады.",
+        permissionButton: "Зразумела"
+      },
       chatStack: {
         chatScreenTitle: "Альтанка",
         guildMembersListTitle: "Новае паведамленне",
@@ -642,6 +660,12 @@ const resources = {
         selectGuildTitle: "Wählen Sie eine Gilde:",
         close: "Schließen",
         ok: "OK"
+      },
+      notifications: {
+        permissionTitle: "Benachrichtigungen zulassen",
+        permissionMessage:
+          "Damit du Gilden-Updates erhältst, erlaube Push-Benachrichtigungen in den Geräteeinstellungen.",
+        permissionButton: "Verstanden"
       },
       chatStack: {
         chatScreenTitle: "Aultanka",

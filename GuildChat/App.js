@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect, useContext } from "react";
-import { StyleSheet, View, ActivityIndicator, Platform } from "react-native";
+import { StyleSheet, View, ActivityIndicator, Platform, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
@@ -86,9 +86,15 @@ const AppContent = () => {
 
   // 🔐 Реєстрація push-токена
   useEffect(() => {
-        requestFcmToken()
+    requestFcmToken()
       .then(token => {
         if (token) console.log("FCM Token:", token);
+        else
+          Alert.alert(
+            i18n.t("notifications.permissionTitle"),
+            i18n.t("notifications.permissionMessage"),
+            [{ text: i18n.t("notifications.permissionButton") }]
+          );
       })
       .catch(e => console.log("Помилка отримання FCM-token:", e));
   }, []);

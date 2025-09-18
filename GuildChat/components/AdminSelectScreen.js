@@ -8,6 +8,7 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 
 import { database } from "../firebaseConfig"; 
@@ -111,7 +112,14 @@ const AdminSelectScreen = ({
       // Оновлюємо глобальний стан через контекст
       setGuildId(formattedGuildId);
       // 5a. Пуш-токен: якщо він уже кешований — пишемо у БД
-      await uploadFcmToken(selectedUserId, database);
+      const uploaded = await uploadFcmToken(selectedUserId, database);
+      if (uploaded === false) {
+        Alert.alert(
+          t("notifications.permissionTitle"),
+          t("notifications.permissionMessage"),
+          [{ text: t("notifications.permissionButton") }]
+        );
+      }
 
       // 6. Викликаємо функцію з батька, якщо вона є:
       if (typeof fetch === "function") {
