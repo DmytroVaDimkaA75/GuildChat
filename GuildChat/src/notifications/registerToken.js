@@ -1,8 +1,56 @@
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, PermissionsAndroid } from 'react-native';
-import { ref, set } from 'firebase/database';
+import { ref, set, get, update } from 'firebase/database';
 import { database } from '../../firebaseConfig';
+
+const INVALID_KEY_REGEX = /[.#$\[\]]/g;
+
+const sanitizeTokenKey = token =>
+  (token || '')
+    .trim()
+    .replace(INVALID_KEY_REGEX, '_');
+
+async function removeTokenFromDatabase(uid, token, db = database) {
+  if (!uid || !token) return;
+
+  const sanitizedKey = sanitizeTokenKey(token);
+  const updates = {
+    [`users/${uid}/fcmTokens/${sanitizedKey}`]: null,
+  };
+
+  try {
+    const legacySnapshot = await get(ref(db, `users/${uid}/fcmToken`));
+    if (!legacySnapshot.exists() || legacySnapshot.val() === token) {
+      updates[`users/${uid}/fcmToken`] = null;
+    }
+  } catch (error) {
+    console.log('Не вдалося перевірити legacy FCM-токен:', error);
+    updates[`users/${uid}/fcmToken`] = null;
+  }
+
+  try {
+    await update(ref(db), updates);
+  } catch (error) {
+    console.log('Не вдалося видалити FCM-токен з бази даних:', error);
+  }
+}
+
+async function clearCachedToken() {
+  try {
+    const previousToken = await AsyncStorage.getItem('cachedFcmToken');
+    await AsyncStorage.removeItem('cachedFcmToken');
+
+    if (!previousToken) return;
+
+    const userId = await AsyncStorage.getItem('userId');
+    if (userId) {
+      await removeTokenFromDatabase(userId, previousToken, database);
+    }
+  } catch (error) {
+    console.log('Не вдалося очистити кешований FCM-токен:', error);
+  }
+}
 
 /**
  * 1) Просимо дозвіл на пуші й кешуємо FCM-токен у AsyncStorage.
@@ -16,7 +64,7 @@ export async function requestFcmToken() {
         await messaging().registerDeviceForRemoteMessages();
       } catch (error) {
         console.log('Не вдалося зареєструвати iOS-пристрій для віддалених повідомлень:', error);
-        await AsyncStorage.removeItem('cachedFcmToken');
+        await clearCachedToken();
         return null;
       }
     }
@@ -31,7 +79,7 @@ export async function requestFcmToken() {
             const result = await PermissionsAndroid.request(permission);
             if (result !== PermissionsAndroid.RESULTS.GRANTED) {
               console.log('Користувач не надав дозвіл POST_NOTIFICATIONS.');
-              await AsyncStorage.removeItem('cachedFcmToken');
+              await clearCachedToken();
               return null;
             }
           }
@@ -46,7 +94,7 @@ export async function requestFcmToken() {
 
     if (!isAuthorized) {
       console.log('Користувач не дозволив push-сповіщення.');
-      await AsyncStorage.removeItem('cachedFcmToken');
+      await clearCachedToken();
       return null;
     }
 
@@ -54,10 +102,10 @@ export async function requestFcmToken() {
       const token = await messaging().getToken();
       if (token) {
         await AsyncStorage.setItem('cachedFcmToken', token);
-                try {
+        try {
           const userId = await AsyncStorage.getItem('userId');
           if (userId) {
-            await uploadFcmToken(userId);
+            await uploadFcmToken(userId, database, token);
           }
         } catch (syncError) {
           console.log('Не вдалося синхронізувати FCM-токен із сервером:', syncError);
@@ -68,38 +116,56 @@ export async function requestFcmToken() {
       console.log('Помилка отримання FCM-токена:', tokenError);
     }
 
-    await AsyncStorage.removeItem('cachedFcmToken');
+    await clearCachedToken();
     return null;
   } catch (error) {
     console.log('Непередбачена помилка під час запиту FCM-токена:', error);
-    await AsyncStorage.removeItem('cachedFcmToken');
+    await clearCachedToken();
     return null;
   }
 }
 
 /**
  * 2) Коли вже знаємо userId і під’єднану Firebase-DB,
- *    записуємо токен у Realtime DB → users/<uid>/fcmToken.
+ *    записуємо токен у Realtime DB → users/<uid>/fcmTokens/<tokenHash>.
+ *    Легасі-поле users/<uid>/fcmToken зберігаємо для сумісності.
  *
  *    Викликайте ОДИН раз після реєстрації / вибору гільдії:
  *      await uploadFcmToken(uid, database);
  */
-export async function uploadFcmToken(uid, db = database) {
-  const token = await AsyncStorage.getItem('cachedFcmToken');
+export async function uploadFcmToken(uid, db = database, tokenOverride) {
+  const token = tokenOverride || (await AsyncStorage.getItem('cachedFcmToken'));
   if (!token) return false; // ще не дали дозвіл — нічого робити
-  await set(ref(db, `users/${uid}/fcmToken`), token);
-  console.log('✅ FCM token saved for', uid);
-  return true;
+  const sanitizedKey = sanitizeTokenKey(token);
+  const tokenRef = ref(db, `users/${uid}/fcmTokens/${sanitizedKey}`);
+
+  try {
+    await set(tokenRef, {
+      token,
+      platform: Platform.OS,
+      updatedAt: Date.now(),
+    });
+    await set(ref(db, `users/${uid}/fcmToken`), token);
+    console.log('✅ FCM token saved for', uid);
+    return true;
+  } catch (error) {
+    console.log('Не вдалося зберегти FCM-токен:', error);
+    return false;
+  }
 }
 
 messaging().onTokenRefresh(async newToken => {
   if (!newToken) return;
 
   try {
+    const previousToken = await AsyncStorage.getItem('cachedFcmToken');
     await AsyncStorage.setItem('cachedFcmToken', newToken);
     const userId = await AsyncStorage.getItem('userId');
     if (userId) {
-      await uploadFcmToken(userId, database);
+      if (previousToken && previousToken !== newToken) {
+        await removeTokenFromDatabase(userId, previousToken, database);
+      }
+      await uploadFcmToken(userId, database, newToken);
     }
   } catch (error) {
     console.log('Помилка під час оновлення FCM-токена:', error);
