@@ -58,6 +58,187 @@ if (!admin.apps.length) {
 
 exports.sendPushNow = require("./sendPushNow").sendPushNow;
 
+const INVALID_TOKEN_ERRORS = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+]);
+
+function collectTokensFromValue(value, addToken, uidHint) {
+  if (!value) {
+    return;
+  }
+
+  if (typeof value === "string") {
+    addToken(value, uidHint);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTokensFromValue(item, addToken, uidHint));
+    return;
+  }
+
+  if (typeof value === "object") {
+    if (value.token) {
+      collectTokensFromValue(value.token, addToken, value.uid || value.userId || uidHint);
+      return;
+    }
+
+    if (value.tokens) {
+      collectTokensFromValue(value.tokens, addToken, value.uid || value.userId || uidHint);
+      return;
+    }
+
+    Object.entries(value).forEach(([nestedKey, nestedValue]) => {
+      collectTokensFromValue(nestedValue, addToken, uidHint || nestedKey);
+    });
+  }
+}
+
+function normalizeDataPayload(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(data).map(([key, value]) => [key, String(value)]);
+  if (!entries.length) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries);
+}
+
+async function handleNotifyEvent(db, payload) {
+  if (!payload || typeof payload !== "object") {
+    console.warn("⚠️ notify: порожній payload");
+    return true;
+  }
+
+  const tokensSet = new Set();
+  const tokenToUid = new Map();
+  const addToken = (token, uid) => {
+    if (!token || typeof token !== "string") {
+      return;
+    }
+
+    const trimmed = token.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    tokensSet.add(trimmed);
+    if (uid && !tokenToUid.has(trimmed)) {
+      tokenToUid.set(trimmed, uid);
+    }
+  };
+
+  collectTokensFromValue(payload.token, addToken);
+  collectTokensFromValue(payload.tokens, addToken);
+  collectTokensFromValue(payload.recipients, addToken);
+
+  if (!tokensSet.size) {
+    console.log("ℹ️ notify: немає валідних токенів");
+    return true;
+  }
+
+  const tokens = Array.from(tokensSet);
+  const notification = payload.notification ||
+    ((payload.title || payload.body)
+      ? { title: payload.title, body: payload.body }
+      : undefined);
+
+  const data = normalizeDataPayload(payload.data);
+  const sound = typeof payload.sound === "string" && payload.sound
+    ? payload.sound
+    : "alert.wav";
+
+  const message = {
+    tokens,
+  };
+
+  if (notification && Object.keys(notification).length) {
+    message.notification = notification;
+  }
+
+  if (data) {
+    message.data = data;
+  }
+
+  if (payload.android) {
+    message.android = payload.android;
+  } else {
+    message.android = {
+      priority: "high",
+      notification: {
+        channelId: "custom-alerts-v4",
+        sound: "alert",
+      },
+    };
+  }
+
+  if (payload.apns) {
+    message.apns = payload.apns;
+  } else {
+    message.apns = {
+      headers: { "apns-priority": "10" },
+      payload: { aps: { sound } },
+    };
+  }
+
+  if (payload.webpush) {
+    message.webpush = payload.webpush;
+  }
+
+  if (payload.fcmOptions) {
+    message.fcmOptions = payload.fcmOptions;
+  }
+
+  const response = await getMessaging().sendEachForMulticast(message);
+
+  console.log(
+    `🔔 notify: надіслано ${response.successCount}, помилок ${response.failureCount}`,
+  );
+
+  const invalidTokens = [];
+  response.responses.forEach((messageResponse, index) => {
+    if (messageResponse.success) {
+      return;
+    }
+
+    const failedToken = tokens[index];
+    console.error(
+      `❌ notify: помилка для токена ${failedToken}:`,
+      messageResponse.error,
+    );
+
+    const code = messageResponse.error && messageResponse.error.code;
+    if (code && INVALID_TOKEN_ERRORS.has(code)) {
+      invalidTokens.push(failedToken);
+    }
+  });
+
+  if (invalidTokens.length) {
+    const updates = {};
+    invalidTokens.forEach((token) => {
+      const uid = tokenToUid.get(token);
+      if (uid) {
+        updates[`users/${uid}/fcmToken`] = null;
+      }
+    });
+
+    if (Object.keys(updates).length) {
+      await db.ref().update(updates);
+      console.log(
+        `🧹 notify: видалено ${Object.keys(updates).length} недійсних токен(ів)`,
+      );
+    } else {
+      console.warn("⚠️ notify: недійсні токени без відповідних uid", invalidTokens);
+    }
+  }
+
+  return true;
+}
+
 exports.executeDueEvents = onSchedule(
   {
     schedule: "every 1 minutes",
@@ -78,23 +259,42 @@ exports.executeDueEvents = onSchedule(
 
     if (!snap.exists()) return;
 
-    const removals = {};
-
+    const events = [];
     snap.forEach((child) => {
-      const { actionType, payload } = child.val();
-
-      switch (actionType) {
-        case "notify":
-          console.log("🔔 notify:", payload);
-          break;
-        default:
-          console.warn("🤷 unknown actionType:", actionType);
-      }
-      removals[child.key] = null;
+      events.push({ key: child.key, value: child.val() });
     });
 
-    await db.ref("scheduledEvents").update(removals);
-    console.log(`✅ Removed ${Object.keys(removals).length} event(s)`);
+    const removals = {};
+
+    for (const { key, value } of events) {
+      const { actionType, payload } = value || {};
+      let processed = false;
+
+      try {
+        switch (actionType) {
+          case "notify":
+            processed = await handleNotifyEvent(db, payload);
+            break;
+          default:
+            console.warn("🤷 unknown actionType:", actionType);
+            processed = true;
+        }
+      } catch (error) {
+        console.error(`❌ Помилка під час обробки події ${key}:`, error);
+      }
+
+      if (processed) {
+        removals[key] = null;
+      }
+    }
+
+    const removalKeys = Object.keys(removals);
+    if (removalKeys.length) {
+      await db.ref("scheduledEvents").update(removals);
+      console.log(`✅ Removed ${removalKeys.length} event(s)`);
+    } else {
+      console.log("ℹ️ Не вдалося видалити жодної події (жодна не була оброблена успішно)");
+    }
   },
 );
 
