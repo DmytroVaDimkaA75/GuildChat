@@ -1,8 +1,8 @@
 // functions/index.js  (CommonJS)
-const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { getDatabase } = require("firebase-admin/database");
-const { onValueCreated } = require("firebase-functions/v2/database");
-const { getMessaging } = require("firebase-admin/messaging");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {getDatabase} = require("firebase-admin/database");
+const {onValueCreated} = require("firebase-functions/v2/database");
+const {getMessaging} = require("firebase-admin/messaging");
 const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
@@ -41,7 +41,10 @@ if (!admin.apps.length) {
     try {
       options.credential = admin.credential.applicationDefault();
     } catch (error) {
-      console.warn("Falling back to unauthenticated Firebase Admin initialization:", error);
+      console.warn(
+          "Falling back to unauthenticated Firebase Admin initialization:",
+          error,
+      );
     }
   }
 
@@ -63,6 +66,110 @@ const INVALID_TOKEN_ERRORS = new Set([
   "messaging/invalid-registration-token",
 ]);
 
+const INVALID_KEY_REGEX = /[.#$[\]]/g;
+
+/**
+ * Повертає безпечний ключ для Realtime DB на основі FCM-токена.
+ * @param {string} token
+ * @return {string}
+ */
+function sanitizeTokenKey(token) {
+  return (token || "").trim().replace(INVALID_KEY_REGEX, "_");
+}
+
+/**
+ * Збирає всі FCM-токени користувача (легасі й множинні) та повертає їх список.
+ * @param {!admin.database.Database} db
+ * @param {string} uid
+ * @return {!Promise<!Array<string>>}
+ */
+async function fetchUserTokens(db, uid) {
+  const tokens = new Set();
+
+  try {
+    const legacySnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+    const legacyValue = legacySnap.val();
+    if (typeof legacyValue === "string" && legacyValue.trim()) {
+      tokens.add(legacyValue.trim());
+    }
+  } catch (error) {
+    console.error(
+        `Не вдалося прочитати legacy FCM-токен користувача ${uid}:`,
+        error,
+    );
+  }
+
+  try {
+    const multiSnap = await db.ref(`/users/${uid}/fcmTokens`).once("value");
+    if (multiSnap.exists()) {
+      const value = multiSnap.val();
+      Object.values(value || {}).forEach((entry) => {
+        if (!entry) return;
+        if (typeof entry === "string" && entry.trim()) {
+          tokens.add(entry.trim());
+          return;
+        }
+        if (typeof entry === "object" && typeof entry.token === "string") {
+          const trimmed = entry.token.trim();
+          if (trimmed) tokens.add(trimmed);
+        }
+      });
+    }
+  } catch (error) {
+    console.error(
+        `Не вдалося прочитати множинні FCM-токени користувача ${uid}:`,
+        error,
+    );
+  }
+
+  return Array.from(tokens);
+}
+
+/**
+ * Видаляє недійсний токен користувача разом із легасі-полем.
+ * @param {!admin.database.Database} db
+ * @param {string} uid
+ * @param {string} token
+ * @return {!Promise<void>}
+ */
+async function removeTokenForUser(db, uid, token) {
+  if (!uid || !token) return;
+
+  const sanitizedKey = sanitizeTokenKey(token);
+  const updates = {
+    [`users/${uid}/fcmTokens/${sanitizedKey}`]: null,
+  };
+
+  try {
+    const legacySnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+    if (!legacySnap.exists() || legacySnap.val() === token) {
+      updates[`users/${uid}/fcmToken`] = null;
+    }
+  } catch (error) {
+    console.error(
+        `Не вдалося перевірити legacy FCM-токен для користувача ${uid}:`,
+        error,
+    );
+    updates[`users/${uid}/fcmToken`] = null;
+  }
+
+  try {
+    await db.ref().update(updates);
+    console.log(`🧹 Видалено недійсний токен для користувача ${uid}`);
+  } catch (error) {
+    console.error(
+        `Не вдалося видалити FCM-токен користувача ${uid}:`,
+        error,
+    );
+  }
+}
+
+/**
+ * Рекурсивно збирає токени з довільної структури.
+ * @param {*} value
+ * @param {function(string, ?string)} addToken
+ * @param {?string} uidHint
+ */
 function collectTokensFromValue(value, addToken, uidHint) {
   if (!value) {
     return;
@@ -74,33 +181,55 @@ function collectTokensFromValue(value, addToken, uidHint) {
   }
 
   if (Array.isArray(value)) {
-    value.forEach((item) => collectTokensFromValue(item, addToken, uidHint));
+    value.forEach((item) =>
+      collectTokensFromValue(item, addToken, uidHint),
+    );
     return;
   }
 
   if (typeof value === "object") {
     if (value.token) {
-      collectTokensFromValue(value.token, addToken, value.uid || value.userId || uidHint);
+      collectTokensFromValue(
+          value.token,
+          addToken,
+          value.uid || value.userId || uidHint,
+      );
       return;
     }
 
     if (value.tokens) {
-      collectTokensFromValue(value.tokens, addToken, value.uid || value.userId || uidHint);
+      collectTokensFromValue(
+          value.tokens,
+          addToken,
+          value.uid || value.userId || uidHint,
+      );
       return;
     }
 
     Object.entries(value).forEach(([nestedKey, nestedValue]) => {
-      collectTokensFromValue(nestedValue, addToken, uidHint || nestedKey);
+      collectTokensFromValue(
+          nestedValue,
+          addToken,
+          uidHint || nestedKey,
+      );
     });
   }
 }
 
+/**
+ * Гарантує, що payload.data містить лише рядкові значення.
+ * @param {*} data
+ * @return {Object|undefined}
+ */
 function normalizeDataPayload(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return undefined;
   }
 
-  const entries = Object.entries(data).map(([key, value]) => [key, String(value)]);
+  const entries = Object.entries(data).map(([key, value]) => [
+    key,
+    String(value),
+  ]);
   if (!entries.length) {
     return undefined;
   }
@@ -108,6 +237,12 @@ function normalizeDataPayload(data) {
   return Object.fromEntries(entries);
 }
 
+/**
+ * Обробляє відкладену подію типу notify.
+ * @param {!admin.database.Database} db
+ * @param {*} payload
+ * @return {!Promise<boolean>}
+ */
 async function handleNotifyEvent(db, payload) {
   if (!payload || typeof payload !== "object") {
     console.warn("⚠️ notify: порожній payload");
@@ -143,14 +278,14 @@ async function handleNotifyEvent(db, payload) {
 
   const tokens = Array.from(tokensSet);
   const notification = payload.notification ||
-    ((payload.title || payload.body)
-      ? { title: payload.title, body: payload.body }
-      : undefined);
+    ((payload.title || payload.body) ?
+      {title: payload.title, body: payload.body} :
+      undefined);
 
   const data = normalizeDataPayload(payload.data);
-  const sound = typeof payload.sound === "string" && payload.sound
-    ? payload.sound
-    : "alert.wav";
+  const sound = typeof payload.sound === "string" && payload.sound ?
+    payload.sound :
+    "alert.wav";
 
   const message = {
     tokens,
@@ -180,8 +315,8 @@ async function handleNotifyEvent(db, payload) {
     message.apns = payload.apns;
   } else {
     message.apns = {
-      headers: { "apns-priority": "10" },
-      payload: { aps: { sound } },
+      headers: {"apns-priority": "10"},
+      payload: {aps: {sound}},
     };
   }
 
@@ -196,7 +331,8 @@ async function handleNotifyEvent(db, payload) {
   const response = await getMessaging().sendEachForMulticast(message);
 
   console.log(
-    `🔔 notify: надіслано ${response.successCount}, помилок ${response.failureCount}`,
+      "🔔 notify: надіслано " +
+      `${response.successCount}, помилок ${response.failureCount}`,
   );
 
   const invalidTokens = [];
@@ -207,8 +343,8 @@ async function handleNotifyEvent(db, payload) {
 
     const failedToken = tokens[index];
     console.error(
-      `❌ notify: помилка для токена ${failedToken}:`,
-      messageResponse.error,
+        `❌ notify: помилка для токена ${failedToken}:`,
+        messageResponse.error,
     );
 
     const code = messageResponse.error && messageResponse.error.code;
@@ -223,16 +359,21 @@ async function handleNotifyEvent(db, payload) {
       const uid = tokenToUid.get(token);
       if (uid) {
         updates[`users/${uid}/fcmToken`] = null;
+        updates[`users/${uid}/fcmTokens/${sanitizeTokenKey(token)}`] = null;
       }
     });
 
     if (Object.keys(updates).length) {
       await db.ref().update(updates);
       console.log(
-        `🧹 notify: видалено ${Object.keys(updates).length} недійсних токен(ів)`,
+          `🧹 notify: видалено ${Object.keys(updates).length} ` +
+          "недійсних токен(ів)",
       );
     } else {
-      console.warn("⚠️ notify: недійсні токени без відповідних uid", invalidTokens);
+      console.warn(
+          "⚠️ notify: недійсні токени без відповідних uid",
+          invalidTokens,
+      );
     }
   }
 
@@ -240,129 +381,187 @@ async function handleNotifyEvent(db, payload) {
 }
 
 exports.executeDueEvents = onSchedule(
-  {
-    schedule: "every 1 minutes",
-    timeZone: "Europe/Kyiv",
-    region: "europe-west1",
-    runtime: "nodejs20",
-    retryConfig: { retryCount: 3 },
-  },
-  async () => {
-    const db = getDatabase();
-    const now = Date.now();
+    {
+      schedule: "every 1 minutes",
+      timeZone: "Europe/Kyiv",
+      region: "europe-west1",
+      runtime: "nodejs20",
+      retryConfig: {retryCount: 3},
+    },
+    async () => {
+      const db = getDatabase();
+      const now = Date.now();
 
-    const snap = await db
-      .ref("scheduledEvents")
-      .orderByChild("executeAt")
-      .endAt(now)
-      .once("value");
+      const snap = await db
+          .ref("scheduledEvents")
+          .orderByChild("executeAt")
+          .endAt(now)
+          .once("value");
 
-    if (!snap.exists()) return;
+      if (!snap.exists()) return;
 
-    const events = [];
-    snap.forEach((child) => {
-      events.push({ key: child.key, value: child.val() });
-    });
+      const events = [];
+      snap.forEach((child) => {
+        events.push({key: child.key, value: child.val()});
+      });
 
-    const removals = {};
+      const removals = {};
 
-    for (const { key, value } of events) {
-      const { actionType, payload } = value || {};
-      let processed = false;
+      for (const {key, value} of events) {
+        const {actionType, payload} = value || {};
+        let processed = false;
 
-      try {
-        switch (actionType) {
-          case "notify":
-            processed = await handleNotifyEvent(db, payload);
-            break;
-          default:
-            console.warn("🤷 unknown actionType:", actionType);
-            processed = true;
+        try {
+          switch (actionType) {
+            case "notify":
+              processed = await handleNotifyEvent(db, payload);
+              break;
+            default:
+              console.warn("🤷 unknown actionType:", actionType);
+              processed = true;
+          }
+        } catch (error) {
+          console.error(`❌ Помилка під час обробки події ${key}:`, error);
         }
-      } catch (error) {
-        console.error(`❌ Помилка під час обробки події ${key}:`, error);
+
+        if (processed) {
+          removals[key] = null;
+        }
       }
 
-      if (processed) {
-        removals[key] = null;
+      const removalKeys = Object.keys(removals);
+      if (removalKeys.length) {
+        await db.ref("scheduledEvents").update(removals);
+        console.log(`✅ Removed ${removalKeys.length} event(s)`);
+      } else {
+        console.log(
+            "ℹ️ Не вдалося видалити жодної події (жодна не була оброблена " +
+            "успішно)",
+        );
       }
-    }
-
-    const removalKeys = Object.keys(removals);
-    if (removalKeys.length) {
-      await db.ref("scheduledEvents").update(removals);
-      console.log(`✅ Removed ${removalKeys.length} event(s)`);
-    } else {
-      console.log("ℹ️ Не вдалося видалити жодної події (жодна не була оброблена успішно)");
-    }
-  },
+    },
 );
 
 exports.onMessageCreate = onValueCreated(
-  {
-    ref: 'guilds/{guildId}/chats/{chatId}/messages/{messageId}',
-    region: 'europe-west1',
-  },
-  async (event) => {
-    const snap = event.data;
-    if (!snap) return;
+    {
+      ref: "guilds/{guildId}/chats/{chatId}/messages/{messageId}",
+      region: "europe-west1",
+    },
+    async (event) => {
+      const snap = event.data;
+      if (!snap) return;
 
-    const message = snap.val();
-    const { guildId, chatId } = event.params;
+      const message = snap.val();
+      const {guildId, chatId} = event.params;
 
-    const db = getDatabase();
+      const db = getDatabase();
 
-    const senderId = message.senderId;
-    const senderNameSnap = await db.ref(`/users/${senderId}/userName`).once('value');
-    const senderNameValue = senderNameSnap.val();
-    const senderName =
-      senderNameValue === undefined || senderNameValue === null
-        ? 'GuildChat'
-        : senderNameValue;
-    const text =
-      message.text === undefined || message.text === null ? '' : message.text;
+      const senderId = message.senderId;
+      const senderNameSnap = await db
+          .ref(`/users/${senderId}/userName`)
+          .once("value");
+      const senderNameValue = senderNameSnap.val();
+      const senderName =
+          senderNameValue === undefined || senderNameValue === null ?
+            "GuildChat" :
+            senderNameValue;
+      const text =
+          message.text === undefined || message.text === null ?
+            "" :
+            message.text;
 
-    const chatSnap = await db.ref(`/guilds/${guildId}/chats/${chatId}/members`).once('value');
-    const members = chatSnap.val() || {};
+      const chatSnap = await db
+          .ref(`/guilds/${guildId}/chats/${chatId}/members`)
+          .once("value");
+      const members = chatSnap.val() || {};
 
-    const recipientUids = Object.keys(members).filter(uid => uid !== senderId);
+      const recipientUids = Object
+          .keys(members)
+          .filter((uid) => uid !== senderId);
 
-    const tokens = [];
-    for (const uid of recipientUids) {
-      const userSnap = await db.ref(`/users/${uid}/fcmToken`).once('value');
-      const fcmToken = userSnap.val();
-      console.log(`FCM token for ${uid}:`, fcmToken);
-      if (fcmToken) tokens.push(fcmToken);
-    }
+      const tokens = [];
+      const tokenOwners = new Map();
+      const seenTokens = new Set();
 
-    try {
-      if (tokens.length === 0) {
-        console.log('No FCM tokens found.');
-        return;
+      for (const uid of recipientUids) {
+        const userTokens = await fetchUserTokens(db, uid);
+        if (!userTokens.length) {
+          console.log(`FCM token for ${uid}: <відсутній>`);
+          continue;
+        }
+
+        userTokens.forEach((fcmToken) => {
+          console.log(`FCM token for ${uid}:`, fcmToken);
+          if (!fcmToken || seenTokens.has(fcmToken)) {
+            return;
+          }
+          seenTokens.add(fcmToken);
+          tokens.push(fcmToken);
+          tokenOwners.set(fcmToken, uid);
+        });
       }
 
-      const response = await getMessaging().sendMulticast({
-        tokens,
-        notification: {
-          title: senderName,
-          body: text,
-        },
-      });
-
-      console.log(
-        `Push notifications sent. Success: ${response.successCount}, failures: ${response.failureCount}.`,
-      );
-
-      response.responses.forEach((messageResponse, index) => {
-        if (!messageResponse.success) {
-          console.error(
-            `Failed to send notification to token ${tokens[index]}:`,
-            messageResponse.error,
-          );
+      try {
+        if (tokens.length === 0) {
+          console.log("No FCM tokens found.");
+          return;
         }
-      });
-    } catch (error) {
-      console.error('Error sending push notification:', error);
-    }
-  }
+
+        const payload = {
+          tokens,
+          notification: {
+            title: senderName,
+            body: text,
+          },
+          data: {
+            guildId: String(guildId),
+            chatId: String(chatId),
+            messageId: String(snap.key),
+            type: "chat-message",
+          },
+          android: {
+            priority: "high",
+            notification: {
+              channelId: "custom-alerts-v4",
+              sound: "alert",
+            },
+          },
+          apns: {
+            headers: {"apns-priority": "10"},
+            payload: {aps: {sound: "alert.wav"}},
+          },
+        };
+
+        const response = await getMessaging().sendMulticast(payload);
+
+        console.log(
+            "Push notifications sent. " +
+        `Success: ${response.successCount}, failures: ` +
+        `${response.failureCount}.`,
+        );
+
+        for (let index = 0; index < response.responses.length; index += 1) {
+          const messageResponse = response.responses[index];
+          if (messageResponse.success) {
+            continue;
+          }
+
+          const failedToken = tokens[index];
+          console.error(
+              `Failed to send notification to token ${failedToken}:`,
+              messageResponse.error,
+          );
+
+          const errorCode = messageResponse.error && messageResponse.error.code;
+          if (errorCode && INVALID_TOKEN_ERRORS.has(errorCode)) {
+            const uid = tokenOwners.get(failedToken);
+            if (uid) {
+              await removeTokenForUser(db, uid, failedToken);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error sending push notification:", error);
+      }
+    },
 );

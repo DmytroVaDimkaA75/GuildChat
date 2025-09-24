@@ -1,6 +1,6 @@
 // functions/sendPushNow.js
-const { onRequest } = require("firebase-functions/v2/https");
-const { getMessaging } = require("firebase-admin/messaging");
+const {onRequest} = require("firebase-functions/v2/https");
+const {getMessaging} = require("firebase-admin/messaging");
 require("./init.js");
 
 /**
@@ -10,19 +10,21 @@ require("./init.js");
  *    "token": "<Expo/FCM token>",
  *    "title": "Заголовок",
  *    "body": "Текст",
- *    "data": { ... },                 // опційно, лише рядки
- *    "sound": "alert.wav"            // iOS: файл у бандлі (caf/wav/aiff). За замовчуванням: alert.wav
+ *    "data": { ... }, // опційно, лише рядки
+ *    "sound": "alert.wav"
+ *      // iOS: файл у бандлі (caf/wav/aiff). За замовчуванням: alert.wav
  *  }
  *
  * Для ANDROID 8+:
  *  - звук визначається КАНАЛОМ
- *  - у додатку створено канал "custom-alerts-v4" зі sound: "alert" (без розширення)
+ *  - у додатку створено канал "custom-alerts-v4"
+ *    зі sound: "alert" (без розширення)
  *  - тут надсилаємо в цей самий channelId
  */
-exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => {
+exports.sendPushNow = onRequest({region: "europe-west1"}, async (req, res) => {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({ error: "Use POST" });
+      return res.status(405).json({error: "Use POST"});
     }
 
     const {
@@ -30,21 +32,24 @@ exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => 
       title,
       body,
       data = {},
-      sound = "alert.wav" // iOS: файл у бандлі (caf/wav/aiff). Для Android не використовується, канал визначає звук
+      sound = "alert.wav",
     } = req.body || {};
 
+    // iOS: файл у бандлі (caf/wav/aiff). Для Android не використовується,
+    // канал визначає звук.
+
     if (!token || !title || !body) {
-      return res.status(400).json({ error: "token, title, body required" });
+      return res.status(400).json({error: "token, title, body required"});
     }
 
     // Перетворюємо data у рядки (вимога FCM)
     const stringData = Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [k, String(v)])
+        Object.entries(data).map(([k, v]) => [k, String(v)]),
     );
 
     const message = {
       token,
-      notification: { title, body },
+      notification: {title, body},
 
       // ANDROID: канал МАЄ збігатися з тим, що створюється в App.js
       android: {
@@ -52,28 +57,29 @@ exports.sendPushNow = onRequest({ region: "europe-west1" }, async (req, res) => 
         notification: {
           channelId: "custom-alerts-v4",
           // Для Android < 8 може вплинути. Для 8+ звук визначається каналом.
-          sound: "alert" // <-- без розширення; відповідає res/raw/alert.(wav|mp3)
-        }
+          // <-- без розширення; відповідає res/raw/alert.(wav|mp3)
+          sound: "alert",
+        },
       },
 
       // iOS (якщо потрібно): звук задається тут
       apns: {
-        headers: { "apns-priority": "10" },
+        headers: {"apns-priority": "10"},
         payload: {
           aps: {
-            sound // напр., "alert.wav"
-          }
-        }
+            sound, // напр., "alert.wav"
+          },
+        },
       },
 
-      data: stringData
+      data: stringData,
     };
 
     await getMessaging().send(message);
-    return res.json({ status: "sent" });
+    return res.json({status: "sent"});
   } catch (err) {
     console.error("sendPushNow error:", err);
     const errorMessage = err && err.message ? err.message : err;
-    return res.status(500).json({ error: String(errorMessage) });
+    return res.status(500).json({error: String(errorMessage)});
   }
 });
