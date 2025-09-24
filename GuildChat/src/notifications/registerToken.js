@@ -54,6 +54,14 @@ export async function requestFcmToken() {
       const token = await messaging().getToken();
       if (token) {
         await AsyncStorage.setItem('cachedFcmToken', token);
+                try {
+          const userId = await AsyncStorage.getItem('userId');
+          if (userId) {
+            await uploadFcmToken(userId);
+          }
+        } catch (syncError) {
+          console.log('Не вдалося синхронізувати FCM-токен із сервером:', syncError);
+        }
         return token; // може знадобитися одразу
       }
     } catch (tokenError) {
@@ -76,10 +84,10 @@ export async function requestFcmToken() {
  *    Викликайте ОДИН раз після реєстрації / вибору гільдії:
  *      await uploadFcmToken(uid, database);
  */
-export async function uploadFcmToken(uid, database) {
+export async function uploadFcmToken(uid, db = database) {
   const token = await AsyncStorage.getItem('cachedFcmToken');
   if (!token) return false; // ще не дали дозвіл — нічого робити
-  await set(ref(database, `users/${uid}/fcmToken`), token);
+  await set(ref(db, `users/${uid}/fcmToken`), token);
   console.log('✅ FCM token saved for', uid);
   return true;
 }
