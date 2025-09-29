@@ -18,58 +18,92 @@ const HALF_HEIGHT = height * 0.5;
 const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
-// Код для визначення сусідніх секторів
-const DIRS = [
-  [1, 0],
-  [0, 1],
-  [-1, 1],
-  [-1, 0],
-  [0, -1],
-  [1, -1],
-];
+// Константна конфігурація карти вулканічного архіпелагу
+const MAP_NAME = 'volcano_archipelago';
 
-const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
-const WEDGE_CHARS = 'ABCDEF';
-const INDEX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-const idToCoord = (id) => {
-  if (id === 'X1X') return { q: 0, r: 0 };
-  const wedge = WEDGE_CHARS.indexOf(id[0]);
-  const ring = parseInt(id[1], 10) - 1;
-  const idx = id.charCodeAt(2) - 65;
-
-  let q = DIRS[0][0] * ring;
-  let r = DIRS[0][1] * ring;
-  for (let s = 0; s < wedge; s++) {
-    q += SIDE_DIRS[s][0] * ring;
-    r += SIDE_DIRS[s][1] * ring;
-  }
-  q += SIDE_DIRS[wedge][0] * idx;
-  r += SIDE_DIRS[wedge][1] * idx;
-  return { q, r };
+const SECTOR_NEIGHBORS = {
+  A2A: ['A3A', 'A3B', 'B2A', 'X1X', 'F2A', 'F3B'],
+  A3A: ['A4A', 'A4B', 'A3B', 'A2A', 'F3B', 'F4C'],
+  A3B: ['A4B', 'A4C', 'B3A', 'B2A', 'A2A', 'A3A'],
+  A4A: ['A5A', 'A5B', 'A4B', 'A3A', 'F4C', 'F5D'],
+  A4B: ['A5B', 'A5C', 'A4C', 'A3B', 'A3A', 'A4A'],
+  A4C: ['A5C', 'A5D', 'B4A', 'B3A', 'A3B', 'A4B'],
+  A5A: ['A5B', 'A4A', 'F5D'],
+  A5B: ['A5C', 'A4B', 'A4A', 'A5A'],
+  A5C: ['A5D', 'A4C', 'A4B', 'A5B'],
+  A5D: ['B5A', 'B4A', 'A4C', 'A5C'],
+  B2A: ['A3B', 'B3A', 'B3B', 'C2A', 'X1X', 'A2A'],
+  B3A: ['A4C', 'B4A', 'B4B', 'B3B', 'B2A', 'A3B'],
+  B3B: ['B3A', 'B4B', 'B4C', 'C3A', 'C2A', 'B2A'],
+  B4A: ['A5D', 'B5A', 'B5B', 'B4B', 'B3A', 'A4C'],
+  B4B: ['B4A', 'B5B', 'B5C', 'B4C', 'B3B', 'B3A'],
+  B4C: ['B4B', 'B5C', 'B5D', 'C4A', 'C3A', 'B3B'],
+  B5A: ['B5B', 'B4A', 'A5D'],
+  B5B: ['B5A', 'B5C', 'B4B', 'B4A'],
+  B5C: ['B5B', 'B5D', 'B4C', 'B4B'],
+  B5D: ['B5C', 'C5A', 'C4A', 'B4C'],
+  C2A: ['B2A', 'B3B', 'C3A', 'C3B', 'D2A', 'X1X'],
+  C3A: ['B3B', 'B4C', 'C4A', 'C4B', 'C3B', 'C2A'],
+  C3B: ['C2A', 'C3A', 'C4B', 'C4C', 'D3A', 'D2A'],
+  C4A: ['B4C', 'B5D', 'C5A', 'C5B', 'C4B', 'C3A'],
+  C4B: ['C3A', 'C4A', 'C5B', 'C5C', 'C4C', 'C3B'],
+  C4C: ['C3B', 'C4B', 'C5C', 'C5D', 'D4A', 'D3A'],
+  C5A: ['B5D', 'C5B', 'C4A'],
+  C5B: ['C4A', 'C5A', 'C5C', 'C4B'],
+  C5C: ['C4B', 'C5B', 'C5D', 'C4C'],
+  C5D: ['C4C', 'C5C', 'D5A', 'D4A'],
+  D2A: ['X1X', 'C2A', 'C3B', 'D3A', 'D3B', 'E2A'],
+  D3A: ['D2A', 'C3B', 'C4C', 'D4A', 'D4B', 'D3B'],
+  D3B: ['E2A', 'D2A', 'D3A', 'D4B', 'D4C', 'E3A'],
+  D4A: ['D3A', 'C4C', 'C5D', 'D5A', 'D5B', 'D4B'],
+  D4B: ['D3B', 'D3A', 'D4A', 'D5B', 'D5C', 'D4C'],
+  D4C: ['E3A', 'D3B', 'D4B', 'D5C', 'D5D', 'E4A'],
+  D5A: ['D4A', 'C5D', 'D5B'],
+  D5B: ['D4B', 'D4A', 'D5A', 'D5C'],
+  D5C: ['D4C', 'D4B', 'D5B', 'D5D'],
+  D5D: ['E4A', 'D4C', 'D5C', 'E5A'],
+  E2A: ['F2A', 'X1X', 'D2A', 'D3B', 'E3A', 'E3B'],
+  E3A: ['E3B', 'E2A', 'D3B', 'D4C', 'E4A', 'E4B'],
+  E3B: ['F3A', 'F2A', 'E2A', 'E3A', 'E4B', 'E4C'],
+  E4A: ['E4B', 'E3A', 'D4C', 'D5D', 'E5A', 'E5B'],
+  E4B: ['E4C', 'E3B', 'E3A', 'E4A', 'E5B', 'E5C'],
+  E4C: ['F4A', 'F3A', 'E3B', 'E4B', 'E5C', 'E5D'],
+  E5A: ['E5B', 'E4A', 'D5D'],
+  E5B: ['E5C', 'E4B', 'E4A', 'E5A'],
+  E5C: ['E5D', 'E4C', 'E4B', 'E5B'],
+  E5D: ['F5A', 'F4A', 'E4C', 'E5C'],
+  F2A: ['F3B', 'A2A', 'X1X', 'E2A', 'E3B', 'F3A'],
+  F3A: ['F4B', 'F3B', 'F2A', 'E3B', 'E4C', 'F4A'],
+  F3B: ['F4C', 'A3A', 'A2A', 'F2A', 'F3A', 'F4B'],
+  F4A: ['F5B', 'F4B', 'F3A', 'E4C', 'E5D', 'F5A'],
+  F4B: ['F5C', 'F4C', 'F3B', 'F3A', 'F4A', 'F5B'],
+  F4C: ['F5D', 'A4A', 'A3A', 'F3B', 'F4B', 'F5C'],
+  F5A: ['F5B', 'F4A', 'E5D'],
+  F5B: ['F5C', 'F4B', 'F4A', 'F5A'],
+  F5C: ['F5D', 'F4C', 'F4B', 'F5B'],
+  F5D: ['A5A', 'A4A', 'F4C', 'F5C'],
+  X1X: ['A2A', 'B2A', 'C2A', 'D2A', 'E2A', 'F2A'],
 };
 
-const coordToId = (q, r) => {
-  if (q === 0 && r === 0) return 'X1X';
-  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
-  if (ring > 4) return null;
-  let cq = DIRS[0][0] * ring;
-  let cr = DIRS[0][1] * ring;
-  for (let s = 0; s < 6; s++) {
-    for (let i = 0; i < ring; i++) {
-      if (q === cq && r === cr) {
-        return `${WEDGE_CHARS[s]}${ring + 1}${INDEX_CHARS[i]}`;
-      }
-      cq += SIDE_DIRS[s][0];
-      cr += SIDE_DIRS[s][1];
-    }
-  }
-  return null;
-};
+const getAdjacentIds = (id) => SECTOR_NEIGHBORS[id] || [];
 
-const getAdjacentIds = (id) => {
-  const { q, r } = idToCoord(id);
-  return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
+const parseGuildData = data => {
+  if (!data) {
+    return { guilds: [], mapName: MAP_NAME };
+  }
+  if (Array.isArray(data)) {
+    return { guilds: data, mapName: MAP_NAME };
+  }
+  const extractedMapName = typeof data.mapName === 'string' ? data.mapName : MAP_NAME;
+  const isGuildEntry = value =>
+    value && typeof value === 'object' && ('name' in value || 'color' in value);
+  if (Array.isArray(data.guilds)) {
+    return { guilds: data.guilds, mapName: extractedMapName };
+  }
+  if (data.guilds && typeof data.guilds === 'object') {
+    return { guilds: Object.values(data.guilds).filter(isGuildEntry), mapName: extractedMapName };
+  }
+  return { guilds: Object.values(data).filter(isGuildEntry), mapName: extractedMapName };
 };
 
 const formatRemaining = seconds => {
@@ -88,6 +122,7 @@ const GVG = ({ navigation, route }) => {
   const [guildInputs, setGuildInputs] = useState([]);
   const [guildList, setGuildList] = useState([]);
   const [ownGuildName, setOwnGuildName] = useState('');
+  const [mapName, setMapName] = useState(MAP_NAME);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
@@ -124,9 +159,12 @@ const GVG = ({ navigation, route }) => {
         const snap = await get(ref(db, `guilds/${id}/GBG`));
         if (snap.exists()) {
           const data = snap.val();
-          setGuildList(Array.isArray(data) ? data : Object.values(data));
+          const { guilds, mapName: storedMapName } = parseGuildData(data);
+          setGuildList(guilds);
+          setMapName(storedMapName);
         } else {
           setGuildList([]);
+          setMapName(MAP_NAME);
         }
       } catch (err) {
         console.error('Error fetching guild list:', err);
@@ -268,9 +306,12 @@ const GVG = ({ navigation, route }) => {
           const snapshot = await get(ref(db, `guilds/${id}/GBG`));
           if (snapshot.exists()) {
             const data = snapshot.val();
-            setGuildInputs(Array.isArray(data) ? data : Object.values(data));
+            const { guilds, mapName: storedMapName } = parseGuildData(data);
+            setGuildInputs(guilds);
+            setMapName(storedMapName);
           } else {
             setGuildInputs([]);
+            setMapName(MAP_NAME);
           }
         } catch (err) {
           console.error('Error fetching guild data:', err);
@@ -472,7 +513,12 @@ const GVG = ({ navigation, route }) => {
       }
       const dataToSave = guildInputs.filter(g => g.color && g.name);
       const db = getDatabase();
-      await set(ref(db, `guilds/${id}/GBG`), dataToSave);
+      const currentMapName = mapName || MAP_NAME;
+      await set(ref(db, `guilds/${id}/GBG`), {
+        mapName: currentMapName,
+        guilds: dataToSave,
+      });
+      setMapName(currentMapName);
       const sectorData = {};
       Object.keys(pathRefs.current).forEach(gid => {
         sectorData[gid] = { color: sectorColors[gid] || '#FFFFFF' };
