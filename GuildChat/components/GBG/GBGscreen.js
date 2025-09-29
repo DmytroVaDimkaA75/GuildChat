@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback, ScrollView } from "react-native";
+import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
-import FontAwesome from "react-native-vector-icons/FontAwesome";
-import { Dropdown } from 'react-native-element-dropdown';
-import { getDatabase, ref, set, get, onValue, update } from 'firebase/database';
+import { faFire } from "@fortawesome/free-solid-svg-icons";
+import { getDatabase, ref, set, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
-import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import GVGIcon from '../ico/GVG.svg';
 // Компонент інтерактивної карти режиму GBG
 
@@ -19,8 +16,6 @@ const SVG_WIDTH = 138.53601;
 const SVG_HEIGHT = 164.52901;
 
 // Константна конфігурація карти вулканічного архіпелагу
-const MAP_NAME = 'volcano_archipelago';
-
 const SECTOR_NEIGHBORS = {
   A2A: ['A3A', 'A3B', 'B2A', 'X1X', 'F2A', 'F3B'],
   A3A: ['A4A', 'A4B', 'A3B', 'A2A', 'F3B', 'F4C'],
@@ -87,25 +82,6 @@ const SECTOR_NEIGHBORS = {
 
 const getAdjacentIds = (id) => SECTOR_NEIGHBORS[id] || [];
 
-const parseGuildData = data => {
-  if (!data) {
-    return { guilds: [], mapName: MAP_NAME };
-  }
-  if (Array.isArray(data)) {
-    return { guilds: data, mapName: MAP_NAME };
-  }
-  const extractedMapName = typeof data.mapName === 'string' ? data.mapName : MAP_NAME;
-  const isGuildEntry = value =>
-    value && typeof value === 'object' && ('name' in value || 'color' in value);
-  if (Array.isArray(data.guilds)) {
-    return { guilds: data.guilds, mapName: extractedMapName };
-  }
-  if (data.guilds && typeof data.guilds === 'object') {
-    return { guilds: Object.values(data.guilds).filter(isGuildEntry), mapName: extractedMapName };
-  }
-  return { guilds: Object.values(data).filter(isGuildEntry), mapName: extractedMapName };
-};
-
 const formatRemaining = seconds => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -114,83 +90,14 @@ const formatRemaining = seconds => {
 
 
 
-const GVG = ({ navigation, route }) => {
+const GVG = () => {
   const [menuVisible, setMenuVisible] = useState(false);
-  const [paintModalVisible, setPaintModalVisible] = useState(false);
-  const [timeModalVisible, setTimeModalVisible] = useState(false);
-  const [settingsVisible, setSettingsVisible] = useState(false);
-  const [guildInputs, setGuildInputs] = useState([]);
-  const [guildList, setGuildList] = useState([]);
-  const [ownGuildName, setOwnGuildName] = useState('');
-  const [mapName, setMapName] = useState(MAP_NAME);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
-  const [sectorColors, setSectorColors] = useState({});
   const [sectorStaff, setSectorStaff] = useState({});
-  const colorOptions = [
-    { label: 'g', value: '#32CD32' },
-    { label: 'y', value: '#FFFF00' },
-    { label: 'b', value: '#3643ff' },
-    { label: 'p', value: '#9C27B0' },
-    { label: 'r', value: '#D32F2F' },
-    { label: 'o', value: '#F4A623' },
-  ];
-  const [colorIndex, setColorIndex] = useState(0);
-  const [hourIndex, setHourIndex] = useState(0);
-  const [minuteIndex, setMinuteIndex] = useState(0);
-  const attackColors = ['#0000FF', '#D32F2F'];
   const [sectorSchedule, setSectorSchedule] = useState([]);
-
-  useEffect(() => {
-    if (route?.params?.openSettings) {
-      setSettingsVisible(true);
-      navigation.setParams({ openSettings: false });
-    }
-  }, [route?.params?.openSettings]);
-
-  useEffect(() => {
-    const fetchGuilds = async () => {
-      try {
-        const id = guildId || await AsyncStorage.getItem('guildId');
-        if (!id) return;
-        const db = getDatabase();
-        const snap = await get(ref(db, `guilds/${id}/GBG`));
-        if (snap.exists()) {
-          const data = snap.val();
-          const { guilds, mapName: storedMapName } = parseGuildData(data);
-          setGuildList(guilds);
-          setMapName(storedMapName);
-        } else {
-          setGuildList([]);
-          setMapName(MAP_NAME);
-        }
-      } catch (err) {
-        console.error('Error fetching guild list:', err);
-      }
-    };
-    fetchGuilds();
-  }, [guildId]);
-
-  useEffect(() => {
-    const fetchOwnName = async () => {
-      try {
-        const id = guildId || await AsyncStorage.getItem('guildId');
-        if (!id) return;
-        const db = getDatabase();
-        const snap = await get(ref(db, `guilds/${id}/guildName`));
-        if (snap.exists()) {
-          setOwnGuildName(snap.val());
-        } else {
-          setOwnGuildName('');
-        }
-      } catch (err) {
-        console.error('Error fetching own guild name:', err);
-      }
-    };
-    fetchOwnName();
-  }, [guildId]);
 
   useEffect(() => {
     let unsubscribe;
@@ -230,7 +137,6 @@ const GVG = ({ navigation, route }) => {
               });
             }
           });
-          setSectorColors(sectors);
           setSectorStaff(staffFlags);
 
           const whiteSectors = Object.entries(sectors)
@@ -285,7 +191,6 @@ const GVG = ({ navigation, route }) => {
               });
             }
           });
-          setSectorColors(sectors);
           setSectorStaff(staffFlags);
           setSectorSchedule([]);
         }
@@ -295,31 +200,6 @@ const GVG = ({ navigation, route }) => {
       if (unsubscribe) unsubscribe();
     };
   }, [guildId]);
-
-  useEffect(() => {
-    if (settingsVisible) {
-      const fetchData = async () => {
-        try {
-          const id = guildId || await AsyncStorage.getItem('guildId');
-          if (!id) return;
-          const db = getDatabase();
-          const snapshot = await get(ref(db, `guilds/${id}/GBG`));
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            const { guilds, mapName: storedMapName } = parseGuildData(data);
-            setGuildInputs(guilds);
-            setMapName(storedMapName);
-          } else {
-            setGuildInputs([]);
-            setMapName(MAP_NAME);
-          }
-        } catch (err) {
-          console.error('Error fetching guild data:', err);
-        }
-      };
-      fetchData();
-    }
-  }, [settingsVisible]);
 
   const handleShapePress = async (id, event) => {
     try {
@@ -341,16 +221,6 @@ const GVG = ({ navigation, route }) => {
     } catch (err) {
       console.error('Error checking GBG folder:', err);
     }
-  };
-
-  const openPaintModal = () => {
-    setMenuVisible(false);
-    setPaintModalVisible(true);
-  };
-
-  const openTimeModal = () => {
-    setMenuVisible(false);
-    setTimeModalVisible(true);
   };
 
   const handleHelpPress = async (id, event) => {
@@ -437,99 +307,9 @@ const GVG = ({ navigation, route }) => {
         newValue ? true : null
       );
       setSectorStaff(prev => ({ ...prev, [selectedId]: newValue ? true : undefined }));
-      if (newValue) {
-        openPaintModal();
-      } else {
-        setMenuVisible(false);
-      }
+      setMenuVisible(false);
     } catch (err) {
       console.error('Error toggling staff:', err);
-    }
-  };
-
-  const closePaintModal = () => setPaintModalVisible(false);
-  const closeTimeModal = () => setTimeModalVisible(false);
-
-  const handleSaveTime = async () => {
-    try {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (id && selectedId) {
-        const db = getDatabase();
-        const openTime =
-          Math.floor(Date.now() / 1000) +
-          hourIndex * 3600 +
-          minuteIndex * 60;
-        await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
-        await set(
-          ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
-          attackColors[colorIndex]
-        );
-      }
-    } catch (err) {
-      console.error('Error saving sector time:', err);
-    }
-    setTimeModalVisible(false);
-  };
-
-  const handleColorSelect = async color => {
-    if (selectedId && pathRefs.current[selectedId]) {
-      const refEl = pathRefs.current[selectedId];
-      const pathId = refEl?.props?.id || '';
-      const chosen = color || '#FFFFFF';
-      const lower = chosen.toLowerCase();
-      const nativeProps = {
-        fill: chosen,
-        stroke: lower === '#ffffff' || lower === 'white' ? '#000000' : 'none',
-        strokeWidth: lower === '#ffffff' || lower === 'white' ? 1 : 0,
-      };
-      if (pathId.startsWith('f')) {
-        nativeProps.strokeOpacity = 0.7;
-      }
-      refEl.setNativeProps(nativeProps);
-      setSectorColors(prev => ({ ...prev, [selectedId]: chosen }));
-      try {
-        const id = guildId || await AsyncStorage.getItem('guildId');
-        if (id) {
-          const db = getDatabase();
-          await update(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), {
-            color: chosen,
-            openTime: null,
-            attack: null,
-          });
-        }
-      } catch (err) {
-        console.error('Error updating sector color:', err);
-      }
-    }
-    setPaintModalVisible(false);
-  };
-
-  const handleSaveGuilds = async () => {
-    try {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id) {
-        console.error('Guild ID not found');
-        return;
-      }
-      const dataToSave = guildInputs.filter(g => g.color && g.name);
-      const db = getDatabase();
-      const currentMapName = mapName || MAP_NAME;
-      await set(ref(db, `guilds/${id}/GBG`), {
-        mapName: currentMapName,
-        guilds: dataToSave,
-      });
-      setMapName(currentMapName);
-      const sectorData = {};
-      Object.keys(pathRefs.current).forEach(gid => {
-        sectorData[gid] = { color: sectorColors[gid] || '#FFFFFF' };
-        if (sectorStaff[gid]) {
-          sectorData[gid].staff = true;
-        }
-      });
-      await set(ref(db, `guilds/${id}/GBG/sectors`), sectorData);
-      setSettingsVisible(false);
-    } catch (error) {
-      console.error('Error saving guilds:', error);
     }
   };
 
@@ -2525,47 +2305,6 @@ const GVG = ({ navigation, route }) => {
             )}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={openPaintModal}
-              disabled={guildList.length === 0 || sectorStaff[selectedId]}
-            >
-              <FontAwesomeIcon
-                icon={faPaintBrush}
-                size={20}
-                color="#8C9093"
-                style={styles.menuIcon}
-              />
-              <Text
-                style={[
-                  styles.menuText,
-                  (guildList.length === 0 || sectorStaff[selectedId]) &&
-                  styles.disabledText,
-                ]}
-              >
-                Перефарбувати
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={openTimeModal}
-              disabled={sectorStaff[selectedId]}
-            >
-              <FontAwesomeIcon
-                icon={faClock}
-                size={20}
-                color="#8C9093"
-                style={styles.menuIcon}
-              />
-              <Text
-                style={[
-                  styles.menuText,
-                  sectorStaff[selectedId] && styles.disabledText,
-                ]}
-              >
-                Час до відкриття
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.menuItem}
               disabled={sectorStaff[selectedId]}
               onPress={handleHelpPress.bind(null, selectedId)}
             >
@@ -2587,187 +2326,6 @@ const GVG = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
       )}
-
-      <Modal
-        visible={paintModalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={closePaintModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paintModalContainer}>
-            <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
-            <ScrollView style={styles.sectorList}>
-              {ownGuildName ? (
-                <TouchableOpacity
-                  style={styles.guildItem}
-                  onPress={() => handleColorSelect('#DCDCDC')}
-                >
-                  <View style={[styles.guildColorBox, { backgroundColor: '#DCDCDC' }]} />
-                  <Text style={styles.guildName}>{ownGuildName}</Text>
-                </TouchableOpacity>
-              ) : null}
-              {guildList.map((item, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.guildItem}
-                  onPress={() => handleColorSelect(item.color)}
-                >
-                  <View style={[styles.guildColorBox, { backgroundColor: item.color }]} />
-                  <Text style={styles.guildName}>{item.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
-              <Text style={styles.closeButtonText}>Закрити</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={timeModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={closeTimeModal}
-      >
-        <TouchableWithoutFeedback onPress={closeTimeModal}>
-          <View style={styles.timeModalBackground}>
-            <TouchableWithoutFeedback>
-              <View style={styles.timeModalContainer}>
-                <Text style={styles.timeModalTitle}>Час до відкриття сектору {selectedId}</Text>
-                <View style={styles.timeWheelWrapper}>
-                  <View style={styles.timeWheelContainer}>
-                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
-                      <SimpleWheelPicker
-                        data={[
-                          <View style={[styles.colorSquare, { backgroundColor: '#0000FF' }]} />,
-                          <View style={[styles.colorSquare, { backgroundColor: '#D32F2F' }]} />,
-                        ]}
-                        selectedIndex={colorIndex}
-                        onValueChange={(_, idx) => setColorIndex(idx)}
-                      />
-                    </View>
-                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
-                      <SimpleWheelPicker
-                        data={Array.from({ length: 4 }, (_, i) => String(i))}
-                        selectedIndex={hourIndex}
-                        onValueChange={(_, idx) => setHourIndex(idx)}
-                      />
-                    </View>
-                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
-                      <SimpleWheelPicker
-                        data={Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))}
-                        selectedIndex={minuteIndex}
-                        onValueChange={(_, idx) => setMinuteIndex(idx)}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.timeSelectionOverlay} pointerEvents="none" />
-                </View>
-                <TouchableOpacity style={styles.timeModalButton} onPress={handleSaveTime}>
-                  <Text style={styles.timeModalButtonText}>Зберегти</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      <Modal
-        visible={settingsVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSettingsVisible(false)}
-      >
-        <View style={styles.settingsOverlay}>
-          <View style={styles.settingsContainer}>
-            {guildInputs.map((item, index) => (
-              <View key={index} style={styles.inputRow}>
-                <Dropdown
-                  style={styles.colorDropdown}
-                  containerStyle={styles.colorDropdownContainer}
-                  data={colorOptions}
-                  labelField="label"
-                  valueField="value"
-                  value={item.color}
-                  selectedTextStyle={styles.hiddenText}
-                  onChange={val => {
-                    const updated = guildInputs.slice();
-                    updated[index].color = val.value;
-                    setGuildInputs(updated);
-                  }}
-                  renderLeftIcon={() =>
-                    item.color ? (
-                      <View style={[styles.colorSample, { backgroundColor: item.color }]} />
-                    ) : null
-                  }
-                  renderItem={option => (
-                    <View style={styles.colorItem}>
-                      <View style={[styles.colorSample, { backgroundColor: option.value }]} />
-                    </View>
-                  )}
-                  renderRightIcon={() => (
-                    <FontAwesome name="chevron-down" size={12} color="#007AFF" />
-                  )}
-                  placeholder=" "
-                />
-                <TextInput
-                  style={styles.guildInput}
-                  value={item.name}
-                  onChangeText={text => {
-                    const updated = guildInputs.slice();
-                    updated[index].name = text;
-                    setGuildInputs(updated);
-                  }}
-                  placeholder="Назва"
-                />
-              </View>
-            ))}
-            <TouchableOpacity
-              disabled={
-                guildInputs.length > 0 &&
-                (!guildInputs[guildInputs.length - 1].color ||
-                  !guildInputs[guildInputs.length - 1].name)
-              }
-              onPress={() =>
-                setGuildInputs([...guildInputs, { color: null, name: '' }])
-              }
-            >
-              <Text
-                style={[
-                  styles.addGuildText,
-                  guildInputs.length > 0 &&
-                    (!guildInputs[guildInputs.length - 1].color ||
-                      !guildInputs[guildInputs.length - 1].name)
-                    ? styles.addGuildDisabled
-                    : null,
-                ]}
-              >
-                Додати гільдію
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                disabled={!guildInputs.some(g => g.color && g.name)}
-                onPress={handleSaveGuilds}
-                style={[
-                  styles.saveButton,
-                  !guildInputs.some(g => g.color && g.name) && styles.disabledButton,
-                ]}
-              >
-                <Text style={styles.saveButtonText}>Зберегти</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setSettingsVisible(false)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>Закрити</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -2815,219 +2373,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: "#fff",
-    width: "100%",
-    height: HALF_HEIGHT,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  paintModalContainer: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    width: '100%',
-    padding: 20
-  },
-  modalText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#000',
-    textAlign: 'center',
-    alignSelf: 'stretch',
-  },
-  closeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 8,
-    flex: 1,
-  },
-  modalCloseButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  closeButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  settingsOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsContainer: {
-    backgroundColor: '#fff',
-    width: '90%',
-    borderRadius: 8,
-    padding: 20,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  colorDropdown: {
-    width: 80,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    backgroundColor: '#ffffff',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 20,
-  },
-  colorDropdownContainer: {
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    borderRadius: 8,
-  },
-  colorItem: {
-    padding: 6,
-    alignItems: 'center',
-  },
-  colorSample: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-  },
-  guildItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    marginBottom: 4,
-    paddingHorizontal: 10,
-    width: '100%',
-  },
-  guildColorBox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    marginRight: 20,
-  },
-  guildName: {
-    fontSize: 14,
-    color: '#000',
-  },
-  guildInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-    borderRadius: 6,
-    padding: 10,
-    backgroundColor: '#fff',
-    fontSize: 16,
-    marginLeft: 10,
-    marginBottom: 20,
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginRight: 10,
-    flex: 1,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  addGuildText: {
-    color: '#007AFF',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  addGuildDisabled: {
-    color: '#999',
-  },
   disabledText: {
     color: '#999',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  hiddenText: {
-    width: 0,
-    height: 0,
-    color: 'transparent',
-    padding: 0,
-    margin: 0,
-  },
-  timeModalBackground: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  timeModalContainer: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    width: '100%',
-    padding: 20,
-  },
-  timeModalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#000',
-    textAlign: 'center',
-  },
-  timeWheelWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-  },
-  timeWheelContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timeSelectionOverlay: {
-    position: 'absolute',
-    top: 70,
-    left: 0,
-    right: 0,
-    height: 40,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#007AFF',
-  },
-  timeModalButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  timeModalButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  colorSquare: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
   },
   sectorList: {
     width: '100%',
