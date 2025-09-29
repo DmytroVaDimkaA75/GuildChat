@@ -3,10 +3,9 @@ import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from "react-nati
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faFire } from "@fortawesome/free-solid-svg-icons";
-import { getDatabase, ref, set, get, onValue } from 'firebase/database';
+import { getDatabase, ref, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
-import GVGIcon from '../ico/GVG.svg';
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -91,7 +90,6 @@ const formatRemaining = seconds => {
 
 
 const GVG = () => {
-  const [menuVisible, setMenuVisible] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
@@ -217,101 +215,83 @@ const GVG = () => {
           : { left: pageX, top: pageY };
       setPopupStyle(position);
       setSelectedId(id);
-      setMenuVisible(true);
     } catch (err) {
       console.error('Error checking GBG folder:', err);
     }
   };
 
-  const handleHelpPress = async (id, event) => {
-  try {
-    const db = getDatabase();
-
-    const gid = guildId || await AsyncStorage.getItem('guildId');
-    if (!gid) {
-      console.warn('⚠️ guildId not found');
-      return;
-    }
-
-    const text = `${id} необхідна допомога`;
-
-    const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
-    const members = snapshot.val() || {};
-    const recipientUids = Object.keys(members);
-
-    const tokens = [];
-    for (const uid of recipientUids) {
-      const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
-      const fcmToken = userSnap.val();
-      console.log(`FCM token for ${uid}:`, fcmToken);
-      if (fcmToken) tokens.push(fcmToken);
-    }
-
-    if (tokens.length > 0) {
-      const payloads = tokens.map(token => ({
-        token,
-        title: "Поле битви",
-        body: text,
-      }));
-
-      const results = await Promise.all(
-        payloads.map(async payload => {
-          try {
-            const response = await fetch('https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            });
-
-            const rawBody = await response.text();
-            let parsedBody = null;
-            try {
-              parsedBody = rawBody ? JSON.parse(rawBody) : null;
-            } catch (parseErr) {
-              console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
-            }
-
-            if (response.ok) {
-              console.log('✅ Повідомлення прийняте FCM для токена:', payload.token, parsedBody ?? rawBody);
-              return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
-            }
-
-            console.error('❌ FCM повернув помилку для токена:', payload.token, response.status, parsedBody ?? rawBody);
-            return { token: payload.token, ok: false, status: response.status, body: parsedBody ?? rawBody };
-          } catch (sendErr) {
-            console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
-            return { token: payload.token, ok: false, error: sendErr };
-          }
-        })
-      );
-
-      console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
-    } else {
-      console.log('No FCM tokens found.');
-    }
-  } catch (err) {
-    console.error('❌ Error in handleHelpPress:', err);
-  }
-};
-
-  
-
-  const handleStaffToggle = async () => {
+  const handleHelpPress = async (id) => {
     try {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id || !selectedId) return;
       const db = getDatabase();
-      const newValue = !sectorStaff[selectedId];
-      await set(
-        ref(db, `guilds/${id}/GBG/sectors/${selectedId}/staff`),
-        newValue ? true : null
-      );
-      setSectorStaff(prev => ({ ...prev, [selectedId]: newValue ? true : undefined }));
-      setMenuVisible(false);
+
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
+      const text = `${id} необхідна допомога`;
+
+      const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
+      const members = snapshot.val() || {};
+      const recipientUids = Object.keys(members);
+
+      const tokens = [];
+      for (const uid of recipientUids) {
+        const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+        const fcmToken = userSnap.val();
+        console.log(`FCM token for ${uid}:`, fcmToken);
+        if (fcmToken) tokens.push(fcmToken);
+      }
+
+      if (tokens.length > 0) {
+        const payloads = tokens.map(token => ({
+          token,
+          title: "Поле битви",
+          body: text,
+        }));
+
+        const results = await Promise.all(
+          payloads.map(async payload => {
+            try {
+              const response = await fetch('https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+
+              const rawBody = await response.text();
+              let parsedBody = null;
+              try {
+                parsedBody = rawBody ? JSON.parse(rawBody) : null;
+              } catch (parseErr) {
+                console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
+              }
+
+              if (response.ok) {
+                console.log('✅ Повідомлення прийняте FCM для токена:', payload.token, parsedBody ?? rawBody);
+                return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
+              }
+
+              console.error('❌ FCM повернув помилку для токена:', payload.token, response.status, parsedBody ?? rawBody);
+              return { token: payload.token, ok: false, status: response.status, body: parsedBody ?? rawBody };
+            } catch (sendErr) {
+              console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
+              return { token: payload.token, ok: false, error: sendErr };
+            }
+          })
+        );
+
+        console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
+      } else {
+        console.log('No FCM tokens found.');
+      }
     } catch (err) {
-      console.error('Error toggling staff:', err);
+      console.error('❌ Error in handleHelpPress:', err);
     }
   };
+
+  
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -2285,47 +2265,30 @@ const GVG = () => {
           </View>
         ))}
       </View>
-      {menuVisible && (
-        <TouchableOpacity
-          style={styles.popupOverlay}
-          onPress={() => setMenuVisible(false)}
-        >
-          <View style={[styles.popupMenu, popupStyle]}>
-            {selectedId && selectedId[1] === '5' && !sectorStaff[selectedId] && (
-              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
-                <GVGIcon width={20} height={20} style={styles.menuIcon} />
-                <Text style={styles.menuText}>Штаб</Text>
-              </TouchableOpacity>
-            )}
-            {selectedId && sectorStaff[selectedId] && (
-              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
-                <GVGIcon width={20} height={20} style={styles.menuIcon} />
-                <Text style={styles.menuText}>Штаб</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.menuItem}
-              disabled={sectorStaff[selectedId]}
-              onPress={handleHelpPress.bind(null, selectedId)}
+      <View style={styles.popupOverlay} pointerEvents="box-none">
+        <View style={[styles.popupMenu, popupStyle]}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            disabled={!selectedId || sectorStaff[selectedId]}
+            onPress={() => selectedId && handleHelpPress(selectedId)}
+          >
+            <FontAwesomeIcon
+              icon={faFire}
+              size={20}
+              color="#8C9093"
+              style={styles.menuIcon}
+            />
+            <Text
+              style={[
+                styles.menuText,
+                (!selectedId || sectorStaff[selectedId]) && styles.disabledText,
+              ]}
             >
-              <FontAwesomeIcon
-                icon={faFire}
-                size={20}
-                color="#8C9093"
-                style={styles.menuIcon}
-              />
-              <Text
-                style={[
-                  styles.menuText,
-                  sectorStaff[selectedId] && styles.disabledText,
-                ]}
-              >
-                Допомагайте
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      )}
+              Допомагайте
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 };
