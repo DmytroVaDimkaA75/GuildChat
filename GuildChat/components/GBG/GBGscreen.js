@@ -91,6 +91,7 @@ const formatRemaining = seconds => {
 
 const GVG = () => {
   const [selectedId, setSelectedId] = useState(null);
+  const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
   const pathRefs = useRef({});
   const { guildId } = useContext(GuildContext);
@@ -211,10 +212,11 @@ const GVG = () => {
       if (!snap.exists()) return;
       const position =
         pageX > screenWidth / 2
-          ? { right: screenWidth - pageX, top: pageY }
-          : { left: pageX, top: pageY };
+          ? { right: Math.max(screenWidth - pageX, 0), top: Math.max(pageY, 0) }
+          : { left: Math.max(pageX, 0), top: Math.max(pageY, 0) };
       setPopupStyle(position);
       setSelectedId(id);
+      setPopupVisible(true);
     } catch (err) {
       console.error('Error checking GBG folder:', err);
     }
@@ -288,6 +290,10 @@ const GVG = () => {
       }
     } catch (err) {
       console.error('❌ Error in handleHelpPress:', err);
+    } finally {
+      setPopupVisible(false);
+      setSelectedId(null);
+      setPopupStyle({});
     }
   };
 
@@ -2265,30 +2271,32 @@ const GVG = () => {
           </View>
         ))}
       </View>
-      <View style={styles.popupOverlay} pointerEvents="box-none">
-        <View style={[styles.popupMenu, popupStyle]}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            disabled={!selectedId || sectorStaff[selectedId]}
-            onPress={() => selectedId && handleHelpPress(selectedId)}
-          >
-            <FontAwesomeIcon
-              icon={faFire}
-              size={20}
-              color="#8C9093"
-              style={styles.menuIcon}
-            />
-            <Text
-              style={[
-                styles.menuText,
-                (!selectedId || sectorStaff[selectedId]) && styles.disabledText,
-              ]}
+      {popupVisible && (
+        <View style={styles.popupOverlay} pointerEvents="box-none">
+          <View style={[styles.popupMenu, popupStyle]}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              disabled={!selectedId || sectorStaff[selectedId]}
+              onPress={() => selectedId && handleHelpPress(selectedId)}
             >
-              Допомагайте
-            </Text>
-          </TouchableOpacity>
+              <FontAwesomeIcon
+                icon={faFire}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text
+                style={[
+                  styles.menuText,
+                  (!selectedId || sectorStaff[selectedId]) && styles.disabledText,
+                ]}
+              >
+                Допомагайте
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };
