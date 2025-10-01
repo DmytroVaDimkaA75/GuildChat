@@ -202,14 +202,15 @@ const GVG = () => {
 
   const handleShapePress = async (id, event) => {
     try {
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
       const screenWidth = Dimensions.get('window').width;
       const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
         event?.nativeEvent || {};
-      const gid = guildId || await AsyncStorage.getItem('guildId');
-      if (!gid) return;
-      const db = getDatabase();
-      const snap = await get(ref(db, `guilds/${gid}/GBG`));
-      if (!snap.exists()) return;
       const position =
         pageX > screenWidth / 2
           ? { right: Math.max(screenWidth - pageX, 0), top: Math.max(pageY, 0) }
@@ -218,7 +219,7 @@ const GVG = () => {
       setSelectedId(id);
       setPopupVisible(true);
     } catch (err) {
-      console.error('Error checking GBG folder:', err);
+      console.error('Error preparing popup:', err);
     }
   };
 
