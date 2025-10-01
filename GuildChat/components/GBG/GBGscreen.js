@@ -125,11 +125,13 @@ const GVG = () => {
   const [sectorSchedule, setSectorSchedule] = useState([]);
   const [currentMap, setCurrentMap] = useState(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [isSectorDataLoaded, setIsSectorDataLoaded] = useState(false);
 
   useEffect(() => {
     let unsubscribe;
     setIsMapLoaded(false);
     setCurrentMap(null);
+    setIsSectorDataLoaded(false);
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) {
@@ -215,6 +217,7 @@ const GVG = () => {
     if (!isMapLoaded) return;
     setSectorStaff({});
     setSectorSchedule([]);
+    setIsSectorDataLoaded(false);
   }, [currentMap, isMapLoaded]);
 
   useEffect(() => {
@@ -299,6 +302,7 @@ const GVG = () => {
               .sort((a, b) => a.timeRemaining - b.timeRemaining);
             setSectorSchedule(result);
           }
+          setIsSectorDataLoaded(true);
         } else {
           const sectors = {};
           const staffFlags = {};
@@ -315,6 +319,7 @@ const GVG = () => {
           });
           setSectorStaff(staffFlags);
           setSectorSchedule([]);
+          setIsSectorDataLoaded(true);
         }
       });
     })();
@@ -438,7 +443,7 @@ const GVG = () => {
     return () => clearInterval(timer);
   }, []);
 
-  if (!isMapLoaded) {
+  if (!isMapLoaded || !isSectorDataLoaded) {
     return (
       <View style={styles.win}>
         <Text>Завантаження карти...</Text>
