@@ -6,13 +6,16 @@ import { faFire } from "@fortawesome/free-solid-svg-icons";
 import { getDatabase, ref, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
+import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
 const HALF_HEIGHT = height * 0.5;
 
-const SVG_WIDTH = 138.53601;
-const SVG_HEIGHT = 164.52901;
+const VOLCANIC_SVG_WIDTH = 138.53601;
+const VOLCANIC_SVG_HEIGHT = 164.52901;
+const WATERFALL_SVG_WIDTH = 248.83203;
+const WATERFALL_SVG_HEIGHT = 248.83203;
 
 // Константна конфігурація карти вулканічного архіпелагу
 const SECTOR_NEIGHBORS = {
@@ -79,7 +82,30 @@ const SECTOR_NEIGHBORS = {
   X1X: ['A2A', 'B2A', 'C2A', 'D2A', 'E2A', 'F2A'],
 };
 
-const getAdjacentIds = (id) => SECTOR_NEIGHBORS[id] || [];
+const WATERFALL_NEIGHBORS = {};
+
+const DEFAULT_MAP_KEY = 'volcanic_archipelago';
+
+const MAP_DIMENSIONS = {
+  [DEFAULT_MAP_KEY]: {
+    width: VOLCANIC_SVG_WIDTH,
+    height: VOLCANIC_SVG_HEIGHT,
+  },
+  waterfall_archipelago: {
+    width: WATERFALL_SVG_WIDTH,
+    height: WATERFALL_SVG_HEIGHT,
+  },
+};
+
+const MAP_NEIGHBORS = {
+  [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS,
+  waterfall_archipelago: WATERFALL_NEIGHBORS,
+};
+
+const getAdjacentIds = (mapKey, id) => {
+  const neighbors = MAP_NEIGHBORS[mapKey] || {};
+  return neighbors[id] || [];
+};
 
 const formatRemaining = seconds => {
   const h = Math.floor(seconds / 3600);
@@ -97,6 +123,88 @@ const GVG = () => {
   const { guildId } = useContext(GuildContext);
   const [sectorStaff, setSectorStaff] = useState({});
   const [sectorSchedule, setSectorSchedule] = useState([]);
+  const [currentMap, setCurrentMap] = useState(DEFAULT_MAP_KEY);
+
+  useEffect(() => {
+    let unsubscribe;
+    (async () => {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) return;
+      const db = getDatabase();
+      const mapRef = ref(db, `guilds/${id}/GBG/map`);
+      unsubscribe = onValue(mapRef, snap => {
+        const value = snap.val();
+        if (typeof value === 'string' && MAP_DIMENSIONS[value]) {
+          setCurrentMap(value);
+        } else {
+          setCurrentMap(DEFAULT_MAP_KEY);
+        }
+      });
+    })();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [guildId]);
+
+  const mapKey = MAP_DIMENSIONS[currentMap] ? currentMap : DEFAULT_MAP_KEY;
+  const mapDimensions = MAP_DIMENSIONS[mapKey];
+  const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
+
+  const renderWaterfallMap = () =>
+    Object.entries(WATERFALL_ARCHIPELAGO_DATA).map(([sectorId, config]) => {
+      const fill = config.fill;
+      const text = config.text;
+      const icon = config.icon;
+      const textStyle = { ...(text?.style || {}) };
+      textStyle.display = sectorStaff[sectorId]
+        ? 'none'
+        : textStyle.display ?? 'inline';
+      const iconStyle = { ...(icon?.style || {}) };
+      iconStyle.display = sectorStaff[sectorId] ? 'inline' : 'none';
+
+      return (
+        <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
+          {fill && (
+            <Path
+              {...(fill.props || {})}
+              d={fill.d}
+              ref={el => {
+                if (el) {
+                  pathRefs.current[sectorId] = el;
+                } else {
+                  delete pathRefs.current[sectorId];
+                }
+              }}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={{
+                ...(fill.style || {}),
+              }}
+            />
+          )}
+          {text && (
+            <Path
+              {...(text.props || {})}
+              d={text.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={textStyle}
+            />
+          )}
+          {icon && (
+            <Path
+              {...(icon.props || {})}
+              d={icon.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={iconStyle}
+            />
+          )}
+        </G>
+      );
+    });
+
+  useEffect(() => {
+    setSectorStaff({});
+    setSectorSchedule([]);
+  }, [currentMap]);
 
   useEffect(() => {
     let unsubscribe;
@@ -105,13 +213,16 @@ const GVG = () => {
       if (!id) return;
       const db = getDatabase();
       const sectorsRef = ref(db, `guilds/${id}/GBG/sectors`);
-      const groupIds = Object.keys(pathRefs.current);
+      const mapKey = MAP_DIMENSIONS[currentMap] ? currentMap : DEFAULT_MAP_KEY;
       unsubscribe = onValue(sectorsRef, snap => {
+        const currentGroupIds = Object.entries(pathRefs.current)
+          .filter(([, refEl]) => !!refEl)
+          .map(([gid]) => gid);
         if (snap.exists()) {
           const data = snap.val();
           const sectors = {};
           const staffFlags = {};
-          groupIds.forEach(gid => {
+          currentGroupIds.forEach(gid => {
             let colorEntry = data[gid];
             let color =
               colorEntry && typeof colorEntry === 'object'
@@ -146,7 +257,7 @@ const GVG = () => {
           } else {
             const namesSet = new Set();
             whiteSectors.forEach(sec => {
-              getAdjacentIds(sec).forEach(adj => {
+              getAdjacentIds(mapKey, sec).forEach(adj => {
                 const adjColor = sectors[adj];
                 const adjLower = (adjColor || '').toLowerCase();
                 if (!adjColor || adjLower !== '#dcdcdc') {
@@ -179,7 +290,7 @@ const GVG = () => {
         } else {
           const sectors = {};
           const staffFlags = {};
-          groupIds.forEach(gid => {
+          currentGroupIds.forEach(gid => {
             sectors[gid] = '#FFFFFF';
             const refEl = pathRefs.current[gid];
             if (refEl) {
@@ -318,11 +429,20 @@ const GVG = () => {
   return (
     <View style={styles.win}>
       <View style={styles.mapContainer}>
-        <Svg
-          width="100%"
-          height="100%"
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-        >
+        {mapKey === 'waterfall_archipelago' ? (
+          <Svg
+            width="100%"
+            height="100%"
+            viewBox={viewBox}
+          >
+            {renderWaterfallMap()}
+          </Svg>
+        ) : (
+          <Svg
+            width="100%"
+            height="100%"
+            viewBox={viewBox}
+          >
           <G onPress={() => handleShapePress("C5D")}>
             <Path
               id="fC5D"
@@ -2255,7 +2375,8 @@ const GVG = () => {
               onPressIn={handleShapePress.bind(null, "E5A")}
             />
           </G>
-        </Svg>
+          </Svg>
+        )}
       </View>
       <View style={styles.sectorList}>
         {sectorSchedule.map(item => (
