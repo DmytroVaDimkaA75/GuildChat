@@ -123,22 +123,32 @@ const GVG = () => {
   const { guildId } = useContext(GuildContext);
   const [sectorStaff, setSectorStaff] = useState({});
   const [sectorSchedule, setSectorSchedule] = useState([]);
-  const [currentMap, setCurrentMap] = useState(DEFAULT_MAP_KEY);
+  const [currentMap, setCurrentMap] = useState(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   useEffect(() => {
     let unsubscribe;
+    setIsMapLoaded(false);
+    setCurrentMap(null);
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id) return;
+      if (!id) {
+        setCurrentMap(DEFAULT_MAP_KEY);
+        setIsMapLoaded(true);
+        return;
+      }
       const db = getDatabase();
       const mapRef = ref(db, `guilds/${id}/GBG/map`);
       unsubscribe = onValue(mapRef, snap => {
-        const value = snap.val();
-        if (typeof value === 'string' && MAP_DIMENSIONS[value]) {
-          setCurrentMap(value);
-        } else {
-          setCurrentMap(DEFAULT_MAP_KEY);
+        let nextMap = DEFAULT_MAP_KEY;
+        if (snap.exists()) {
+          const value = snap.val();
+          if (typeof value === 'string' && MAP_DIMENSIONS[value]) {
+            nextMap = value;
+          }
         }
+        setCurrentMap(nextMap);
+        setIsMapLoaded(true);
       });
     })();
     return () => {
@@ -146,8 +156,8 @@ const GVG = () => {
     };
   }, [guildId]);
 
-  const mapKey = MAP_DIMENSIONS[currentMap] ? currentMap : DEFAULT_MAP_KEY;
-  const mapDimensions = MAP_DIMENSIONS[mapKey];
+  const mapKey = currentMap ?? DEFAULT_MAP_KEY;
+  const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
 
   const renderWaterfallMap = () =>
@@ -202,18 +212,20 @@ const GVG = () => {
     });
 
   useEffect(() => {
+    if (!isMapLoaded) return;
     setSectorStaff({});
     setSectorSchedule([]);
-  }, [currentMap]);
+  }, [currentMap, isMapLoaded]);
 
   useEffect(() => {
+    if (!isMapLoaded) return;
     let unsubscribe;
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) return;
       const db = getDatabase();
       const sectorsRef = ref(db, `guilds/${id}/GBG/sectors`);
-      const mapKey = MAP_DIMENSIONS[currentMap] ? currentMap : DEFAULT_MAP_KEY;
+      const mapKey = currentMap ?? DEFAULT_MAP_KEY;
       unsubscribe = onValue(sectorsRef, snap => {
         const currentGroupIds = Object.entries(pathRefs.current)
           .filter(([, refEl]) => !!refEl)
@@ -309,7 +321,7 @@ const GVG = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [guildId]);
+  }, [guildId, isMapLoaded, currentMap]);
 
   const handleShapePress = async (id, event) => {
     try {
@@ -425,6 +437,14 @@ const GVG = () => {
     }, 60000);
     return () => clearInterval(timer);
   }, []);
+
+  if (!isMapLoaded) {
+    return (
+      <View style={styles.win}>
+        <Text>Завантаження карти...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.win}>
