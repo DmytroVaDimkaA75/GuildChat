@@ -6,17 +6,17 @@ import { faFire } from "@fortawesome/free-solid-svg-icons";
 import { getDatabase, ref, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
-import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
-import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
+import { VOLCANIC_ARCHIPELAGO_DATA } from "./waterfallData";
+import { WATERFALL_ARCHIPELAGO_DATA } from "./volcanicData";
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
 const HALF_HEIGHT = height * 0.5;
 
-const VOLCANIC_SVG_WIDTH = 138.53601;
-const VOLCANIC_SVG_HEIGHT = 164.52901;
-const WATERFALL_SVG_WIDTH = 248.83203;
-const WATERFALL_SVG_HEIGHT = 248.83203;
+const VOLCANIC_SVG_WIDTH = 248.83203;
+const VOLCANIC_SVG_HEIGHT = 248.83203;
+const WATERFALL_SVG_WIDTH = 138.53601;
+const WATERFALL_SVG_HEIGHT = 164.52901;
 
 // Константна конфігурація карти вулканічного архіпелагу
 const SECTOR_NEIGHBORS = {
