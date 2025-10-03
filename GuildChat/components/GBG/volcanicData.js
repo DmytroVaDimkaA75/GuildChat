@@ -1,5 +1,5 @@
-// Generated from GBGscreen.js
-export const VOLCANIC_ARCHIPELAGO_DATA = {
+// Generated from GBGscreen.js (Waterfall Archipelago)
+export const WATERFALL_ARCHIPELAGO_DATA = {
   "C5D": {
     "fill": {
       "d": "m 74.361668,146.24736 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z",

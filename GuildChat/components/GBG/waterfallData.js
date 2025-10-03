@@ -1,5 +1,5 @@
-// Generated from map2.svg
-export const WATERFALL_ARCHIPELAGO_DATA = {
+// Generated from map2.svg (Volcanic Archipelago)
+export const VOLCANIC_ARCHIPELAGO_DATA = {
   'A1M': {
     fill: {
       d: "m 124.94211,123.88718 h 48.68392 L 159.36679,89.466033 124.94211,75.206801 Z",
