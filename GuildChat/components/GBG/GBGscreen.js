@@ -186,7 +186,7 @@ const GVG = () => {
         return;
       }
       const db = getDatabase();
-      const opponentsRef = ref(db, `guilds/${id}/GBG/opponets`);
+      const opponentsRef = ref(db, `guilds/${id}/GBG/opponents`);
       unsubscribe = onValue(opponentsRef, snap => {
         if (snap.exists()) {
           const raw = snap.val() || {};
