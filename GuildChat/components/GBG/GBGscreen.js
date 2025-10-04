@@ -19,6 +19,9 @@ const VOLCANIC_SVG_HEIGHT = 248.83203;
 const WATERFALL_SVG_WIDTH = 138.53601;
 const WATERFALL_SVG_HEIGHT = 164.52901;
 
+const HELP_NOTIFICATION_TITLE = 'Поле битви';
+const HELP_SOUND = 'alert.mp3';
+
 // Константна конфігурація карти вулканічного архіпелагу
 const SECTOR_NEIGHBORS = {
   A2A: ['A3A', 'A3B', 'B2A', 'X1X', 'F2A', 'F3B'],
@@ -502,6 +505,71 @@ const GVG = () => {
     }
   };
 
+  const notifyGuildMembersAboutSector = async (db, guildId, sectorId) => {
+    const text = `${sectorId} необхідна допомога`;
+    const membersSnap = await get(ref(db, `/guilds/${guildId}/guildUsers`));
+    const members = membersSnap.val() || {};
+    const recipientUids = Object.keys(members);
+    if (!recipientUids.length) {
+      return { tokens: [], results: [] };
+    }
+
+    const tokens = new Set();
+    for (const uid of recipientUids) {
+      const tokenSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+      const token = tokenSnap.val();
+      if (token) {
+        tokens.add(token);
+      }
+    }
+
+    const payloads = Array.from(tokens).map(token => ({
+      token,
+      title: HELP_NOTIFICATION_TITLE,
+      body: text,
+      sound: HELP_SOUND,
+    }));
+
+    const results = await Promise.all(
+      payloads.map(async payload => {
+        try {
+          const response = await fetch(
+            'https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }
+          );
+
+          const rawBody = await response.text();
+          let parsedBody = null;
+          try {
+            parsedBody = rawBody ? JSON.parse(rawBody) : null;
+          } catch (parseErr) {
+            console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
+          }
+
+          if (response.ok) {
+            return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
+          }
+
+          return {
+            token: payload.token,
+            ok: false,
+            status: response.status,
+            body: parsedBody ?? rawBody,
+          };
+        } catch (sendErr) {
+          console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
+          return { token: payload.token, ok: false, error: sendErr };
+        }
+      })
+    );
+
+    return { tokens: Array.from(tokens), results };
+  };
+
   const handleHelpPress = async (id) => {
     try {
       const db = getDatabase();
@@ -512,82 +580,14 @@ const GVG = () => {
         return;
       }
 
-      const text = `${id} необхідна допомога`;
+      const { tokens, results } = await notifyGuildMembersAboutSector(db, gid, id);
 
-      const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
-      const members = snapshot.val() || {};
-      const recipientUids = Object.keys(members);
-
-      const tokens = [];
-      for (const uid of recipientUids) {
-        const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
-        const fcmToken = userSnap.val();
-        console.log(`FCM token for ${uid}:`, fcmToken);
-        if (fcmToken) tokens.push(fcmToken);
-      }
-
-      if (tokens.length > 0) {
-        const payloads = tokens.map(token => ({
-          token,
-          title: "Поле битви",
-          body: text,
-        }));
-
-        const results = await Promise.all(
-          payloads.map(async payload => {
-            try {
-              const response = await fetch('https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-
-              const rawBody = await response.text();
-              let parsedBody = null;
-              try {
-                parsedBody = rawBody ? JSON.parse(rawBody) : null;
-              } catch (parseErr) {
-                console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
-              }
-
-              if (response.ok) {
-                console.log('✅ Повідомлення прийняте FCM для токена:', payload.token, parsedBody ?? rawBody);
-                return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
-              }
-
-              console.error('❌ FCM повернув помилку для токена:', payload.token, response.status, parsedBody ?? rawBody);
-              return { token: payload.token, ok: false, status: response.status, body: parsedBody ?? rawBody };
-            } catch (sendErr) {
-              console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
-              return { token: payload.token, ok: false, error: sendErr };
-            }
-          })
-        );
-
-        console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
-      } else {
+      if (!tokens.length) {
         console.log('No FCM tokens found.');
+      } else {
+        console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
       }
-    } catch (err) {
-      console.error('❌ Error in handleHelpPress:', err);
-    } finally {
-      setPopupVisible(false);
-      setSelectedId(null);
-      setPopupStyle({});
-    }
-  };
-
-  
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSectorSchedule(prev =>
-        prev
-          .map(item => ({
-            ...item,
-            timeRemaining: item.openTime - Math.floor(Date.now() / 1000),
-          }))
-          .filter(item => item.timeRemaining > 0)
+    } catch
           .sort((a, b) => a.timeRemaining - b.timeRemaining)
       );
     }, 60000);
