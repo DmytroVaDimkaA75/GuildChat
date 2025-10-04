@@ -22,6 +22,71 @@ const WATERFALL_SVG_HEIGHT = 164.52901;
 const HELP_NOTIFICATION_TITLE = 'Поле битви';
 const HELP_SOUND = 'alert.mp3';
 
+const notifyGuildMembersAboutSector = async (db, guildId, sectorId) => {
+  const text = `${sectorId} необхідна допомога`;
+  const membersSnap = await get(ref(db, `/guilds/${guildId}/guildUsers`));
+  const members = membersSnap.val() || {};
+  const recipientUids = Object.keys(members);
+  if (!recipientUids.length) {
+    return { tokens: [], results: [] };
+  }
+
+  const tokens = new Set();
+  for (const uid of recipientUids) {
+    const tokenSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+    const token = tokenSnap.val();
+    if (token) {
+      tokens.add(token);
+    }
+  }
+
+  const payloads = Array.from(tokens).map(token => ({
+    token,
+    title: HELP_NOTIFICATION_TITLE,
+    body: text,
+    sound: HELP_SOUND,
+  }));
+
+  const results = await Promise.all(
+    payloads.map(async payload => {
+      try {
+        const response = await fetch(
+          'https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        const rawBody = await response.text();
+        let parsedBody = null;
+        try {
+          parsedBody = rawBody ? JSON.parse(rawBody) : null;
+        } catch (parseErr) {
+          console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
+        }
+
+        if (response.ok) {
+          return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
+        }
+
+        return {
+          token: payload.token,
+          ok: false,
+          status: response.status,
+          body: parsedBody ?? rawBody,
+        };
+      } catch (sendErr) {
+        console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
+        return { token: payload.token, ok: false, error: sendErr };
+      }
+    )
+  );
+
+  return { tokens: Array.from(tokens), results };
+};
+
 // Константна конфігурація карти вулканічного архіпелагу
 const SECTOR_NEIGHBORS = {
   A2A: ['A3A', 'A3B', 'B2A', 'X1X', 'F2A', 'F3B'],
@@ -505,69 +570,309 @@ const GVG = () => {
     }
   };
 
-  const notifyGuildMembersAboutSector = async (db, guildId, sectorId) => {
-    const text = `${sectorId} необхідна допомога`;
-    const membersSnap = await get(ref(db, `/guilds/${guildId}/guildUsers`));
-    const members = membersSnap.val() || {};
-    const recipientUids = Object.keys(members);
-    if (!recipientUids.length) {
-      return { tokens: [], results: [] };
-    }
+  const handleHelpPress = async (id) => {
+    try {
+      const db = getDatabase();
 
-    const tokens = new Set();
-    for (const uid of recipientUids) {
-      const tokenSnap = await get(ref(db, `/users/${uid}/fcmToken`));
-      const token = tokenSnap.val();
-      if (token) {
-        tokens.add(token);
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
       }
+
+      const { tokens, results } = await notifyGuildMembersAboutSector(db, gid, id);
+
+      if (!tokens.length) {
+        console.log('No FCM tokens found.');
+      } else {
+        console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
+      }
+    } catch (err) {
+      console.error('❌ Error in handleHelpPress:', err);
+    } finally {
+      setPopupVisible(false);
+      setSelectedId(null);
+      setPopupStyle({});
+    }
+  };
+
+  const mapKey = currentMap ?? DEFAULT_MAP_KEY;
+  const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
+  const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
+
+  const formatMapTitle = key => {
+    const normalizedKey = key || DEFAULT_MAP_KEY;
+    if (MAP_TITLE_TRANSLATIONS[normalizedKey]) {
+      return MAP_TITLE_TRANSLATIONS[normalizedKey];
+    }
+    return normalizedKey
+      .split('_')
+      .map(word => (word ? word[0].toUpperCase() + word.slice(1) : word))
+      .join(' ');
+  };
+
+  const mapTitle = formatMapTitle(mapKey);
+
+  useLayoutEffect(() => {
+    if (!navigation) return;
+    const isDataReady = isMapLoaded && isSectorDataLoaded && areOpponentsLoaded;
+    navigation.setOptions({
+      headerTitle: mapTitle,
+    });
+  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+
+  // Прокидуємо callback для відкриття списку суперників у стек (MainContent -> GBGStack)
+  useEffect(() => {
+    if (!navigation) return;
+    const isDataReady = isMapLoaded && isSectorDataLoaded && areOpponentsLoaded;
+    if (isDataReady) {
+      navigation.setParams({
+        onOpenOpponents: () => setInfoVisible(true),
+      });
+    }
+  }, [navigation, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+
+  const renderMapPaths = () => {
+    const data = MAP_DATA[mapKey] || {};
+    return Object.entries(data).map(([sectorId, config]) => {
+      const fill = config.fill;
+      const text = config.text;
+      const icon = config.icon;
+
+      const fillStyle = { ...(fill?.style || {}) };
+      const color = sectorColors[sectorId];
+      if (color) {
+        const lower = color.toLowerCase();
+        const isWhite = lower === '#ffffff' || lower === 'white';
+        fillStyle.fill = color;
+        fillStyle.stroke = isWhite ? '#000000' : 'none';
+        fillStyle.strokeWidth = isWhite ? 1 : 0;
+        fillStyle.strokeOpacity = isWhite ? 0.7 : 0;
+      }
+
+      const textStyle = { ...(text?.style || {}) };
+      textStyle.display = sectorStaff[sectorId]
+        ? 'none'
+        : textStyle.display ?? 'inline';
+
+      const iconStyle = { ...(icon?.style || {}) };
+      iconStyle.display = sectorStaff[sectorId] ? 'inline' : 'none';
+
+      return (
+        <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
+          {fill && (
+            <Path
+              {...(fill.props || {})}
+              d={fill.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={fillStyle}
+            />
+          )}
+          {text && (
+            <Path
+              {...(text.props || {})}
+              d={text.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={textStyle}
+            />
+          )}
+          {icon && (
+            <Path
+              {...(icon.props || {})}
+              d={icon.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={iconStyle}
+            />
+          )}
+        </G>
+      );
+    });
+  };
+
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    setSectorStaff({});
+    setSectorSchedule([]);
+    setSectorColors({});
+    setSectorSnapshot(null);
+    setIsSectorDataLoaded(false);
+  }, [currentMap, isMapLoaded]);
+
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    let unsubscribe;
+    (async () => {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) {
+        setSectorSnapshot(null);
+        setIsSectorDataLoaded(true);
+        return;
+      }
+      const db = getDatabase();
+      const sectorsRef = ref(db, `guilds/${id}/GBG/sectors`);
+      unsubscribe = onValue(sectorsRef, snap => {
+        if (snap.exists()) {
+          setSectorSnapshot(snap.val());
+        } else {
+          setSectorSnapshot(null);
+        }
+        setIsSectorDataLoaded(true);
+      });
+    })();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [guildId, isMapLoaded]);
+
+  useEffect(() => {
+    if (!isMapLoaded || !areOpponentsLoaded) {
+      return;
+    }
+    const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
+    const mapData = MAP_DATA[mapKey] || {};
+    const sectorIds = Object.keys(mapData);
+    if (sectorIds.length === 0) {
+      setSectorColors({});
+      setSectorStaff({});
+      setSectorSchedule([]);
+      return;
     }
 
-    const payloads = Array.from(tokens).map(token => ({
-      token,
-      title: HELP_NOTIFICATION_TITLE,
-      body: text,
-      sound: HELP_SOUND,
-    }));
+    const colors = {};
+    const staffFlags = {};
+    const owners = {};
+    const availableSectors = new Set(sectorIds);
 
-    const results = await Promise.all(
-      payloads.map(async payload => {
-        try {
-          const response = await fetch(
-            'https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow',
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            }
-          );
+    sectorIds.forEach(gid => {
+      const entry = data[gid];
+      let color = '#FFFFFF';
+      let staff = false;
+      let ownerValue = null;
 
-          const rawBody = await response.text();
-          let parsedBody = null;
-          try {
-            parsedBody = rawBody ? JSON.parse(rawBody) : null;
-          } catch (parseErr) {
-            console.warn('⚠️ Не вдалося розпарсити відповідь як JSON:', parseErr);
-          }
-
-          if (response.ok) {
-            return { token: payload.token, ok: true, body: parsedBody ?? rawBody };
-          }
-
-          return {
-            token: payload.token,
-            ok: false,
-            status: response.status,
-            body: parsedBody ?? rawBody,
-          };
-        } catch (sendErr) {
-          console.error('❌ Помилка під час надсилання пушу для токена:', payload.token, sendErr);
-          return { token: payload.token, ok: false, error: sendErr };
+      if (entry && typeof entry === 'object') {
+        if (typeof entry.color === 'string') {
+          color = entry.color;
         }
-      })
-    );
+        if (entry.owner !== undefined && entry.owner !== null) {
+          ownerValue = entry.owner;
+        } else if (entry.ownerId !== undefined && entry.ownerId !== null) {
+          ownerValue = entry.ownerId;
+        }
+        if (ownerValue !== null) {
+          const ownerKey = String(ownerValue);
+          if (ownerKey === '0') {
+            color = '#FFFFFF';
+          } else {
+            const opponent = opponentMapById[ownerKey];
+            if (opponent?.sectorColor) {
+              color = String(opponent.sectorColor);
+            } else if (typeof entry.color === 'string') {
+              color = entry.color;
+            } else {
+              color = '#FFFFFF';
+            }
+          }
+        }
+        staff = !!entry.staff;
+      } else if (typeof entry === 'string') {
+        color = entry;
+      }
 
-    return { tokens: Array.from(tokens), results };
+      if (!color) {
+        color = '#FFFFFF';
+      }
+
+      colors[gid] = color;
+      staffFlags[gid] = staff;
+      owners[gid] = ownerValue !== null ? String(ownerValue) : null;
+    });
+
+    const whiteSectors = sectorIds.filter(id => {
+      const owner = owners[id];
+      const color = colors[id];
+      const lower = (color || '').toLowerCase();
+      if (owner === null) {
+        return !color || lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
+      }
+      if (owner === '0') {
+        return true;
+      }
+      return lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
+    });
+
+    if (whiteSectors.length === 0) {
+      setSectorSchedule([]);
+    } else {
+      const namesSet = new Set();
+      whiteSectors.forEach(sec => {
+        getAdjacentIds(mapKey, sec).forEach(adj => {
+          if (!availableSectors.has(adj)) {
+            return;
+          }
+          if (!adj) return;
+          const colorLower = (colors[adj] || '').toLowerCase();
+          const owner = owners[adj];
+          if (owner !== null && owner !== '0') {
+            namesSet.add(adj);
+          } else if (colorLower && colorLower !== '#ffffff' && colorLower !== '#dcdcdc' && colorLower !== 'white') {
+            namesSet.add(adj);
+          }
+        });
+      });
+
+      const now = Math.floor(Date.now() / 1000);
+      const result = Array.from(namesSet)
+        .map(name => {
+          const entry = data[name];
+          if (entry && typeof entry === 'object') {
+            return {
+              name,
+              attack: entry.attack,
+              openTime: entry.openTime,
+              staff: entry.staff,
+            };
+          }
+          return { name };
+        })
+        .filter(item => item.openTime && !item.staff)
+        .map(it => ({
+          ...it,
+          timeRemaining: it.openTime - now,
+          openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }))
+        .filter(it => it.timeRemaining > 0)
+        .sort((a, b) => a.timeRemaining - b.timeRemaining);
+      setSectorSchedule(result);
+    }
+
+    setSectorColors(colors);
+    setSectorStaff(staffFlags);
+  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, sectorSnapshot]);
+
+  const handleShapePress = async (id, event) => {
+    try {
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
+      const screenWidth = Dimensions.get('window').width;
+      const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+        event?.nativeEvent || {};
+      const position =
+        pageX > screenWidth / 2
+          ? { right: Math.max(screenWidth - pageX, 0), top: Math.max(pageY, 0) }
+          : { left: Math.max(pageX, 0), top: Math.max(pageY, 0) };
+      setPopupStyle(position);
+      setSelectedId(id);
+      setPopupVisible(true);
+    } catch (err) {
+      console.error('Error preparing popup:', err);
+    }
   };
 
   const handleHelpPress = async (id) => {
@@ -587,18 +892,319 @@ const GVG = () => {
       } else {
         console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
       }
-    } catch
-          .sort((a, b) => a.timeRemaining - b.timeRemaining)
+    } catch (err) {
+      console.error('❌ Error in handleHelpPress:', err);
+    } finally {
+      setPopupVisible(false);
+      setSelectedId(null);
+      setPopupStyle({});
+    }
+  };
+
+  const mapKey = currentMap ?? DEFAULT_MAP_KEY;
+  const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
+  const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
+
+  const formatMapTitle = key => {
+    const normalizedKey = key || DEFAULT_MAP_KEY;
+    if (MAP_TITLE_TRANSLATIONS[normalizedKey]) {
+      return MAP_TITLE_TRANSLATIONS[normalizedKey];
+    }
+    return normalizedKey
+      .split('_')
+      .map(word => (word ? word[0].toUpperCase() + word.slice(1) : word))
+      .join(' ');
+  };
+
+  const mapTitle = formatMapTitle(mapKey);
+
+  useLayoutEffect(() => {
+    if (!navigation) return;
+    const isDataReady = isMapLoaded && isSectorDataLoaded && areOpponentsLoaded;
+    navigation.setOptions({
+      headerTitle: mapTitle,
+    });
+  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+
+  // Прокидуємо callback для відкриття списку суперників у стек (MainContent -> GBGStack)
+  useEffect(() => {
+    if (!navigation) return;
+    const isDataReady = isMapLoaded && isSectorDataLoaded && areOpponentsLoaded;
+    if (isDataReady) {
+      navigation.setParams({
+        onOpenOpponents: () => setInfoVisible(true),
+      });
+    }
+  }, [navigation, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+
+  const renderMapPaths = () => {
+    const data = MAP_DATA[mapKey] || {};
+    return Object.entries(data).map(([sectorId, config]) => {
+      const fill = config.fill;
+      const text = config.text;
+      const icon = config.icon;
+
+      const fillStyle = { ...(fill?.style || {}) };
+      const color = sectorColors[sectorId];
+      if (color) {
+        const lower = color.toLowerCase();
+        const isWhite = lower === '#ffffff' || lower === 'white';
+        fillStyle.fill = color;
+        fillStyle.stroke = isWhite ? '#000000' : 'none';
+        fillStyle.strokeWidth = isWhite ? 1 : 0;
+        fillStyle.strokeOpacity = isWhite ? 0.7 : 0;
+      }
+
+      const textStyle = { ...(text?.style || {}) };
+      textStyle.display = sectorStaff[sectorId]
+        ? 'none'
+        : textStyle.display ?? 'inline';
+
+      const iconStyle = { ...(icon?.style || {}) };
+      iconStyle.display = sectorStaff[sectorId] ? 'inline' : 'none';
+
+      return (
+        <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
+          {fill && (
+            <Path
+              {...(fill.props || {})}
+              d={fill.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={fillStyle}
+            />
+          )}
+          {text && (
+            <Path
+              {...(text.props || {})}
+              d={text.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={textStyle}
+            />
+          )}
+          {icon && (
+            <Path
+              {...(icon.props || {})}
+              d={icon.d}
+              onPressIn={handleShapePress.bind(null, sectorId)}
+              style={iconStyle}
+            />
+          )}
+        </G>
       );
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
+    });
+  };
 
   useEffect(() => {
-    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
-      setInfoVisible(false);
+    if (!isMapLoaded) return;
+    setSectorStaff({});
+    setSectorSchedule([]);
+    setSectorColors({});
+    setSectorSnapshot(null);
+    setIsSectorDataLoaded(false);
+  }, [currentMap, isMapLoaded]);
+
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    let unsubscribe;
+    (async () => {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) {
+        setSectorSnapshot(null);
+        setIsSectorDataLoaded(true);
+        return;
+      }
+      const db = getDatabase();
+      const sectorsRef = ref(db, `guilds/${id}/GBG/sectors`);
+      unsubscribe = onValue(sectorsRef, snap => {
+        if (snap.exists()) {
+          setSectorSnapshot(snap.val());
+        } else {
+          setSectorSnapshot(null);
+        }
+        setIsSectorDataLoaded(true);
+      });
+    })();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [guildId, isMapLoaded]);
+
+  useEffect(() => {
+    if (!isMapLoaded || !areOpponentsLoaded) {
+      return;
     }
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded]);
+    const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
+    const mapData = MAP_DATA[mapKey] || {};
+    const sectorIds = Object.keys(mapData);
+    if (sectorIds.length === 0) {
+      setSectorColors({});
+      setSectorStaff({});
+      setSectorSchedule([]);
+      return;
+    }
+
+    const colors = {};
+    const staffFlags = {};
+    const owners = {};
+    const availableSectors = new Set(sectorIds);
+
+    sectorIds.forEach(gid => {
+      const entry = data[gid];
+      let color = '#FFFFFF';
+      let staff = false;
+      let ownerValue = null;
+
+      if (entry && typeof entry === 'object') {
+        if (typeof entry.color === 'string') {
+          color = entry.color;
+        }
+        if (entry.owner !== undefined && entry.owner !== null) {
+          ownerValue = entry.owner;
+        } else if (entry.ownerId !== undefined && entry.ownerId !== null) {
+          ownerValue = entry.ownerId;
+        }
+        if (ownerValue !== null) {
+          const ownerKey = String(ownerValue);
+          if (ownerKey === '0') {
+            color = '#FFFFFF';
+          } else {
+            const opponent = opponentMapById[ownerKey];
+            if (opponent?.sectorColor) {
+              color = String(opponent.sectorColor);
+            } else if (typeof entry.color === 'string') {
+              color = entry.color;
+            } else {
+              color = '#FFFFFF';
+            }
+          }
+        }
+        staff = !!entry.staff;
+      } else if (typeof entry === 'string') {
+        color = entry;
+      }
+
+      if (!color) {
+        color = '#FFFFFF';
+      }
+
+      colors[gid] = color;
+      staffFlags[gid] = staff;
+      owners[gid] = ownerValue !== null ? String(ownerValue) : null;
+    });
+
+    const whiteSectors = sectorIds.filter(id => {
+      const owner = owners[id];
+      const color = colors[id];
+      const lower = (color || '').toLowerCase();
+      if (owner === null) {
+        return !color || lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
+      }
+      if (owner === '0') {
+        return true;
+      }
+      return lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
+    });
+
+    if (whiteSectors.length === 0) {
+      setSectorSchedule([]);
+    } else {
+      const namesSet = new Set();
+      whiteSectors.forEach(sec => {
+        getAdjacentIds(mapKey, sec).forEach(adj => {
+          if (!availableSectors.has(adj)) {
+            return;
+          }
+          if (!adj) return;
+          const colorLower = (colors[adj] || '').toLowerCase();
+          const owner = owners[adj];
+          if (owner !== null && owner !== '0') {
+            namesSet.add(adj);
+          } else if (colorLower && colorLower !== '#ffffff' && colorLower !== '#dcdcdc' && colorLower !== 'white') {
+            namesSet.add(adj);
+          }
+        });
+      });
+
+      const now = Math.floor(Date.now() / 1000);
+      const result = Array.from(namesSet)
+        .map(name => {
+          const entry = data[name];
+          if (entry && typeof entry === 'object') {
+            return {
+              name,
+              attack: entry.attack,
+              openTime: entry.openTime,
+              staff: entry.staff,
+            };
+          }
+          return { name };
+        })
+        .filter(item => item.openTime && !item.staff)
+        .map(it => ({
+          ...it,
+          timeRemaining: it.openTime - now,
+          openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }))
+        .filter(it => it.timeRemaining > 0)
+        .sort((a, b) => a.timeRemaining - b.timeRemaining);
+      setSectorSchedule(result);
+    }
+
+    setSectorColors(colors);
+    setSectorStaff(staffFlags);
+  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, sectorSnapshot]);
+
+  const handleShapePress = async (id, event) => {
+    try {
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
+      const screenWidth = Dimensions.get('window').width;
+      const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+        event?.nativeEvent || {};
+      const position =
+        pageX > screenWidth / 2
+          ? { right: Math.max(screenWidth - pageX, 0), top: Math.max(pageY, 0) }
+          : { left: Math.max(pageX, 0), top: Math.max(pageY, 0) };
+      setPopupStyle(position);
+      setSelectedId(id);
+      setPopupVisible(true);
+    } catch (err) {
+      console.error('Error preparing popup:', err);
+    }
+  };
+
+  const handleHelpPress = async (id) => {
+    try {
+      const db = getDatabase();
+
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
+      const { tokens, results } = await notifyGuildMembersAboutSector(db, gid, id);
+
+      if (!tokens.length) {
+        console.log('No FCM tokens found.');
+      } else {
+        console.log('📨 Результати надсилання пушів:', JSON.stringify(results, null, 2));
+      }
+    } catch (err) {
+      console.error('❌ Error in handleHelpPress:', err);
+    } finally {
+      setPopupVisible(false);
+      setSelectedId(null);
+      setPopupStyle({});
+    }
+  };
 
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
