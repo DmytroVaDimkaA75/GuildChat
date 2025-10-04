@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useLayoutEffect } from "react";
 import { View, StyleSheet, Dimensions, TouchableOpacity, Text, ScrollView } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./waterfallData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./volcanicData";
+import { useNavigation } from '@react-navigation/native';
 // Компонент інтерактивної карти режиму GBG
 
 const { height } = Dimensions.get('window');
@@ -142,6 +143,7 @@ const GVG = () => {
   const [opponentMapById, setOpponentMapById] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
+  const navigation = useNavigation();
 
   useEffect(() => {
     let unsubscribe;
@@ -237,6 +239,24 @@ const GVG = () => {
   };
 
   const mapTitle = formatMapTitle(mapKey);
+
+  useLayoutEffect(() => {
+    if (!navigation) return;
+    const isDataReady = isMapLoaded && isSectorDataLoaded && areOpponentsLoaded;
+    navigation.setOptions({
+      headerTitle: mapTitle,
+      headerRight: isDataReady
+        ? () => (
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => setInfoVisible(true)}
+            >
+              <Text style={styles.infoButtonText}>і</Text>
+            </TouchableOpacity>
+          )
+        : undefined,
+    });
+  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
 
   const renderMapPaths = () => {
     const data = MAP_DATA[mapKey] || {};
@@ -589,12 +609,6 @@ const GVG = () => {
 
   return (
     <View style={styles.win}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{mapTitle}</Text>
-        <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
-          <Text style={styles.infoButtonText}>і</Text>
-        </TouchableOpacity>
-      </View>
       <View style={styles.mapContainer}>
         <Svg
           width="100%"
@@ -684,19 +698,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     backgroundColor: "white",
   },
-  header: {
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-  },
   infoButton: {
     width: 32,
     height: 32,
@@ -704,6 +705,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976d2',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
   infoButtonText: {
     color: '#fff',
