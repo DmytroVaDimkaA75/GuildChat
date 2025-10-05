@@ -3,7 +3,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { onValueCreated } = require("firebase-functions/v2/database");
-const fetch = require('node-fetch');
+const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
@@ -59,8 +59,8 @@ exports.onMessageCreate = onValueCreated(
     const message = snap.val();
     const { guildId, chatId } = event.params;
 
-    const admin = require('firebase-admin');
     const db = getDatabase();
+    const messaging = getMessaging();
 
     const senderId = message.senderId;
     const senderName = (await db.ref(`/users/${senderId}/userName`).once('value')).val();
@@ -79,35 +79,28 @@ exports.onMessageCreate = onValueCreated(
       if (fcmToken) tokens.push(fcmToken);
     }
 
-    if (tokens.length > 0) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tokens.map(token => ({
-          to: token,
-          title: senderName,
-          body: text,
-        }))),
-      });
-      console.log(`Notification sent to ${tokens.length} user(s).`);
+    const uniqueTokens = [...new Set(tokens)];
+
+    if (uniqueTokens.length > 0) {
+      try {
+        const response = await messaging.sendMulticast({
+          tokens: uniqueTokens,
+          notification: {
+            title: senderName,
+            body: text,
+          },
+          data: {
+            guildId,
+            chatId,
+            senderId,
+          },
+        });
+        console.log(`Notification sent to ${uniqueTokens.length} user(s). Success: ${response.successCount}, Failures: ${response.failureCount}`);
+      } catch (error) {
+        console.error('Error sending FCM push notification:', error);
+      }
     } else {
       console.log('No FCM tokens found.');
-    }
-
-    try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tokens.map(token => ({
-          to: token,
-          title: senderName,
-          body: text,
-        }))),
-      });
-      const result = await response.json();
-      console.log('Push notification result:', result);
-    } catch (error) {
-      console.error('Error sending push notification:', error);
     }
   }
 );

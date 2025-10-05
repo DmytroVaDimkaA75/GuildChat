@@ -9,7 +9,7 @@ import * as Localization from "expo-localization";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
 // НОВЕ: сервіс реєстрації push-токена
-import { cacheExpoToken } from "./src/notifications/registerToken";
+import { cacheFcmToken } from "./src/notifications/registerToken";
 import * as Notifications from 'expo-notifications';
 
 // контекст гільдії
@@ -72,7 +72,7 @@ const AppContent = () => {
 
   /* ───────── 2. реєструємо push-токен (ЄДИНИЙ ДОДАНИЙ useEffect) ───────── */
   useEffect(() => {
-    cacheExpoToken()
+    cacheFcmToken()
       .then(token => {
         if (token) alert(token);
       })

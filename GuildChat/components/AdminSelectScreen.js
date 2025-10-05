@@ -16,7 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import CryptoJS from "react-native-crypto-js";
 import { GuildContext } from "../GuildContext"; // Скоригуйте шлях, якщо потрібно
 import { useTranslation } from "react-i18next";
-import { uploadExpoToken } from "../src/notifications/registerToken";
+import { uploadFcmToken } from "../src/notifications/registerToken";
 
 const AdminSelectScreen = ({
   guildData,      // масив даних про учасників гільдії
@@ -111,7 +111,7 @@ const AdminSelectScreen = ({
       // Оновлюємо глобальний стан через контекст
       setGuildId(formattedGuildId);
       // 5a. Пуш-токен: якщо він уже кешований — пишемо у БД
-      await uploadExpoToken(selectedUserId, database);
+      await uploadFcmToken(selectedUserId, database);
 
       // 6. Викликаємо функцію з батька, якщо вона є:
       if (typeof fetch === "function") {
