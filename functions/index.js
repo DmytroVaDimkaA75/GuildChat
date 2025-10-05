@@ -75,8 +75,20 @@ exports.onMessageCreate = onValueCreated(
     for (const uid of recipientUids) {
       const userSnap = await db.ref(`/users/${uid}/fcmToken`).once('value');
       const fcmToken = userSnap.val();
+      if (typeof fcmToken !== 'string' || fcmToken.length === 0) {
+        console.warn(`⚠️  Некоректний FCM токен для ${uid}:`, fcmToken);
+        continue;
+      }
+
+      if (fcmToken.startsWith('ExponentPushToken')) {
+        console.warn(
+          `⚠️  Виявлено застарілий Expo push token у ${uid}, пропускаємо.`,
+        );
+        continue;
+      }
+
       console.log(`FCM token for ${uid}:`, fcmToken);
-      if (fcmToken) tokens.push(fcmToken);
+      tokens.push(fcmToken);
     }
 
     const uniqueTokens = [...new Set(tokens)];
