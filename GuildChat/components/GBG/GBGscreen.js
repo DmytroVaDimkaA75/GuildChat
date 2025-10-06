@@ -328,29 +328,45 @@ const GVG = ({ navigation, route }) => {
       const members = snapshot.val() || {};
       const recipientUids = Object.keys(members);
 
-      const tokens = [];
+      const tokens = new Set();
       for (const uid of recipientUids) {
         const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
         const fcmToken = userSnap.val();
         console.log(`FCM token for ${uid}:`, fcmToken);
-        if (fcmToken) tokens.push(fcmToken);
+        if (fcmToken) tokens.add(fcmToken);
       }
 
-      if (tokens.length > 0) {
-        const messages = tokens.map(token => ({
-          to: token,
-          title: "Поле битви",
-          body: text,
-        }));
+      if (tokens.size > 0) {
+        await Promise.all(
+          Array.from(tokens).map(async token => {
+            try {
+              const response = await fetch(
+                'https://europe-west1-guildchat-5d8c1.cloudfunctions.net/sendPushNow',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    token,
+                    title: 'Поле битви',
+                    body: text,
+                    sound: 'alert.mp3',
+                    data: { type: 'GBG_HELP', sector: id },
+                  }),
+                }
+              );
 
-        const res = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(messages),
-        });
-
-        const data = await res.json();
-        console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Push send error:', errorText);
+              } else {
+                const result = await response.json();
+                console.log('📨 Push sent:', JSON.stringify(result));
+              }
+            } catch (pushErr) {
+              console.error('❌ Error sending push for token', token, pushErr);
+            }
+          })
+        );
       } else {
         console.log('No FCM tokens found.');
       }
