@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
 import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback, ScrollView } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
@@ -76,6 +76,14 @@ const formatRemaining = seconds => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   return `${h}:${String(m).padStart(2, '0')}`;
+};
+
+const chunkArray = (array, size) => {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
 };
 
 
@@ -312,7 +320,14 @@ const GVG = ({ navigation, route }) => {
     setTimeModalVisible(true);
   };
 
-  const handleHelpPress = async (id, event) => {
+  const handleHelpPress = useCallback(async () => {
+    if (!selectedId) {
+      console.warn('⚠️ selectedId is not set, cannot send help notification.');
+      return;
+    }
+
+    setMenuVisible(false);
+
     try {
       const db = getDatabase();
 
@@ -322,22 +337,41 @@ const GVG = ({ navigation, route }) => {
         return;
       }
 
-      const text = `${id} необхідна допомога`;
+      const text = `${selectedId} необхідна допомога`;
 
       const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
       const members = snapshot.val() || {};
       const recipientUids = Object.keys(members);
 
-      const tokens = [];
-      for (const uid of recipientUids) {
-        const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
-        const fcmToken = userSnap.val();
-        console.log(`FCM token for ${uid}:`, fcmToken);
-        if (fcmToken) tokens.push(fcmToken);
+      if (recipientUids.length === 0) {
+        console.log('No guild members found to notify.');
+        return;
       }
 
-      if (tokens.length > 0) {
-        const messages = tokens.map(token => ({
+      const tokenResults = await Promise.all(
+        recipientUids.map(async uid => {
+          try {
+            const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+            const fcmToken = userSnap.val();
+            console.log(`FCM token for ${uid}:`, fcmToken);
+            return fcmToken || null;
+          } catch (tokenErr) {
+            console.error(`Failed to fetch token for ${uid}:`, tokenErr);
+            return null;
+          }
+        })
+      );
+
+      const tokens = tokenResults.filter(Boolean);
+
+      if (tokens.length === 0) {
+        console.log('No FCM tokens found.');
+        return;
+      }
+
+      const messageChunks = chunkArray(tokens, 99);
+      for (const chunk of messageChunks) {
+        const messages = chunk.map(token => ({
           to: token,
           title: "Поле битви",
           body: text,
@@ -351,13 +385,11 @@ const GVG = ({ navigation, route }) => {
 
         const data = await res.json();
         console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
-      } else {
-        console.log('No FCM tokens found.');
       }
     } catch (err) {
       console.error('❌ Error in handleHelpPress:', err);
     }
-  };
+  }, [guildId, selectedId]);
 
   
 
@@ -2497,7 +2529,7 @@ const GVG = ({ navigation, route }) => {
             <TouchableOpacity
               style={styles.menuItem}
               disabled={sectorStaff[selectedId]}
-              onPress={handleHelpPress.bind(null, selectedId)}
+              onPress={handleHelpPress}
             >
               <FontAwesomeIcon
                 icon={faFire}
