@@ -85,8 +85,8 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
         <TouchableOpacity
           style={styles.sendOptionButton}
           onPress={() => {
-            onSendLater();
             onClose();
+            onSendLater();
           }}
         >
           <View style={styles.sendOptionContent}>
@@ -97,8 +97,8 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
         <TouchableOpacity
           style={styles.sendOptionButton}
           onPress={() => {
-            onSendLater();
             onClose();
+            onSendLater();
           }}
         >
           <View style={styles.sendOptionContent}>
@@ -708,6 +708,7 @@ const ChatWindow = ({ route, navigation }) => {
   }, [locale]);
 
   const handleOpenScheduleModal = () => {
+    setSendOptionsPopupVisible(false);
     setTempDayIndex(selectedDayIndex);
     setTempHourIndex(selectedHourIndex);
     setTempMinuteIndex(selectedMinuteIndex);
