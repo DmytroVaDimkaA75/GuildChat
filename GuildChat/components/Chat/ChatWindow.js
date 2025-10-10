@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
   Alert,
   ActivityIndicator,
   Clipboard,
-  Linking
+  Linking,
+  TouchableWithoutFeedback
 } from "react-native";
 import {
   getDatabase,
@@ -51,6 +52,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import uuid from 'react-native-uuid';
 import Markdown from 'react-native-markdown-display';
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 
 // Імпорт кастомного чекбоксу
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
@@ -678,6 +680,57 @@ const ChatWindow = ({ route, navigation }) => {
   const [unpinModalVisible, setUnpinModalVisible] = useState(false);
   const [messageToUnpin, setMessageToUnpin] = useState(null);
   const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
+  const [showDateTimeModal, setShowDateTimeModal] = useState(false);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  const [selectedHourIndex, setSelectedHourIndex] = useState(new Date().getHours());
+  const [selectedMinuteIndex, setSelectedMinuteIndex] = useState(new Date().getMinutes());
+  const [tempDayIndex, setTempDayIndex] = useState(0);
+  const [tempHourIndex, setTempHourIndex] = useState(0);
+  const [tempMinuteIndex, setTempMinuteIndex] = useState(0);
+
+  const dayOptions = useMemo(() => {
+    const options = [];
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      let label = '';
+      if (i === 0) {
+        label = 'Сьогодні';
+      } else if (i === 1) {
+        label = 'Завтра';
+      } else {
+        label = format(day, 'EEEE, d MMMM', { locale });
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+      }
+      options.push({ label, date: day });
+    }
+    return options;
+  }, [locale]);
+
+  const handleOpenScheduleModal = () => {
+    setTempDayIndex(selectedDayIndex);
+    setTempHourIndex(selectedHourIndex);
+    setTempMinuteIndex(selectedMinuteIndex);
+    setShowDateTimeModal(true);
+  };
+
+  const handleSaveScheduledTime = () => {
+    const dayOption = dayOptions[tempDayIndex];
+    if (dayOption) {
+      const scheduledDate = new Date(dayOption.date);
+      scheduledDate.setHours(tempHourIndex);
+      scheduledDate.setMinutes(tempMinuteIndex);
+      scheduledDate.setSeconds(0);
+      setSelectedDayIndex(tempDayIndex);
+      setSelectedHourIndex(tempHourIndex);
+      setSelectedMinuteIndex(tempMinuteIndex);
+      Alert.alert(
+        'Заплановано',
+        format(scheduledDate, "d MMMM yyyy, HH:mm", { locale })
+      );
+    }
+    setShowDateTimeModal(false);
+  };
 
 
   const handleReply = (message) => {
@@ -1803,9 +1856,7 @@ const renderReadReceiptOption = (message) => {
         visible={sendOptionsPopupVisible}
         chatType={chatType}
         onClose={() => setSendOptionsPopupVisible(false)}
-        onSendLater={() => {
-          Alert.alert("Функція", "Надіслати пізніше");
-        }}
+        onSendLater={handleOpenScheduleModal}
         onSendToSelected={() => {
           Alert.alert("Функція", "Надіслати обраним");
         }}
@@ -1814,6 +1865,56 @@ const renderReadReceiptOption = (message) => {
           setFormattingModalVisible(true);
         }}
       />
+
+      {showDateTimeModal && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowDateTimeModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowDateTimeModal(false)}>
+            <View style={styles.scheduleModalBackground}>
+              <TouchableWithoutFeedback>
+                <View style={styles.scheduleModalContainer}>
+                  <Text style={styles.scheduleModalTitle}>Оберіть дату й час</Text>
+                  <View style={styles.wheelWrapper}>
+                    <View style={styles.wheelContainer}>
+                      <View style={{ width: 140, height: 180, overflow: 'hidden' }}>
+                        <SimpleWheelPicker
+                          data={dayOptions.map((item) => item.label)}
+                          selectedIndex={tempDayIndex}
+                          onValueChange={(_, index) => setTempDayIndex(index)}
+                        />
+                      </View>
+                      <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                        <SimpleWheelPicker
+                          data={Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))}
+                          selectedIndex={tempHourIndex}
+                          onValueChange={(_, index) => setTempHourIndex(index)}
+                        />
+                      </View>
+                      <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                        <SimpleWheelPicker
+                          data={Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))}
+                          selectedIndex={tempMinuteIndex}
+                          onValueChange={(_, index) => setTempMinuteIndex(index)}
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.selectionOverlay} pointerEvents="none" />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.scheduleModalButton}
+                    onPress={handleSaveScheduledTime}
+                  >
+                    <Text style={styles.scheduleModalButtonText}>Зберегти</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
 
       <Modal
         animationType="fade"
@@ -2597,6 +2698,59 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.8)",
     borderRadius: 12,
     padding: 2,
+  },
+  scheduleModalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scheduleModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    width: '85%',
+    alignItems: 'center',
+    elevation: 5,
+  },
+  scheduleModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  wheelWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  wheelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: 20,
+    right: 20,
+    height: 36,
+    marginTop: -18,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2296f3',
+  },
+  scheduleModalButton: {
+    backgroundColor: '#2296f3',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+  },
+  scheduleModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   docsIconContainer: {
     position: "absolute",
