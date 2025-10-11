@@ -87,6 +87,8 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
                     styles.itemText,
                     index === currentIndex && styles.selectedText,
                   ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {item}
                 </Text>
@@ -116,6 +118,7 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 20,
     color: '#333',
+    textAlign: 'center',
   },
   selectedText: {
     color: '#007AFF',
@@ -126,8 +129,8 @@ const styles = StyleSheet.create({
     top: ITEM_HEIGHT * Math.floor(VISIBLE_ITEMS / 2),
     height: ITEM_HEIGHT,
     width: '100%',
-    //borderTopWidth: 1,
-    //borderBottomWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: '#007aff',
   },
 });

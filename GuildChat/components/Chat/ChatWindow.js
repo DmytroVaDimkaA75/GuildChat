@@ -710,7 +710,7 @@ const ChatWindow = ({ route, navigation }) => {
   }, [locale]);
 
   const handleOpenScheduleModal = () => {
-    
+    setTempDayIndex(selectedDayIndex);
     setTempHourIndex(selectedHourIndex);
     setTempMinuteIndex(selectedMinuteIndex);
     setShowDateTimeModal(true);
@@ -1903,7 +1903,6 @@ const renderReadReceiptOption = (message) => {
                         />
                       </View>
                     </View>
-                    <View style={styles.selectionOverlay} pointerEvents="none" />
                   </View>
                   <TouchableOpacity
                     style={styles.scheduleModalButton}
@@ -2729,16 +2728,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  selectionOverlay: {
-    position: 'absolute',
-    top: 70,
-    left: 0,
-    right: 0,
-    height: 40,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#007AFF',
   },
   scheduleModalButton: {
     backgroundColor: '#007AFF',
