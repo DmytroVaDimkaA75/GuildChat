@@ -3,6 +3,7 @@ import { ScrollView, Text, View, StyleSheet, TouchableWithoutFeedback } from 're
 
 const ITEM_HEIGHT = 36;
 const VISIBLE_ITEMS = 5;
+const EDGE_PADDING = (ITEM_HEIGHT * (VISIBLE_ITEMS - 1)) / 2;
 
 const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
   const scrollViewRef = useRef(null);
@@ -20,8 +21,9 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
   // Helper function to scroll to a specific index
   const scrollToIndex = (index, animated = true) => {
     if (scrollViewRef.current) {
+      const targetOffset = Math.max(0, ITEM_HEIGHT * index);
       scrollViewRef.current.scrollTo({
-        y: Math.max(0, ITEM_HEIGHT * index),
+        y: targetOffset,
         animated,
       });
     }
@@ -40,13 +42,17 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
     
     // Ensure index is within valid range
     index = Math.max(0, Math.min(index, data.length - 1));
+
+    const expectedOffset = ITEM_HEIGHT * index;
+    const needsSnap = Math.abs(offsetY - expectedOffset) > 0.5;
     
     // Update if the index changed
     if (index !== currentIndex) {
       setCurrentIndex(index);
       onValueChange && onValueChange(data[index], index);
-      
-      // Ensure proper snap alignment (important for touch interactions)
+    }
+
+    if (needsSnap) {
       scrollToIndex(index);
     }
   };
@@ -70,7 +76,7 @@ const SimpleWheelPicker = ({ data, selectedIndex = 0, onValueChange }) => {
         onScrollEndDrag={handleScrollEnd}
         scrollEventThrottle={16}
         contentContainerStyle={{
-          paddingVertical: (ITEM_HEIGHT * (VISIBLE_ITEMS - 1)) / 2,
+          paddingVertical: EDGE_PADDING,
         }}
       >
         {data.map((item, index) => (
