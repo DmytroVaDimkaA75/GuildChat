@@ -1,0 +1,2987 @@
+import React, { useState, useEffect, useContext, useRef } from "react";
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, Text, TextInput, TouchableWithoutFeedback, ScrollView } from "react-native";
+import Svg, { G, Path } from "react-native-svg";
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faPaintBrush, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
+import FontAwesome from "react-native-vector-icons/FontAwesome";
+import { Dropdown } from 'react-native-element-dropdown';
+import { getDatabase, ref, set, get, onValue, update } from 'firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GuildContext } from "../../GuildContext";
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
+import GVGIcon from '../ico/GVG.svg';
+// Компонент інтерактивної карти режиму GBG
+
+const { height } = Dimensions.get('window');
+const HALF_HEIGHT = height * 0.5;
+
+const SVG_WIDTH = 138.53601;
+const SVG_HEIGHT = 164.52901;
+
+// Код для визначення сусідніх секторів
+const DIRS = [
+  [1, 0],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [0, -1],
+  [1, -1],
+];
+
+const SIDE_DIRS = [DIRS[2], DIRS[3], DIRS[4], DIRS[5], DIRS[0], DIRS[1]];
+const WEDGE_CHARS = 'ABCDEF';
+const INDEX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+const idToCoord = (id) => {
+  if (id === 'X1X') return { q: 0, r: 0 };
+  const wedge = WEDGE_CHARS.indexOf(id[0]);
+  const ring = parseInt(id[1], 10) - 1;
+  const idx = id.charCodeAt(2) - 65;
+
+  let q = DIRS[0][0] * ring;
+  let r = DIRS[0][1] * ring;
+  for (let s = 0; s < wedge; s++) {
+    q += SIDE_DIRS[s][0] * ring;
+    r += SIDE_DIRS[s][1] * ring;
+  }
+  q += SIDE_DIRS[wedge][0] * idx;
+  r += SIDE_DIRS[wedge][1] * idx;
+  return { q, r };
+};
+
+const coordToId = (q, r) => {
+  if (q === 0 && r === 0) return 'X1X';
+  const ring = Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r));
+  if (ring > 4) return null;
+  let cq = DIRS[0][0] * ring;
+  let cr = DIRS[0][1] * ring;
+  for (let s = 0; s < 6; s++) {
+    for (let i = 0; i < ring; i++) {
+      if (q === cq && r === cr) {
+        return `${WEDGE_CHARS[s]}${ring + 1}${INDEX_CHARS[i]}`;
+      }
+      cq += SIDE_DIRS[s][0];
+      cr += SIDE_DIRS[s][1];
+    }
+  }
+  return null;
+};
+
+const getAdjacentIds = (id) => {
+  const { q, r } = idToCoord(id);
+  return DIRS.map(([dq, dr]) => coordToId(q + dq, r + dr)).filter(Boolean);
+};
+
+const formatRemaining = seconds => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+};
+
+
+
+const GVG = ({ navigation, route }) => {
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [paintModalVisible, setPaintModalVisible] = useState(false);
+  const [timeModalVisible, setTimeModalVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [guildInputs, setGuildInputs] = useState([]);
+  const [guildList, setGuildList] = useState([]);
+  const [ownGuildName, setOwnGuildName] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  const [popupStyle, setPopupStyle] = useState({});
+  const pathRefs = useRef({});
+  const { guildId } = useContext(GuildContext);
+  const [sectorColors, setSectorColors] = useState({});
+  const [sectorStaff, setSectorStaff] = useState({});
+  const colorOptions = [
+    { label: 'g', value: '#32CD32' },
+    { label: 'y', value: '#FFFF00' },
+    { label: 'b', value: '#3643ff' },
+    { label: 'p', value: '#9C27B0' },
+    { label: 'r', value: '#D32F2F' },
+    { label: 'o', value: '#F4A623' },
+  ];
+  const [colorIndex, setColorIndex] = useState(0);
+  const [hourIndex, setHourIndex] = useState(0);
+  const [minuteIndex, setMinuteIndex] = useState(0);
+  const attackColors = ['#0000FF', '#D32F2F'];
+  const [sectorSchedule, setSectorSchedule] = useState([]);
+
+  useEffect(() => {
+    if (route?.params?.openSettings) {
+      setSettingsVisible(true);
+      navigation.setParams({ openSettings: false });
+    }
+  }, [route?.params?.openSettings]);
+
+  useEffect(() => {
+    const fetchGuilds = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/GBG`));
+        if (snap.exists()) {
+          const data = snap.val();
+          setGuildList(Array.isArray(data) ? data : Object.values(data));
+        } else {
+          setGuildList([]);
+        }
+      } catch (err) {
+        console.error('Error fetching guild list:', err);
+      }
+    };
+    fetchGuilds();
+  }, [guildId]);
+
+  useEffect(() => {
+    const fetchOwnName = async () => {
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (!id) return;
+        const db = getDatabase();
+        const snap = await get(ref(db, `guilds/${id}/guildName`));
+        if (snap.exists()) {
+          setOwnGuildName(snap.val());
+        } else {
+          setOwnGuildName('');
+        }
+      } catch (err) {
+        console.error('Error fetching own guild name:', err);
+      }
+    };
+    fetchOwnName();
+  }, [guildId]);
+
+  useEffect(() => {
+    let unsubscribe;
+    (async () => {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) return;
+      const db = getDatabase();
+      const sectorsRef = ref(db, `guilds/${id}/GBG/sectors`);
+      const groupIds = Object.keys(pathRefs.current);
+      unsubscribe = onValue(sectorsRef, snap => {
+        if (snap.exists()) {
+          const data = snap.val();
+          const sectors = {};
+          const staffFlags = {};
+          groupIds.forEach(gid => {
+            let colorEntry = data[gid];
+            let color =
+              colorEntry && typeof colorEntry === 'object'
+                ? colorEntry.color
+                : colorEntry;
+            const staff =
+              colorEntry && typeof colorEntry === 'object' && colorEntry.staff;
+            if (!color) {
+              color = '#FFFFFF';
+            }
+            sectors[gid] = color;
+            staffFlags[gid] = !!staff;
+            const refEl = pathRefs.current[gid];
+            if (refEl) {
+              const lower = color.toLowerCase();
+              const isWhite = lower === '#ffffff' || lower === 'white';
+              refEl.setNativeProps({
+                fill: color,
+                stroke: isWhite ? '#000000' : 'none',
+                strokeWidth: isWhite ? 1 : 0,
+                strokeOpacity: isWhite ? 0.7 : 0,
+              });
+            }
+          });
+          setSectorColors(sectors);
+          setSectorStaff(staffFlags);
+
+          const whiteSectors = Object.entries(sectors)
+            .filter(([_, c]) => c && c.toLowerCase() === '#dcdcdc')
+            .map(([name]) => name);
+          if (whiteSectors.length === 0) {
+            setSectorSchedule([]);
+          } else {
+            const namesSet = new Set();
+            whiteSectors.forEach(sec => {
+              getAdjacentIds(sec).forEach(adj => {
+                const adjColor = sectors[adj];
+                const adjLower = (adjColor || '').toLowerCase();
+                if (!adjColor || adjLower !== '#dcdcdc') {
+                  namesSet.add(adj);
+                }
+              });
+            });
+            const now = Math.floor(Date.now() / 1000);
+            const arr = Array.from(namesSet)
+              .map(name => ({
+                name,
+                attack: data[name]?.attack,
+                openTime: data[name]?.openTime,
+                staff: data[name]?.staff,
+              }))
+              .filter(item => item.openTime && !item.staff);
+            const result = arr
+              .map(it => ({
+                ...it,
+                timeRemaining: it.openTime - now,
+                openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              }))
+              .filter(it => it.timeRemaining > 0)
+              .sort((a, b) => a.timeRemaining - b.timeRemaining);
+            setSectorSchedule(result);
+          }
+        } else {
+          const sectors = {};
+          const staffFlags = {};
+          groupIds.forEach(gid => {
+            sectors[gid] = '#FFFFFF';
+            const refEl = pathRefs.current[gid];
+            if (refEl) {
+              refEl.setNativeProps({
+                fill: '#FFFFFF',
+                stroke: '#000000',
+                strokeWidth: 1,
+              });
+            }
+          });
+          setSectorColors(sectors);
+          setSectorStaff(staffFlags);
+          setSectorSchedule([]);
+        }
+      });
+    })();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [guildId]);
+
+  useEffect(() => {
+    if (settingsVisible) {
+      const fetchData = async () => {
+        try {
+          const id = guildId || await AsyncStorage.getItem('guildId');
+          if (!id) return;
+          const db = getDatabase();
+          const snapshot = await get(ref(db, `guilds/${id}/GBG`));
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            setGuildInputs(Array.isArray(data) ? data : Object.values(data));
+          } else {
+            setGuildInputs([]);
+          }
+        } catch (err) {
+          console.error('Error fetching guild data:', err);
+        }
+      };
+      fetchData();
+    }
+  }, [settingsVisible]);
+
+  const handleShapePress = async (id, event) => {
+    try {
+      const screenWidth = Dimensions.get('window').width;
+      const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+        event?.nativeEvent || {};
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) return;
+      const db = getDatabase();
+      const snap = await get(ref(db, `guilds/${gid}/GBG`));
+      if (!snap.exists()) return;
+      const position =
+        pageX > screenWidth / 2
+          ? { right: screenWidth - pageX, top: pageY }
+          : { left: pageX, top: pageY };
+      setPopupStyle(position);
+      setSelectedId(id);
+      setMenuVisible(true);
+    } catch (err) {
+      console.error('Error checking GBG folder:', err);
+    }
+  };
+
+  const openPaintModal = () => {
+    setMenuVisible(false);
+    setPaintModalVisible(true);
+  };
+
+  const openTimeModal = () => {
+    setMenuVisible(false);
+    setTimeModalVisible(true);
+  };
+
+  const handleHelpPress = async (id, event) => {
+    try {
+      const db = getDatabase();
+
+      const gid = guildId || await AsyncStorage.getItem('guildId');
+      if (!gid) {
+        console.warn('⚠️ guildId not found');
+        return;
+      }
+
+      const text = `${id} необхідна допомога`;
+
+      const snapshot = await get(ref(db, `/guilds/${gid}/guildUsers`));
+      const members = snapshot.val() || {};
+      const recipientUids = Object.keys(members);
+
+      const tokens = [];
+      for (const uid of recipientUids) {
+        const userSnap = await get(ref(db, `/users/${uid}/fcmToken`));
+        const fcmToken = userSnap.val();
+        console.log(`FCM token for ${uid}:`, fcmToken);
+        if (fcmToken) tokens.push(fcmToken);
+      }
+
+      if (tokens.length > 0) {
+        const messages = tokens.map(token => ({
+          to: token,
+          title: "Поле битви",
+          body: text,
+        }));
+
+        const res = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(messages),
+        });
+
+        const data = await res.json();
+        console.log('📨 Expo push response:', JSON.stringify(data, null, 2));
+      } else {
+        console.log('No FCM tokens found.');
+      }
+    } catch (err) {
+      console.error('❌ Error in handleHelpPress:', err);
+    }
+  };
+
+  
+
+  const handleStaffToggle = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id || !selectedId) return;
+      const db = getDatabase();
+      const newValue = !sectorStaff[selectedId];
+      await set(
+        ref(db, `guilds/${id}/GBG/sectors/${selectedId}/staff`),
+        newValue ? true : null
+      );
+      setSectorStaff(prev => ({ ...prev, [selectedId]: newValue ? true : undefined }));
+      if (newValue) {
+        openPaintModal();
+      } else {
+        setMenuVisible(false);
+      }
+    } catch (err) {
+      console.error('Error toggling staff:', err);
+    }
+  };
+
+  const closePaintModal = () => setPaintModalVisible(false);
+  const closeTimeModal = () => setTimeModalVisible(false);
+
+  const handleSaveTime = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (id && selectedId) {
+        const db = getDatabase();
+        const openTime =
+          Math.floor(Date.now() / 1000) +
+          hourIndex * 3600 +
+          minuteIndex * 60;
+        await set(ref(db, `guilds/${id}/GBG/sectors/${selectedId}/openTime`), openTime);
+        await set(
+          ref(db, `guilds/${id}/GBG/sectors/${selectedId}/attack`),
+          attackColors[colorIndex]
+        );
+      }
+    } catch (err) {
+      console.error('Error saving sector time:', err);
+    }
+    setTimeModalVisible(false);
+  };
+
+  const handleColorSelect = async color => {
+    if (selectedId && pathRefs.current[selectedId]) {
+      const refEl = pathRefs.current[selectedId];
+      const pathId = refEl?.props?.id || '';
+      const chosen = color || '#FFFFFF';
+      const lower = chosen.toLowerCase();
+      const nativeProps = {
+        fill: chosen,
+        stroke: lower === '#ffffff' || lower === 'white' ? '#000000' : 'none',
+        strokeWidth: lower === '#ffffff' || lower === 'white' ? 1 : 0,
+      };
+      if (pathId.startsWith('f')) {
+        nativeProps.strokeOpacity = 0.7;
+      }
+      refEl.setNativeProps(nativeProps);
+      setSectorColors(prev => ({ ...prev, [selectedId]: chosen }));
+      try {
+        const id = guildId || await AsyncStorage.getItem('guildId');
+        if (id) {
+          const db = getDatabase();
+          await update(ref(db, `guilds/${id}/GBG/sectors/${selectedId}`), {
+            color: chosen,
+            openTime: null,
+            attack: null,
+          });
+        }
+      } catch (err) {
+        console.error('Error updating sector color:', err);
+      }
+    }
+    setPaintModalVisible(false);
+  };
+
+  const handleSaveGuilds = async () => {
+    try {
+      const id = guildId || await AsyncStorage.getItem('guildId');
+      if (!id) {
+        console.error('Guild ID not found');
+        return;
+      }
+      const dataToSave = guildInputs.filter(g => g.color && g.name);
+      const db = getDatabase();
+      await set(ref(db, `guilds/${id}/GBG`), dataToSave);
+      const sectorData = {};
+      Object.keys(pathRefs.current).forEach(gid => {
+        sectorData[gid] = { color: sectorColors[gid] || '#FFFFFF' };
+        if (sectorStaff[gid]) {
+          sectorData[gid].staff = true;
+        }
+      });
+      await set(ref(db, `guilds/${id}/GBG/sectors`), sectorData);
+      setSettingsVisible(false);
+    } catch (error) {
+      console.error('Error saving guilds:', error);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSectorSchedule(prev =>
+        prev
+          .map(item => ({
+            ...item,
+            timeRemaining: item.openTime - Math.floor(Date.now() / 1000),
+          }))
+          .filter(item => item.timeRemaining > 0)
+          .sort((a, b) => a.timeRemaining - b.timeRemaining)
+      );
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <View style={styles.win}>
+      <View style={styles.mapContainer}>
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+        >
+          <G onPress={() => handleShapePress("C5D")}>
+            <Path
+              id="fC5D"
+              ref={el => (pathRefs.current['C5D'] = el)}
+              onPressIn={handleShapePress.bind(null, "C5D")}
+              style={{
+                display: "inline",
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.48615,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.361668,146.24736 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z"
+            />
+            <Path
+              id="tC5D"
+              onPressIn={handleShapePress.bind(null, "C5D")}
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5D"] ? "none" : "inline",
+              }}
+              d="m 81.187661,147.00201 0.668378,0.16882 q -0.21016,0.82342 -0.757954,1.25752 -0.54435,0.43065 -1.333312,0.43065 -0.816524,0 -1.329866,-0.33074 -0.509897,-0.33419 -0.778626,-0.96467 -0.265284,-0.63048 -0.265284,-1.35398 0,-0.78896 0.299736,-1.37466 0.303182,-0.58913 0.857867,-0.89232 0.558131,-0.30662 1.226509,-0.30662 0.757955,0 1.274742,0.38586 0.516788,0.38587 0.720057,1.08526 l -0.658042,0.15503 q -0.175708,-0.55124 -0.509897,-0.80274 -0.334189,-0.2515 -0.840641,-0.2515 -0.582247,0 -0.975005,0.27906 -0.389314,0.27907 -0.547795,0.75107 -0.158481,0.46855 -0.158481,0.96811 0,0.64426 0.186043,1.1266 0.189489,0.47889 0.585692,0.71661 0.396204,0.23772 0.857867,0.23772 0.561576,0 0.950889,-0.32385 0.389313,-0.32385 0.527123,-0.96123 z m 1.24029,0.44789 0.651152,-0.0551 q 0.07235,0.47545 0.334189,0.71662 0.265284,0.23772 0.637371,0.23772 0.447883,0 0.757955,-0.33764 0.310072,-0.33763 0.310072,-0.89576 0,-0.53057 -0.299736,-0.8372 -0.296292,-0.30662 -0.778627,-0.30662 -0.299736,0 -0.540904,0.13781 -0.241167,0.13436 -0.378977,0.35141 l -0.582247,-0.0758 0.489225,-2.59428 h 2.511587 v 0.59259 H 83.52354 l -0.272175,1.35742 q 0.454773,-0.31696 0.954334,-0.31696 0.661488,0 1.116261,0.45822 0.454773,0.45822 0.454773,1.17827 0,0.68561 -0.399649,1.18517 -0.48578,0.61325 -1.326421,0.61325 -0.68905,0 -1.126596,-0.38586 -0.434102,-0.38587 -0.496116,-1.02324 z m 4.175642,1.32297 v -5.05073 h 1.73985 q 0.589138,0 0.89921,0.0724 0.434102,0.0999 0.740729,0.36175 0.399649,0.33763 0.596028,0.86476 0.199824,0.52367 0.199824,1.19894 0,0.57536 -0.134364,1.0198 -0.134365,0.44443 -0.344525,0.73728 -0.21016,0.2894 -0.461664,0.45822 -0.248058,0.16537 -0.602918,0.2515 -0.351416,0.0861 -0.809634,0.0861 z m 0.668378,-0.59603 h 1.078363 q 0.499561,0 0.782071,-0.093 0.285956,-0.093 0.454773,-0.26184 0.237722,-0.23772 0.368642,-0.63737 0.134365,-0.40309 0.134365,-0.975 0,-0.79241 -0.261839,-1.21618 -0.258394,-0.42721 -0.630481,-0.57191 -0.268729,-0.10335 -0.864757,-0.10335 h -1.061137 z"
+            />
+            <Path
+              id="iC5D"
+              onPressIn={handleShapePress.bind(null, "C5D")}
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5D"] ? "inline" : "none",
+              }}
+              d="m 85.98945,148.0908 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+            />
+          </G>
+          {/* Додаємо групу D5A */}
+          <G onPress={() => handleShapePress("D5A")}>
+            <Path
+              id="fD5A"
+              ref={el => (pathRefs.current['D5A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.129502,146.49108 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
+              onPressIn={handleShapePress.bind(null, "D5A")}
+            />
+            <Path
+              id="tD5A"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5A"] ? "none" : "inline",
+              }}
+              d="M 62.672018,157.87086 V 152.82 h 1.739895 q 0.589153,0 0.899233,0.0724 0.434113,0.0999 0.740748,0.36176 0.399659,0.33765 0.596043,0.86478 0.199829,0.52369 0.199829,1.19898 0,0.57537 -0.134368,1.01982 -0.134368,0.44445 -0.344533,0.7373 -0.210166,0.28941 -0.461675,0.45823 -0.248065,0.16538 -0.602934,0.25151 -0.351425,0.0861 -0.809655,0.0861 z m 0.668396,-0.59604 h 1.07839 q 0.499574,0 0.782091,-0.093 0.285963,-0.093 0.454785,-0.26185 0.237728,-0.23773 0.368651,-0.63739 0.134368,-0.4031 0.134368,-0.97503 0,-0.79242 -0.261845,-1.2162 -0.258401,-0.42722 -0.630497,-0.57193 -0.268736,-0.10336 -0.86478,-0.10336 h -1.061163 z m 4.175748,-0.72696 0.651168,-0.0551 q 0.07235,0.47546 0.334198,0.71663 0.265291,0.23773 0.637387,0.23773 0.447894,0 0.757974,-0.33764 0.310081,-0.33765 0.310081,-0.89579 0,-0.53058 -0.299745,-0.83722 -0.296298,-0.30663 -0.778646,-0.30663 -0.299744,0 -0.540918,0.13781 -0.241173,0.13437 -0.378987,0.35142 l -0.582262,-0.0758 0.489238,-2.59434 h 2.511651 v 0.5926 h -2.015522 l -0.272182,1.35746 q 0.454785,-0.31697 0.954359,-0.31697 0.661504,0 1.116289,0.45823 0.454784,0.45823 0.454784,1.1783 0,0.68562 -0.399659,1.1852 -0.485792,0.61327 -1.326455,0.61327 -0.689067,0 -1.126625,-0.38588 -0.434112,-0.38588 -0.496128,-1.02326 z m 3.621049,1.323 1.939724,-5.05086 h 0.720076 l 2.067202,5.05086 h -0.76142 l -0.589152,-1.52972 h -2.111992 l -0.554699,1.52972 z m 1.457377,-2.07409 h 1.712333 l -0.527137,-1.3988 q -0.241173,-0.63739 -0.358315,-1.04739 -0.09647,0.4858 -0.272182,0.9647 z"
+              onPressIn={handleShapePress.bind(null, "D5A")}
+            />
+            <Path
+              id="iD5A"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5A"] ? "inline" : "none",
+              }}
+              d="m 71.17295,157.2318 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "D5A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A4A")}>
+            <Path
+              id="fA4A"
+              ref={el => (pathRefs.current['A4A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 78.991004,27.4215 -4.861501,8.897423 H 64.406499 L 59.544998,27.4215 64.406499,18.524077 h 9.723004 z"
+              onPressIn={handleShapePress.bind(null, "A4A")}
+            />
+            <Path
+              id="tA4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.589502,29.947001 1.939777,-5.051 h 0.720095 l 2.067258,5.051 h -0.76144 L 65.966023,28.41723 h -2.112048 l -0.554715,1.529771 z m 1.457417,-2.074149 h 1.712378 l -0.52715,-1.398845 q -0.241181,-0.637404 -0.358325,-1.04741 -0.09647,0.485805 -0.272189,0.96472 z m 5.540251,2.074149 v -1.209346 h -2.191293 v -0.568496 l 2.304992,-3.273158 h 0.506478 v 3.273158 h 0.682195 v 0.568496 h -0.682195 v 1.209346 z m 0,-1.777842 V 25.89173 l -1.581452,2.277429 z m 1.633134,1.777842 1.939777,-5.051 h 0.720095 l 2.067258,5.051 h -0.76144 L 74.596825,28.41723 h -2.112048 l -0.554714,1.529771 z m 1.457417,-2.074149 h 1.712378 l -0.52715,-1.398845 q -0.24118,-0.637404 -0.358325,-1.04741 -0.09647,0.485805 -0.272189,0.96472 z"
+              onPressIn={handleShapePress.bind(null, "A4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A5A")}>
+            <Path
+              id="fA5A"
+              ref={el => (pathRefs.current['A5A'] = el)}
+              style={{
+                display: "inline",
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.48615,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.544994,9.1403544 4.861503,-8.89727935 h 9.723006 l 4.861502,8.89727935 -4.861502,8.8972796 h -9.723006 z"
+              onPressIn={handleShapePress.bind(null, "A5A")}
+            />
+            <Path
+              id="tA5A"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5A"] ? "none" : "inline",
+              }}
+              d="M 62.589518,11.622864 64.529242,6.572 h 0.720076 l 2.067202,5.050864 H 66.5551 l -0.589152,-1.52973 h -2.111992 l -0.554699,1.52973 z m 1.457377,-2.074093 h 1.712332 L 65.232091,8.1499642 Q 64.990917,7.5125769 64.873776,7.1025819 64.777306,7.5883743 64.601594,8.0672762 Z m 3.552142,0.751083 0.651169,-0.05513 q 0.07235,0.475457 0.334198,0.71663 0.265291,0.237728 0.637387,0.237728 0.447894,0 0.757974,-0.337643 0.310081,-0.337643 0.310081,-0.8957872 0,-0.5305819 -0.299745,-0.8372169 -0.296299,-0.306635 -0.778646,-0.306635 -0.299744,0 -0.540918,0.1378135 -0.241173,0.1343681 -0.378987,0.3514244 l -0.582262,-0.075797 0.489238,-2.5943386 h 2.511651 v 0.592598 h -2.015522 l -0.272182,1.3574627 q 0.454784,-0.316971 0.954358,-0.316971 0.661505,0 1.116289,0.4582298 0.454785,0.4582298 0.454785,1.1783052 0,0.6856221 -0.399659,1.1851961 -0.485793,0.61327 -1.326455,0.61327 -0.689067,0 -1.126625,-0.385878 -0.434112,-0.385877 -0.496129,-1.023265 z m 3.62105,1.32301 L 73.159812,6.572 h 0.720075 l 2.067202,5.050864 H 75.18567 l -0.589153,-1.52973 h -2.111991 l -0.5547,1.52973 z m 1.457377,-2.074093 h 1.712333 L 73.86266,8.1499642 Q 73.621487,7.5125769 73.504345,7.1025819 73.407876,7.5883743 73.232164,8.0672762 Z"
+              onPressIn={handleShapePress.bind(null, "A5A")}
+            />
+            <Path
+              id="iA5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5A"] ? "inline" : "none",
+              }}
+              d="m 71.172452,10.982968 -0.535074,0.53523 -0.517793,0.517775 -0.15219,0.152187 0.100966,0.101129 c 0.0366,0.0366 0.08501,0.05481 0.133589,0.05481 0.0486,0 0.09701,-0.01839 0.133579,-0.05481 l 0.286318,-0.286301 0.511903,-0.511884 0.286148,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.107587,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.221931,1.983654 -0.511903,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.127488,-0.0484 -0.0486,0 -0.09701,0.0184 -0.133609,0.05483 l -0.09791,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.659172,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07001,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.08941,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.801389,-4.0043108 -0.005,-1.2806866 -1.281892,-0.0049 -1.197267,1.38427 -0.391985,0.4534868 -0.115928,0.1341492 -0.494081,0.5714674 -0.547606,0.632937 0.30168,0.301503 0.375684,-0.375686 0.242675,-0.242651 0.387265,-0.387246 0.242496,-0.2423032 0.391985,-0.3921704 0.242316,-0.2422848 0.870736,-0.8706987 c 0.067,-0.066991 0.175501,-0.066991 0.242495,0 0.06701,0.066991 0.06701,0.1754932 0,0.2422858 l -0.888377,0.8883361 -0.242295,0.2422858 -0.374564,0.3745494 -0.242496,0.242487 -0.367534,0.367526 -0.242665,0.242651 -0.395426,0.395406 0.285179,0.285166 1.08798,-0.923426 0.262236,-0.222564 0.702806,-0.5963452 1.09595,-0.9302804 0.0556,-0.047231 h -3e-5 z m 0.336041,-1.4507086 0.006,1.5188023 c 0.004,0.052191 -0.0171,0.1053164 -0.0602,0.1415393 L 71.696599,9.458077 v 1.275014 c 0.0808,0.0979 0.121228,0.218007 0.121228,0.337923 0,0.120266 -0.0404,0.240587 -0.121228,0.338475 v 0.401661 l 0.297109,0.296945 c 0.07721,-0.04063 0.162431,-0.06112 0.247616,-0.06112 0.136059,0 0.272478,0.05179 0.375894,0.155406 l 0.09811,0.0979 c 0.0855,0.08557 0.128468,0.199023 0.128468,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.129028,0.312315 l -0.659173,0.659147 c -0.0855,0.08554 -0.198862,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.113097,0 -0.226364,-0.04308 -0.31231,-0.129028 l -0.009,-0.0095 -0.08901,-0.08899 -2.3e-4,2.17e-4 c -0.09981,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.577502 v 0.740541 c 0,0.128474 -0.09981,0.233573 -0.221614,0.233573 h -0.222024 c -0.121798,0 -0.221604,-0.105099 -0.221604,-0.233573 v -0.740549 h -1.577492 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.09051,0.09052 -0.009,0.0095 c -0.08591,0.08595 -0.199213,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.113458,0 -0.226745,-0.04288 -0.31232,-0.128257 l -0.659181,-0.65916 C 65.734418,12.838799 65.6915,12.725517 65.6915,12.612421 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.128458,-0.312314 l 0.09811,-0.09791 c 0.103586,-0.103584 0.239845,-0.155406 0.375904,-0.155406 0.08521,0 0.170371,0.02029 0.247616,0.06112 l 0.297129,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.121258,-0.218209 -0.121258,-0.338475 0,-0.119917 0.0404,-0.240198 0.121258,-0.337923 V 9.458073 L 66.502262,9.1719392 c -0.0431,-0.036421 -0.0636,-0.089382 -0.0602,-0.1415383 l 0.006,-1.5188023 c 0,-0.094282 0.0765,-0.1707711 0.170781,-0.1707711 l 0.220834,-7.51e-4 V 5.8483908 h 2.095712 V 5.5763003 h -2.496971 c -0.121818,0 -0.221604,-0.099622 -0.221604,-0.2215962 V 5.1325217 c 0,-0.1220039 0.09981,-0.2215963 0.221604,-0.2215963 h 2.496971 V 4.4145746 c 0,-0.128459 0.09981,-0.2335746 0.221614,-0.2335746 h 0.222024 c 0.122008,0 0.221604,0.1051156 0.221604,0.2335746 v 0.4963508 h 2.496971 c 0.121818,0 0.221604,0.099622 0.221604,0.2215963 v 0.2221824 c 0,0.1218008 -0.09961,0.2215962 -0.221604,0.2215962 h -2.496971 v 0.2720855 h 2.095695 v 1.4916867 l 0.220854,7.52e-4 c 0.09431,0 0.170771,0.076482 0.170771,0.1707711 h -2.3e-4 z m -1.593852,2.9670574 -0.353653,0.300164 0.375684,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.345882,0.293511 0.456119,0.387263 0.285179,-0.285166 -0.395616,-0.395604 h 2e-4 z M 68.005289,9.9988268 68.408855,9.5320917 67.520478,8.6437556 c -0.06701,-0.066991 -0.06701,-0.1754932 0,-0.2422848 0.067,-0.066991 0.175501,-0.066991 0.242495,0 l 0.870736,0.8706977 0.408536,-0.4722402 -0.971292,-1.1230468 -1.281892,0.0049 -0.005,1.2806876 0.0556,0.047231 1.165595,0.9892807 -4e-5,-2.17e-4 z m -1.165595,2.2972682 -0.0376,0.03756 0.269608,0.269599 0.478901,-0.478898 -0.269608,-0.269598 -0.441308,0.441505 -4e-5,-1.67e-4 z m 5.257728,0.158844 -0.511903,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.08081,0.0816 0.08881,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07001,-0.0292 l 0.659172,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.09791,-0.09804 c -0.0366,-0.03662 -0.08501,-0.05483 -0.133599,-0.05483 -0.0459,0 -0.09181,0.01613 -0.127498,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.633161,0.148349 0.269618,-0.2696 -0.0375,-0.03755 -0.441518,-0.441506 -0.269608,0.269599 0.478901,0.478899 1.6e-4,1.66e-4 z m -2.895446,-0.414926 -0.669983,-0.669958 -0.535064,-0.535229 -0.14645,-0.146463 -0.107587,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.283648,0.28363 0.002,0.0025 0.511903,0.511883 0.005,0.0051 0.287479,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.127498,0.0484 0.0486,0 0.09711,-0.01839 0.133589,-0.05481 l 0.100956,-0.10113"
+              onPressIn={handleShapePress.bind(null, "A5A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A3A")}>
+            <Path
+              id="fA3A"
+              ref={el => (pathRefs.current['A3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.129503,36.805078 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 z"
+              onPressIn={handleShapePress.bind(null, "A3A")}
+            />
+            <Path
+              id="tA3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.589514,48.19342 1.939681,-5.050749 h 0.720059 l 2.067155,5.050749 h -0.761402 l -0.589139,-1.529695 h -2.111944 l -0.554687,1.529695 z m 1.457344,-2.074045 h 1.712294 L 65.232027,44.7206 q -0.241168,-0.637373 -0.358306,-1.047359 -0.09647,0.485781 -0.272176,0.964672 z m 3.555507,0.74073 0.620147,-0.08269 q 0.106803,0.527125 0.361752,0.761402 0.258395,0.230833 0.627037,0.230833 0.437548,0 0.737286,-0.303183 0.303182,-0.303183 0.303182,-0.751067 0,-0.427212 -0.279065,-0.702832 -0.279066,-0.279066 -0.709724,-0.279066 -0.175708,0 -0.437548,0.06891 l 0.06891,-0.544351 q 0.06201,0.0069 0.09991,0.0069 0.396205,0 0.713169,-0.206715 0.316963,-0.206716 0.316963,-0.637373 0,-0.341081 -0.230832,-0.565022 -0.230832,-0.223942 -0.59603,-0.223942 -0.361752,0 -0.60292,0.227387 -0.241168,0.227387 -0.310073,0.682161 L 67.66438,44.431198 q 0.113694,-0.623592 0.516789,-0.964673 0.403095,-0.344526 1.00257,-0.344526 0.413431,0 0.761402,0.179154 0.347972,0.175708 0.53057,0.482336 0.186044,0.306628 0.186044,0.651154 0,0.3273 -0.175708,0.59603 -0.175708,0.26873 -0.520234,0.427212 0.447884,0.103358 0.695942,0.430657 0.248059,0.323855 0.248059,0.813081 0,0.66149 -0.482336,1.123155 -0.482337,0.458219 -1.219622,0.458219 -0.664935,0 -1.105928,-0.396205 -0.437548,-0.396204 -0.499563,-1.026687 z m 3.617522,1.333315 1.939681,-5.050749 h 0.720059 l 2.067155,5.050749 H 75.18538 L 74.596241,46.663725 H 72.484297 L 71.92961,48.19342 Z m 1.457344,-2.074045 h 1.712294 L 73.8624,44.7206 q -0.241168,-0.637373 -0.358306,-1.047359 -0.09647,0.485781 -0.272176,0.964672 z"
+              onPressIn={handleShapePress.bind(null, "A3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A2A")}>
+            <Path
+              id="fA2A"
+              ref={el => (pathRefs.current['A2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 78.991004,63.9835 -4.861501,8.897423 H 64.406499 L 59.544998,63.9835 64.406499,55.086077 h 9.723004 z"
+              onPressIn={handleShapePress.bind(null, "A2A")}
+            />
+            <Path
+              id="tA2A"
+              style={{
+                fontSize: 7.05553,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.589996,66.519005 1.939642,-5.050332 h 0.720046 l 2.067114,5.050332 h -0.761387 l -0.589128,-1.529569 h -2.111902 l -0.554675,1.529569 z m 1.457316,-2.073875 h 1.71226 l -0.527115,-1.398659 q -0.241163,-0.637321 -0.358299,-1.047273 -0.09646,0.485742 -0.272171,0.964594 z m 6.811143,1.477895 v 0.59598 h -3.33839 q -0.0069,-0.223923 0.07235,-0.430622 0.127472,-0.341052 0.406533,-0.671769 0.282506,-0.330718 0.813066,-0.764785 0.8234,-0.675215 1.112797,-1.067942 0.289392,-0.396172 0.289392,-0.747559 0,-0.368613 -0.265281,-0.620096 -0.261834,-0.254929 -0.685592,-0.254929 -0.447875,0 -0.716601,0.268709 -0.268724,0.268707 -0.272169,0.744114 l -0.637361,-0.06546 q 0.06546,-0.713109 0.492662,-1.085167 0.427205,-0.375502 1.147249,-0.375502 0.726935,0 1.150694,0.403063 0.423759,0.403061 0.423759,0.999042 0,0.303158 -0.124027,0.59598 -0.124027,0.292823 -0.413423,0.616651 -0.285951,0.323828 -0.954318,0.888803 -0.558122,0.468517 -0.7166,0.637321 -0.158479,0.165359 -0.261835,0.334163 z m 0.361745,0.59598 1.939643,-5.050332 h 0.720045 l 2.067115,5.050332 h -0.761388 l -0.589128,-1.529569 h -2.111902 l -0.554675,1.529569 z m 1.457316,-2.073875 h 1.71226 l -0.527114,-1.398659 q -0.241163,-0.637321 -0.3583,-1.047273 -0.09646,0.485742 -0.272171,0.964594 z"
+              onPressIn={handleShapePress.bind(null, "A2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("X1X")}>
+            <Path
+              id="fX1X"
+              ref={el => (pathRefs.current['X1X'] = el)}
+              style={{
+                fill: "#ff00ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.129503,91.161922 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "X1X")}
+            />
+            <Path
+              id="tX1X"
+              style={{
+                fontSize: 7.05551,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.638431,84.800148 1.953357,-2.632036 -1.722537,-2.418441 h 0.795812 l 0.91639,1.295347 q 0.285941,0.403074 0.406518,0.620113 0.168809,-0.275606 0.399629,-0.575327 l 1.016296,-1.340133 h 0.726911 l -1.774213,2.380545 1.912016,2.669932 H 66.441792 L 65.17056,82.998375 q -0.106797,-0.155029 -0.220484,-0.337617 -0.168809,0.275605 -0.241156,0.378958 l -1.267787,1.760432 z m 7.303556,0 h -0.620113 v -3.951499 q -0.22393,0.213595 -0.589108,0.427189 -0.361733,0.213595 -0.651119,0.320392 v -0.599443 q 0.520206,-0.2446 0.9095,-0.592552 0.389293,-0.347953 0.551211,-0.675235 h 0.399629 z m 1.326353,0 1.953356,-2.632036 -1.722536,-2.418441 h 0.795812 l 0.916389,1.295347 q 0.285941,0.403074 0.406519,0.620113 0.168808,-0.275606 0.399628,-0.575327 l 1.016297,-1.340133 h 0.72691 l -1.774212,2.380545 1.912015,2.669932 h -0.826817 l -1.271232,-1.801773 q -0.106798,-0.155029 -0.220485,-0.337617 -0.168809,0.275605 -0.241155,0.378958 l -1.267787,1.760432 z"
+              onPressIn={handleShapePress.bind(null, "X1X")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D2A")}>
+            <Path
+              id="fD2A"
+              ref={el => (pathRefs.current['D2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 64.406499,109.44292 -4.861501,-8.89742 4.861501,-8.897422 h 9.723004 l 4.861501,8.897422 -4.861501,8.89742 z"
+              onPressIn={handleShapePress.bind(null, "D2A")}
+            />
+            <Path
+              id="tD2A"
+              style={{
+                fontSize: 7.05549,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.672002,103.08118 v -5.050511 h 1.739739 q 0.589099,0 0.899151,0.07235 0.434074,0.09991 0.740682,0.361735 0.399622,0.33762 0.595989,0.86472 0.199811,0.523655 0.199811,1.198896 0,0.57533 -0.134355,1.01975 -0.134356,0.44441 -0.344503,0.73725 -0.210147,0.28939 -0.461634,0.4582 -0.248041,0.16536 -0.60288,0.25149 -0.351392,0.0861 -0.809581,0.0861 z m 0.668335,-0.59599 h 1.078294 q 0.499529,0 0.782021,-0.093 0.285936,-0.093 0.454743,-0.26183 0.237707,-0.23771 0.368618,-0.63734 0.134356,-0.40308 0.134356,-0.97496 0,-0.792381 -0.261822,-1.216128 -0.258377,-0.427193 -0.63044,-0.571887 -0.268712,-0.103354 -0.864702,-0.103354 h -1.061068 z m 7.434368,0 v 0.59599 h -3.338231 q -0.0069,-0.22393 0.07235,-0.43063 0.127467,-0.34107 0.406514,-0.6718 0.282492,-0.33072 0.813026,-0.76481 0.823361,-0.67523 1.112743,-1.06798 0.289383,-0.396186 0.289383,-0.747585 0,-0.368626 -0.265267,-0.620119 -0.261822,-0.254938 -0.685561,-0.254938 -0.447853,0 -0.716565,0.268718 -0.268712,0.268718 -0.272157,0.744142 l -0.63733,-0.06546 q 0.06546,-0.713135 0.492638,-1.085206 0.427184,-0.375516 1.147195,-0.375516 0.726901,0 1.150639,0.403076 0.423739,0.403077 0.423739,0.99908 0,0.303168 -0.124022,0.596008 -0.124021,0.29283 -0.413403,0.61666 -0.285938,0.32385 -0.954273,0.88884 -0.558094,0.46854 -0.716565,0.63735 -0.158471,0.16536 -0.261822,0.33417 z m 0.361729,0.59599 1.93955,-5.050511 h 0.72001 l 2.067017,5.050511 H 75.10166 l -0.5891,-1.52961 h -2.111802 l -0.554649,1.52961 z m 1.457246,-2.07394 h 1.712178 l -0.527089,-1.398715 q -0.241152,-0.637343 -0.358283,-1.04731 -0.09646,0.485759 -0.272157,0.964628 z"
+              onPressIn={handleShapePress.bind(null, "D2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D3A")}>
+            <Path
+              id="fD3A"
+              ref={el => (pathRefs.current['D3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.544998,118.8265 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 h -9.723004 z"
+              onPressIn={handleShapePress.bind(null, "D3A")}
+            />
+            <Path
+              id="tD3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.672014,121.31742 v -5.05075 h 1.739855 q 0.58914,0 0.899213,0.0724 0.434102,0.0999 0.74073,0.36175 0.39965,0.33764 0.59603,0.86476 0.199825,0.52368 0.199825,1.19895 0,0.57536 -0.134365,1.0198 -0.134365,0.44444 -0.344526,0.73729 -0.210161,0.2894 -0.461664,0.45822 -0.248059,0.16537 -0.602921,0.2515 -0.351416,0.0861 -0.809636,0.0861 z m 0.66838,-0.59603 h 1.078366 q 0.499562,0 0.782074,-0.093 0.285956,-0.093 0.454774,-0.26184 0.237723,-0.23772 0.368642,-0.63737 0.134365,-0.4031 0.134365,-0.97501 0,-0.79241 -0.261839,-1.21618 -0.258395,-0.42721 -0.630483,-0.57191 -0.26873,-0.10336 -0.86476,-0.10336 h -1.061139 z m 4.179099,-0.73728 0.620146,-0.0827 q 0.106803,0.52712 0.361752,0.7614 0.258395,0.23083 0.627037,0.23083 0.437548,0 0.737286,-0.30318 0.303183,-0.30318 0.303183,-0.75107 0,-0.42721 -0.279066,-0.70283 -0.279066,-0.27906 -0.709724,-0.27906 -0.175708,0 -0.437548,0.0689 l 0.06891,-0.54435 q 0.06201,0.007 0.09991,0.007 0.396205,0 0.713169,-0.20671 0.316964,-0.20672 0.316964,-0.63738 0,-0.34108 -0.230833,-0.56502 -0.230832,-0.22394 -0.59603,-0.22394 -0.361752,0 -0.60292,0.22739 -0.241168,0.22738 -0.310073,0.68216 l -0.620147,-0.11025 q 0.113694,-0.62359 0.516789,-0.96467 0.403095,-0.34453 1.00257,-0.34453 0.413431,0 0.761403,0.17915 0.347971,0.17571 0.530569,0.48234 0.186044,0.30663 0.186044,0.65115 0,0.3273 -0.175708,0.59603 -0.175708,0.26873 -0.520234,0.42722 0.447884,0.10335 0.695942,0.43065 0.248059,0.32386 0.248059,0.81308 0,0.66149 -0.482336,1.12316 -0.482336,0.45822 -1.219622,0.45822 -0.664935,0 -1.105928,-0.39621 -0.437548,-0.3962 -0.499562,-1.02668 z m 3.617522,1.33331 1.93968,-5.05075 h 0.720059 l 2.067156,5.05075 h -0.761403 l -0.589139,-1.52969 h -2.111943 l -0.554687,1.52969 z m 1.457344,-2.07404 h 1.712294 l -0.527125,-1.39878 q -0.241168,-0.63737 -0.358307,-1.04736 -0.09647,0.48578 -0.272175,0.96467 z"
+              onPressIn={handleShapePress.bind(null, "D3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C2A")}>
+            <Path
+              id="fC2A"
+              ref={el => (pathRefs.current['C2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 93.80768,91.404355 -4.861502,8.897275 h -9.723006 l -4.861503,-8.897275 4.861503,-8.897279 h 9.723006 zm 64.406499,109.44292 -4.861501,-8.89742 4.861501,-8.897422 h 9.723004 l 4.861501,8.897422 -4.861501,8.89742 z"
+              onPressIn={handleShapePress.bind(null, "C2A")}
+            />
+            <Path
+              id="tC2A"
+              style={{
+                fontSize: 7.05549,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 81.190278,92.15899 0.668378,0.168817 q -0.21016,0.823414 -0.757954,1.257516 -0.54435,0.430656 -1.333312,0.430656 -0.816524,0 -1.329866,-0.330744 -0.509897,-0.334189 -0.778626,-0.96467 -0.265284,-0.63048 -0.265284,-1.353983 0,-0.788962 0.299736,-1.374654 0.303182,-0.589138 0.857867,-0.892319 0.558131,-0.306628 1.226509,-0.306628 0.757955,0 1.274742,0.385868 0.516787,0.385868 0.720057,1.085254 l -0.658042,0.155036 q -0.175708,-0.55124 -0.509897,-0.802743 -0.334189,-0.251503 -0.840641,-0.251503 -0.582247,0 -0.975006,0.279065 -0.389313,0.279065 -0.547794,0.751064 -0.158482,0.468554 -0.158482,0.968115 0,0.644262 0.186044,1.126597 0.189489,0.478889 0.585692,0.716611 0.396204,0.237723 0.857867,0.237723 0.561576,0 0.950889,-0.323854 0.389313,-0.323853 0.527123,-0.961224 z m 4.499495,1.17483 v 0.596028 h -3.338446 q -0.0069,-0.223941 0.07235,-0.430656 0.127474,-0.34108 0.40654,-0.671824 0.28251,-0.330744 0.813078,-0.764845 0.823415,-0.675269 1.112816,-1.068027 0.289401,-0.396204 0.289401,-0.74762 0,-0.368641 -0.265284,-0.620144 -0.261839,-0.254949 -0.685605,-0.254949 -0.447882,0 -0.716612,0.26873 -0.268729,0.268729 -0.272174,0.744173 l -0.637372,-0.06546 q 0.06546,-0.713167 0.492671,-1.085254 0.427211,-0.375532 1.147268,-0.375532 0.726948,0 1.150713,0.403094 0.423766,0.403094 0.423766,0.999122 0,0.303182 -0.124029,0.596029 -0.124029,0.292846 -0.41343,0.616699 -0.285956,0.323854 -0.954334,0.888874 -0.55813,0.468554 -0.716612,0.637371 -0.158481,0.165372 -0.261839,0.33419 z m 0.361751,0.596028 1.939676,-5.050735 h 0.720057 l 2.067149,5.050735 h -0.7614 l -0.589138,-1.529691 h -2.111937 l -0.554685,1.529691 z m 1.457341,-2.07404 h 1.712288 L 88.69403,90.457037 q -0.241167,-0.637371 -0.358306,-1.047356 -0.09647,0.48578 -0.272174,0.96467 z"
+              onPressIn={handleShapePress.bind(null, "C2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B2A")}>
+            <Path
+              id="fB2A"
+              ref={el => (pathRefs.current['B2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 88.946178,64.226074 4.861502,8.897279 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 z"
+              onPressIn={handleShapePress.bind(null, "B2A")}
+            />
+            <Path
+              id="tB2A"
+              style={{
+                fontSize: 7.05549,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 77.669998,75.658999 v -5.050331 h 1.894872 q 0.578797,0 0.926765,0.155024 0.351412,0.151579 0.54779,0.471961 0.199823,0.316938 0.199823,0.66488 0,0.323828 -0.175707,0.60976 -0.175706,0.285933 -0.530564,0.461627 0.458215,0.134354 0.702826,0.458181 0.248056,0.323828 0.248056,0.764784 0,0.354832 -0.15159,0.661435 -0.148145,0.303157 -0.368639,0.468516 -0.220494,0.165359 -0.554681,0.251483 -0.330741,0.08268 -0.813073,0.08268 z m 0.668373,-2.928228 h 1.092135 q 0.444433,0 0.637366,-0.05857 0.254947,-0.07579 0.38242,-0.251483 0.130918,-0.175693 0.130918,-0.440957 0,-0.251483 -0.120582,-0.440956 -0.120583,-0.192919 -0.344523,-0.261818 -0.223939,-0.07235 -0.768285,-0.07235 h -1.009449 z m 0,2.332248 h 1.257505 q 0.323852,0 0.45477,-0.02412 0.23083,-0.04134 0.385865,-0.137799 0.155035,-0.09646 0.254946,-0.279043 0.09991,-0.186028 0.09991,-0.427177 0,-0.282488 -0.1447,-0.489186 -0.144699,-0.210143 -0.40309,-0.292822 -0.254947,-0.08613 -0.737278,-0.08613 h -1.16793 z m 7.073042,0 v 0.59598 h -3.338421 q -0.0069,-0.223924 0.07235,-0.430622 0.127473,-0.341052 0.406535,-0.67177 0.282508,-0.330717 0.813074,-0.764783 0.823408,-0.675216 1.112806,-1.067943 0.289398,-0.396171 0.289398,-0.747558 0,-0.368612 -0.265281,-0.620096 -0.261838,-0.254928 -0.6856,-0.254928 -0.447878,0 -0.716606,0.268708 -0.268728,0.268709 -0.272173,0.744115 l -0.637366,-0.06546 q 0.06546,-0.713109 0.492667,-1.085167 0.427207,-0.375501 1.14726,-0.375501 0.726941,0 1.150703,0.403061 0.423763,0.403063 0.423763,0.999042 0,0.303158 -0.124028,0.59598 -0.124028,0.292824 -0.413427,0.616651 -0.285953,0.323827 -0.954326,0.888803 -0.558127,0.468516 -0.716606,0.63732 -0.158481,0.165359 -0.261838,0.334163 z m 0.361748,0.59598 1.93966,-5.050331 h 0.720052 l 2.067133,5.050331 h -0.761394 l -0.589133,-1.529568 h -2.111921 l -0.55468,1.529568 z m 1.45733,-2.073874 h 1.712275 l -0.527119,-1.398659 q -0.241165,-0.63732 -0.358303,-1.047272 -0.09646,0.485741 -0.272173,0.964593 z"
+              onPressIn={handleShapePress.bind(null, "B2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F2A")}>
+            <Path
+              id="fF2A"
+              ref={el => (pathRefs.current['F2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 49.589499,82.020925 -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "F2A")}
+            />
+            <Path
+              id="tF2A"
+              style={{
+                fontSize: 7.05549,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.265807,75.659302 v -5.050349 h 3.407091 v 0.595983 h -2.738763 v 1.564023 h 2.370149 v 0.595983 h -2.370149 v 2.29436 z m 7.282699,-0.595983 v 0.595983 h -3.33819 q -0.0069,-0.223924 0.07234,-0.430623 0.127465,-0.341054 0.406509,-0.671773 0.282488,-0.330718 0.813016,-0.764786 0.823352,-0.675217 1.11273,-1.067946 0.289379,-0.396173 0.289379,-0.747561 0,-0.368614 -0.265264,-0.620098 -0.261819,-0.254929 -0.685552,-0.254929 -0.447848,0 -0.716557,0.268709 -0.268709,0.268709 -0.272154,0.744117 l -0.637322,-0.06546 q 0.06546,-0.713112 0.492633,-1.08517 0.427178,-0.375504 1.14718,-0.375504 0.726892,0 1.150625,0.403064 0.423733,0.403063 0.423733,0.999045 0,0.303159 -0.124019,0.595983 -0.12402,0.292824 -0.413398,0.616652 -0.285934,0.323829 -0.954261,0.888806 -0.558088,0.468518 -0.716557,0.637323 -0.15847,0.165359 -0.261819,0.334163 z m 0.361724,0.595983 1.939526,-5.050349 h 0.720002 l 2.066991,5.050349 h -0.761341 l -0.589093,-1.529574 h -2.111776 l -0.554642,1.529574 z m 1.457228,-2.073881 h 1.712158 l -0.527083,-1.398664 q -0.241149,-0.637323 -0.358278,-1.047276 -0.09646,0.485743 -0.272154,0.964596 z"
+              onPressIn={handleShapePress.bind(null, "F2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E2A")}>
+            <Path
+              id="fE2A"
+              ref={el => (pathRefs.current['E2A'] = el)}
+              style={{
+                fill: "#0064ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 44.727998,91.404501 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897419 h -9.723004 z"
+              onPressIn={handleShapePress.bind(null, "E2A")}
+            />
+            <Path
+              id="tE2A"
+              style={{
+                fontSize: 7.05549,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.057384,93.939438 v -5.05047 h 3.651772 v 0.595996 H 48.725727 V 91.0318 h 2.793951 v 0.592552 h -2.793951 v 1.719089 h 3.100562 v 0.595997 z m 7.699728,-0.595997 v 0.595997 h -3.338271 q -0.0069,-0.22393 0.07235,-0.430634 0.127468,-0.341061 0.406518,-0.671788 0.282496,-0.330727 0.813036,-0.764805 0.823372,-0.675234 1.112757,-1.067971 0.289386,-0.396183 0.289386,-0.74758 0,-0.368623 -0.26527,-0.620113 -0.261825,-0.254935 -0.685569,-0.254935 -0.447859,0 -0.716574,0.268716 -0.268715,0.268715 -0.27216,0.744135 l -0.637338,-0.06546 q 0.06546,-0.713129 0.492645,-1.085196 0.427188,-0.375513 1.147208,-0.375513 0.726909,0 1.150652,0.403073 0.423744,0.403073 0.423744,0.99907 0,0.303166 -0.124023,0.595997 -0.124022,0.292831 -0.413408,0.616667 -0.285941,0.323837 -0.954284,0.888828 -0.558101,0.468529 -0.716574,0.637337 -0.158473,0.165364 -0.261825,0.334172 z m 0.361732,0.595997 1.939573,-5.05047 h 0.72002 l 2.067041,5.05047 h -0.761361 l -0.589106,-1.52961 h -2.111827 l -0.554656,1.52961 z m 1.457264,-2.073931 h 1.712199 l -0.527096,-1.398698 q -0.241155,-0.637338 -0.358287,-1.047301 -0.09646,0.485755 -0.27216,0.964619 z"
+              onPressIn={handleShapePress.bind(null, "E2A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D3D")}>
+            <Path
+              id="fD3B"
+              ref={el => (pathRefs.current['D3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 49.589499,100.78808 h 9.723004 l 4.861501,8.89742 -4.861501,8.89742 h -9.723004 l -4.861501,-8.89742 z"
+              onPressIn={handleShapePress.bind(null, "D3B")}
+            />
+            <Path
+              id="tD3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.048499,112.17642 v -5.05075 h 1.7398 q 0.589121,0 0.899184,0.0724 0.434089,0.0999 0.740707,0.36175 0.399637,0.33764 0.596011,0.86477 0.199819,0.52368 0.199819,1.19895 0,0.57536 -0.134361,1.01979 -0.134361,0.44444 -0.344516,0.73729 -0.210153,0.2894 -0.461649,0.45821 -0.248051,0.16538 -0.602901,0.25151 -0.351405,0.0861 -0.80961,0.0861 z m 0.668359,-0.59603 h 1.078331 q 0.499547,0 0.78205,-0.093 0.285947,-0.093 0.454759,-0.26184 0.237715,-0.23772 0.368631,-0.63738 0.134361,-0.40309 0.134361,-0.975 0,-0.79242 -0.261832,-1.21618 -0.258386,-0.42721 -0.630462,-0.57191 -0.268721,-0.10336 -0.864732,-0.10336 h -1.061106 z m 4.178966,-0.73728 0.620125,-0.0827 q 0.106801,0.52713 0.361741,0.7614 0.258386,0.23083 0.627017,0.23083 0.437534,0 0.737262,-0.30317 0.303173,-0.30319 0.303173,-0.75107 0,-0.42721 -0.279056,-0.70284 -0.279058,-0.27906 -0.709702,-0.27906 -0.175702,0 -0.437533,0.0689 l 0.0689,-0.54435 q 0.06201,0.007 0.09991,0.007 0.396192,0 0.713146,-0.20671 0.316954,-0.20673 0.316954,-0.63738 0,-0.34108 -0.230825,-0.56502 -0.230826,-0.22395 -0.596012,-0.22395 -0.36174,0 -0.6029,0.2274 -0.241161,0.22738 -0.310064,0.68216 l -0.620126,-0.11025 q 0.11369,-0.62359 0.516772,-0.96468 0.403082,-0.34452 1.002539,-0.34452 0.413417,0 0.761377,0.17915 0.34796,0.17571 0.530553,0.48234 0.186038,0.30662 0.186038,0.65115 0,0.3273 -0.175703,0.59604 -0.175702,0.26872 -0.520217,0.4272 0.44787,0.10337 0.69592,0.43066 0.24805,0.32386 0.24805,0.81309 0,0.66149 -0.48232,1.12315 -0.482321,0.45822 -1.219583,0.45822 -0.664914,0 -1.105893,-0.39621 -0.437533,-0.3962 -0.499545,-1.02668 z m 4.144513,1.33331 v -5.05075 h 1.894832 q 0.578784,0 0.926744,0.15504 0.351406,0.15159 0.547779,0.472 0.199819,0.31696 0.199819,0.66493 0,0.32385 -0.175703,0.60982 -0.175702,0.28595 -0.530552,0.46166 0.458204,0.13437 0.702809,0.45822 0.248051,0.32386 0.248051,0.76485 0,0.35486 -0.151586,0.66149 -0.148142,0.30318 -0.368631,0.46855 -0.22049,0.16538 -0.554669,0.25151 -0.330735,0.0827 -0.813055,0.0827 z m 0.668359,-2.92847 h 1.092112 q 0.444424,0 0.637352,-0.0586 0.254941,-0.0758 0.382412,-0.2515 0.130915,-0.17571 0.130915,-0.441 0,-0.2515 -0.12058,-0.44099 -0.12058,-0.19293 -0.344514,-0.26184 -0.223936,-0.0724 -0.768269,-0.0724 h -1.009428 z m 0,2.33244 h 1.257479 q 0.323844,0 0.45476,-0.0241 0.230825,-0.0414 0.385856,-0.13781 0.155032,-0.0965 0.254941,-0.27907 0.09991,-0.18604 0.09991,-0.42721 0,-0.28252 -0.144697,-0.48923 -0.144696,-0.21017 -0.403082,-0.29285 -0.254941,-0.0861 -0.737262,-0.0861 h -1.167905 z"
+              onPressIn={handleShapePress.bind(null, "D3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F3A")}>
+            <Path
+              id="fF3A"
+              ref={el => (pathRefs.current['F3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 29.910998,63.982502 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 z"
+              onPressIn={handleShapePress.bind(null, "F3A")}
+            />
+            <Path
+              id="tF3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="M 33.448509,66.473419 V 61.42267 h 3.407361 v 0.59603 h -2.738981 v 1.564147 h 2.370338 v 0.59603 h -2.370338 v 2.294542 z m 4.027507,-1.333315 0.620147,-0.08269 q 0.106803,0.527124 0.361752,0.761402 0.258395,0.230832 0.627037,0.230832 0.437548,0 0.737286,-0.303182 0.303183,-0.303183 0.303183,-0.751067 0,-0.427212 -0.279066,-0.702833 -0.279066,-0.279066 -0.709724,-0.279066 -0.175708,0 -0.437548,0.06891 l 0.06891,-0.544351 q 0.06201,0.0069 0.09991,0.0069 0.396205,0 0.713169,-0.206715 0.316963,-0.206716 0.316963,-0.637373 0,-0.341081 -0.230832,-0.565023 -0.230832,-0.223942 -0.59603,-0.223942 -0.361752,0 -0.60292,0.227388 -0.241168,0.227387 -0.310073,0.682161 l -0.620147,-0.110248 q 0.113694,-0.623592 0.516789,-0.964673 0.403095,-0.344526 1.00257,-0.344526 0.413431,0 0.761402,0.179154 0.347972,0.175708 0.53057,0.482336 0.186044,0.306628 0.186044,0.651154 0,0.327299 -0.175708,0.59603 -0.175708,0.26873 -0.520234,0.427212 0.447884,0.103357 0.695942,0.430657 0.248059,0.323854 0.248059,0.813081 0,0.66149 -0.482336,1.123154 -0.482337,0.45822 -1.219622,0.45822 -0.664935,0 -1.105928,-0.396205 -0.437548,-0.396205 -0.499563,-1.026687 z m 3.617522,1.333315 1.939681,-5.050749 h 0.720059 l 2.067156,5.050749 h -0.761403 l -0.589139,-1.529695 h -2.111944 l -0.554686,1.529695 z m 1.457345,-2.074046 h 1.712294 l -0.527125,-1.398775 q -0.241168,-0.637373 -0.358307,-1.047358 -0.09647,0.485781 -0.272175,0.964672 z"
+              onPressIn={handleShapePress.bind(null, "F3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E3B")}>
+            <Path
+              id="fE3B"
+              ref={el => (pathRefs.current['E3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 34.772499,73.366078 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 z"
+              onPressIn={handleShapePress.bind(null, "E3B")}
+            />
+            <Path
+              id="tE3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="M 33.433001,84.754178 V 79.703666 H 37.0847 v 0.596001 h -2.98337 v 1.546849 h 2.793896 v 0.592558 H 34.10133 v 1.719103 h 3.1005 v 0.596001 z m 4.44405,-1.333251 0.6201,-0.08268 q 0.106794,0.527101 0.361725,0.761367 0.258374,0.230821 0.62699,0.230821 0.437515,0 0.737229,-0.303168 0.30316,-0.303168 0.30316,-0.75103 0,-0.427194 -0.279045,-0.7028 -0.279045,-0.279053 -0.70967,-0.279053 -0.175694,0 -0.437515,0.0689 l 0.0689,-0.544326 q 0.06201,0.0069 0.09991,0.0069 0.396175,0 0.713116,-0.206706 0.316939,-0.206706 0.316939,-0.637343 0,-0.341065 -0.230814,-0.564996 -0.230815,-0.223931 -0.595986,-0.223931 -0.361725,0 -0.602874,0.227376 -0.241151,0.227376 -0.310051,0.68213 l -0.620102,-0.110255 q 0.113684,-0.623563 0.51675,-0.964628 0.403065,-0.344509 1.002494,-0.344509 0.4134,0 0.761345,0.179145 0.347946,0.175701 0.53053,0.482314 0.18603,0.306613 0.18603,0.651123 0,0.327285 -0.175694,0.596003 -0.175696,0.268716 -0.520196,0.427192 0.447851,0.103352 0.69589,0.430637 0.248041,0.323838 0.248041,0.813042 0,0.66146 -0.4823,1.123102 -0.482301,0.458199 -1.21953,0.458199 -0.664886,0 -1.105845,-0.396187 -0.437515,-0.396185 -0.499525,-1.026638 z m 4.144335,1.333251 v -5.050512 h 1.894749 q 0.578761,0 0.926705,0.155029 0.35139,0.151584 0.547755,0.471979 0.19981,0.316948 0.19981,0.664903 0,0.32384 -0.175694,0.609783 -0.175696,0.285943 -0.530531,0.461642 0.458186,0.134359 0.70278,0.458199 0.248041,0.323838 0.248041,0.764812 0,0.354845 -0.151581,0.661458 -0.148135,0.303168 -0.368615,0.468534 -0.22048,0.165364 -0.554645,0.251491 -0.330719,0.08268 -0.813019,0.08268 z m 0.668329,-2.928332 h 1.092065 q 0.444406,0 0.637325,-0.05857 0.25493,-0.07579 0.382395,-0.251491 0.130911,-0.175701 0.130911,-0.440974 0,-0.251491 -0.120576,-0.440972 -0.120575,-0.192926 -0.3445,-0.261828 -0.223925,-0.07235 -0.768235,-0.07235 h -1.009385 z m 0,2.332331 h 1.257426 q 0.323829,0 0.454739,-0.02411 0.230816,-0.04134 0.385841,-0.137804 0.155024,-0.09646 0.254929,-0.279053 0.09991,-0.186036 0.09991,-0.427192 0,-0.282498 -0.14469,-0.489204 -0.14469,-0.210151 -0.403066,-0.292833 -0.25493,-0.08613 -0.737229,-0.08613 h -1.167856 z"
+              onPressIn={handleShapePress.bind(null, "E3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E3A")}>
+            <Path
+              id="fE3A"
+              ref={el => (pathRefs.current['E3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 44.495503,91.64708 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
+              onPressIn={handleShapePress.bind(null, "E3A")}
+            />
+            <Path
+              id="tE3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 33.240264,103.03514 v -5.050469 h 3.651773 v 0.595997 h -2.983429 v 1.546832 h 2.79395 v 0.59256 h -2.79395 v 1.71908 h 3.100561 v 0.596 z m 4.444139,-1.33324 0.620112,-0.0827 q 0.106797,0.52709 0.361732,0.76136 0.25838,0.23082 0.627003,0.23082 0.437523,0 0.737244,-0.30317 0.303166,-0.30316 0.303166,-0.75102 0,-0.42719 -0.27905,-0.7028 -0.279051,-0.27905 -0.709684,-0.27905 -0.175699,0 -0.437524,0.0689 l 0.0689,-0.54432 q 0.06201,0.007 0.09991,0.007 0.396183,0 0.71313,-0.206701 0.316946,-0.206704 0.316946,-0.637338 0,-0.341062 -0.23082,-0.564991 -0.230819,-0.22393 -0.595997,-0.22393 -0.361732,0 -0.602887,0.227375 -0.241154,0.227374 -0.310056,0.682124 l -0.620112,-0.110243 q 0.113687,-0.623557 0.51676,-0.964619 0.403073,-0.344507 1.002515,-0.344507 0.413408,0 0.76136,0.179144 0.347952,0.175698 0.530541,0.482309 0.186033,0.306612 0.186033,0.651118 0,0.327282 -0.175698,0.595997 -0.175699,0.268712 -0.520205,0.427192 0.447859,0.10335 0.695903,0.43063 0.248045,0.32384 0.248045,0.81304 0,0.66145 -0.482309,1.12309 -0.48231,0.45819 -1.219554,0.45819 -0.664899,0 -1.105867,-0.39618 -0.437524,-0.39618 -0.499535,-1.02663 z m 3.617321,1.33324 1.939574,-5.050469 h 0.720019 l 2.067041,5.050469 h -0.76136 l -0.589107,-1.52961 h -2.111827 l -0.554656,1.52961 z m 1.457264,-2.07393 h 1.712199 l -0.527095,-1.398698 q -0.241155,-0.637338 -0.358287,-1.047301 -0.09646,0.485755 -0.272161,0.964619 z"
+              onPressIn={handleShapePress.bind(null, "E3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A3B")}>
+            <Path
+              id="fA3B"
+              ref={el => (pathRefs.current['A3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 79.223172,45.945075 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 z"
+              onPressIn={handleShapePress.bind(null, "A3B")}
+            />
+            <Path
+              id="tA3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 77.59952,57.33342 1.939681,-5.05075 h 0.720059 l 2.067155,5.05075 H 81.565013 L 80.975874,55.803725 H 78.86393 l -0.554687,1.529695 z m 1.457344,-2.074046 h 1.712294 l -0.527125,-1.398775 q -0.241168,-0.637373 -0.358307,-1.047359 -0.09647,0.485782 -0.272175,0.964673 z m 3.555507,0.740731 0.620147,-0.08269 q 0.106803,0.527125 0.361752,0.761403 0.258395,0.230832 0.627037,0.230832 0.437548,0 0.737286,-0.303183 0.303182,-0.303183 0.303182,-0.751066 0,-0.427212 -0.279066,-0.702833 -0.279065,-0.279066 -0.709723,-0.279066 -0.175708,0 -0.437548,0.06891 l 0.06891,-0.544351 q 0.06202,0.0069 0.09991,0.0069 0.396205,0 0.713169,-0.206716 0.316963,-0.206715 0.316963,-0.637373 0,-0.34108 -0.230832,-0.565022 -0.230832,-0.223942 -0.59603,-0.223942 -0.361752,0 -0.60292,0.227387 -0.241168,0.227387 -0.310073,0.682161 l -0.620147,-0.110248 q 0.113694,-0.623592 0.516789,-0.964672 0.403095,-0.344526 1.00257,-0.344526 0.413431,0 0.761402,0.179153 0.347972,0.175708 0.53057,0.482336 0.186044,0.306629 0.186044,0.651154 0,0.3273 -0.175708,0.59603 -0.175708,0.26873 -0.520234,0.427212 0.447884,0.103358 0.695942,0.430658 0.248059,0.323854 0.248059,0.813081 0,0.661489 -0.482336,1.123154 -0.482337,0.45822 -1.219622,0.45822 -0.664935,0 -1.105928,-0.396205 -0.437548,-0.396205 -0.499563,-1.026687 z m 4.144646,1.333315 v -5.05075 h 1.894893 q 0.578803,0 0.926774,0.155037 0.351417,0.151591 0.547797,0.472 0.199825,0.316964 0.199825,0.664935 0,0.323855 -0.175709,0.609811 -0.175708,0.285957 -0.530569,0.461665 0.458219,0.134365 0.702832,0.458219 0.248059,0.323855 0.248059,0.764848 0,0.354861 -0.151591,0.661489 -0.148147,0.303183 -0.368643,0.468556 -0.220497,0.165372 -0.554687,0.251504 -0.330745,0.08269 -0.813081,0.08269 z m 0.668381,-2.92847 h 1.092147 q 0.444438,0 0.637373,-0.05857 0.254949,-0.0758 0.382423,-0.251504 0.13092,-0.175708 0.13092,-0.440993 0,-0.251504 -0.120584,-0.440993 -0.120584,-0.192934 -0.344526,-0.261839 -0.223942,-0.07235 -0.768292,-0.07235 h -1.009461 z m 0,2.33244 h 1.257519 q 0.323854,0 0.454774,-0.02412 0.230833,-0.04134 0.385869,-0.13781 0.155037,-0.09647 0.254949,-0.279066 0.09991,-0.186044 0.09991,-0.427212 0,-0.282511 -0.144701,-0.489227 -0.144701,-0.210161 -0.403095,-0.292847 -0.254949,-0.08613 -0.737286,-0.08613 h -1.167942 z"
+              onPressIn={handleShapePress.bind(null, "A3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C3B")}>
+            <Path
+              id="fC3B"
+              ref={el => (pathRefs.current['C3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 88.946178,118.58263 h -9.723006 l -4.861503,-8.89728 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 z"
+              onPressIn={handleShapePress.bind(null, "C3B")}
+            />
+            <Path
+              id="tC3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 81.382494,110.43886 0.668349,0.16881 q -0.210151,0.82338 -0.757922,1.25746 -0.544325,0.43064 -1.333252,0.43064 -0.816489,0 -1.329808,-0.33073 -0.509875,-0.33418 -0.778592,-0.96463 -0.265273,-0.63045 -0.265273,-1.35392 0,-0.78893 0.299724,-1.3746 0.303168,-0.58911 0.857829,-0.89228 0.558106,-0.30661 1.226455,-0.30661 0.757921,0 1.274686,0.38585 0.516765,0.38585 0.720025,1.08521 l -0.658013,0.15503 q -0.1757,-0.55122 -0.509875,-0.80271 -0.334174,-0.25149 -0.840604,-0.25149 -0.582221,0 -0.974962,0.27905 -0.389296,0.27905 -0.547771,0.75103 -0.158474,0.46853 -0.158474,0.96807 0,0.64424 0.186035,1.12655 0.18948,0.47887 0.585667,0.71658 0.396186,0.23771 0.857829,0.23771 0.561551,0 0.950847,-0.32384 0.389296,-0.32384 0.5271,-0.96118 z m 1.24368,0.43753 0.620118,-0.0827 q 0.106798,0.5271 0.361735,0.76136 0.258383,0.23082 0.627008,0.23082 0.437527,0 0.737251,-0.30317 0.303169,-0.30316 0.303169,-0.75103 0,-0.42719 -0.279053,-0.7028 -0.279053,-0.27905 -0.709691,-0.27905 -0.1757,0 -0.437527,0.0689 l 0.0689,-0.54432 q 0.06201,0.007 0.09991,0.007 0.396186,0 0.713135,-0.20671 0.316949,-0.2067 0.316949,-0.63734 0,-0.34107 -0.230821,-0.565 -0.230822,-0.22393 -0.596002,-0.22393 -0.361736,0 -0.602892,0.22738 -0.241157,0.22737 -0.310059,0.68213 l -0.620118,-0.11025 q 0.113688,-0.62356 0.516765,-0.96462 0.403076,-0.34451 1.002523,-0.34451 0.413412,0 0.761367,0.17914 0.347955,0.1757 0.530545,0.48232 0.186035,0.30661 0.186035,0.65112 0,0.32728 -0.1757,0.596 -0.1757,0.26872 -0.52021,0.42719 0.447863,0.10336 0.69591,0.43064 0.248047,0.32384 0.248047,0.81304 0,0.66146 -0.482314,1.12311 -0.482313,0.45819 -1.219564,0.45819 -0.664904,0 -1.105876,-0.39618 -0.437528,-0.39619 -0.49954,-1.02664 z m 4.144453,1.33325 v -5.05051 h 1.894804 q 0.578776,0 0.926731,0.15503 0.3514,0.15158 0.547771,0.47198 0.199815,0.31694 0.199815,0.6649 0,0.32384 -0.1757,0.60978 -0.1757,0.28594 -0.530545,0.46164 0.458198,0.13436 0.7028,0.4582 0.248047,0.32384 0.248047,0.76481 0,0.35485 -0.151584,0.66146 -0.148139,0.30317 -0.368626,0.46854 -0.220486,0.16536 -0.55466,0.25149 -0.33073,0.0827 -0.813043,0.0827 z m 0.668349,-2.92833 h 1.092096 q 0.444418,0 0.637343,-0.0586 0.254937,-0.0758 0.382406,-0.25149 0.130914,-0.1757 0.130914,-0.44097 0,-0.2515 -0.120579,-0.44098 -0.120578,-0.19292 -0.34451,-0.26182 -0.223931,-0.0724 -0.768256,-0.0724 h -1.009414 z m 0,2.33233 h 1.257461 q 0.323839,0 0.454753,-0.0241 0.230821,-0.0413 0.38585,-0.1378 0.15503,-0.0965 0.254938,-0.27905 0.09991,-0.18604 0.09991,-0.4272 0,-0.28249 -0.144695,-0.4892 -0.144694,-0.21015 -0.403076,-0.29283 -0.254937,-0.0861 -0.737251,-0.0861 h -1.167888 z"
+              onPressIn={handleShapePress.bind(null, "C3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B3A")}>
+            <Path
+              id="fB3A"
+              ref={el => (pathRefs.current['B3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 108.62501,63.982354 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 z"
+              onPressIn={handleShapePress.bind(null, "B3A")}
+            />
+            <Path
+              id="tB3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 92.486996,66.473424 v -5.050752 h 1.894961 q 0.578824,0 0.926808,0.155038 0.35143,0.151591 0.547816,0.472 0.199833,0.316964 0.199833,0.664935 0,0.323855 -0.175715,0.609812 -0.175714,0.285956 -0.530589,0.461664 0.458236,0.134366 0.702858,0.45822 0.248068,0.323854 0.248068,0.764848 0,0.354862 -0.151598,0.66149 -0.14815,0.303183 -0.368655,0.468555 -0.220505,0.165373 -0.554707,0.251505 -0.330757,0.08269 -0.81311,0.08269 z m 0.668404,-2.92847 h 1.092188 q 0.444453,0 0.637395,-0.05857 0.254958,-0.0758 0.382438,-0.251504 0.130924,-0.175709 0.130924,-0.440994 0,-0.251504 -0.120588,-0.440993 -0.120588,-0.192935 -0.344538,-0.261839 -0.22395,-0.07235 -0.768321,-0.07235 H 93.1554 Z m 0,2.332441 h 1.257566 q 0.323865,0 0.454791,-0.02412 0.23084,-0.04134 0.385882,-0.13781 0.155042,-0.09647 0.254958,-0.279066 0.09992,-0.186044 0.09992,-0.427212 0,-0.282511 -0.144707,-0.489227 -0.144705,-0.210161 -0.403109,-0.292848 -0.254958,-0.08613 -0.737312,-0.08613 h -1.167986 z m 3.817486,-0.737286 0.620169,-0.08269 q 0.106807,0.527124 0.361765,0.761402 0.258404,0.230833 0.62706,0.230833 0.437564,0 0.737312,-0.303184 0.303193,-0.303182 0.303193,-0.751066 0,-0.427213 -0.279076,-0.702834 -0.279076,-0.279066 -0.709748,-0.279066 -0.175715,0 -0.437564,0.06891 l 0.06891,-0.544351 q 0.06202,0.0069 0.09991,0.0069 0.396219,0 0.713194,-0.206717 0.316975,-0.206715 0.316975,-0.637372 0,-0.341081 -0.23084,-0.565023 -0.230841,-0.223942 -0.596052,-0.223942 -0.361765,0 -0.602942,0.227387 -0.241177,0.227387 -0.310085,0.682162 L 97.034901,62.71121 q 0.113698,-0.623592 0.516808,-0.964673 0.40311,-0.344526 1.002606,-0.344526 0.413447,0 0.761431,0.179154 0.347983,0.175707 0.530588,0.482336 0.186056,0.306629 0.186056,0.651154 0,0.327301 -0.17572,0.596031 -0.175714,0.26873 -0.520252,0.427212 0.447899,0.103357 0.695972,0.430657 0.24806,0.323855 0.24806,0.813082 0,0.66149 -0.482351,1.123155 -0.482353,0.45822 -1.219665,0.45822 -0.664959,0 -1.105969,-0.396205 -0.437564,-0.396205 -0.49958,-1.026688 z m 3.617654,1.333315 1.93975,-5.050752 h 0.72009 l 2.06722,5.050752 h -0.76143 l -0.58916,-1.529695 h -2.11202 l -0.55471,1.529695 z m 1.4574,-2.074047 h 1.71235 l -0.52714,-1.398775 q -0.24118,-0.637373 -0.35832,-1.047359 -0.0965,0.485781 -0.27218,0.964673 z"
+              onPressIn={handleShapePress.bind(null, "B3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B3B")}>
+            <Path
+              id="fB3B"
+              ref={el => (pathRefs.current['B3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 94.040504,91.160632 -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 l 4.8615,8.897279 -4.8615,8.897279 z"
+              onPressIn={handleShapePress.bind(null, "B3B")}
+            />
+            <Path
+              id="tB3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 92.679998,84.754183 v -5.050516 h 1.894851 q 0.57879,0 0.926755,0.15503 0.351408,0.151584 0.547783,0.471978 0.199822,0.316949 0.199822,0.664905 0,0.323839 -0.175705,0.609782 -0.175704,0.285943 -0.530558,0.461644 0.458209,0.134358 0.702817,0.458197 0.248054,0.32384 0.248054,0.764813 0,0.354845 -0.151589,0.661459 -0.148143,0.303169 -0.368635,0.468533 -0.220491,0.165365 -0.554674,0.251493 -0.330737,0.08268 -0.813063,0.08268 z m 0.668365,-2.928334 h 1.092124 q 0.444428,0 0.637358,-0.05857 0.254945,-0.07579 0.382416,-0.251491 0.130917,-0.1757 0.130917,-0.440973 0,-0.251493 -0.120581,-0.440973 -0.120581,-0.192925 -0.344519,-0.261827 -0.223937,-0.07235 -0.768275,-0.07235 h -1.00944 z m 0,2.332332 h 1.257493 q 0.323847,0 0.454764,-0.02412 0.230827,-0.04134 0.385861,-0.137804 0.155033,-0.09646 0.254943,-0.279054 0.09991,-0.186034 0.09991,-0.427191 0,-0.282499 -0.144697,-0.489204 -0.144698,-0.210152 -0.403086,-0.292834 -0.254945,-0.08613 -0.73727,-0.08613 h -1.167918 z m 3.817264,-0.737252 0.620134,-0.08268 q 0.1068,0.527101 0.361744,0.761367 0.258388,0.230822 0.627024,0.230822 0.437538,0 0.737269,-0.303169 0.303176,-0.303169 0.303176,-0.751032 0,-0.427192 -0.27906,-0.7028 -0.27906,-0.279053 -0.709707,-0.279053 -0.175705,0 -0.437539,0.0689 l 0.0689,-0.544326 q 0.06201,0.0069 0.09991,0.0069 0.396196,0 0.713153,-0.206707 0.316957,-0.206705 0.316957,-0.637343 0,-0.341065 -0.230827,-0.564996 -0.230828,-0.223931 -0.596017,-0.223931 -0.361745,0 -0.602908,0.227376 -0.241163,0.227376 -0.310066,0.68213 l -0.620133,-0.110244 q 0.113691,-0.623562 0.516777,-0.964627 0.403087,-0.34451 1.002549,-0.34451 0.413422,0 0.761386,0.179145 0.347963,0.1757 0.530561,0.482314 0.18604,0.306613 0.18604,0.651124 0,0.327284 -0.1757,0.596002 -0.175712,0.268717 -0.52023,0.427192 0.447874,0.103353 0.69593,0.430637 0.24805,0.32384 0.24805,0.813044 0,0.661459 -0.482325,1.123102 -0.482326,0.458199 -1.219596,0.458199 -0.66492,0 -1.105904,-0.396187 -0.437538,-0.396187 -0.499552,-1.02664 z m 4.144563,1.333254 v -5.050516 h 1.89485 q 0.57879,0 0.92675,0.15503 0.35141,0.151584 0.54779,0.471978 0.19981,0.316949 0.19981,0.664905 0,0.323839 -0.1757,0.609782 -0.1757,0.285943 -0.53056,0.461644 0.45821,0.134358 0.70282,0.458197 0.24805,0.32384 0.24805,0.764813 0,0.354845 -0.15159,0.661459 -0.14814,0.303169 -0.36863,0.468533 -0.2205,0.165365 -0.55467,0.251493 -0.33074,0.08268 -0.81307,0.08268 z m 0.66836,-2.928334 h 1.09213 q 0.44442,0 0.63736,-0.05857 0.25494,-0.07579 0.38241,-0.251491 0.13091,-0.1757 0.13091,-0.440973 0,-0.251493 -0.12058,-0.440973 -0.12058,-0.192925 -0.34451,-0.261827 -0.22395,-0.07235 -0.76828,-0.07235 h -1.00944 z m 0,2.332332 h 1.25749 q 0.32385,0 0.45477,-0.02412 0.23083,-0.04134 0.38586,-0.137804 0.15503,-0.09646 0.25494,-0.279054 0.0999,-0.186034 0.0999,-0.427191 0,-0.282499 -0.1447,-0.489204 -0.1447,-0.210152 -0.40308,-0.292834 -0.25495,-0.08613 -0.73727,-0.08613 h -1.16792 z"
+              onPressIn={handleShapePress.bind(null, "B3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C3A")}>
+            <Path
+              id="fC3A"
+              ref={el => (pathRefs.current['C3A'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 94.040504,109.44163 -4.861503,-8.89728 4.861503,-8.897274 h 9.723006 l 4.8615,8.897274 -4.8615,8.89728 z"
+              onPressIn={handleShapePress.bind(null, "C3A")}
+            />
+            <Path
+              id="tC3A"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 96.007168,101.29672 0.668344,0.16881 q -0.210149,0.82334 -0.757916,1.25741 -0.544322,0.43061 -1.333243,0.43061 -0.816482,0 -1.329798,-0.33071 -0.509871,-0.33416 -0.778586,-0.96459 -0.265271,-0.63043 -0.265271,-1.35386 0,-0.788901 0.299721,-1.374544 0.303167,-0.589087 0.857824,-0.892243 0.558101,-0.306602 1.226445,-0.306602 0.757916,0 1.274678,0.385835 0.51676,0.385836 0.72002,1.085162 l -0.658009,0.155022 q -0.175699,-0.551192 -0.509871,-0.802674 -0.334173,-0.251482 -0.840598,-0.251482 -0.582217,0 -0.974955,0.279041 -0.389294,0.279042 -0.547767,0.751001 -0.158473,0.468514 -0.158473,0.968034 0,0.64421 0.186034,1.1265 0.189479,0.47885 0.585662,0.71656 0.396183,0.23769 0.857823,0.23769 0.561546,0 0.95084,-0.32382 0.389294,-0.32383 0.527096,-0.96115 z m 1.243672,0.43752 0.620112,-0.0827 q 0.106798,0.52707 0.361733,0.76133 0.258381,0.23081 0.627003,0.23081 0.437524,0 0.737245,-0.30315 0.303167,-0.30316 0.303167,-0.751 0,-0.42717 -0.27905,-0.70278 -0.279052,-0.27904 -0.709685,-0.27904 -0.175699,0 -0.437525,0.0689 l 0.0689,-0.5443 q 0.06201,0.007 0.0999,0.007 0.396184,0 0.71313,-0.206699 0.316947,-0.206697 0.316947,-0.637317 0,-0.34105 -0.230819,-0.564973 -0.23082,-0.223922 -0.595998,-0.223922 -0.361732,0 -0.602888,0.227367 -0.241155,0.227367 -0.310057,0.682102 l -0.620112,-0.110239 q 0.113687,-0.623537 0.516761,-0.964588 0.403073,-0.344495 1.002515,-0.344495 0.413409,0 0.761361,0.179137 0.347953,0.175693 0.53055,0.482294 0.18603,0.306601 0.18603,0.651097 0,0.327271 -0.1757,0.595978 -0.175702,0.268708 -0.520209,0.427178 0.447869,0.10335 0.695909,0.43061 0.24804,0.32383 0.24804,0.81302 0,0.66143 -0.4823,1.12305 -0.48232,0.45818 -1.219565,0.45818 -0.664898,0 -1.105868,-0.39617 -0.437524,-0.39616 -0.499535,-1.02659 z m 3.61732,1.33319 1.93958,-5.050305 h 0.72002 l 2.06704,5.050305 h -0.76136 l -0.5891,-1.52956 h -2.11183 l -0.55466,1.52956 z m 1.45727,-2.07386 h 1.7122 l -0.52709,-1.398655 q -0.24116,-0.637316 -0.35829,-1.047267 -0.0965,0.485739 -0.27216,0.964588 z"
+              onPressIn={handleShapePress.bind(null, "C3A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F3B")}>
+            <Path
+              id="fF3B"
+              ref={el => (pathRefs.current['F3B'] = el)}
+              style={{
+                fill: "#94ff00",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.312503,63.739926 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "F3B")}
+            />
+            <Path
+              id="tF3B"
+              style={{
+                fontSize: 7.05589,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.459,57.333424 v -5.050752 h 3.407223 v 0.59603 h -2.73887 v 1.564148 h 2.370242 v 0.59603 h -2.370242 v 2.294544 z m 4.027344,-1.333316 0.620122,-0.08268 q 0.106799,0.527126 0.361738,0.761404 0.258384,0.230832 0.627011,0.230832 0.437531,0 0.737256,-0.303183 0.303171,-0.303183 0.303171,-0.751067 0,-0.427213 -0.279055,-0.702833 -0.279055,-0.279066 -0.709695,-0.279066 -0.175701,0 -0.43753,0.0689 l 0.0689,-0.544352 q 0.06201,0.0069 0.09991,0.0069 0.396189,0 0.71314,-0.206716 0.316951,-0.206715 0.316951,-0.637373 0,-0.341081 -0.230823,-0.565023 -0.230823,-0.223941 -0.596006,-0.223941 -0.361737,0 -0.602896,0.227386 -0.241158,0.227388 -0.310061,0.682162 L 52.548356,53.57121 q 0.113689,-0.623593 0.516767,-0.964674 0.40308,-0.344526 1.002531,-0.344526 0.413414,0 0.761371,0.179154 0.347957,0.175709 0.530548,0.482337 0.186037,0.306628 0.186037,0.651154 0,0.3273 -0.175701,0.59603 -0.175701,0.268731 -0.520213,0.427213 0.447866,0.103357 0.695914,0.430657 0.248048,0.323855 0.248048,0.813082 0,0.66149 -0.482316,1.123155 -0.482317,0.45822 -1.219573,0.45822 -0.664908,0 -1.105883,-0.396205 -0.43753,-0.396205 -0.499543,-1.026688 z m 4.144479,1.333316 v -5.050752 h 1.894817 q 0.57878,0 0.926737,0.155036 0.351402,0.151592 0.547774,0.472001 0.199817,0.316964 0.199817,0.664935 0,0.323855 -0.175701,0.609812 -0.175702,0.285956 -0.530548,0.461664 0.4582,0.134366 0.702803,0.458221 0.248049,0.323853 0.248049,0.764847 0,0.354862 -0.151585,0.66149 -0.14814,0.303183 -0.368628,0.468555 -0.220488,0.165373 -0.554664,0.251505 -0.330732,0.08268 -0.813048,0.08268 z m 0.668354,-2.928472 h 1.092103 q 0.44442,0 0.637347,-0.05857 0.254939,-0.07579 0.382408,-0.251504 0.130915,-0.175709 0.130915,-0.440994 0,-0.251504 -0.120579,-0.440993 -0.120579,-0.192935 -0.344512,-0.26184 -0.223933,-0.07235 -0.768262,-0.07235 h -1.00942 z m 0,2.332442 h 1.257469 q 0.323841,0 0.454756,-0.02412 0.230823,-0.04134 0.385853,-0.13781 0.155031,-0.09647 0.254938,-0.279067 0.09991,-0.186044 0.09991,-0.427212 0,-0.282511 -0.144695,-0.489227 -0.144695,-0.210161 -0.403078,-0.292847 -0.254939,-0.08613 -0.737256,-0.08613 h -1.167896 z"
+              onPressIn={handleShapePress.bind(null, "F3B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A4B")}>
+            <Path
+              id="fA4B"
+              ref={el => (pathRefs.current['A4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.361669,36.561354 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 z"
+              onPressIn={handleShapePress.bind(null, "A4B")}
+            />
+            <Path
+              id="tA4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 77.6,39.087002 1.939777,-5.051 h 0.720095 l 2.067258,5.051 h -0.76144 l -0.589169,-1.529771 h -2.112048 l -0.554714,1.529771 z m 1.457417,-2.074149 h 1.712378 l -0.52715,-1.398844 q -0.24118,-0.637405 -0.358325,-1.047411 -0.09647,0.485806 -0.272189,0.96472 z m 5.540251,2.074149 V 37.877656 H 82.406375 V 37.30916 l 2.304992,-3.273158 h 0.506478 v 3.273158 h 0.682195 v 0.568496 h -0.682195 v 1.209346 z m 0,-1.777842 v -2.277429 l -1.581452,2.277429 z m 2.160285,1.777842 v -5.051 h 1.894986 q 0.578832,0 0.926821,0.155044 0.351434,0.151599 0.547823,0.472024 0.199835,0.31698 0.199835,0.664968 0,0.32387 -0.175717,0.609841 -0.175717,0.285971 -0.530596,0.461688 0.458242,0.134371 0.702868,0.458242 0.248071,0.32387 0.248071,0.764885 0,0.354879 -0.151599,0.661523 -0.148154,0.303197 -0.368661,0.468578 -0.220508,0.165381 -0.554714,0.251516 -0.330762,0.08269 -0.813122,0.08269 z m 0.668413,-2.928615 h 1.092202 q 0.44446,0 0.637404,-0.05857 0.254962,-0.0758 0.382443,-0.251516 0.130926,-0.175717 0.130926,-0.441015 0,-0.251517 -0.12059,-0.441015 -0.12059,-0.192944 -0.344543,-0.261853 -0.223953,-0.07235 -0.768331,-0.07235 h -1.009511 z m 0,2.332555 h 1.257582 q 0.323871,0 0.454797,-0.02412 0.230844,-0.04134 0.385888,-0.137817 0.155044,-0.09647 0.254962,-0.27908 0.09992,-0.186053 0.09992,-0.427233 0,-0.282525 -0.144708,-0.489251 Q 89.590099,36.92327 89.331692,36.84058 89.07673,36.75444 88.59437,36.75444 h -1.168001 z"
+              onPressIn={handleShapePress.bind(null, "A4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C4C")}>
+            <Path
+              id="fC4C"
+              ref={el => (pathRefs.current['C4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 74.361669,128.06636 4.861503,-8.89728 h 9.723006 l 4.861502,8.89728 -4.861502,8.89728 h -9.723006 z"
+              onPressIn={handleShapePress.bind(null, "C4C")}
+            />
+            <Path
+              id="tC4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 81.139808,128.82032 0.668346,0.16881 q -0.21015,0.82338 -0.757918,1.25746 -0.544323,0.43063 -1.333247,0.43063 -0.816485,0 -1.329802,-0.33073 -0.509873,-0.33417 -0.778589,-0.96462 -0.265271,-0.63045 -0.265271,-1.35392 0,-0.78892 0.299722,-1.37458 0.303167,-0.58911 0.857825,-0.89228 0.558104,-0.30661 1.22645,-0.30661 0.757918,0 1.274681,0.38585 0.516762,0.38584 0.720022,1.0852 l -0.658011,0.15503 q -0.175699,-0.55122 -0.509872,-0.80271 -0.334173,-0.25149 -0.8406,-0.25149 -0.582219,0 -0.974959,0.27905 -0.389294,0.27905 -0.547768,0.75103 -0.158474,0.46853 -0.158474,0.96807 0,0.64423 0.186035,1.12654 0.189479,0.47887 0.585664,0.71658 0.396184,0.23771 0.857825,0.23771 0.561549,0 0.950843,-0.32384 0.389295,-0.32384 0.527098,-0.96118 z m 3.228043,1.77077 v -1.20922 h -2.191073 v -0.56844 l 2.304761,-3.27283 h 0.506427 v 3.27283 h 0.682126 v 0.56844 h -0.682126 v 1.20922 z m 0,-1.77766 v -2.2772 l -1.581293,2.2772 z m 5.791184,0.007 0.668346,0.16881 q -0.21015,0.82338 -0.757918,1.25746 -0.544323,0.43063 -1.333247,0.43063 -0.816485,0 -1.329802,-0.33073 -0.509873,-0.33417 -0.778589,-0.96462 -0.265271,-0.63045 -0.265271,-1.35392 0,-0.78892 0.299722,-1.37458 0.303167,-0.58911 0.857826,-0.89228 0.558103,-0.30661 1.226449,-0.30661 0.757918,0 1.274681,0.38585 0.516762,0.38584 0.720022,1.0852 l -0.658011,0.15503 q -0.175699,-0.55122 -0.509872,-0.80271 -0.334173,-0.25149 -0.8406,-0.25149 -0.582219,0 -0.974959,0.27905 -0.389294,0.27905 -0.547768,0.75103 -0.158474,0.46853 -0.158474,0.96807 0,0.64423 0.186035,1.12654 0.189479,0.47887 0.585664,0.71658 0.396184,0.23771 0.857825,0.23771 0.561549,0 0.950843,-0.32384 0.389295,-0.32384 0.527098,-0.96118 z"
+              onPressIn={handleShapePress.bind(null, "C4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A4C")}>
+            <Path
+              id="fA4C"
+              ref={el => (pathRefs.current['A4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 103.76351,36.804076 4.8615,8.897279 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 z"
+              onPressIn={handleShapePress.bind(null, "A4C")}
+            />
+            <Path
+              id="tA4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 92.173503,48.226639 1.93959,-5.050513 h 0.720025 l 2.067059,5.050513 H 96.13881 l -0.589112,-1.529624 h -2.111845 l -0.55466,1.529624 z m 1.457276,-2.073949 h 1.712213 l -0.527099,-1.39871 q -0.241157,-0.637343 -0.358291,-1.047309 -0.09646,0.485758 -0.272162,0.964627 z m 5.539717,2.073949 v -1.20923 h -2.191082 v -0.568441 l 2.30477,-3.272842 h 0.50643 v 3.272842 h 0.682126 v 0.568441 h -0.682126 v 1.20923 z m 0,-1.777671 v -2.277209 l -1.5813,2.277209 z m 5.791214,0.0069 0.66835,0.168809 q -0.21016,0.823379 -0.75793,1.257461 -0.54432,0.430637 -1.33325,0.430637 -0.81649,0 -1.32981,-0.330729 -0.50987,-0.334175 -0.77859,-0.964628 -0.26527,-0.630452 -0.26527,-1.353923 0,-0.788927 0.29972,-1.374594 0.30317,-0.589112 0.85783,-0.89228 0.55811,-0.306614 1.22646,-0.306614 0.75792,0 1.27468,0.385851 0.51677,0.385851 0.72003,1.085206 l -0.65802,0.155029 q -0.1757,-0.551215 -0.50987,-0.802708 -0.33418,-0.251492 -0.8406,-0.251492 -0.58223,0 -0.97497,0.279053 -0.38929,0.279053 -0.54777,0.751032 -0.15847,0.468533 -0.15847,0.968072 0,0.644233 0.18603,1.126547 0.18948,0.478869 0.58567,0.71658 0.39619,0.237712 0.85783,0.237712 0.56155,0 0.95085,-0.323839 0.38929,-0.323839 0.5271,-0.961182 z"
+              onPressIn={handleShapePress.bind(null, "A4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C4B")}>
+            <Path
+              id="fC4B"
+              ref={el => (pathRefs.current['C4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 94.040504,109.92808 h 9.723006 l 4.8615,8.89728 -4.8615,8.89728 h -9.723006 l -4.861503,-8.89728 z"
+              onPressIn={handleShapePress.bind(null, "C4B")}
+            />
+            <Path
+              id="tC4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 96.199393,119.57986 0.66833,0.16881 q -0.210145,0.82337 -0.7579,1.25746 -0.544311,0.43063 -1.333216,0.43063 -0.816466,0 -1.329771,-0.33072 -0.50986,-0.33418 -0.77857,-0.96464 -0.265266,-0.63044 -0.265266,-1.35391 0,-0.78894 0.299715,-1.3746 0.303161,-0.58911 0.857806,-0.89228 0.55809,-0.30661 1.226421,-0.30661 0.757901,0 1.274651,0.38585 0.51675,0.38585 0.720005,1.0852 l -0.657995,0.15503 q -0.175696,-0.55121 -0.50986,-0.80271 -0.334166,-0.25149 -0.840581,-0.25149 -0.582206,0 -0.974936,0.27905 -0.389285,0.27906 -0.547755,0.75103 -0.15847,0.46854 -0.15847,0.96808 0,0.64423 0.18603,1.12654 0.189475,0.47888 0.585651,0.71658 0.396174,0.23771 0.857805,0.23771 0.561535,0 0.95082,-0.32383 0.389286,-0.32385 0.527086,-0.96118 z m 3.227967,1.77077 v -1.20923 h -2.191021 v -0.56843 l 2.304705,-3.27285 h 0.506416 v 3.27285 h 0.68211 v 0.56843 h -0.68211 v 1.20923 z m 0,-1.77766 v -2.27721 l -1.581257,2.27721 z m 2.16002,1.77766 v -5.05051 h 1.89475 q 0.57875,0 0.9267,0.15503 0.35139,0.15159 0.54776,0.47198 0.19981,0.31695 0.19981,0.66491 0,0.32383 -0.1757,0.60978 -0.17569,0.28594 -0.53052,0.46164 0.45818,0.13436 0.70278,0.4582 0.24803,0.32383 0.24803,0.76481 0,0.35485 -0.15157,0.66146 -0.14814,0.30316 -0.36862,0.46853 -0.22049,0.16537 -0.55465,0.25149 -0.33072,0.0827 -0.81302,0.0827 z m 0.66833,-2.92833 h 1.09206 q 0.44441,0 0.63732,-0.0586 0.25494,-0.0758 0.3824,-0.25149 0.13092,-0.17571 0.13092,-0.44098 0,-0.25149 -0.12058,-0.44097 -0.12058,-0.19293 -0.34451,-0.26183 -0.22391,-0.0723 -0.76823,-0.0723 h -1.00938 z m 0,2.33233 h 1.25742 q 0.32384,0 0.45474,-0.0241 0.23082,-0.0413 0.38584,-0.1378 0.15503,-0.0965 0.25494,-0.27905 0.0999,-0.18604 0.0999,-0.42719 0,-0.2825 -0.14468,-0.48921 -0.14469,-0.21015 -0.40307,-0.29283 -0.25493,-0.0861 -0.73723,-0.0861 h -1.16785 z"
+              onPressIn={handleShapePress.bind(null, "C4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B4A")}>
+            <Path
+              id="fB4A"
+              ref={el => (pathRefs.current['B4A'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 118.58051,63.738633 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 z"
+              onPressIn={handleShapePress.bind(null, "B4A")}
+            />
+            <Path
+              id="tB4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 107.30397,57.366999 v -5.051001 h 1.89506 q 0.57886,0 0.92685,0.155044 0.35145,0.151599 0.54784,0.472024 0.19985,0.31698 0.19985,0.664968 0,0.323871 -0.17573,0.609842 -0.17572,0.285971 -0.53061,0.461688 0.45826,0.134371 0.7029,0.458241 0.24807,0.323871 0.24807,0.764886 0,0.35488 -0.1516,0.661523 -0.14817,0.303198 -0.36868,0.468579 -0.22051,0.16538 -0.55473,0.251517 -0.33078,0.08269 -0.81315,0.08269 z m 0.66844,-2.928616 h 1.09224 q 0.44448,0 0.63742,-0.05857 0.25498,-0.0758 0.38246,-0.251516 0.13093,-0.175717 0.13093,-0.441016 0,-0.251516 -0.12059,-0.441015 -0.12059,-0.192944 -0.34455,-0.261853 -0.22397,-0.07235 -0.76836,-0.07235 h -1.00955 z m 0,2.332557 h 1.25763 q 0.32388,0 0.45481,-0.02412 0.23085,-0.04135 0.3859,-0.137817 0.15505,-0.09647 0.25498,-0.27908 0.0999,-0.186054 0.0999,-0.427234 0,-0.282525 -0.14471,-0.489251 -0.14472,-0.210171 -0.40314,-0.292861 -0.25497,-0.08614 -0.73735,-0.08614 h -1.16804 z m 5.80232,0.596059 v -1.209346 h -2.19138 v -0.568496 l 2.30508,-3.273159 h 0.5065 v 3.273159 h 0.68221 v 0.568496 h -0.68221 v 1.209346 z m 0,-1.777842 v -2.27743 l -1.58151,2.27743 z m 1.63319,1.777842 1.93984,-5.051001 h 0.72013 l 2.06733,5.051001 h -0.76147 l -0.58919,-1.529771 h -2.11212 l -0.55474,1.529771 z m 1.45746,-2.074149 h 1.71244 l -0.52717,-1.398845 q -0.24118,-0.637405 -0.35833,-1.047411 -0.0965,0.485806 -0.2722,0.964721 z"
+              onPressIn={handleShapePress.bind(null, "B4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B4B")}>
+            <Path
+              id="fB4B"
+              ref={el => (pathRefs.current['B4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 108.8575,82.019632 -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 z"
+              onPressIn={handleShapePress.bind(null, "B4B")}
+            />
+            <Path
+              id="tB4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 107.49699,75.647514 v -5.050516 h 1.89486 q 0.57878,0 0.92675,0.15503 0.3514,0.151584 0.54778,0.471978 0.19983,0.316949 0.19983,0.664905 0,0.323839 -0.17572,0.609783 -0.1757,0.285942 -0.53055,0.461643 0.4582,0.134358 0.70282,0.458197 0.24805,0.32384 0.24805,0.764813 0,0.354844 -0.15159,0.661459 -0.14814,0.303169 -0.36864,0.468533 -0.22049,0.165365 -0.55466,0.251493 -0.33075,0.08268 -0.81307,0.08268 z m 0.66837,-2.928334 h 1.09212 q 0.44443,0 0.63736,-0.05857 0.25494,-0.07579 0.38242,-0.251492 0.13091,-0.1757 0.13091,-0.440973 0,-0.251493 -0.12058,-0.440973 -0.12058,-0.192925 -0.34452,-0.261827 -0.22394,-0.07235 -0.76828,-0.07235 h -1.00943 z m 0,2.332332 h 1.25749 q 0.32385,0 0.45476,-0.02412 0.23083,-0.04134 0.38587,-0.137804 0.15503,-0.09646 0.25494,-0.279053 0.0999,-0.186035 0.0999,-0.427192 0,-0.282499 -0.1447,-0.489204 -0.1447,-0.210152 -0.40309,-0.292834 -0.25494,-0.08613 -0.73727,-0.08613 h -1.16791 z m 5.80168,0.596002 v -1.20923 h -2.19114 v -0.568441 l 2.30483,-3.272845 h 0.50645 v 3.272845 h 0.68215 v 0.568441 h -0.68215 v 1.20923 z m 0,-1.777671 v -2.277211 l -1.58134,2.277211 z m 2.16014,1.777671 v -5.050516 h 1.89485 q 0.57879,0 0.92675,0.15503 0.35141,0.151584 0.54779,0.471978 0.19982,0.316949 0.19982,0.664905 0,0.323839 -0.17571,0.609783 -0.1757,0.285942 -0.53056,0.461643 0.45822,0.134358 0.70282,0.458197 0.24806,0.32384 0.24806,0.764813 0,0.354844 -0.1516,0.661459 -0.14814,0.303169 -0.36863,0.468533 -0.22049,0.165365 -0.55467,0.251493 -0.33074,0.08268 -0.81307,0.08268 z m 0.66837,-2.928334 h 1.09212 q 0.44443,0 0.63736,-0.05857 0.25494,-0.07579 0.38241,-0.251492 0.13091,-0.1757 0.13091,-0.440973 0,-0.251493 -0.12058,-0.440973 -0.12058,-0.192925 -0.34451,-0.261827 -0.22394,-0.07235 -0.76828,-0.07235 h -1.00943 z m 0,2.332332 h 1.25748 q 0.32386,0 0.45477,-0.02412 0.23083,-0.04134 0.38586,-0.137804 0.15503,-0.09646 0.25495,-0.279053 0.0999,-0.186035 0.0999,-0.427192 0,-0.282499 -0.14471,-0.489204 -0.14469,-0.210152 -0.40308,-0.292834 -0.25494,-0.08613 -0.73727,-0.08613 h -1.16791 z"
+              onPressIn={handleShapePress.bind(null, "B4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B4C")}>
+            <Path
+              id="fB4C"
+              ref={el => (pathRefs.current['B4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 108.8575,82.506076 h 9.72301 l 4.8615,8.897279 -4.8615,8.897275 h -9.72301 l -4.8615,-8.897275 z"
+              onPressIn={handleShapePress.bind(null, "B4C")}
+            />
+            <Path
+              id="tB4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 107.254,93.928867 v -5.050738 h 1.89482 q 0.57878,0 0.92674,0.155037 0.35141,0.151591 0.54778,0.471999 0.19981,0.316963 0.19981,0.664934 0,0.323853 -0.1757,0.609809 -0.1757,0.285956 -0.53055,0.461664 0.45821,0.134364 0.70281,0.458218 0.24805,0.323853 0.24805,0.764845 0,0.354861 -0.15159,0.661489 -0.14814,0.303182 -0.36862,0.468554 -0.22049,0.165372 -0.55467,0.251503 -0.33074,0.08268 -0.81305,0.08268 z m 0.66835,-2.928464 h 1.09211 q 0.44443,0 0.63735,-0.05857 0.25494,-0.07579 0.38241,-0.251503 0.13091,-0.175707 0.13091,-0.440992 0,-0.251503 -0.12057,-0.440991 -0.12058,-0.192935 -0.34452,-0.26184 -0.22393,-0.07235 -0.76827,-0.07235 h -1.00942 z m 0,2.332435 h 1.25748 q 0.32384,0 0.45475,-0.02412 0.23083,-0.04134 0.38586,-0.137811 0.15503,-0.09646 0.25494,-0.279064 0.0999,-0.186044 0.0999,-0.427212 0,-0.28251 -0.1447,-0.489225 -0.1447,-0.21016 -0.40308,-0.292847 -0.25494,-0.08613 -0.73726,-0.08613 h -1.1679 z m 5.8016,0.596029 v -1.209283 h -2.1911 v -0.568466 l 2.30479,-3.272989 h 0.50644 v 3.272989 h 0.68214 v 0.568466 h -0.68214 v 1.209283 z m 0,-1.777749 v -2.277311 l -1.58131,2.277311 z m 5.79127,0.0069 0.66836,0.168818 q -0.21016,0.823414 -0.75794,1.257516 -0.54433,0.430656 -1.33327,0.430656 -0.81649,0 -1.32981,-0.330744 -0.50988,-0.334189 -0.7786,-0.96467 -0.26527,-0.63048 -0.26527,-1.353983 0,-0.788963 0.29972,-1.374655 0.30318,-0.589138 0.85784,-0.892321 0.55811,-0.306627 1.22646,-0.306627 0.75793,0 1.2747,0.385869 0.51677,0.385867 0.72004,1.085254 l -0.65803,0.155035 q -0.1757,-0.551239 -0.50987,-0.802743 -0.33418,-0.251503 -0.84062,-0.251503 -0.58223,0 -0.97497,0.279065 -0.3893,0.279066 -0.54777,0.751065 -0.15848,0.468554 -0.15848,0.968115 0,0.644262 0.18604,1.126598 0.18948,0.478889 0.58567,0.716611 0.39619,0.237722 0.85784,0.237722 0.56156,0 0.95085,-0.323853 0.3893,-0.323853 0.52711,-0.961225 z"
+              onPressIn={handleShapePress.bind(null, "B4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C4A")}>
+            <Path
+              id="fC4A"
+              ref={el => (pathRefs.current['C4A'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 108.8575,100.78707 h 9.72301 l 4.8615,8.89728 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 z"
+              onPressIn={handleShapePress.bind(null, "C4A")}
+            />
+            <Path
+              id="tC4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 110.82429,110.43801 0.66834,0.16881 q -0.21014,0.82337 -0.75791,1.25745 -0.54432,0.43064 -1.33324,0.43064 -0.81649,0 -1.3298,-0.33073 -0.50987,-0.33417 -0.77859,-0.96462 -0.26527,-0.63045 -0.26527,-1.35392 0,-0.78892 0.29972,-1.37458 0.30317,-0.58911 0.85782,-0.89227 0.55811,-0.30662 1.22645,-0.30662 0.75792,0 1.27468,0.38585 0.51676,0.38585 0.72002,1.0852 l -0.65801,0.15503 q -0.1757,-0.55121 -0.50987,-0.8027 -0.33417,-0.25149 -0.8406,-0.25149 -0.58222,0 -0.97496,0.27905 -0.38929,0.27905 -0.54776,0.75102 -0.15848,0.46853 -0.15848,0.96807 0,0.64423 0.18604,1.12654 0.18948,0.47886 0.58566,0.71657 0.39618,0.23771 0.85782,0.23771 0.56155,0 0.95084,-0.32383 0.3893,-0.32384 0.5271,-0.96118 z m 3.22803,1.77077 v -1.20922 h -2.19106 v -0.56844 l 2.30475,-3.27282 h 0.50643 v 3.27282 h 0.68212 v 0.56844 h -0.68212 v 1.20922 z m 0,-1.77766 v -2.27719 l -1.58128,2.27719 z m 1.63297,1.77766 1.93958,-5.05048 h 0.72002 l 2.06704,5.05048 h -0.76136 l -0.58911,-1.52961 h -2.11183 l -0.55466,1.52961 z m 1.45727,-2.07394 h 1.7122 l -0.5271,-1.3987 q -0.24115,-0.63733 -0.35829,-1.0473 -0.0965,0.48576 -0.27216,0.96462 z"
+              onPressIn={handleShapePress.bind(null, "C4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F4C")}>
+            <Path
+              id="fF4C"
+              ref={el => (pathRefs.current['F4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.312503,45.458925 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "F4C")}
+            />
+            <Path
+              id="tF4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.214996,39.086871 v -5.050737 h 3.407282 v 0.596028 h -2.738917 v 1.564144 h 2.370283 v 0.596028 h -2.370283 v 2.294537 z m 6.011838,0 V 37.877587 H 52.0357 v -0.568466 l 2.304825,-3.272987 h 0.506441 v 3.272987 h 0.682146 v 0.568466 h -0.682146 v 1.209284 z m 0,-1.77775 v -2.27731 l -1.581338,2.27731 z m 5.791346,0.0069 0.668365,0.168818 q -0.210156,0.823415 -0.75794,1.257516 -0.544338,0.430656 -1.333284,0.430656 -0.816508,0 -1.329839,-0.330744 -0.509887,-0.334188 -0.778611,-0.96467 -0.265279,-0.63048 -0.265279,-1.353983 0,-0.788962 0.299731,-1.374655 0.303176,-0.589138 0.85785,-0.892319 0.558119,-0.306628 1.226484,-0.306628 0.757939,0 1.274716,0.385868 0.516777,0.385869 0.720042,1.085254 l -0.658029,0.155036 q -0.175704,-0.55124 -0.509887,-0.802743 -0.334182,-0.251503 -0.840623,-0.251503 -0.582236,0 -0.974986,0.279065 -0.389305,0.279065 -0.547783,0.751064 -0.158479,0.468555 -0.158479,0.968116 0,0.644262 0.186039,1.126597 0.189486,0.47889 0.585681,0.716612 0.396196,0.237722 0.85785,0.237722 0.561565,0 0.95087,-0.323854 0.389305,-0.323853 0.527112,-0.961225 z"
+              onPressIn={handleShapePress.bind(null, "F4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D4B")}>
+            <Path
+              id="fD4B"
+              ref={el => (pathRefs.current['D4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.312503,119.06908 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 z"
+              onPressIn={handleShapePress.bind(null, "D4B")}
+            />
+            <Path
+              id="tD4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 48.048498,130.492 v -5.051 h 1.739942 q 0.589168,0 0.899257,0.0724 0.434124,0.0999 0.740767,0.36177 0.39967,0.33765 0.59606,0.8648 0.199835,0.52371 0.199835,1.19901 0,0.57539 -0.134372,1.01985 -0.134372,0.44446 -0.344543,0.73732 -0.210171,0.28942 -0.461688,0.45824 -0.248071,0.16538 -0.60295,0.25152 -0.351434,0.0861 -0.809676,0.0861 z m 0.668413,-0.59605 h 1.07842 q 0.499587,0 0.782112,-0.093 0.285971,-0.093 0.454797,-0.26185 0.237735,-0.23774 0.368661,-0.63741 0.134372,-0.40311 0.134372,-0.97506 0,-0.79244 -0.261853,-1.21623 -0.258407,-0.42724 -0.630514,-0.57194 -0.268743,-0.10337 -0.864803,-0.10337 h -1.061192 z m 6.163874,0.59605 v -1.20934 h -2.191294 v -0.5685 l 2.304993,-3.27316 h 0.506478 v 3.27316 h 0.682195 v 0.5685 h -0.682195 v 1.20934 z m 0,-1.77784 v -2.27743 l -1.581453,2.27743 z m 2.160284,1.77784 v -5.051 h 1.894987 q 0.578832,0 0.92682,0.15505 0.351434,0.1516 0.547824,0.47202 0.199834,0.31698 0.199834,0.66497 0,0.32387 -0.175716,0.60984 -0.175717,0.28597 -0.530597,0.46169 0.458243,0.13437 0.702868,0.45824 0.248071,0.32387 0.248071,0.76489 0,0.35488 -0.151599,0.66152 -0.148153,0.3032 -0.368661,0.46858 -0.220507,0.16538 -0.554714,0.25151 -0.330761,0.0827 -0.813122,0.0827 z m 0.668414,-2.92861 h 1.092201 q 0.44446,0 0.637404,-0.0586 0.254962,-0.0758 0.382443,-0.25152 0.130926,-0.17572 0.130926,-0.44101 0,-0.25152 -0.12059,-0.44102 -0.12059,-0.19294 -0.344543,-0.26185 -0.223953,-0.0724 -0.76833,-0.0724 h -1.009511 z m 0,2.33256 h 1.257581 q 0.323871,0 0.454797,-0.0241 0.230844,-0.0413 0.385888,-0.13782 0.155045,-0.0965 0.254962,-0.27908 0.09992,-0.18605 0.09992,-0.42723 0,-0.28253 -0.144708,-0.48925 -0.144709,-0.21018 -0.403116,-0.29287 -0.254962,-0.0861 -0.737322,-0.0861 h -1.168 z"
+              onPressIn={handleShapePress.bind(null, "D4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F4B")}>
+            <Path
+              id="fF4B"
+              ref={el => (pathRefs.current['F4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 29.910998,45.701503 4.861501,-8.897423 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 z"
+              onPressIn={handleShapePress.bind(null, "F4B")}
+            />
+            <Path
+              id="tF4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 33.6415,48.227001 v -5.051 h 3.40753 v 0.59606 h -2.739117 v 1.564225 h 2.370456 v 0.596059 h -2.370456 v 2.294656 z m 6.012275,0 v -1.209346 h -2.191293 v -0.568496 l 2.304992,-3.273158 h 0.506478 v 3.273158 h 0.682195 v 0.568496 h -0.682195 v 1.209346 z m 0,-1.777842 V 44.17173 l -1.581452,2.277429 z m 2.160284,1.777842 v -5.051 h 1.894987 q 0.578832,0 0.92682,0.155045 0.351434,0.151598 0.547824,0.472023 0.199835,0.31698 0.199835,0.664968 0,0.323871 -0.175717,0.609841 -0.175717,0.285971 -0.530596,0.461688 0.458242,0.134372 0.702867,0.458242 0.248071,0.323871 0.248071,0.764886 0,0.354879 -0.151599,0.661522 -0.148153,0.303198 -0.368661,0.468579 -0.220507,0.16538 -0.554714,0.251516 -0.330761,0.08269 -0.813121,0.08269 z m 0.668414,-2.928615 h 1.092201 q 0.444461,0 0.637405,-0.05857 0.254961,-0.0758 0.382442,-0.251517 0.130927,-0.175717 0.130927,-0.441015 0,-0.251516 -0.12059,-0.441015 -0.12059,-0.192944 -0.344543,-0.261852 -0.223953,-0.07235 -0.768331,-0.07235 h -1.009511 z m 0,2.332556 h 1.257582 q 0.32387,0 0.454796,-0.02412 0.230844,-0.04134 0.385889,-0.137817 0.155044,-0.09647 0.254961,-0.27908 0.09992,-0.186053 0.09992,-0.427233 0,-0.282526 -0.144708,-0.489251 -0.144708,-0.210172 -0.403116,-0.292862 -0.254961,-0.08614 -0.737321,-0.08614 h -1.168001 z"
+              onPressIn={handleShapePress.bind(null, "F4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D4C")}>
+            <Path
+              id="fD4C"
+              ref={el => (pathRefs.current['D4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 49.357004,118.8255 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 z"
+              onPressIn={handleShapePress.bind(null, "D4C")}
+            />
+            <Path
+              id="tD4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 32.989242,121.35084 v -5.05074 h 1.739851 q 0.589138,0 0.89921,0.0724 0.434101,0.0999 0.740729,0.36175 0.399648,0.33764 0.596028,0.86476 0.199824,0.52368 0.199824,1.19895 0,0.57535 -0.134365,1.01979 -0.134364,0.44444 -0.344525,0.73729 -0.21016,0.2894 -0.461663,0.45821 -0.248058,0.16538 -0.602918,0.25151 -0.351416,0.0861 -0.809634,0.0861 z m 0.668379,-0.59603 h 1.078363 q 0.499561,0 0.782071,-0.093 0.285956,-0.093 0.454773,-0.26184 0.237722,-0.23772 0.368642,-0.63737 0.134364,-0.4031 0.134364,-0.97501 0,-0.7924 -0.261839,-1.21617 -0.258393,-0.42721 -0.63048,-0.57191 -0.26873,-0.10336 -0.864758,-0.10336 h -1.061136 z m 6.16355,0.59603 v -1.20928 h -2.191178 v -0.56847 l 2.304871,-3.27299 h 0.506452 v 3.27299 h 0.682159 v 0.56847 h -0.682159 v 1.20928 z m 0,-1.77775 v -2.27731 l -1.581369,2.27731 z m 5.791464,0.007 0.668378,0.16882 q -0.21016,0.82341 -0.757955,1.25751 -0.544349,0.43066 -1.333311,0.43066 -0.816524,0 -1.329866,-0.33074 -0.509897,-0.33419 -0.778627,-0.96467 -0.265284,-0.63049 -0.265284,-1.35399 0,-0.78896 0.299737,-1.37465 0.303182,-0.58914 0.857867,-0.89232 0.55813,-0.30663 1.226509,-0.30663 0.757954,0 1.274742,0.38587 0.516787,0.38587 0.720057,1.08525 l -0.658043,0.15504 q -0.175708,-0.55124 -0.509897,-0.80274 -0.334189,-0.25151 -0.84064,-0.25151 -0.582248,0 -0.975006,0.27907 -0.389313,0.27906 -0.547795,0.75106 -0.158481,0.46856 -0.158481,0.96812 0,0.64426 0.186043,1.12659 0.189489,0.47889 0.585693,0.71662 0.396203,0.23772 0.857867,0.23772 0.561575,0 0.950889,-0.32386 0.389313,-0.32385 0.527123,-0.96122 z"
+              onPressIn={handleShapePress.bind(null, "D4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F4A")}>
+            <Path
+              id="fF4A"
+              ref={el => (pathRefs.current['F4A'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 29.678503,45.94408 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 4.861501,-8.897423 z"
+              onPressIn={handleShapePress.bind(null, "F4A")}
+            />
+            <Path
+              id="tF4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 18.908999,57.367001 v -5.050999 h 3.407434 v 0.596058 h -2.739039 v 1.564225 h 2.370389 v 0.59606 h -2.370389 v 2.294656 z m 6.012106,0 v -1.209346 h -2.191231 v -0.568496 l 2.304927,-3.273157 h 0.506464 v 3.273157 h 0.682175 v 0.568496 h -0.682175 v 1.209346 z m 0,-1.777842 v -2.277428 l -1.581408,2.277428 z m 1.633088,1.777842 1.939722,-5.050999 h 0.720074 l 2.0672,5.050999 H 30.51977 L 29.930618,55.83723 H 27.81863 l -0.554698,1.529771 z m 1.457375,-2.074148 h 1.71233 l -0.527136,-1.398845 q -0.241172,-0.637404 -0.358314,-1.047411 -0.09647,0.485806 -0.272181,0.964721 z"
+              onPressIn={handleShapePress.bind(null, "F4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E4C")}>
+            <Path
+              id="fE4C"
+              ref={el => (pathRefs.current['E4C'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 19.955499,64.225079 h 9.723004 l 4.861501,8.897423 -4.861501,8.897423 h -9.723004 l -4.861501,-8.897423 z"
+              onPressIn={handleShapePress.bind(null, "E4C")}
+            />
+            <Path
+              id="tE4C"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 18.650086,75.64785 v -5.050735 h 3.651964 v 0.596028 h -2.983586 v 1.546917 h 2.794097 v 0.592583 h -2.794097 v 1.719179 h 3.100724 v 0.596028 z m 6.428834,0 v -1.209282 h -2.191178 v -0.568466 l 2.304871,-3.272987 h 0.506452 v 3.272987 h 0.682159 v 0.568466 h -0.682159 v 1.209282 z m 0,-1.777748 v -2.27731 l -1.581369,2.27731 z m 5.791464,0.0069 0.668379,0.168817 q -0.210161,0.823415 -0.757955,1.257516 -0.54435,0.430656 -1.333312,0.430656 -0.816524,0 -1.329866,-0.330744 -0.509897,-0.334189 -0.778626,-0.964669 -0.265284,-0.630481 -0.265284,-1.353983 0,-0.788962 0.299736,-1.374655 0.303182,-0.589137 0.857867,-0.892319 0.558131,-0.306627 1.226509,-0.306627 0.757955,0 1.274742,0.385868 0.516788,0.385867 0.720057,1.085253 l -0.658042,0.155036 q -0.175708,-0.55124 -0.509897,-0.802743 -0.334189,-0.251503 -0.840641,-0.251503 -0.582247,0 -0.975005,0.279065 -0.389314,0.279065 -0.547795,0.751065 -0.158481,0.468553 -0.158481,0.968114 0,0.644262 0.186043,1.126597 0.189489,0.47889 0.585692,0.716612 0.396204,0.237722 0.857867,0.237722 0.561576,0 0.950889,-0.323853 0.389313,-0.323854 0.527123,-0.961225 z"
+              onPressIn={handleShapePress.bind(null, "E4C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E4B")}>
+            <Path
+              id="fE4B"
+              ref={el => (pathRefs.current['E4B'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 34.540004,91.403501 -4.861501,8.897419 h -9.723004 l -4.861501,-8.897419 4.861501,-8.897423 h 9.723004 z"
+              onPressIn={handleShapePress.bind(null, "E4B")}
+            />
+            <Path
+              id="tE4B"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 18.893001,93.929 v -5.051001 h 3.652052 v 0.59606 h -2.983658 v 1.546997 h 2.794165 v 0.592615 h -2.794165 v 1.719269 h 3.100799 V 93.929 Z m 6.428989,0 v -1.209346 h -2.19123 v -0.568496 l 2.304926,-3.273159 h 0.506464 v 3.273159 h 0.682176 v 0.568496 H 25.94215 V 93.929 Z m 0,-1.777842 v -2.27743 l -1.581407,2.27743 z M 27.482214,93.929 v -5.051001 h 1.894932 q 0.578816,0 0.926794,0.155045 0.351424,0.151598 0.547808,0.472024 0.199829,0.316979 0.199829,0.664967 0,0.323871 -0.175711,0.609842 -0.175713,0.28597 -0.530582,0.461688 0.45823,0.134372 0.702848,0.458241 0.248064,0.323871 0.248064,0.764886 0,0.354879 -0.151595,0.661522 -0.148149,0.303198 -0.36865,0.468579 -0.220502,0.16538 -0.554699,0.251517 -0.330751,0.08269 -0.813099,0.08269 z m 0.668393,-2.928616 h 1.092171 q 0.444447,0 0.637387,-0.05857 0.254954,-0.0758 0.382431,-0.251516 0.130922,-0.175718 0.130922,-0.441015 0,-0.251517 -0.120586,-0.441016 -0.120586,-0.192943 -0.344533,-0.261852 -0.223947,-0.07235 -0.768309,-0.07235 h -1.009483 z m 0,2.332556 h 1.257546 q 0.323862,0 0.454785,-0.02412 0.230837,-0.04134 0.385876,-0.137817 0.155041,-0.09647 0.254956,-0.27908 0.09992,-0.186053 0.09992,-0.427233 0,-0.282525 -0.144704,-0.489251 -0.144703,-0.210171 -0.403104,-0.292862 -0.254954,-0.08613 -0.7373,-0.08613 h -1.167969 z"
+              onPressIn={handleShapePress.bind(null, "E4B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E4A")}>
+            <Path
+              id="fE4A"
+              ref={el => (pathRefs.current['E4A'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 29.678503,118.58192 h -9.723004 l -4.861501,-8.89742 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 z"
+              onPressIn={handleShapePress.bind(null, "E4A")}
+            />
+            <Path
+              id="tE4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 18.700149,112.20862 v -5.05047 h 3.651772 v 0.59599 h -2.983429 v 1.54684 h 2.793951 v 0.59255 h -2.793951 v 1.71909 h 3.100562 v 0.596 z m 6.428498,0 v -1.20922 h -2.191064 v -0.56844 l 2.304751,-3.27281 h 0.506425 v 3.27281 h 0.682124 v 0.56844 h -0.682124 v 1.20922 z m 0,-1.77766 v -2.27719 l -1.581287,2.27719 z m 1.632962,1.77766 1.939573,-5.05047 h 0.72002 l 2.067041,5.05047 h -0.76136 l -0.589107,-1.52961 h -2.111827 l -0.554656,1.52961 z m 1.457264,-2.07393 h 1.712199 l -0.527096,-1.3987 q -0.241155,-0.63734 -0.358287,-1.0473 -0.09646,0.48575 -0.27216,0.96462 z"
+              onPressIn={handleShapePress.bind(null, "E4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D4A")}>
+            <Path
+              id="fD4A"
+              ref={el => (pathRefs.current['D4A'] = el)}
+              style={{
+                fill: "#6161fa",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 64.406499,128.21008 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 h -9.723004 l -4.861501,-8.89743 z"
+              onPressIn={handleShapePress.bind(null, "D4A")}
+            />
+            <Path
+              id="tD4A"
+              style={{
+                fontSize: 7.05624,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+              }}
+              d="m 62.671997,139.633 v -5.051 h 1.740002 q 0.589188,0 0.899287,0.0724 0.43414,0.0999 0.740793,0.36176 0.399684,0.33766 0.596079,0.86481 0.199842,0.5237 0.199842,1.19901 0,0.57539 -0.134376,1.01984 -0.134376,0.44446 -0.344555,0.73733 -0.210178,0.28941 -0.461704,0.45824 -0.248079,0.16538 -0.60297,0.25152 -0.351446,0.0861 -0.809704,0.0861 z m 0.668437,-0.59606 h 1.078456 q 0.499604,0 0.782138,-0.093 0.285981,-0.093 0.454813,-0.26186 0.237743,-0.23773 0.368673,-0.6374 0.134377,-0.40312 0.134377,-0.97506 0,-0.79245 -0.261862,-1.21623 -0.258416,-0.42724 -0.630534,-0.57195 -0.268753,-0.10336 -0.864833,-0.10336 h -1.061228 z m 6.164083,0.59606 v -1.20934 h -2.191368 v -0.5685 l 2.30507,-3.27316 h 0.506496 v 3.27316 h 0.682219 v 0.5685 h -0.682219 v 1.20934 z m 0,-1.77784 v -2.27743 l -1.581506,2.27743 z m 1.633189,1.77784 1.939843,-5.051 h 0.72012 l 2.067328,5.051 h -0.761466 l -0.589189,-1.52977 h -2.11212 l -0.554733,1.52977 z m 1.457466,-2.07415 h 1.712437 L 73.78044,136.16 q -0.241188,-0.6374 -0.358336,-1.0474 -0.09647,0.4858 -0.272198,0.96472 z"
+              onPressIn={handleShapePress.bind(null, "D4A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A5B")}>
+            <Path
+              id="fA5B"
+              ref={el => (pathRefs.current['A5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 79.223172,27.177634 -4.861503,-8.89728 4.861503,-8.8972788 h 9.723006 l 4.861502,8.8972788 -4.861502,8.89728 z"
+              onPressIn={handleShapePress.bind(null, "A5B")}
+            />
+            <Path
+              id="tA5B"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5B"] ? "none" : "inline",
+              }}
+              d="m 77.59952,20.762863 1.939724,-5.050864 h 0.720076 l 2.067202,5.050864 h -0.76142 L 80.97595,19.233134 h -2.111992 l -0.554699,1.529729 z m 1.457377,-2.074093 h 1.712333 l -0.527137,-1.398806 q -0.241174,-0.637388 -0.358315,-1.047383 -0.09647,0.485793 -0.272182,0.964695 z m 3.552143,0.751084 0.651168,-0.05513 q 0.07235,0.475457 0.334198,0.71663 0.265291,0.237729 0.637387,0.237729 0.447894,0 0.757974,-0.337643 0.310081,-0.337643 0.310081,-0.895788 0,-0.530582 -0.299745,-0.837217 -0.296299,-0.306635 -0.778646,-0.306635 -0.299744,0 -0.540918,0.137814 -0.241173,0.134368 -0.378987,0.351424 l -0.582262,-0.0758 0.489238,-2.594339 h 2.511651 v 0.592598 h -2.015522 l -0.272182,1.357463 q 0.454785,-0.316971 0.954358,-0.316971 0.661505,0 1.11629,0.45823 0.454784,0.458229 0.454784,1.178305 0,0.685622 -0.399659,1.185196 -0.485793,0.61327 -1.326455,0.61327 -0.689067,0 -1.126625,-0.385878 -0.434112,-0.385878 -0.496128,-1.023265 z m 4.148186,1.323009 v -5.050864 h 1.894935 q 0.578816,0 0.926795,0.155041 0.351425,0.151594 0.547809,0.472011 0.19983,0.316971 0.19983,0.66495 0,0.323861 -0.175713,0.609824 -0.175712,0.285963 -0.530581,0.461675 0.458229,0.134369 0.702848,0.45823 0.248065,0.323862 0.248065,0.764865 0,0.35487 -0.151595,0.661505 -0.14815,0.303189 -0.368651,0.468565 -0.220502,0.165377 -0.5547,0.25151 -0.330752,0.08269 -0.813099,0.08269 z m 0.668395,-2.928536 h 1.092172 q 0.444448,0 0.637387,-0.05857 0.254955,-0.0758 0.382432,-0.251509 0.130923,-0.175713 0.130923,-0.441004 0,-0.251509 -0.120587,-0.441003 -0.120586,-0.192939 -0.344533,-0.261845 -0.223947,-0.07235 -0.76831,-0.07235 h -1.009484 z m 0,2.332493 h 1.257548 q 0.323862,0 0.454784,-0.02412 0.230838,-0.04134 0.385878,-0.137814 0.15504,-0.09647 0.254955,-0.279072 0.09992,-0.186048 0.09992,-0.427222 0,-0.282518 -0.144704,-0.489238 -0.144704,-0.210165 -0.403105,-0.292853 -0.254955,-0.08613 -0.737302,-0.08613 h -1.167969 z"
+              onPressIn={handleShapePress.bind(null, "A5B")}
+            />
+            <Path
+              id="iA5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5B"] ? "inline" : "none",
+              }}
+              d="m 85.988952,20.123468 -0.535074,0.53523 -0.517793,0.517775 -0.15219,0.152187 0.100966,0.101129 c 0.0366,0.0366 0.08501,0.05481 0.133589,0.05481 0.0486,0 0.09701,-0.01839 0.133579,-0.05481 l 0.286318,-0.286301 0.511903,-0.511884 0.286148,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.107587,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.221931,1.983654 -0.511903,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.127488,-0.0484 -0.0486,0 -0.09701,0.0184 -0.133609,0.05483 l -0.09791,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.659172,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07001,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.08941,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.801389,-4.004311 -0.005,-1.280686 -1.281892,-0.0049 -1.197267,1.38427 -0.391985,0.453486 -0.115928,0.13415 -0.494081,0.571467 -0.547606,0.632937 0.30168,0.301503 0.375684,-0.375686 0.242675,-0.242651 0.387265,-0.387246 0.242496,-0.242303 0.391985,-0.392171 0.242316,-0.242284 0.870736,-0.870699 c 0.067,-0.06699 0.175501,-0.06699 0.242495,0 0.06701,0.06699 0.06701,0.175493 0,0.242286 l -0.888377,0.888336 -0.242295,0.242286 -0.374564,0.374549 -0.242496,0.242487 -0.367534,0.367526 -0.242665,0.242651 -0.395426,0.395406 0.285179,0.285166 1.08798,-0.923426 0.262236,-0.222564 0.702806,-0.596345 1.09595,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.336041,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.337152,0.286133 v 1.275014 c 0.0808,0.0979 0.121228,0.218007 0.121228,0.337923 0,0.120266 -0.0404,0.240587 -0.121228,0.338475 v 0.401661 l 0.297109,0.296945 c 0.07721,-0.04063 0.162431,-0.06112 0.247616,-0.06112 0.136059,0 0.272478,0.05179 0.375894,0.155406 l 0.09811,0.0979 c 0.0855,0.08557 0.128468,0.199023 0.128468,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.129028,0.312315 l -0.659173,0.659147 c -0.0855,0.08554 -0.198862,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.113097,0 -0.226364,-0.04308 -0.31231,-0.129028 l -0.009,-0.0095 -0.08901,-0.08899 -2.3e-4,2.17e-4 c -0.09981,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.577502 v 0.740541 c 0,0.128474 -0.09981,0.233573 -0.221614,0.233573 h -0.222024 c -0.121798,0 -0.221604,-0.105099 -0.221604,-0.233573 v -0.740549 h -1.577492 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.09051,0.09052 -0.009,0.0095 c -0.08591,0.08595 -0.199213,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.113458,0 -0.226745,-0.04288 -0.31232,-0.128257 l -0.659181,-0.65916 C 80.550918,21.979299 80.508,21.866017 80.508,21.752921 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.128458,-0.312314 l 0.09811,-0.09791 c 0.103586,-0.103584 0.239845,-0.155406 0.375904,-0.155406 0.08521,0 0.170371,0.02029 0.247616,0.06112 l 0.297129,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.121258,-0.218209 -0.121258,-0.338475 0,-0.119917 0.0404,-0.240198 0.121258,-0.337923 v -1.274998 l -0.337175,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.170781,-0.170771 l 0.220834,-7.51e-4 v -1.491686 h 2.095712 V 14.7168 h -2.496971 c -0.121818,0 -0.221604,-0.09962 -0.221604,-0.221596 v -0.222182 c 0,-0.122004 0.09981,-0.221597 0.221604,-0.221597 h 2.496971 v -0.49635 c 0,-0.128459 0.09981,-0.233575 0.221614,-0.233575 h 0.222024 c 0.122008,0 0.221604,0.105116 0.221604,0.233575 v 0.49635 h 2.496971 c 0.121818,0 0.221604,0.09962 0.221604,0.221597 v 0.222182 c 0,0.121801 -0.09961,0.221596 -0.221604,0.221596 h -2.496971 v 0.272086 h 2.095695 v 1.491686 l 0.220854,7.52e-4 c 0.09431,0 0.170771,0.07648 0.170771,0.170772 h -2.3e-4 z m -1.593852,2.967057 -0.353653,0.300164 0.375684,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.345882,0.293511 0.456119,0.387263 0.285179,-0.285166 -0.395616,-0.395604 h 2e-4 z m -1.87292,-1.002529 0.403566,-0.466735 -0.888377,-0.888336 c -0.06701,-0.06699 -0.06701,-0.175494 0,-0.242285 0.067,-0.06699 0.175501,-0.06699 0.242495,0 l 0.870736,0.870698 0.408536,-0.472241 -0.971292,-1.123047 -1.281892,0.0049 -0.005,1.280687 0.0556,0.04723 1.165595,0.989281 -4e-5,-2.17e-4 z m -1.165595,2.297268 -0.0376,0.03756 0.269608,0.269599 0.478901,-0.478898 -0.269608,-0.269598 -0.441308,0.441505 -4e-5,-1.67e-4 z m 5.257728,0.158844 -0.511903,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.08081,0.0816 0.08881,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07001,-0.0292 l 0.659172,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.09791,-0.09804 c -0.0366,-0.03662 -0.08501,-0.05483 -0.133599,-0.05483 -0.0459,0 -0.09181,0.01613 -0.127498,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.633161,0.148349 0.269618,-0.2696 -0.0375,-0.03755 -0.441518,-0.441506 -0.269608,0.269599 0.478901,0.478899 1.6e-4,1.66e-4 z m -2.895446,-0.414926 -0.669983,-0.669958 -0.535064,-0.535229 -0.14645,-0.146463 -0.107587,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.283648,0.28363 0.002,0.0025 0.511903,0.511883 0.005,0.0051 0.287479,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.127498,0.0484 0.0486,0 0.09711,-0.01839 0.133589,-0.05481 l 0.100956,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "A5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A5C")}>
+            <Path
+              id="fA5C"
+              ref={el => (pathRefs.current['A5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 108.62501,27.420354 -4.8615,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 z"
+              onPressIn={handleShapePress.bind(null, "A5C")}
+            />
+            <Path
+              id="tA5C"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5C"] ? "none" : "inline",
+              }}
+              d="m 92.173995,29.945639 1.939655,-5.050515 h 0.720049 l 2.067129,5.050515 h -0.761392 l -0.589132,-1.529623 h -2.111916 l -0.554679,1.529623 z M 93.63132,27.87169 h 1.712271 l -0.527117,-1.39871 q -0.241165,-0.637343 -0.358303,-1.047309 -0.09646,0.485759 -0.272172,0.964627 z m 3.552015,0.751031 0.651145,-0.05512 q 0.07235,0.475423 0.334187,0.71658 0.265281,0.237712 0.637363,0.237712 0.447879,0 0.757948,-0.337619 0.310069,-0.337619 0.310069,-0.895726 0,-0.530545 -0.299734,-0.837159 -0.296288,-0.306614 -0.778618,-0.306614 -0.299734,0 -0.540899,0.137805 -0.241165,0.134359 -0.378973,0.3514 l -0.582241,-0.07579 0.48922,-2.594159 h 2.511558 v 0.592556 h -2.015447 l -0.272172,1.35737 q 0.454768,-0.316949 0.954324,-0.316949 0.661481,0 1.116245,0.458198 0.45477,0.458198 0.45477,1.178224 0,0.685574 -0.39964,1.185113 -0.485777,0.613228 -1.32641,0.613228 -0.689042,0 -1.126585,-0.385851 -0.434096,-0.385851 -0.49611,-1.023195 z m 7.779285,-0.447862 0.66838,0.16881 q -0.21016,0.823378 -0.75795,1.257461 -0.54434,0.430637 -1.33329,0.430637 -0.81652,0 -1.32986,-0.33073 -0.50989,-0.334174 -0.77862,-0.964626 -0.26528,-0.630454 -0.26528,-1.353925 0,-0.788928 0.29973,-1.374594 0.30319,-0.589112 0.85787,-0.892281 0.55812,-0.306613 1.22649,-0.306613 0.75795,0 1.27473,0.38585 0.51678,0.385852 0.72005,1.085206 l -0.65804,0.15503 q -0.1757,-0.551216 -0.50989,-0.802708 -0.33418,-0.251493 -0.84063,-0.251493 -0.58224,0 -0.975,0.279054 -0.3893,0.279053 -0.54779,0.751031 -0.15848,0.468533 -0.15848,0.968073 0,0.644233 0.18604,1.126547 0.1895,0.478869 0.58569,0.716581 0.3962,0.237711 0.85786,0.237711 0.56157,0 0.95088,-0.323838 0.38931,-0.32384 0.52711,-0.961183 z"
+              onPressIn={handleShapePress.bind(null, "A5C")}
+            />
+            <Path
+              id="iA5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5C"] ? "inline" : "none",
+              }}
+              d="m 100.80695,29.263968 -0.53507,0.53523 -0.517791,0.517775 -0.15219,0.152187 0.100966,0.101129 c 0.0366,0.0366 0.08501,0.05481 0.133589,0.05481 0.0486,0 0.09701,-0.01839 0.133579,-0.05481 l 0.286317,-0.286301 0.5119,-0.511884 0.28615,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.10759,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.221928,1.983654 -0.511903,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.127488,-0.0484 -0.0486,0 -0.09701,0.0184 -0.13361,0.05483 l -0.09791,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.659173,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07001,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.08941,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.801398,-4.004311 -0.005,-1.280686 -1.2819,-0.0049 -1.197266,1.38427 -0.391985,0.453486 -0.115928,0.13415 -0.494082,0.571467 -0.547606,0.632937 0.30168,0.301503 0.375684,-0.375686 0.242675,-0.242651 0.387266,-0.387246 0.242496,-0.242303 0.391985,-0.392171 0.242317,-0.242284 0.870734,-0.870699 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175493 0,0.242286 l -0.88837,0.888336 -0.242295,0.242286 -0.374565,0.374549 -0.242496,0.242487 -0.367534,0.367526 -0.242666,0.242651 -0.395426,0.395406 0.285179,0.285166 1.087981,-0.923426 0.262237,-0.222564 0.702805,-0.596345 1.09596,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.33604,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.33715,0.286133 v 1.275014 c 0.0808,0.0979 0.12123,0.218007 0.12123,0.337923 0,0.120266 -0.0404,0.240587 -0.12123,0.338475 v 0.401661 l 0.29711,0.296945 c 0.0772,-0.04063 0.16243,-0.06112 0.24761,-0.06112 0.13606,0 0.27248,0.05179 0.3759,0.155406 l 0.0981,0.0979 c 0.0855,0.08557 0.12847,0.199023 0.12847,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.12903,0.312315 l -0.65917,0.659147 c -0.0855,0.08554 -0.19887,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.11311,0 -0.22638,-0.04308 -0.31232,-0.129028 l -0.009,-0.0095 -0.089,-0.08899 -2.3e-4,2.17e-4 c -0.0998,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.577504 v 0.740541 c 0,0.128474 -0.09981,0.233573 -0.221614,0.233573 h -0.222024 c -0.121798,0 -0.221604,-0.105099 -0.221604,-0.233573 V 31.405876 H 96.99245 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.09051,0.09052 -0.009,0.0095 c -0.08591,0.08595 -0.199213,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.113458,0 -0.226745,-0.04288 -0.31232,-0.128257 l -0.659182,-0.65916 C 95.368918,31.119799 95.326,31.006517 95.326,30.893421 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.128458,-0.312314 l 0.09811,-0.09791 c 0.103586,-0.103584 0.239845,-0.155406 0.375905,-0.155406 0.08521,0 0.170371,0.02029 0.247616,0.06112 l 0.297129,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.121258,-0.218209 -0.121258,-0.338475 0,-0.119917 0.0404,-0.240198 0.121258,-0.337923 v -1.274998 l -0.337175,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.170781,-0.170771 l 0.220834,-7.51e-4 v -1.491686 h 2.095714 V 23.8573 h -2.496973 c -0.121818,0 -0.221605,-0.09962 -0.221605,-0.221596 v -0.222182 c 0,-0.122004 0.09981,-0.221597 0.221605,-0.221597 h 2.496973 v -0.49635 c 0,-0.128459 0.09981,-0.233575 0.221614,-0.233575 h 0.222024 c 0.122008,0 0.221604,0.105116 0.221604,0.233575 v 0.49635 h 2.496976 c 0.12182,0 0.22161,0.09962 0.22161,0.221597 v 0.222182 c 0,0.121801 -0.0996,0.221596 -0.22161,0.221596 h -2.496976 v 0.272086 h 2.095706 v 1.491686 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170772 h -2.3e-4 z m -1.59386,2.967057 -0.35365,0.300164 0.37568,0.375686 0.30168,-0.301503 z m -0.615887,0.522696 -0.345883,0.293511 0.45612,0.387263 0.285179,-0.285166 -0.395616,-0.395604 h 2e-4 z m -1.872922,-1.002529 0.403566,-0.466735 -0.888377,-0.888336 c -0.06701,-0.06699 -0.06701,-0.175494 0,-0.242285 0.067,-0.06699 0.175501,-0.06699 0.242495,0 l 0.870736,0.870698 0.408537,-0.472241 -0.971293,-1.123047 -1.281893,0.0049 -0.005,1.280687 0.0556,0.04723 1.165596,0.989281 -4e-5,-2.17e-4 z m -1.165596,2.297268 -0.0376,0.03756 0.269608,0.269599 0.478902,-0.478898 -0.269609,-0.269598 -0.441308,0.441505 -4e-5,-1.67e-4 z m 5.257735,0.158844 -0.51191,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.0808,0.0816 0.0888,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07,-0.0292 l 0.65917,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.0979,-0.09804 c -0.0366,-0.03662 -0.085,-0.05483 -0.1336,-0.05483 -0.0459,0 -0.0918,0.01613 -0.1275,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.63317,0.148349 0.26963,-0.2696 -0.0375,-0.03755 -0.44153,-0.441506 -0.26961,0.269599 0.4789,0.478899 1.6e-4,1.66e-4 z m -2.895443,-0.414926 -0.669983,-0.669958 -0.535065,-0.535229 -0.14645,-0.146463 -0.107587,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.283648,0.28363 0.002,0.0025 0.511904,0.511883 0.005,0.0051 0.287479,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.127498,0.0484 0.0486,0 0.09711,-0.01839 0.133589,-0.05481 l 0.100956,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "A5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C5C")}>
+            <Path
+              id="fC5C"
+              ref={el => (pathRefs.current['C5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 94.040504,128.20908 h 9.723006 l 4.8615,8.89728 -4.8615,8.89728 h -9.723006 l -4.861503,-8.89728 z"
+              onPressIn={handleShapePress.bind(null, "C5C")}
+            />
+            <Path
+              id="tC5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5C"] ? "none" : "inline",
+              }}
+              d="m 95.95687,137.86029 0.668347,0.1688 q -0.21015,0.82338 -0.757919,1.25746 -0.544323,0.43063 -1.333247,0.43063 -0.816485,0 -1.329802,-0.33072 -0.509872,-0.33418 -0.778589,-0.96463 -0.265271,-0.63045 -0.265271,-1.35391 0,-0.78893 0.299722,-1.37459 0.303167,-0.58911 0.857826,-0.89228 0.558103,-0.30661 1.226449,-0.30661 0.757919,0 1.274681,0.38585 0.516763,0.38585 0.720022,1.0852 l -0.65801,0.15503 q -0.1757,-0.55122 -0.509873,-0.80271 -0.334173,-0.25149 -0.8406,-0.25149 -0.582219,0 -0.974958,0.27905 -0.389295,0.27906 -0.547769,0.75103 -0.158473,0.46853 -0.158473,0.96807 0,0.64423 0.186034,1.12654 0.18948,0.47887 0.585664,0.71658 0.396185,0.23771 0.857826,0.23771 0.561548,0 0.950843,-0.32384 0.389294,-0.32383 0.527097,-0.96117 z m 1.24023,0.44786 0.651121,-0.0551 q 0.07235,0.47543 0.334173,0.71658 0.265271,0.23771 0.63734,0.23771 0.447861,0 0.757919,-0.33762 0.310057,-0.33761 0.310057,-0.89572 0,-0.53054 -0.299722,-0.83715 -0.296277,-0.30661 -0.778589,-0.30661 -0.299722,0 -0.540878,0.1378 -0.241156,0.13436 -0.378959,0.3514 l -0.582219,-0.0758 0.489202,-2.59415 h 2.511465 v 0.59255 h -2.015373 l -0.272162,1.35736 q 0.454751,-0.31694 0.954288,-0.31694 0.661456,0 1.116207,0.45819 0.45475,0.4582 0.45475,1.17822 0,0.68557 -0.39963,1.18511 -0.485755,0.61322 -1.326356,0.61322 -0.689016,0 -1.126542,-0.38584 -0.43408,-0.38585 -0.496092,-1.02319 z m 7.779,-0.44786 0.66834,0.1688 q -0.21015,0.82338 -0.75791,1.25746 -0.54433,0.43063 -1.33325,0.43063 -0.81649,0 -1.3298,-0.33072 -0.50988,-0.33418 -0.77859,-0.96463 -0.26527,-0.63045 -0.26527,-1.35391 0,-0.78893 0.29972,-1.37459 0.30317,-0.58911 0.85782,-0.89228 0.55811,-0.30661 1.22645,-0.30661 0.75792,0 1.27468,0.38585 0.51677,0.38585 0.72003,1.0852 l -0.65801,0.15503 q -0.1757,-0.55122 -0.50988,-0.80271 -0.33417,-0.25149 -0.8406,-0.25149 -0.58222,0 -0.97496,0.27905 -0.38929,0.27906 -0.54776,0.75103 -0.15848,0.46853 -0.15848,0.96807 0,0.64423 0.18604,1.12654 0.18948,0.47887 0.58566,0.71658 0.39619,0.23771 0.85783,0.23771 0.56155,0 0.95084,-0.32384 0.38929,-0.32383 0.5271,-0.96117 z"
+              onPressIn={handleShapePress.bind(null, "C5C")}
+            />
+            <Path
+              id="iC5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5C"] ? "inline" : "none",
+              }}
+              d="m 100.80695,138.9498 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "C5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("A5D")}>
+            <Path
+              id="fA5D"
+              ref={el => (pathRefs.current['A5D'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 118.58051,27.663075 4.8615,8.897279 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 z"
+              onPressIn={handleShapePress.bind(null, "A5D")}
+            />
+            <Path
+              id="tA5D"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5D"] ? "none" : "inline",
+              }}
+              d="m 107.03939,39.042854 1.93973,-5.050863 h 0.72007 l 2.0672,5.050863 h -0.76141 l -0.58916,-1.529729 h -2.11199 l -0.5547,1.529729 z m 1.45738,-2.074092 h 1.71233 l -0.52713,-1.398807 q -0.24118,-0.637388 -0.35832,-1.047383 -0.0965,0.485793 -0.27218,0.964695 z m 3.55214,0.751083 0.65117,-0.05512 q 0.0724,0.475456 0.3342,0.71663 0.26529,0.237728 0.63739,0.237728 0.44789,0 0.75797,-0.337643 0.31008,-0.337643 0.31008,-0.895788 0,-0.530582 -0.29974,-0.837217 -0.2963,-0.306635 -0.77865,-0.306635 -0.29974,0 -0.54092,0.137814 -0.24117,0.134368 -0.37898,0.351424 l -0.58227,-0.0758 0.48924,-2.594339 h 2.51165 v 0.592598 h -2.01552 l -0.27218,1.357463 q 0.45478,-0.316971 0.95436,-0.316971 0.6615,0 1.11629,0.45823 0.45478,0.45823 0.45478,1.178305 0,0.685622 -0.39966,1.185196 -0.48579,0.61327 -1.32645,0.61327 -0.68907,0 -1.12663,-0.385878 -0.43411,-0.385878 -0.49613,-1.023265 z m 4.17575,1.323009 v -5.050863 h 1.7399 q 0.58915,0 0.89923,0.07235 0.43411,0.09991 0.74075,0.36176 0.39966,0.337643 0.59604,0.86478 0.19983,0.523691 0.19983,1.198977 0,0.575371 -0.13437,1.019819 -0.13437,0.444449 -0.34453,0.737303 -0.21017,0.289408 -0.46168,0.458229 -0.24806,0.165376 -0.60293,0.25151 -0.35143,0.08613 -0.80966,0.08613 z m 0.6684,-0.596043 h 1.07839 q 0.49957,0 0.78209,-0.09302 0.28596,-0.09302 0.45478,-0.261846 0.23773,-0.237728 0.36865,-0.637387 0.13437,-0.403104 0.13437,-0.97503 0,-0.792428 -0.26184,-1.216204 -0.2584,-0.427222 -0.6305,-0.571926 -0.26874,-0.10336 -0.86478,-0.10336 h -1.06116 z"
+              onPressIn={handleShapePress.bind(null, "A5D")}
+            />
+            <Path
+              id="iA5D"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["A5D"] ? "inline" : "none",
+              }}
+              d="m 115.62295,38.403968 -0.53507,0.53523 -0.51779,0.517775 -0.15219,0.152187 0.10096,0.101129 c 0.0366,0.0366 0.085,0.05481 0.13359,0.05481 0.0486,0 0.097,-0.01839 0.13358,-0.05481 l 0.28632,-0.286301 0.5119,-0.511884 0.28615,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.10759,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.22194,1.983654 -0.5119,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.05483 l -0.0979,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.65917,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.0894,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.80141,-4.004311 -0.005,-1.280686 -1.2819,-0.0049 -1.19728,1.38427 -0.39198,0.453486 -0.11593,0.13415 -0.49408,0.571467 -0.54761,0.632937 0.30168,0.301503 0.37569,-0.375686 0.24267,-0.242651 0.38727,-0.387246 0.24249,-0.242303 0.392,-0.392171 0.24232,-0.242284 0.87073,-0.870699 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175493 0,0.242286 l -0.88837,0.888336 -0.24229,0.242286 -0.37457,0.374549 -0.24251,0.242487 -0.36753,0.367526 -0.24267,0.242651 -0.39542,0.395406 0.28518,0.285166 1.08799,-0.923426 0.26224,-0.222564 0.7028,-0.596345 1.09596,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.33604,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.33715,0.286133 v 1.275014 c 0.0808,0.0979 0.12123,0.218007 0.12123,0.337923 0,0.120266 -0.0404,0.240587 -0.12123,0.338475 v 0.401661 l 0.29711,0.296945 c 0.0772,-0.04063 0.16243,-0.06112 0.24761,-0.06112 0.13606,0 0.27248,0.05179 0.3759,0.155406 l 0.0981,0.0979 c 0.0855,0.08557 0.12847,0.199023 0.12847,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.12903,0.312315 l -0.65917,0.659147 c -0.0855,0.08554 -0.19887,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.11311,0 -0.22638,-0.04308 -0.31232,-0.129028 l -0.009,-0.0095 -0.089,-0.08899 -2.3e-4,2.17e-4 c -0.0998,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.5775 v 0.740541 c 0,0.128474 -0.0998,0.233573 -0.22162,0.233573 h -0.22203 c -0.1218,0 -0.22161,-0.105099 -0.22161,-0.233573 v -0.740549 h -1.57749 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.0905,0.09052 -0.009,0.0095 c -0.0859,0.08595 -0.19921,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.11346,0 -0.22674,-0.04288 -0.31232,-0.128257 l -0.65918,-0.65916 c -0.0861,-0.08594 -0.12903,-0.199221 -0.12903,-0.312317 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.12846,-0.312314 l 0.0981,-0.09791 c 0.10358,-0.103584 0.23984,-0.155406 0.3759,-0.155406 0.0852,0 0.17037,0.02029 0.24762,0.06112 l 0.29713,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.12126,-0.218209 -0.12126,-0.338475 0,-0.119917 0.0404,-0.240198 0.12126,-0.337923 v -1.274998 l -0.33718,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.17078,-0.170771 l 0.22084,-7.51e-4 v -1.491686 h 2.09571 V 32.9973 h -2.49697 c -0.12182,0 -0.22161,-0.09962 -0.22161,-0.221596 v -0.222182 c 0,-0.122004 0.0998,-0.221597 0.22161,-0.221597 h 2.49697 v -0.49635 c 0,-0.128459 0.0998,-0.233575 0.22162,-0.233575 h 0.22203 c 0.12201,0 0.2216,0.105116 0.2216,0.233575 v 0.49635 h 2.49698 c 0.12182,0 0.22161,0.09962 0.22161,0.221597 v 0.222182 c 0,0.121801 -0.0996,0.221596 -0.22161,0.221596 h -2.49698 v 0.272086 h 2.09571 v 1.491686 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170772 h -2.3e-4 z m -1.59386,2.967057 -0.35365,0.300164 0.37568,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.34588,0.293511 0.45612,0.387263 0.28518,-0.285166 -0.39562,-0.395604 h 2e-4 z m -1.87293,-1.002529 0.40357,-0.466735 -0.88838,-0.888336 c -0.067,-0.06699 -0.067,-0.175494 0,-0.242285 0.067,-0.06699 0.1755,-0.06699 0.24249,0 l 0.87074,0.870698 0.40854,-0.472241 -0.9713,-1.123047 -1.28189,0.0049 -0.005,1.280687 0.0556,0.04723 1.1656,0.989281 -4e-5,-2.17e-4 z m -1.16559,2.297268 -0.0376,0.03756 0.2696,0.269599 0.47891,-0.478898 -0.26961,-0.269598 -0.44131,0.441505 -4e-5,-1.67e-4 z m 5.25774,0.158844 -0.51191,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.0808,0.0816 0.0888,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07,-0.0292 l 0.65917,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.0979,-0.09804 c -0.0366,-0.03662 -0.085,-0.05483 -0.1336,-0.05483 -0.0459,0 -0.0918,0.01613 -0.1275,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.63317,0.148349 0.26963,-0.2696 -0.0375,-0.03755 -0.44153,-0.441506 -0.26961,0.269599 0.4789,0.478899 1.6e-4,1.66e-4 z m -2.89545,-0.414926 -0.66999,-0.669958 -0.53506,-0.535229 -0.14645,-0.146463 -0.10759,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.28365,0.28363 0.002,0.0025 0.5119,0.511883 0.005,0.0051 0.28748,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.01839 0.13359,-0.05481 l 0.10096,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "A5D")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C5B")}>
+            <Path
+              id="fC5B"
+              ref={el => (pathRefs.current['C5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 123.44201,127.96536 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 4.8615,-8.89728 h 9.72301 z"
+              onPressIn={handleShapePress.bind(null, "C5B")}
+            />
+            <Path
+              id="tC5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5B"] ? "none" : "inline",
+              }}
+              d="m 111.01639,128.71987 0.66833,0.16881 q -0.21015,0.82338 -0.7579,1.25746 -0.54431,0.43064 -1.33321,0.43064 -0.81647,0 -1.32977,-0.33073 -0.50987,-0.33417 -0.77857,-0.96463 -0.26527,-0.63045 -0.26527,-1.35392 0,-0.78893 0.29972,-1.37459 0.30315,-0.58912 0.8578,-0.89228 0.55809,-0.30662 1.22642,-0.30662 0.7579,0 1.27465,0.38585 0.51675,0.38586 0.72001,1.0852 l -0.658,0.15504 q -0.1757,-0.55122 -0.50986,-0.8027 -0.33417,-0.2515 -0.84058,-0.2515 -0.5822,0 -0.97494,0.27906 -0.38928,0.27904 -0.54775,0.75103 -0.15847,0.46852 -0.15847,0.96806 0,0.64424 0.18603,1.12656 0.18948,0.47886 0.58565,0.71657 0.39617,0.23771 0.85781,0.23771 0.56153,0 0.95082,-0.32384 0.38928,-0.32383 0.52708,-0.96118 z m 1.2402,0.44787 0.6511,-0.0551 q 0.0724,0.47541 0.33417,0.71658 0.26526,0.23771 0.63733,0.23771 0.44784,0 0.7579,-0.33763 0.31004,-0.33761 0.31004,-0.89572 0,-0.53055 -0.29971,-0.83716 -0.29627,-0.30661 -0.77857,-0.30661 -0.29972,0 -0.54086,0.1378 -0.24115,0.13436 -0.37896,0.3514 l -0.5822,-0.0758 0.48919,-2.59415 h 2.51141 v 0.59254 h -2.01532 l -0.27216,1.35737 q 0.45473,-0.31694 0.95427,-0.31694 0.66143,0 1.11617,0.4582 0.45475,0.45819 0.45475,1.17822 0,0.68557 -0.39963,1.18511 -0.48574,0.61323 -1.32632,0.61323 -0.689,0 -1.12652,-0.38585 -0.43407,-0.38585 -0.49608,-1.02319 z m 4.14778,1.32291 v -5.05051 h 1.89476 q 0.57875,0 0.9267,0.15503 0.35139,0.15158 0.54776,0.47197 0.19981,0.31696 0.19981,0.66491 0,0.32384 -0.1757,0.60978 -0.17569,0.28595 -0.53052,0.46165 0.45818,0.13436 0.70277,0.45819 0.24804,0.32384 0.24804,0.76481 0,0.35485 -0.15158,0.66146 -0.14813,0.30317 -0.36861,0.46854 -0.22049,0.16536 -0.55465,0.25149 -0.33072,0.0827 -0.81302,0.0827 z m 0.66834,-2.92834 h 1.09206 q 0.4444,0 0.63732,-0.0586 0.25494,-0.0758 0.3824,-0.25149 0.13091,-0.1757 0.13091,-0.44098 0,-0.25148 -0.12057,-0.44096 -0.12058,-0.19292 -0.34451,-0.26183 -0.22392,-0.0723 -0.76823,-0.0723 h -1.00938 z m 0,2.33234 h 1.25742 q 0.32383,0 0.45474,-0.0241 0.23082,-0.0413 0.38584,-0.13781 0.15502,-0.0965 0.25493,-0.27905 0.0999,-0.18604 0.0999,-0.4272 0,-0.28249 -0.14469,-0.4892 -0.14468,-0.21014 -0.40306,-0.29284 -0.25493,-0.0861 -0.73723,-0.0861 h -1.16785 z"
+              onPressIn={handleShapePress.bind(null, "C5B")}
+            />
+            <Path
+              id="iC5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5B"] ? "inline" : "none",
+              }}
+              d="m 115.62295,129.8088 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "C5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B5A")}>
+            <Path
+              id="fB5A"
+              ref={el => (pathRefs.current['B5A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 138.25901,45.700355 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 4.8615,-8.897279 h 9.72301 z"
+              onPressIn={handleShapePress.bind(null, "B5A")}
+            />
+            <Path
+              id="tB5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5A"] ? "none" : "inline",
+              }}
+              d="m 122.12099,48.182865 v -5.050867 h 1.89501 q 0.57884,0 0.92683,0.15504 0.35144,0.151596 0.54782,0.472012 0.19985,0.316971 0.19985,0.664951 0,0.323861 -0.17573,0.609824 -0.17571,0.285964 -0.5306,0.461676 0.45825,0.134369 0.70288,0.45823 0.24807,0.323862 0.24807,0.764865 0,0.354871 -0.1516,0.661506 -0.14815,0.303189 -0.36866,0.468566 -0.22051,0.165376 -0.55472,0.25151 -0.33076,0.08269 -0.81313,0.08269 z m 0.66843,-2.928538 h 1.09221 q 0.44446,0 0.63741,-0.05857 0.25496,-0.0758 0.38244,-0.25151 0.13094,-0.175712 0.13094,-0.441003 0,-0.25151 -0.1206,-0.441003 -0.12059,-0.19294 -0.34454,-0.261847 -0.22396,-0.07235 -0.76835,-0.07235 h -1.00951 z m 0,2.332495 h 1.25759 q 0.32387,0 0.4548,-0.02412 0.23085,-0.04134 0.38589,-0.137813 0.15505,-0.09647 0.25497,-0.279072 0.0999,-0.186049 0.0999,-0.427223 0,-0.282518 -0.14471,-0.489238 -0.14472,-0.210165 -0.40312,-0.292854 -0.25497,-0.08613 -0.73733,-0.08613 h -1.16801 z m 3.81412,-0.726966 0.6512,-0.05513 q 0.0724,0.475457 0.3342,0.716631 0.26531,0.237728 0.63741,0.237728 0.44791,0 0.75801,-0.337643 0.31009,-0.337643 0.31009,-0.895788 0,-0.530583 -0.29975,-0.837217 -0.29632,-0.306636 -0.77868,-0.306636 -0.29975,0 -0.54094,0.137814 -0.24118,0.134368 -0.379,0.351424 l -0.58228,-0.0758 0.48925,-2.594341 h 2.51175 v 0.592598 h -2.0156 l -0.27219,1.357464 q 0.4548,-0.316971 0.9544,-0.316971 0.66152,0 1.11633,0.458231 0.45479,0.45823 0.45479,1.178305 0,0.685623 -0.39967,1.185197 -0.48581,0.61327 -1.32651,0.61327 -0.68909,0 -1.12666,-0.385877 -0.43413,-0.385878 -0.49615,-1.023266 z m 3.62118,1.323009 1.93979,-5.050867 h 0.72011 l 2.06727,5.050867 h -0.76144 l -0.58917,-1.529729 h -2.11207 l -0.55472,1.529729 z m 1.45743,-2.074094 h 1.71239 l -0.52715,-1.398807 q -0.24118,-0.637388 -0.35833,-1.047383 -0.0965,0.485793 -0.27219,0.964695 z"
+              onPressIn={handleShapePress.bind(null, "B5A")}
+            />
+            <Path
+              id="iB5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5A"] ? "inline" : "none",
+              }}
+              d="m 130.44095,47.543968 -0.53507,0.53523 -0.51779,0.517775 -0.15219,0.152187 0.10096,0.101129 c 0.0366,0.0366 0.085,0.05481 0.13359,0.05481 0.0486,0 0.097,-0.01839 0.13358,-0.05481 l 0.28632,-0.286301 0.5119,-0.511884 0.28615,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.10759,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.22194,1.983654 -0.5119,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.05483 l -0.0979,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.65917,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.0894,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.80141,-4.004311 -0.005,-1.280686 -1.2819,-0.0049 -1.19728,1.38427 -0.39198,0.453486 -0.11593,0.13415 -0.49408,0.571467 -0.54761,0.632937 0.30168,0.301503 0.37569,-0.375686 0.24267,-0.242651 0.38727,-0.387246 0.24249,-0.242303 0.392,-0.392171 0.24232,-0.242284 0.87073,-0.870699 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175493 0,0.242286 l -0.88837,0.888336 -0.24229,0.242286 -0.37457,0.374549 -0.24251,0.242487 -0.36753,0.367526 -0.24267,0.242651 -0.39542,0.395406 0.28518,0.285166 1.08799,-0.923426 0.26224,-0.222564 0.7028,-0.596345 1.09596,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.33604,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.33715,0.286133 v 1.275014 c 0.0808,0.0979 0.12123,0.218007 0.12123,0.337923 0,0.120266 -0.0404,0.240587 -0.12123,0.338475 v 0.401661 l 0.29711,0.296945 c 0.0772,-0.04063 0.16243,-0.06112 0.24761,-0.06112 0.13606,0 0.27248,0.05179 0.3759,0.155406 l 0.0981,0.0979 c 0.0855,0.08557 0.12847,0.199023 0.12847,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.12903,0.312315 l -0.65917,0.659147 c -0.0855,0.08554 -0.19887,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.11311,0 -0.22638,-0.04308 -0.31232,-0.129028 l -0.009,-0.0095 -0.089,-0.08899 -2.3e-4,2.17e-4 c -0.0998,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.5775 v 0.740541 c 0,0.128474 -0.0998,0.233573 -0.22162,0.233573 h -0.22203 c -0.1218,0 -0.22161,-0.105099 -0.22161,-0.233573 v -0.740549 h -1.57749 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.0905,0.09052 -0.009,0.0095 c -0.0859,0.08595 -0.19921,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.11346,0 -0.22674,-0.04288 -0.31232,-0.128257 l -0.65918,-0.65916 C 125.00293,49.399798 124.96,49.286517 124.96,49.173421 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.12846,-0.312314 l 0.0981,-0.09791 c 0.10358,-0.103584 0.23984,-0.155406 0.3759,-0.155406 0.0852,0 0.17037,0.02029 0.24762,0.06112 l 0.29713,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.12126,-0.218209 -0.12126,-0.338475 0,-0.119917 0.0404,-0.240198 0.12126,-0.337923 v -1.274998 l -0.33718,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.17078,-0.170771 l 0.22084,-7.51e-4 v -1.491686 h 2.09571 V 42.1373 h -2.49697 c -0.12182,0 -0.22161,-0.09962 -0.22161,-0.221596 v -0.222182 c 0,-0.122004 0.0998,-0.221597 0.22161,-0.221597 h 2.49697 v -0.49635 c 0,-0.128459 0.0998,-0.233575 0.22162,-0.233575 h 0.22203 c 0.12201,0 0.2216,0.105116 0.2216,0.233575 v 0.49635 h 2.49698 c 0.12182,0 0.22161,0.09962 0.22161,0.221597 v 0.222182 c 0,0.121801 -0.0996,0.221596 -0.22161,0.221596 h -2.49698 v 0.272086 h 2.09571 v 1.491686 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170772 h -2.3e-4 z m -1.59386,2.967057 -0.35365,0.300164 0.37568,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.34588,0.293511 0.45612,0.387263 0.28518,-0.285166 -0.39562,-0.395604 h 2e-4 z m -1.87293,-1.002529 0.40357,-0.466735 -0.88838,-0.888336 c -0.067,-0.06699 -0.067,-0.175494 0,-0.242285 0.067,-0.06699 0.1755,-0.06699 0.24249,0 l 0.87074,0.870698 0.40854,-0.472241 -0.9713,-1.123047 -1.28189,0.0049 -0.005,1.280687 0.0556,0.04723 1.1656,0.989281 -4e-5,-2.17e-4 z m -1.16559,2.297268 -0.0376,0.03756 0.2696,0.269599 0.47891,-0.478898 -0.26961,-0.269598 -0.44131,0.441505 -4e-5,-1.67e-4 z m 5.25774,0.158844 -0.51191,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.0808,0.0816 0.0888,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07,-0.0292 l 0.65917,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.0979,-0.09804 c -0.0366,-0.03662 -0.085,-0.05483 -0.1336,-0.05483 -0.0459,0 -0.0918,0.01613 -0.1275,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.63317,0.148349 0.26963,-0.2696 -0.0375,-0.03755 -0.44153,-0.441506 -0.26961,0.269599 0.4789,0.478899 1.6e-4,1.66e-4 z m -2.89545,-0.414926 -0.66999,-0.669958 -0.53506,-0.535229 -0.14645,-0.146463 -0.10759,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.28365,0.28363 0.002,0.0025 0.5119,0.511883 0.005,0.0051 0.28748,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.01839 0.13359,-0.05481 l 0.10096,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "B5A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B5B")}>
+            <Path
+              id="fB5B"
+              ref={el => (pathRefs.current['B5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 118.813,63.981354 4.8615,-8.897279 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 h -9.72301 z"
+              onPressIn={handleShapePress.bind(null, "B5B")}
+            />
+            <Path
+              id="tB5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5B"] ? "none" : "inline",
+              }}
+              d="m 122.31399,66.463515 v -5.050516 h 1.89486 q 0.57879,0 0.92676,0.155029 0.3514,0.151584 0.54778,0.471979 0.19982,0.316949 0.19982,0.664904 0,0.323839 -0.1757,0.609783 -0.17571,0.285943 -0.53056,0.461643 0.45821,0.134359 0.70282,0.458198 0.24805,0.323839 0.24805,0.764812 0,0.354845 -0.15159,0.66146 -0.14814,0.303168 -0.36864,0.468533 -0.22049,0.165365 -0.55467,0.251492 -0.33074,0.08268 -0.81306,0.08268 z m 0.66837,-2.928335 h 1.09213 q 0.44442,0 0.63735,-0.05857 0.25495,-0.07579 0.38242,-0.251493 0.13092,-0.1757 0.13092,-0.440973 0,-0.251492 -0.12058,-0.440972 -0.12058,-0.192926 -0.34453,-0.261828 -0.22393,-0.07235 -0.76826,-0.07235 h -1.00945 z m 0,2.332332 h 1.2575 q 0.32384,0 0.45476,-0.02412 0.23083,-0.04134 0.38586,-0.137804 0.15503,-0.09646 0.25494,-0.279052 0.0999,-0.186036 0.0999,-0.427193 0,-0.282498 -0.14469,-0.489204 -0.1447,-0.210151 -0.40308,-0.292834 -0.25496,-0.08613 -0.73728,-0.08613 h -1.16792 z m 3.81382,-0.726916 0.65115,-0.05512 q 0.0723,0.475423 0.33417,0.71658 0.26528,0.237712 0.63737,0.237712 0.44787,0 0.75794,-0.33762 0.31006,-0.33762 0.31006,-0.895726 0,-0.530544 -0.29973,-0.837158 -0.29628,-0.306615 -0.77861,-0.306615 -0.29973,0 -0.5409,0.137805 -0.24116,0.134359 -0.37896,0.351399 l -0.58224,-0.07579 0.48922,-2.594159 h 2.51154 v 0.592557 h -2.01544 l -0.27217,1.357369 q 0.45477,-0.316949 0.95432,-0.316949 0.66147,0 1.11624,0.458198 0.45476,0.458199 0.45476,1.178224 0,0.685574 -0.39963,1.185114 -0.48578,0.613228 -1.3264,0.613228 -0.68904,0 -1.12658,-0.385851 -0.43409,-0.385852 -0.49611,-1.023195 z m 4.148,1.322919 v -5.050516 h 1.89485 q 0.5788,0 0.92677,0.155029 0.3514,0.151584 0.54777,0.471979 0.19982,0.316949 0.19982,0.664904 0,0.323839 -0.1757,0.609783 -0.1757,0.285943 -0.53055,0.461643 0.4582,0.134359 0.70281,0.458198 0.24806,0.323839 0.24806,0.764812 0,0.354845 -0.15159,0.66146 -0.14815,0.303168 -0.36864,0.468533 -0.22049,0.165365 -0.55468,0.251492 -0.33073,0.08268 -0.81306,0.08268 z m 0.66837,-2.928335 h 1.09212 q 0.44444,0 0.63736,-0.05857 0.25494,-0.07579 0.38241,-0.251493 0.13093,-0.1757 0.13093,-0.440973 0,-0.251492 -0.12059,-0.440972 -0.12058,-0.192926 -0.34451,-0.261828 -0.22394,-0.07235 -0.76828,-0.07235 h -1.00944 z m 0,2.332332 h 1.25749 q 0.32385,0 0.45477,-0.02412 0.23082,-0.04134 0.38585,-0.137804 0.15504,-0.09646 0.25495,-0.279052 0.0999,-0.186036 0.0999,-0.427193 0,-0.282498 -0.14469,-0.489204 -0.1447,-0.210151 -0.40309,-0.292834 -0.25495,-0.08613 -0.73728,-0.08613 h -1.16791 z"
+              onPressIn={handleShapePress.bind(null, "B5B")}
+            />
+            <Path
+              id="iB5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5B"] ? "inline" : "none",
+              }}
+              d="m 130.44095,65.824968 -0.53507,0.53523 -0.51779,0.517775 -0.15219,0.152187 0.10096,0.101129 c 0.0366,0.0366 0.085,0.05481 0.13359,0.05481 0.0486,0 0.097,-0.01839 0.13358,-0.05481 l 0.28632,-0.286301 0.5119,-0.511884 0.28615,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.10759,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.22194,1.983654 -0.5119,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.05483 l -0.0979,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.65917,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.0894,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.80141,-4.004311 -0.005,-1.280686 -1.2819,-0.0049 -1.19728,1.38427 -0.39198,0.453486 -0.11593,0.13415 -0.49408,0.571467 -0.54761,0.632937 0.30168,0.301503 0.37569,-0.375686 0.24267,-0.242651 0.38727,-0.387246 0.24249,-0.242303 0.392,-0.392171 0.24232,-0.242284 0.87073,-0.870699 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175493 0,0.242286 l -0.88837,0.888336 -0.24229,0.242286 -0.37457,0.374549 -0.24251,0.242487 -0.36753,0.367526 -0.24267,0.242651 -0.39542,0.395406 0.28518,0.285166 1.08799,-0.923426 0.26224,-0.222564 0.7028,-0.596345 1.09596,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.33604,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.33715,0.286133 v 1.275014 c 0.0808,0.0979 0.12123,0.218007 0.12123,0.337923 0,0.120266 -0.0404,0.240587 -0.12123,0.338475 v 0.401661 l 0.29711,0.296945 c 0.0772,-0.04063 0.16243,-0.06112 0.24761,-0.06112 0.13606,0 0.27248,0.05179 0.3759,0.155406 l 0.0981,0.0979 c 0.0855,0.08557 0.12847,0.199023 0.12847,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.12903,0.312315 l -0.65917,0.659147 c -0.0855,0.08554 -0.19887,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.11311,0 -0.22638,-0.04308 -0.31232,-0.129028 l -0.009,-0.0095 -0.089,-0.08899 -2.3e-4,2.17e-4 c -0.0998,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.5775 v 0.740541 c 0,0.128474 -0.0998,0.233573 -0.22162,0.233573 h -0.22203 c -0.1218,0 -0.22161,-0.105099 -0.22161,-0.233573 v -0.740549 h -1.57749 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.0905,0.09052 -0.009,0.0095 c -0.0859,0.08595 -0.19921,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.11346,0 -0.22674,-0.04288 -0.31232,-0.128257 l -0.65918,-0.65916 C 125.00293,67.680798 124.96,67.567517 124.96,67.454421 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.12846,-0.312314 l 0.0981,-0.09791 c 0.10358,-0.103584 0.23984,-0.155406 0.3759,-0.155406 0.0852,0 0.17037,0.02029 0.24762,0.06112 l 0.29713,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.12126,-0.218209 -0.12126,-0.338475 0,-0.119917 0.0404,-0.240198 0.12126,-0.337923 v -1.274998 l -0.33718,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.17078,-0.170771 l 0.22084,-7.51e-4 v -1.491686 h 2.09571 V 60.4183 h -2.49697 c -0.12182,0 -0.22161,-0.09962 -0.22161,-0.221596 v -0.222182 c 0,-0.122004 0.0998,-0.221597 0.22161,-0.221597 h 2.49697 v -0.49635 c 0,-0.128459 0.0998,-0.233575 0.22162,-0.233575 h 0.22203 c 0.12201,0 0.2216,0.105116 0.2216,0.233575 v 0.49635 h 2.49698 c 0.12182,0 0.22161,0.09962 0.22161,0.221597 v 0.222182 c 0,0.121801 -0.0996,0.221596 -0.22161,0.221596 h -2.49698 v 0.272086 h 2.09571 v 1.491686 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170772 h -2.3e-4 z m -1.59386,2.967057 -0.35365,0.300164 0.37568,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.34588,0.293511 0.45612,0.387263 0.28518,-0.285166 -0.39562,-0.395604 h 2e-4 z m -1.87293,-1.002529 0.40357,-0.466735 -0.88838,-0.888336 c -0.067,-0.06699 -0.067,-0.175494 0,-0.242285 0.067,-0.06699 0.1755,-0.06699 0.24249,0 l 0.87074,0.870698 0.40854,-0.472241 -0.9713,-1.123047 -1.28189,0.0049 -0.005,1.280687 0.0556,0.04723 1.1656,0.989281 -4e-5,-2.17e-4 z m -1.16559,2.297268 -0.0376,0.03756 0.2696,0.269599 0.47891,-0.478898 -0.26961,-0.269598 -0.44131,0.441505 -4e-5,-1.67e-4 z m 5.25774,0.158844 -0.51191,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.0808,0.0816 0.0888,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07,-0.0292 l 0.65917,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.0979,-0.09804 c -0.0366,-0.03662 -0.085,-0.05483 -0.1336,-0.05483 -0.0459,0 -0.0918,0.01613 -0.1275,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.63317,0.148349 0.26963,-0.2696 -0.0375,-0.03755 -0.44153,-0.441506 -0.26961,0.269599 0.4789,0.478899 1.6e-4,1.66e-4 z m -2.89545,-0.414926 -0.66999,-0.669958 -0.53506,-0.535229 -0.14645,-0.146463 -0.10759,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.28365,0.28363 0.002,0.0025 0.5119,0.511883 0.005,0.0051 0.28748,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.01839 0.13359,-0.05481 l 0.10096,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "B5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B5C")}>
+            <Path
+              id="fB5C"
+              ref={el => (pathRefs.current['B5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 123.6745,73.365074 h 9.72301 l 4.8615,8.897279 -4.8615,8.897279 h -9.72301 l -4.8615,-8.897279 z"
+              onPressIn={handleShapePress.bind(null, "B5C")}
+            />
+            <Path
+              id="tB5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5C"] ? "none" : "inline",
+              }}
+              d="M 122.07199,84.787869 V 79.73713 h 1.89482 q 0.57879,0 0.92675,0.155037 0.3514,0.151591 0.54777,0.471999 0.19982,0.316964 0.19982,0.664934 0,0.323854 -0.1757,0.60981 -0.1757,0.285955 -0.53056,0.461663 0.45821,0.134365 0.70281,0.458218 0.24805,0.323853 0.24805,0.764846 0,0.35486 -0.15158,0.661488 -0.14815,0.303182 -0.36863,0.468554 -0.22049,0.165372 -0.55466,0.251503 -0.33074,0.08268 -0.81306,0.08268 z m 0.66836,-2.928463 h 1.0921 q 0.44443,0 0.63735,-0.05857 0.25495,-0.07579 0.38242,-0.251503 0.1309,-0.175708 0.1309,-0.440993 0,-0.251503 -0.12057,-0.440991 -0.12058,-0.192935 -0.34452,-0.26184 -0.22392,-0.07235 -0.76825,-0.07235 h -1.00943 z m 0,2.332434 h 1.25747 q 0.32385,0 0.45476,-0.02412 0.23082,-0.04134 0.38586,-0.13781 0.15502,-0.09647 0.25493,-0.279065 0.0999,-0.186044 0.0999,-0.427211 0,-0.282511 -0.1447,-0.489225 -0.14468,-0.210161 -0.40307,-0.292848 -0.25495,-0.08613 -0.73726,-0.08613 h -1.1679 z m 3.81376,-0.726948 0.65113,-0.05512 q 0.0724,0.475445 0.33418,0.716612 0.26527,0.237722 0.63735,0.237722 0.44786,0 0.75792,-0.337634 0.31007,-0.337634 0.31007,-0.895765 0,-0.530569 -0.29974,-0.837196 -0.29627,-0.306627 -0.77859,-0.306627 -0.29973,0 -0.54088,0.137809 -0.24117,0.134366 -0.37898,0.351416 l -0.58222,-0.07579 0.48921,-2.594274 h 2.5115 v 0.592583 h -2.0154 l -0.27217,1.357429 q 0.45476,-0.316963 0.95431,-0.316963 0.66146,0 1.11622,0.458218 0.45476,0.458218 0.45476,1.178276 0,0.685605 -0.39965,1.185166 -0.48576,0.613254 -1.32636,0.613254 -0.68903,0 -1.12656,-0.385867 -0.43409,-0.385868 -0.4961,-1.02324 z m 7.7791,-0.447882 0.66836,0.168817 q -0.21016,0.823415 -0.75793,1.257517 -0.54433,0.430655 -1.33326,0.430655 -0.8165,0 -1.32983,-0.330744 -0.50987,-0.334188 -0.7786,-0.964669 -0.26527,-0.630481 -0.26527,-1.353984 0,-0.788963 0.29972,-1.374655 0.30318,-0.589138 0.85784,-0.89232 0.55812,-0.306627 1.22647,-0.306627 0.75792,0 1.27469,0.385868 0.51677,0.385867 0.72004,1.085254 l -0.65802,0.155036 q -0.17571,-0.55124 -0.50988,-0.802744 -0.33418,-0.251503 -0.84061,-0.251503 -0.58223,0 -0.97498,0.279066 -0.38929,0.279065 -0.54777,0.751064 -0.15848,0.468554 -0.15848,0.968116 0,0.644261 0.18604,1.126597 0.18948,0.478889 0.58567,0.716612 0.39619,0.237722 0.85784,0.237722 0.56156,0 0.95086,-0.323853 0.38929,-0.323854 0.5271,-0.961225 z"
+              onPressIn={handleShapePress.bind(null, "B5C")}
+            />
+            <Path
+              id="iB5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5C"] ? "inline" : "none",
+              }}
+              d="m 130.44095,84.104968 -0.53507,0.53523 -0.51779,0.517775 -0.15219,0.152187 0.10096,0.101129 c 0.0366,0.0366 0.085,0.05481 0.13359,0.05481 0.0486,0 0.097,-0.01839 0.13358,-0.05481 l 0.28632,-0.286301 0.5119,-0.511884 0.28615,-0.286134 c 0.0366,-0.03662 0.055,-0.085 0.055,-0.133581 0,-0.04592 -0.0161,-0.09186 -0.0484,-0.127508 l -0.10759,-0.107202 -0.14646,0.146462 -3e-5,-1.67e-4 z m -4.22194,1.983654 -0.5119,-0.511884 -0.006,-0.0067 -0.01,-0.0097 c -0.0356,-0.03227 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.05483 l -0.0979,0.0979 c -0.0196,0.01956 -0.0292,0.04497 -0.0292,0.07001 h 7.1e-4 c 0,0.02541 0.009,0.05085 0.0286,0.07003 l 0.65917,0.65913 c 0.0196,0.01957 0.045,0.02921 0.07,0.02921 v -7.52e-4 c 0.0254,0 0.0509,-0.0095 0.07,-0.02865 l 0.009,-0.0087 0.0894,-0.08939 c 0.0324,-0.03242 0.0503,-0.07474 0.0537,-0.118381 v -3.94e-4 -3.93e-4 -9.29e-4 -3.94e-4 -3.94e-4 -3.93e-4 -0.0015 -3.93e-4 -3.94e-4 -9.66e-4 -3.93e-4 -3.24e-4 -3.93e-4 -2.17e-4 -2.17e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.93e-4 -2.17e-4 -3.94e-4 -5.72e-4 -3.94e-4 -3.94e-4 -3.94e-4 0 -3.23e-4 -5.73e-4 -3.93e-4 -3.94e-4 -3.94e-4 c 0,-0.04857 -0.0184,-0.09713 -0.0548,-0.133581 l -0.01,-0.0097 -2e-4,-3.93e-4 -2.3e-4,-0.0015 z m 4.80141,-4.004311 -0.005,-1.280686 -1.2819,-0.0049 -1.19728,1.38427 -0.39198,0.453486 -0.11593,0.13415 -0.49408,0.571467 -0.54761,0.632937 0.30168,0.301503 0.37569,-0.375686 0.24267,-0.242651 0.38727,-0.387246 0.24249,-0.242303 0.392,-0.392171 0.24232,-0.242284 0.87073,-0.870699 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175493 0,0.242286 l -0.88837,0.888336 -0.24229,0.242286 -0.37457,0.374549 -0.24251,0.242487 -0.36753,0.367526 -0.24267,0.242651 -0.39542,0.395406 0.28518,0.285166 1.08799,-0.923426 0.26224,-0.222564 0.7028,-0.596345 1.09596,-0.930281 0.0556,-0.04723 h -3e-5 z m 0.33604,-1.450708 0.006,1.518802 c 0.004,0.05219 -0.0171,0.105316 -0.0602,0.141539 l -0.33715,0.286133 v 1.275014 c 0.0808,0.0979 0.12123,0.218007 0.12123,0.337923 0,0.120266 -0.0404,0.240587 -0.12123,0.338475 v 0.401661 l 0.29711,0.296945 c 0.0772,-0.04063 0.16243,-0.06112 0.24761,-0.06112 0.13606,0 0.27248,0.05179 0.3759,0.155406 l 0.0981,0.0979 c 0.0855,0.08557 0.12847,0.199023 0.12847,0.312314 h 7.1e-4 c 0,0.113096 -0.0431,0.226353 -0.12903,0.312315 l -0.65917,0.659147 c -0.0855,0.08554 -0.19887,0.128257 -0.31233,0.128257 v 7.52e-4 c -0.11311,0 -0.22638,-0.04308 -0.31232,-0.129028 l -0.009,-0.0095 -0.089,-0.08899 -2.3e-4,2.17e-4 c -0.0998,-0.0998 -0.15143,-0.229781 -0.15524,-0.360881 h -1.5775 v 0.740541 c 0,0.128474 -0.0998,0.233573 -0.22162,0.233573 h -0.22203 c -0.1218,0 -0.22161,-0.105099 -0.22161,-0.233573 v -0.740549 h -1.57749 c -0.004,0.129963 -0.055,0.259188 -0.1541,0.358983 l -0.0905,0.09052 -0.009,0.0095 c -0.0859,0.08595 -0.19921,0.129027 -0.31231,0.129027 v -7.51e-4 c -0.11346,0 -0.22674,-0.04288 -0.31232,-0.128257 l -0.65918,-0.65916 C 125.00293,85.960798 124.96,85.847517 124.96,85.734421 h 7.2e-4 c 0,-0.113257 0.0429,-0.226718 0.12846,-0.312314 l 0.0981,-0.09791 c 0.10358,-0.103584 0.23984,-0.155406 0.3759,-0.155406 0.0852,0 0.17037,0.02029 0.24762,0.06112 l 0.29713,-0.296945 v -0.401497 c -0.0808,-0.0979 -0.12126,-0.218209 -0.12126,-0.338475 0,-0.119917 0.0404,-0.240198 0.12126,-0.337923 v -1.274998 l -0.33718,-0.286134 c -0.0431,-0.03642 -0.0636,-0.08938 -0.0602,-0.141538 l 0.006,-1.518802 c 0,-0.09428 0.0765,-0.170771 0.17078,-0.170771 l 0.22084,-7.51e-4 v -1.491686 h 2.09571 V 78.6983 h -2.49697 c -0.12182,0 -0.22161,-0.09962 -0.22161,-0.221596 v -0.222182 c 0,-0.122004 0.0998,-0.221597 0.22161,-0.221597 h 2.49697 v -0.49635 c 0,-0.128459 0.0998,-0.233575 0.22162,-0.233575 h 0.22203 c 0.12201,0 0.2216,0.105116 0.2216,0.233575 v 0.49635 h 2.49698 c 0.12182,0 0.22161,0.09962 0.22161,0.221597 v 0.222182 c 0,0.121801 -0.0996,0.221596 -0.22161,0.221596 h -2.49698 v 0.272086 h 2.09571 v 1.491686 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170772 h -2.3e-4 z m -1.59386,2.967057 -0.35365,0.300164 0.37568,0.375686 0.30168,-0.301503 z m -0.61589,0.522696 -0.34588,0.293511 0.45612,0.387263 0.28518,-0.285166 -0.39562,-0.395604 h 2e-4 z m -1.87293,-1.002529 0.40357,-0.466735 -0.88838,-0.888336 c -0.067,-0.06699 -0.067,-0.175494 0,-0.242285 0.067,-0.06699 0.1755,-0.06699 0.24249,0 l 0.87074,0.870698 0.40854,-0.472241 -0.9713,-1.123047 -1.28189,0.0049 -0.005,1.280687 0.0556,0.04723 1.1656,0.989281 -4e-5,-2.17e-4 z m -1.16559,2.297268 -0.0376,0.03756 0.2696,0.269599 0.47891,-0.478898 -0.26961,-0.269598 -0.44131,0.441505 -4e-5,-1.67e-4 z m 5.25774,0.158844 -0.51191,0.511885 -0.01,0.0099 -3.6e-4,-3.93e-4 c -0.0364,0.03642 -0.0547,0.0852 -0.0547,0.133947 v 3.93e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.18e-4 3.93e-4 5.73e-4 3.23e-4 3.95e-4 3.93e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 2.17e-4 3.94e-4 5.72e-4 3.94e-4 3.93e-4 2.17e-4 3.24e-4 3.93e-4 3.94e-4 5.72e-4 3.94e-4 0 3.94e-4 3.93e-4 3.94e-4 3.93e-4 3.94e-4 0 3.93e-4 3.94e-4 3.92e-4 c 0.004,0.04326 0.0218,0.08595 0.0543,0.118381 -7.2e-4,7.52e-4 0.0808,0.0816 0.0888,0.08938 l 0.009,0.0087 c 0.019,0.01895 0.0444,0.02863 0.07,0.02863 v 7.51e-4 c 0.025,0 0.0504,-0.0099 0.07,-0.0292 l 0.65917,-0.659147 c 0.019,-0.01896 0.0286,-0.0444 0.0286,-0.07003 h 7.1e-4 c 0,-0.02504 -0.01,-0.05045 -0.0292,-0.07001 l -0.0979,-0.09804 c -0.0366,-0.03662 -0.085,-0.05483 -0.1336,-0.05483 -0.0459,0 -0.0918,0.01613 -0.1275,0.0484 l -0.006,0.0065 -0.01,0.0099 4e-5,0.0018 z m -0.63317,0.148349 0.26963,-0.2696 -0.0375,-0.03755 -0.44153,-0.441506 -0.26961,0.269599 0.4789,0.478899 1.6e-4,1.66e-4 z m -2.89545,-0.414926 -0.66999,-0.669958 -0.53506,-0.535229 -0.14645,-0.146463 -0.10759,0.107203 c -0.0322,0.03565 -0.0484,0.0814 -0.0484,0.127507 0,0.04855 0.0184,0.09697 0.055,0.133582 l 0.28365,0.28363 0.002,0.0025 0.5119,0.511883 0.005,0.0051 0.28748,0.287451 c 0.0357,0.03227 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.01839 0.13359,-0.05481 l 0.10096,-0.10113 z"
+              onPressIn={handleShapePress.bind(null, "B5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("B5D")}>
+            <Path
+              id="fB5D"
+              ref={el => (pathRefs.current['B5D'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 138.25901,100.54336 -4.8615,8.89727 h -9.72301 l -4.8615,-8.89727 4.8615,-8.897284 h 9.72301 z"
+              onPressIn={handleShapePress.bind(null, "B5D")}
+            />
+            <Path
+              id="tB5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5D"] ? "none" : "inline",
+              }}
+              d="m 122.11998,103.02584 v -5.050863 h 1.89494 q 0.57881,0 0.92679,0.15504 0.35143,0.151595 0.54781,0.472011 0.19983,0.316971 0.19983,0.66495 0,0.323862 -0.17571,0.609825 -0.17571,0.285967 -0.53058,0.461677 0.45823,0.13437 0.70284,0.45823 0.24807,0.32386 0.24807,0.76486 0,0.35487 -0.1516,0.66151 -0.14815,0.30319 -0.36865,0.46856 -0.2205,0.16538 -0.5547,0.25151 -0.33075,0.0827 -0.8131,0.0827 z m 0.6684,-2.92854 h 1.09217 q 0.44445,0 0.63738,-0.0586 0.25496,-0.07579 0.38244,-0.251506 0.13092,-0.175712 0.13092,-0.441003 0,-0.25151 -0.12059,-0.441003 -0.12058,-0.192939 -0.34453,-0.261846 -0.22395,-0.07235 -0.76831,-0.07235 h -1.00948 z m 0,2.3325 h 1.25754 q 0.32387,0 0.45479,-0.0241 0.23084,-0.0413 0.38588,-0.13781 0.15504,-0.0965 0.25495,-0.27908 0.0999,-0.18604 0.0999,-0.42722 0,-0.28252 -0.14471,-0.48924 -0.1447,-0.21016 -0.4031,-0.29285 -0.25496,-0.0861 -0.73731,-0.0861 h -1.16796 z m 3.81398,-0.72697 0.65117,-0.0551 q 0.0724,0.47545 0.3342,0.71663 0.26529,0.23772 0.63739,0.23772 0.44789,0 0.75797,-0.33764 0.31008,-0.33764 0.31008,-0.89579 0,-0.53058 -0.29974,-0.83721 -0.2963,-0.30664 -0.77865,-0.30664 -0.29974,0 -0.54092,0.13782 -0.24117,0.13436 -0.37898,0.35142 l -0.58227,-0.0758 0.48924,-2.594336 h 2.51165 v 0.592598 h -2.01552 l -0.27218,1.357462 q 0.45478,-0.316971 0.95436,-0.316971 0.6615,0 1.11629,0.458227 0.45478,0.45823 0.45478,1.17831 0,0.68562 -0.39966,1.18519 -0.48579,0.61327 -1.32645,0.61327 -0.68907,0 -1.12663,-0.38587 -0.43411,-0.38588 -0.49613,-1.02327 z m 4.17575,1.32301 v -5.050863 h 1.7399 q 0.58915,0 0.89923,0.07235 0.43411,0.09991 0.74075,0.36176 0.39966,0.337643 0.59604,0.86478 0.19983,0.523691 0.19983,1.198983 0,0.57537 -0.13437,1.01982 -0.13437,0.44444 -0.34453,0.7373 -0.21017,0.28941 -0.46168,0.45823 -0.24806,0.16537 -0.60293,0.25151 -0.35142,0.0861 -0.80965,0.0861 z m 0.6684,-0.59604 h 1.07839 q 0.49957,0 0.78209,-0.093 0.28596,-0.093 0.45478,-0.26184 0.23773,-0.23773 0.36866,-0.63739 0.13436,-0.4031 0.13436,-0.97503 0,-0.792427 -0.26184,-1.216204 -0.2584,-0.427222 -0.6305,-0.571926 -0.26874,-0.10336 -0.86478,-0.10336 h -1.06116 z"
+              onPressIn={handleShapePress.bind(null, "B5D")}
+            />
+            <Path
+              id="iB5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["B5D"] ? "inline" : "none",
+              }}
+              d="m 130.44095,102.3873 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -10e-4 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.280753 -1.2819,-0.0049 -1.19728,1.384343 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.870744 c 0.067,-0.06699 0.1755,-0.06699 0.24249,0 0.067,0.06699 0.067,0.175501 0,0.242294 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.450783 0.006,1.518883 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.518877 c 0,-0.09428 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.51e-4 v -1.491759 h 2.09571 v -0.272084 h -2.49697 c -0.12182,0 -0.22161,-0.09962 -0.22161,-0.221607 v -0.222193 c 0,-0.12201 0.0998,-0.221608 0.22161,-0.221608 h 2.49697 v -0.496375 c 0,-0.128465 0.0998,-0.233586 0.22162,-0.233586 h 0.22203 c 0.12201,0 0.2216,0.105121 0.2216,0.233586 v 0.496375 h 2.49698 c 0.12182,0 0.22161,0.09963 0.22161,0.221608 v 0.222193 c 0,0.121807 -0.0996,0.221607 -0.22161,0.221607 h -2.49698 v 0.272099 h 2.09571 v 1.491759 l 0.22085,7.52e-4 c 0.0943,0 0.17077,0.07648 0.17077,0.170781 h -2.3e-4 z m -1.59386,2.967203 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.06699 -0.067,-0.175507 0,-0.242301 0.067,-0.06699 0.1755,-0.06699 0.24249,0 l 0.87074,0.870741 0.40854,-0.47226 -0.9713,-1.123107 -1.28189,0.0049 -0.005,1.280757 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "B5D")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("C5A")}>
+            <Path
+              id="fC5A"
+              ref={el => (pathRefs.current['C5A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 138.25901,118.82436 -4.8615,8.89728 h -9.72301 l -4.8615,-8.89728 4.8615,-8.89728 h 9.72301 z"
+              onPressIn={handleShapePress.bind(null, "C5A")}
+            />
+            <Path
+              id="tC5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5A"] ? "none" : "inline",
+              }}
+              d="m 125.75064,119.53573 0.66834,0.16881 q -0.21015,0.82338 -0.75792,1.25746 -0.54432,0.43064 -1.33325,0.43064 -0.81649,0 -1.32981,-0.33073 -0.50987,-0.33418 -0.77859,-0.96463 -0.26527,-0.63045 -0.26527,-1.35392 0,-0.78893 0.29972,-1.3746 0.30317,-0.58911 0.85783,-0.89228 0.55811,-0.30661 1.22646,-0.30661 0.75792,0 1.27468,0.38585 0.51677,0.38585 0.72003,1.08521 l -0.65802,0.15503 q -0.1757,-0.55122 -0.50987,-0.80271 -0.33418,-0.25149 -0.84061,-0.25149 -0.58222,0 -0.97496,0.27905 -0.38929,0.27905 -0.54777,0.75103 -0.15847,0.46853 -0.15847,0.96807 0,0.64424 0.18603,1.12655 0.18948,0.47887 0.58567,0.71658 0.39619,0.23771 0.85783,0.23771 0.56155,0 0.95085,-0.32384 0.38929,-0.32384 0.5271,-0.96118 z m 1.24023,0.44786 0.65112,-0.0551 q 0.0724,0.47543 0.33418,0.71658 0.26527,0.23771 0.63734,0.23771 0.44786,0 0.75792,-0.33762 0.31006,-0.33762 0.31006,-0.89572 0,-0.53055 -0.29972,-0.83716 -0.29628,-0.30661 -0.77859,-0.30661 -0.29973,0 -0.54088,0.1378 -0.24116,0.13436 -0.37896,0.3514 l -0.58223,-0.0758 0.48921,-2.59416 h 2.51147 v 0.59256 h -2.01538 l -0.27216,1.35736 q 0.45475,-0.31694 0.95429,-0.31694 0.66146,0 1.11621,0.45819 0.45476,0.4582 0.45476,1.17823 0,0.68557 -0.39964,1.18511 -0.48575,0.61323 -1.32636,0.61323 -0.68902,0 -1.12655,-0.38585 -0.43408,-0.38585 -0.49609,-1.0232 z m 3.6208,1.32292 1.93959,-5.05051 h 0.72002 l 2.06706,5.05051 h -0.76136 l -0.58912,-1.52962 h -2.11184 l -0.55466,1.52962 z m 1.45727,-2.07395 h 1.71222 l -0.5271,-1.39871 q -0.24116,-0.63734 -0.35829,-1.04731 -0.0965,0.48576 -0.27216,0.96463 z"
+              onPressIn={handleShapePress.bind(null, "C5A")}
+            />
+            <Path
+              id="iC5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["C5A"] ? "inline" : "none",
+              }}
+              d="m 130.44095,120.6673 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -10e-4 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "C5A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("f5D")}>
+            <Path
+              id="fF5D"
+              ref={el => (pathRefs.current['F5D'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 59.312503,9.3830752 4.861502,8.8972798 -4.861502,8.897279 h -9.723006 l -4.861503,-8.897279 4.861503,-8.8972798 z"
+              onPressIn={handleShapePress.bind(null, "F5D")}
+            />
+            <Path
+              id="tF5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5D"] ? "none" : "inline",
+              }}
+              d="m 48.263592,20.76269 v -5.050557 h 3.407231 v 0.596007 h -2.738876 v 1.564088 h 2.370247 v 0.596007 h -2.370247 v 2.294455 z m 4.023908,-1.322929 0.651129,-0.05512 q 0.07235,0.475427 0.334178,0.716586 0.265275,0.237714 0.637348,0.237714 0.447867,0 0.757928,-0.337622 0.310062,-0.337623 0.310062,-0.895734 0,-0.530549 -0.299726,-0.837165 -0.296281,-0.306617 -0.778599,-0.306617 -0.299726,0 -0.540885,0.137805 -0.241159,0.13436 -0.378964,0.351403 l -0.582226,-0.07579 0.489208,-2.594181 h 2.511497 v 0.592562 h -2.015399 l -0.272165,1.35738 q 0.454757,-0.316952 0.9543,-0.316952 0.661464,0 1.116221,0.458202 0.454757,0.458202 0.454757,1.178233 0,0.685581 -0.399635,1.185124 -0.485763,0.613233 -1.326374,0.613233 -0.689025,0 -1.126556,-0.385854 -0.434086,-0.385855 -0.496099,-1.023203 z m 4.175495,1.322929 v -5.050557 h 1.739789 q 0.589117,0 0.899178,0.07235 0.434086,0.09991 0.740703,0.361738 0.399634,0.337623 0.596007,0.864727 0.199817,0.52366 0.199817,1.198904 0,0.575337 -0.13436,1.019758 -0.13436,0.444421 -0.344513,0.737257 -0.210152,0.289391 -0.461647,0.458202 -0.248049,0.165366 -0.602897,0.251494 -0.351403,0.08613 -0.809605,0.08613 z m 0.668355,-0.596007 h 1.078324 q 0.499544,0 0.782044,-0.09302 0.285946,-0.09302 0.454757,-0.261829 0.237714,-0.237714 0.368629,-0.637349 0.13436,-0.40308 0.13436,-0.974971 0,-0.792379 -0.26183,-1.21613 -0.258385,-0.427196 -0.630458,-0.571891 -0.26872,-0.103354 -0.864727,-0.103354 H 57.13135 Z"
+              onPressIn={handleShapePress.bind(null, "F5D")}
+            />
+            <Path
+              id="iF5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5D"] ? "inline" : "none",
+              }}
+              d="m 56.35495,20.1238 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 51.00303,22.06565 C 50.91693,21.97975 50.874,21.86642 50.874,21.75331 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "F5D")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D5B")}>
+            <Path
+              id="fD5B"
+              ref={el => (pathRefs.current['D5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 49.53328,154.94757 -4.808314,-8.80008 4.808314,-8.80008 h 9.616629 l 4.808314,8.80008 -4.808314,8.80008 z"
+              onPressIn={handleShapePress.bind(null, "D5B")}
+            />
+            <Path
+              id="tD5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5B"] ? "none" : "inline",
+              }}
+              d="m 48.048014,148.72986 v -5.05087 h 1.739895 q 0.589153,0 0.899233,0.0724 0.434112,0.0999 0.740747,0.36176 0.399659,0.33764 0.596044,0.86478 0.199829,0.52369 0.199829,1.19897 0,0.57538 -0.134368,1.01982 -0.134368,0.44445 -0.344534,0.73731 -0.210165,0.2894 -0.461675,0.45823 -0.248064,0.16537 -0.602934,0.2515 -0.351424,0.0861 -0.809654,0.0861 z m 0.668395,-0.59604 H 49.7948 q 0.499573,0 0.782091,-0.093 0.285963,-0.093 0.454785,-0.26184 0.237728,-0.23773 0.368651,-0.63739 0.134368,-0.40311 0.134368,-0.97503 0,-0.79243 -0.261846,-1.21621 -0.2584,-0.42722 -0.630496,-0.57192 -0.268737,-0.10336 -0.86478,-0.10336 h -1.061164 z m 4.175748,-0.72697 0.651169,-0.0551 q 0.07235,0.47546 0.334198,0.71663 0.265291,0.23773 0.637387,0.23773 0.447894,0 0.757974,-0.33764 0.31008,-0.33764 0.31008,-0.89579 0,-0.53058 -0.299744,-0.83722 -0.296299,-0.30663 -0.778646,-0.30663 -0.299744,0 -0.540918,0.13781 -0.241173,0.13437 -0.378987,0.35143 l -0.582262,-0.0758 0.489238,-2.59434 h 2.511651 v 0.5926 h -2.015523 l -0.272181,1.35746 q 0.454784,-0.31697 0.954358,-0.31697 0.661505,0 1.116289,0.45823 0.454785,0.45823 0.454785,1.17831 0,0.68562 -0.399659,1.18519 -0.485793,0.61327 -1.326455,0.61327 -0.689067,0 -1.126625,-0.38588 -0.434113,-0.38587 -0.496129,-1.02326 z m 4.148186,1.32301 v -5.05087 h 1.894935 q 0.578817,0 0.926796,0.15504 0.351424,0.1516 0.547808,0.47202 0.19983,0.31697 0.19983,0.66495 0,0.32386 -0.175712,0.60982 -0.175712,0.28596 -0.530582,0.46168 0.45823,0.13436 0.702849,0.45823 0.248064,0.32386 0.248064,0.76486 0,0.35487 -0.151595,0.6615 -0.14815,0.30319 -0.368651,0.46857 -0.220502,0.16538 -0.554699,0.25151 -0.330753,0.0827 -0.8131,0.0827 z m 0.668395,-2.92854 h 1.092172 q 0.444448,0 0.637387,-0.0586 0.254955,-0.0758 0.382433,-0.25151 0.130923,-0.17571 0.130923,-0.441 0,-0.25151 -0.120587,-0.441 -0.120587,-0.19294 -0.344534,-0.26185 -0.223947,-0.0724 -0.76831,-0.0724 h -1.009484 z m 0,2.3325 h 1.257548 q 0.323862,0 0.454785,-0.0241 0.230837,-0.0413 0.385877,-0.13782 0.155041,-0.0965 0.254955,-0.27907 0.09991,-0.18605 0.09991,-0.42722 0,-0.28252 -0.144704,-0.48924 -0.144704,-0.21016 -0.403104,-0.29285 -0.254955,-0.0861 -0.737303,-0.0861 h -1.167969 z"
+              onPressIn={handleShapePress.bind(null, "D5B")}
+            />
+            <Path
+              id="iD5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5B"] ? "inline" : "none",
+              }}
+              d="m 56.35495,148.0908 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "D5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F5C")}>
+            <Path
+              id="fF5C"
+              ref={el => (pathRefs.current['F5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 44.495503,36.317633 h -9.723006 l -4.861503,-8.897279 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 z"
+              onPressIn={handleShapePress.bind(null, "F5C")}
+            />
+            <Path
+              id="tF5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5C"] ? "none" : "inline",
+              }}
+              d="m 33.398008,29.945866 v -5.050735 h 3.407351 v 0.596028 h -2.738973 v 1.564143 h 2.370332 v 0.596028 h -2.370332 v 2.294536 z m 4.024051,-1.322976 0.651152,-0.05512 q 0.07235,0.475444 0.334189,0.716612 0.265284,0.237722 0.637371,0.237722 0.447883,0 0.757955,-0.337634 0.310073,-0.337635 0.310073,-0.895765 0,-0.530569 -0.299737,-0.837196 -0.296292,-0.306627 -0.778626,-0.306627 -0.299737,0 -0.540905,0.13781 -0.241167,0.134365 -0.378977,0.351416 l -0.582247,-0.0758 0.489225,-2.594272 h 2.511587 v 0.592582 h -2.015471 l -0.272174,1.357428 q 0.454772,-0.316962 0.954334,-0.316962 0.661487,0 1.11626,0.458218 0.454773,0.458218 0.454773,1.178275 0,0.685604 -0.399649,1.185166 -0.48578,0.613254 -1.326421,0.613254 -0.689049,0 -1.126596,-0.385868 -0.434101,-0.385868 -0.496116,-1.023239 z m 7.779372,-0.447882 0.668379,0.168817 q -0.210161,0.823414 -0.757955,1.257516 -0.54435,0.430656 -1.333312,0.430656 -0.816524,0 -1.329866,-0.330744 -0.509897,-0.334189 -0.778626,-0.96467 -0.265284,-0.63048 -0.265284,-1.353983 0,-0.788962 0.299736,-1.374654 0.303182,-0.589138 0.857867,-0.89232 0.558131,-0.306627 1.226509,-0.306627 0.757955,0 1.274742,0.385868 0.516788,0.385868 0.720057,1.085254 l -0.658042,0.155036 q -0.175708,-0.55124 -0.509897,-0.802743 -0.334189,-0.251503 -0.840641,-0.251503 -0.582247,0 -0.975005,0.279065 -0.389313,0.279065 -0.547795,0.751064 -0.158481,0.468554 -0.158481,0.968115 0,0.644262 0.186043,1.126597 0.189489,0.478889 0.585692,0.716611 0.396204,0.237723 0.857867,0.237723 0.561576,0 0.950889,-0.323854 0.389313,-0.323853 0.527123,-0.961224 z"
+              onPressIn={handleShapePress.bind(null, "F5C")}
+            />
+            <Path
+              id="iF5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5C"] ? "inline" : "none",
+              }}
+              d="m 41.53845,29.2643 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "F5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D5C")}>
+            <Path
+              id="fD5C"
+              ref={el => (pathRefs.current['D5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 34.772498,146.00393 -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 z"
+              onPressIn={handleShapePress.bind(null, "D5C")}
+            />
+            <Path
+              id="tD5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5C"] ? "none" : "inline",
+              }}
+              d="m 32.988501,139.63164 v -5.05052 h 1.739775 q 0.589111,0 0.89917,0.0724 0.434082,0.0999 0.740696,0.36174 0.399631,0.33762 0.596002,0.86472 0.199816,0.52365 0.199816,1.19889 0,0.57533 -0.134359,1.01975 -0.134359,0.44442 -0.34451,0.73725 -0.210151,0.28939 -0.461643,0.4582 -0.248047,0.16536 -0.602892,0.25149 -0.3514,0.0861 -0.809598,0.0861 z m 0.668349,-0.596 h 1.078316 q 0.499539,0 0.782037,-0.093 0.285943,-0.093 0.454753,-0.26183 0.237712,-0.23771 0.368625,-0.63734 0.134359,-0.40308 0.134359,-0.97497 0,-0.79237 -0.261827,-1.21611 -0.258383,-0.4272 -0.630453,-0.57189 -0.268718,-0.10335 -0.86472,-0.10335 h -1.06109 z m 4.175459,-0.72692 0.651123,-0.0551 q 0.07235,0.47542 0.334175,0.71658 0.265272,0.23771 0.637343,0.23771 0.447862,0 0.757921,-0.33762 0.310059,-0.33762 0.310059,-0.89572 0,-0.53055 -0.299723,-0.83716 -0.296279,-0.30662 -0.778593,-0.30662 -0.299723,0 -0.54088,0.13781 -0.241157,0.13436 -0.378961,0.3514 l -0.582221,-0.0758 0.489204,-2.59415 h 2.511476 v 0.59255 H 38.92785 l -0.272163,1.35737 q 0.454753,-0.31695 0.954292,-0.31695 0.661459,0 1.116212,0.4582 0.454753,0.4582 0.454753,1.17822 0,0.68558 -0.399632,1.18512 -0.485758,0.61323 -1.326362,0.61323 -0.68902,0 -1.126547,-0.38586 -0.434082,-0.38585 -0.496094,-1.02319 z m 7.77903,-0.44786 0.668349,0.16881 q -0.210151,0.82338 -0.757921,1.25746 -0.544325,0.43064 -1.333253,0.43064 -0.816488,0 -1.329808,-0.33073 -0.509874,-0.33418 -0.778592,-0.96463 -0.265272,-0.63045 -0.265272,-1.35393 0,-0.78892 0.299723,-1.37459 0.303169,-0.58911 0.85783,-0.89228 0.558105,-0.30661 1.226454,-0.30661 0.757922,0 1.274687,0.38585 0.516764,0.38585 0.720025,1.0852 l -0.658014,0.15503 q -0.1757,-0.55121 -0.509874,-0.8027 -0.334175,-0.2515 -0.840604,-0.2515 -0.582221,0 -0.974963,0.27906 -0.389296,0.27905 -0.54777,0.75103 -0.158475,0.46853 -0.158475,0.96807 0,0.64423 0.186036,1.12655 0.18948,0.47887 0.585666,0.71658 0.396186,0.23771 0.85783,0.23771 0.561551,0 0.950847,-0.32384 0.389296,-0.32384 0.527099,-0.96118 z"
+              onPressIn={handleShapePress.bind(null, "D5C")}
+            />
+            <Path
+              id="iD5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5C"] ? "inline" : "none",
+              }}
+              d="m 41.53845,138.9503 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "D5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F5B")}>
+            <Path
+              id="fF5B"
+              ref={el => (pathRefs.current['F5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 15.093994,36.560354 4.861503,-8.897279 h 9.723006 l 4.861502,8.897279 -4.861502,8.897279 h -9.723006 z"
+              onPressIn={handleShapePress.bind(null, "F5B")}
+            />
+            <Path
+              id="tF5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5B"] ? "none" : "inline",
+              }}
+              d="m 19.101504,39.285862 v -5.050864 h 3.407439 v 0.596043 H 19.7699 v 1.564183 h 2.370392 v 0.596044 H 19.7699 v 2.294594 z m 4.024154,-1.323009 0.651168,-0.05513 q 0.07235,0.475457 0.334198,0.71663 0.265291,0.237729 0.637387,0.237729 0.447894,0 0.757975,-0.337643 0.31008,-0.337643 0.31008,-0.895788 0,-0.530582 -0.299744,-0.837217 -0.296299,-0.306635 -0.778647,-0.306635 -0.299744,0 -0.540917,0.137814 -0.241174,0.134368 -0.378987,0.351424 l -0.582262,-0.0758 0.489237,-2.594339 h 2.511651 v 0.592598 h -2.015522 l -0.272182,1.357463 q 0.454785,-0.316971 0.954359,-0.316971 0.661504,0 1.116289,0.458229 0.454784,0.45823 0.454784,1.178306 0,0.685622 -0.399659,1.185195 -0.485792,0.61327 -1.326455,0.61327 -0.689067,0 -1.126625,-0.385877 -0.434112,-0.385878 -0.496128,-1.023265 z m 4.148185,1.323009 v -5.050864 h 1.894936 q 0.578816,0 0.926795,0.15504 0.351425,0.151595 0.547809,0.472011 0.199829,0.316971 0.199829,0.66495 0,0.323862 -0.175712,0.609825 -0.175712,0.285963 -0.530582,0.461675 0.45823,0.134368 0.702849,0.45823 0.248064,0.323862 0.248064,0.764865 0,0.35487 -0.151595,0.661504 -0.148149,0.30319 -0.368651,0.468566 -0.220501,0.165376 -0.554699,0.25151 -0.330752,0.08269 -0.813099,0.08269 z m 0.668396,-2.928536 h 1.092172 q 0.444448,0 0.637387,-0.05857 0.254955,-0.0758 0.382432,-0.25151 0.130923,-0.175712 0.130923,-0.441003 0,-0.251509 -0.120587,-0.441003 -0.120587,-0.192939 -0.344533,-0.261845 -0.223947,-0.07235 -0.768311,-0.07235 h -1.009483 z m 0,2.332493 h 1.257548 q 0.323861,0 0.454784,-0.02412 0.230838,-0.04134 0.385878,-0.137813 0.15504,-0.09647 0.254955,-0.279072 0.09991,-0.186049 0.09991,-0.427222 0,-0.282518 -0.144705,-0.489238 Q 30.105905,37.122188 29.847505,37.0395 29.59255,36.95337 29.110203,36.95337 h -1.167969 z"
+              onPressIn={handleShapePress.bind(null, "F5B")}
+            />
+            <Path
+              id="iF5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5B"] ? "inline" : "none",
+              }}
+              d="m 26.99795,38.6473 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -10e-4 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 21.64603,40.58915 C 21.55993,40.50325 21.517,40.38992 21.517,40.27681 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "F5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("D5D")}>
+            <Path
+              id="fD5D"
+              ref={el => (pathRefs.current['D5D'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 19.955499,136.86293 -4.861501,-8.89743 4.861501,-8.89742 h 9.723004 l 4.861501,8.89742 -4.861501,8.89743 z"
+              onPressIn={handleShapePress.bind(null, "D5D")}
+            />
+            <Path
+              id="tD5D"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5D"] ? "none" : "inline",
+              }}
+              d="M 18.496,130.44787 V 125.397 h 1.739933 q 0.589167,0 0.899253,0.0724 0.434123,0.0999 0.740764,0.36177 0.399668,0.33763 0.596056,0.86477 0.199834,0.52369 0.199834,1.19898 0,0.57537 -0.134371,1.01982 -0.134371,0.44445 -0.344541,0.73731 -0.21017,0.2894 -0.461686,0.45822 -0.248069,0.16538 -0.602946,0.25151 -0.351433,0.0861 -0.809673,0.0861 z m 0.66841,-0.59605 h 1.078415 q 0.499585,0 0.782108,-0.093 0.28597,-0.093 0.454795,-0.26183 0.237733,-0.23774 0.368659,-0.6374 0.134371,-0.4031 0.134371,-0.97503 0,-0.79243 -0.261852,-1.2162 -0.258405,-0.42722 -0.630509,-0.57193 -0.268743,-0.10336 -0.8648,-0.10336 H 19.16441 Z m 4.17584,-0.72697 0.651183,-0.0551 q 0.07235,0.47546 0.334206,0.71663 0.265297,0.23773 0.637401,0.23773 0.447903,0 0.757991,-0.33764 0.310087,-0.33765 0.310087,-0.8958 0,-0.53057 -0.299751,-0.83721 -0.296305,-0.30663 -0.778664,-0.30663 -0.29975,0 -0.540929,0.13781 -0.241179,0.13436 -0.378995,0.35142 l -0.582275,-0.0758 0.489249,-2.59433 h 2.511705 v 0.59259 h -2.015566 l -0.272188,1.35747 q 0.454795,-0.31698 0.954379,-0.31698 0.661519,0 1.116314,0.45824 0.454795,0.45822 0.454795,1.17831 0,0.68562 -0.399668,1.18519 -0.485803,0.61327 -1.326484,0.61327 -0.689083,0 -1.12665,-0.38588 -0.434122,-0.38588 -0.49614,-1.02327 z m 4.175841,1.32302 V 125.397 h 1.739933 q 0.589165,0 0.899253,0.0724 0.434122,0.0999 0.740763,0.36177 0.399669,0.33763 0.596057,0.86477 0.199834,0.52369 0.199834,1.19898 0,0.57537 -0.134371,1.01982 -0.134371,0.44445 -0.344541,0.73731 -0.21017,0.2894 -0.461686,0.45822 -0.24807,0.16538 -0.602947,0.25151 -0.351432,0.0861 -0.809672,0.0861 z m 0.66841,-0.59605 h 1.078414 q 0.499584,0 0.782108,-0.093 0.28597,-0.093 0.454795,-0.26183 0.237734,-0.23774 0.368659,-0.6374 0.134372,-0.4031 0.134372,-0.97503 0,-0.79243 -0.261852,-1.2162 -0.258406,-0.42722 -0.630511,-0.57193 -0.268742,-0.10336 -0.864798,-0.10336 h -1.061187 z"
+              onPressIn={handleShapePress.bind(null, "D5D")}
+            />
+            <Path
+              id="iD5D"
+              style={{
+                fontSize: 7.05605,
+                fontFamily: "Arial",
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["D5D"] ? "inline" : "none",
+              }}
+              d="m 26.72145,129.8088 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 h -0.22203 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 h -1.57749 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 l -0.65918,-0.65919 c -0.0861,-0.0859 -0.12903,-0.19923 -0.12903,-0.31234 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 h -2.49697 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "D5D")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("F5A")}>
+            <Path
+              id="fF5A"
+              ref={el => (pathRefs.current['F5A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 19.446011,45.700355 -4.861502,8.897279 H 4.8615029 L 1.4942e-7,45.700355 4.8615029,36.803076 h 9.7230061 z"
+              onPressIn={handleShapePress.bind(null, "F5A")}
+            />
+            <Path
+              id="tF5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5A"] ? "none" : "inline",
+              }}
+              d="m 3.8140001,48.425513 v -5.050512 h 3.4071057 v 0.596002 H 4.4823303 v 1.564073 h 2.3701603 v 0.596003 H 4.4823303 v 2.294434 z m 4.0237609,-1.322918 0.6511051,-0.05512 q 0.072345,0.475422 0.3341652,0.71658 0.265265,0.237711 0.637325,0.237711 0.4478501,0 0.7578997,-0.33762 0.310051,-0.337618 0.310051,-0.895724 0,-0.530546 -0.299715,-0.837159 -0.2962706,-0.306613 -0.7785706,-0.306613 -0.2997151,0 -0.5408651,0.137803 -0.2411501,0.134359 -0.3789501,0.3514 L 7.9480011,46.038061 8.4371912,43.443903 H 10.948597 V 44.03646 H 8.9332712 l -0.272155,1.357368 q 0.4547401,-0.316949 0.9542652,-0.316949 0.6614396,0 1.1161806,0.458197 0.45474,0.458199 0.45474,1.178224 0,0.685575 -0.399621,1.185114 -0.485744,0.613226 -1.3263247,0.613226 -0.6890001,0 -1.1265152,-0.38585 -0.43407,-0.385852 -0.4960801,-1.023195 z m 3.620697,1.322918 1.939535,-5.050512 h 0.720004 l 2.067001,5.050512 h -0.761345 l -0.589096,-1.529622 h -2.111785 l -0.554644,1.529622 z m 1.457234,-2.073948 h 1.712165 l -0.527084,-1.39871 q -0.24115,-0.637343 -0.35828,-1.047309 -0.09646,0.485758 -0.272155,0.964627 z"
+              onPressIn={handleShapePress.bind(null, "F5A")}
+            />
+            <Path
+              id="iF5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["F5A"] ? "inline" : "none",
+              }}
+              d="m 11.90395,47.7863 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 H 9.88854 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 V 49.92782 H 8.08944 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 6.55203,49.72815 C 6.46593,49.64225 6.423,49.52892 6.423,49.41581 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 V 46.26131 L 7.23375,45.97517 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 V 42.65145 H 9.66688 V 42.37937 H 7.16991 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z M 8.73678,46.80212 9.14035,46.33535 8.25197,45.44698 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z M 9.30031,48.99175 8.63032,48.32176 8.09526,47.78651 7.94881,47.64004 7.84122,47.74725 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 L 9.2999,48.99182 Z"
+              onPressIn={handleShapePress.bind(null, "F5A")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E5D")}>
+            <Path
+              id="fE5D"
+              ref={el => (pathRefs.current['E5D'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="M 14.861502,72.878925 H 5.1384984 L 0.27699675,63.981502 5.1384984,55.084079 h 9.7230036 l 4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "E5D")}
+            />
+            <Path
+              id="tE5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5D"] ? "none" : "inline",
+              }}
+              d="m 3.604,66.463519 v -5.050516 h 3.6519052 v 0.596003 H 4.2723675 v 1.546849 h 2.794052 v 0.592557 h -2.794052 v 1.719104 h 3.1006743 v 0.596003 z m 4.4408545,-1.322918 0.6511416,-0.05512 q 0.072349,0.475423 0.3341838,0.716581 0.2652798,0.237712 0.6373608,0.237712 0.4478753,0 0.7579423,-0.337621 0.310068,-0.337619 0.310068,-0.895725 0,-0.530545 -0.299732,-0.837159 -0.296287,-0.306614 -0.7786139,-0.306614 -0.2997318,0 -0.5408954,0.137804 -0.2411635,0.134359 -0.3789713,0.351401 L 8.1551007,64.07606 8.6443182,61.4819 h 2.5115458 v 0.592557 H 9.1404261 l -0.2721703,1.357369 q 0.4547655,-0.316949 0.9543186,-0.316949 0.6614776,0 1.1162426,0.458198 0.454766,0.458198 0.454766,1.178224 0,0.685575 -0.399642,1.185114 -0.485773,0.613228 -1.3264003,0.613228 -0.6890387,0 -1.1265783,-0.385851 Q 8.106868,65.777944 8.0448545,65.140601 Z m 4.1755745,1.322918 v -5.050516 h 1.739823 q 0.589128,0 0.899196,0.07235 0.434094,0.09991 0.740716,0.361736 0.399642,0.33762 0.596019,0.864719 0.199821,0.523656 0.199821,1.198895 0,0.575332 -0.134363,1.01975 -0.134362,0.444418 -0.344519,0.737251 -0.210157,0.289388 -0.461656,0.458197 -0.248054,0.165365 -0.602909,0.251493 -0.351409,0.08613 -0.809621,0.08613 z m 0.668368,-0.596003 h 1.078345 q 0.499553,0 0.782059,-0.09302 0.285951,-0.09302 0.454765,-0.261827 0.23772,-0.237712 0.368636,-0.637343 0.134363,-0.403077 0.134363,-0.974963 0,-0.792373 -0.261834,-1.21612 -0.25839,-0.427192 -0.630471,-0.571886 -0.268725,-0.103353 -0.864744,-0.103353 h -1.061119 z"
+              onPressIn={handleShapePress.bind(null, "E5D")}
+            />
+            <Path
+              id="iE5D"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5D"] ? "inline" : "none",
+              }}
+              d="m 11.90395,65.8253 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -10e-4 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 H 9.88854 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 V 67.96682 H 8.08944 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 6.55203,67.76715 C 6.46593,67.68125 6.423,67.56792 6.423,67.45481 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 V 64.30031 L 7.23375,64.01417 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 V 60.69045 H 9.66688 V 60.41837 H 7.16991 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z M 8.73678,64.84112 9.14035,64.37435 8.25197,63.48598 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z M 9.30031,67.03075 8.63032,66.36076 8.09526,65.82551 7.94881,65.67904 7.84122,65.78625 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 L 9.2999,67.03082 Z"
+              onPressIn={handleShapePress.bind(null, "E5D")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E5C")}>
+            <Path
+              id="fE5C"
+              ref={el => (pathRefs.current['E5C'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="M 14.861502,91.159924 H 5.1384984 L 0.27699675,82.262501 5.1384984,73.365078 h 9.7230036 l 4.861501,8.897423 z"
+              onPressIn={handleShapePress.bind(null, "E5C")}
+            />
+            <Path
+              id="tE5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5C"] ? "none" : "inline",
+              }}
+              d="m 3.5560004,84.78787 v -5.05074 h 3.6518051 v 0.596029 H 4.2243496 v 1.546919 h 2.7939755 v 0.592583 H 4.2243496 v 1.71918 H 7.3249389 V 84.78787 Z M 7.9967332,83.464893 8.647857,83.40977 q 0.072347,0.475444 0.3341746,0.716612 0.2652726,0.237722 0.6373433,0.237722 0.4478631,0 0.7579221,-0.337635 0.310059,-0.337634 0.310059,-0.895766 0,-0.530568 -0.299724,-0.837195 -0.296278,-0.306628 -0.7785923,-0.306628 -0.2997237,0 -0.5408806,0.13781 -0.241157,0.134365 -0.3789609,0.351416 L 8.1069764,82.400314 8.5961805,79.80604 h 2.5114765 v 0.592583 H 9.0922747 l -0.2721628,1.357429 q 0.4547531,-0.316963 0.9542925,-0.316963 0.6614586,0 1.1162116,0.458218 0.454754,0.458219 0.454754,1.178277 0,0.685604 -0.399632,1.185167 -0.485759,0.613254 -1.3263631,0.613254 -0.6890198,0 -1.1265474,-0.385867 Q 8.058745,84.102269 7.9967332,83.464897 Z m 7.7790338,-0.447882 0.66835,0.168817 q -0.210151,0.823415 -0.757922,1.257517 -0.544326,0.430656 -1.333254,0.430656 -0.816489,0 -1.329808,-0.330744 -0.509875,-0.33419 -0.778593,-0.964671 -0.265272,-0.630481 -0.265272,-1.353984 0,-0.788962 0.299723,-1.374655 0.30317,-0.589138 0.85783,-0.89232 0.558106,-0.306628 1.226455,-0.306628 0.757922,0 1.274687,0.385869 0.516765,0.385867 0.720026,1.085254 l -0.658014,0.155036 q -0.1757,-0.55124 -0.509874,-0.802744 -0.334175,-0.251503 -0.840605,-0.251503 -0.582222,0 -0.974963,0.279065 -0.389296,0.279066 -0.547771,0.751066 -0.158474,0.468553 -0.158474,0.968115 0,0.644263 0.186035,1.126597 0.18948,0.478891 0.585667,0.716613 0.396187,0.237722 0.85783,0.237722 0.561551,0 0.950847,-0.323853 0.389296,-0.323854 0.5271,-0.961225 z"
+              onPressIn={handleShapePress.bind(null, "E5C")}
+            />
+            <Path
+              id="iE5C"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5C"] ? "inline" : "none",
+              }}
+              d="m 11.90395,84.1053 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 H 9.88854 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 V 86.24682 H 8.08944 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 6.55203,86.04715 C 6.46593,85.96125 6.423,85.84792 6.423,85.73481 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 V 82.58031 L 7.23375,82.29417 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 V 78.97045 H 9.66688 V 78.69837 H 7.16991 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z M 8.73678,83.12112 9.14035,82.65435 8.25197,81.76598 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z M 9.30031,85.31075 8.63032,84.64076 8.09526,84.10551 7.94881,83.95904 7.84122,84.06625 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 L 9.2999,85.31082 Z"
+              onPressIn={handleShapePress.bind(null, "E5C")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E5B")}>
+            <Path
+              id="fE5B"
+              ref={el => (pathRefs.current['E5B'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="M 5.1384984,109.44092 0.27699675,100.5435 5.1384984,91.646079 h 9.7230036 l 4.861501,8.897421 -4.861501,8.89742 z"
+              onPressIn={handleShapePress.bind(null, "E5B")}
+            />
+            <Path
+              id="tE5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5B"] ? "none" : "inline",
+              }}
+              d="m 3.7990002,103.02587 v -5.050873 h 3.6517015 v 0.596044 H 4.4673304 V 100.118 h 2.7938962 v 0.59259 H 4.4673304 v 1.71923 h 3.1005014 v 0.59605 z m 4.4406068,-1.32302 0.6511052,-0.0551 q 0.072346,0.47545 0.3341652,0.71663 0.2652651,0.23773 0.6373253,0.23773 0.4478503,0 0.7579003,-0.33765 0.310051,-0.33764 0.310051,-0.89578 0,-0.53059 -0.299716,-0.83722 -0.29627,-0.30664 -0.7785703,-0.30664 -0.2997152,0 -0.5408652,0.13782 -0.2411502,0.13436 -0.3789502,0.35142 l -0.5822053,-0.0758 0.4891903,-2.594335 h 2.5114057 v 0.592578 H 9.3351175 l -0.2721551,1.357463 q 0.4547401,-0.31697 0.9542646,-0.31697 0.661441,0 1.116182,0.458234 0.454739,0.45823 0.454739,1.1783 0,0.68563 -0.39962,1.1852 -0.485745,0.61327 -1.3263253,0.61327 -0.6890003,0 -1.1265155,-0.38588 -0.4340702,-0.38588 -0.4960802,-1.02327 z m 4.147782,1.32302 v -5.050873 h 1.894751 q 0.578759,0 0.926705,0.155041 0.35139,0.151595 0.547755,0.472011 0.19981,0.316972 0.19981,0.664951 0,0.323862 -0.175695,0.609826 -0.175695,0.285964 -0.53053,0.461674 0.458185,0.13437 0.70278,0.45823 0.24804,0.32386 0.24804,0.76487 0,0.35486 -0.15158,0.6615 -0.148135,0.30319 -0.368615,0.46857 -0.22048,0.16537 -0.554646,0.2515 -0.33072,0.0827 -0.81302,0.0827 z m 0.66833,-2.92855 h 1.092065 q 0.444405,0 0.637326,-0.0586 0.254929,-0.07579 0.382394,-0.251504 0.130911,-0.175712 0.130911,-0.441003 0,-0.25151 -0.120575,-0.441004 -0.120575,-0.192939 -0.3445,-0.261846 -0.223925,-0.07235 -0.768236,-0.07235 h -1.009385 z m 0,2.3325 h 1.257425 q 0.32383,0 0.454741,-0.0241 0.230814,-0.0414 0.38584,-0.13782 0.155024,-0.0965 0.254929,-0.27907 0.0999,-0.18605 0.0999,-0.42722 0,-0.28252 -0.144689,-0.48924 -0.14469,-0.21017 -0.403066,-0.29285 -0.254929,-0.0861 -0.737229,-0.0861 h -1.167856 z"
+              onPressIn={handleShapePress.bind(null, "E5B")}
+            />
+            <Path
+              id="iE5B"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5B"] ? "inline" : "none",
+              }}
+              d="m 11.90395,102.3868 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -0.001 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 H 9.88854 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 H 8.08944 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 6.55203,104.32865 C 6.46593,104.24275 6.423,104.12942 6.423,104.01631 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 V 97.25195 H 9.66688 V 96.97987 H 7.16991 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z M 7.57119,103.7 l -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "E5B")}
+            />
+          </G>
+          <G onPress={() => handleShapePress("E5A")}>
+            <Path
+              id="fE5A"
+              ref={el => (pathRefs.current['E5A'] = el)}
+              style={{
+                fill: "#0000ff",
+                stroke: "#ffffff",
+                strokeWidth: 0.486154,
+                strokeOpacity: 0.7,
+              }}
+              d="m 0.27699675,118.8245 4.86150165,-8.89742 h 9.7230036 l 4.861501,8.89742 -4.861501,8.89743 H 5.1384984 Z"
+              onPressIn={handleShapePress.bind(null, "E5A")}
+            />
+            <Path
+              id="tE5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5A"] ? "none" : "inline",
+              }}
+              d="m 3.6060285,121.30554 v -5.05047 h 3.6517724 v 0.596 H 4.2743717 v 1.54683 h 2.7939505 v 0.59256 H 4.2743717 v 1.71909 h 3.1005616 v 0.59599 z m 4.4406933,-1.3229 0.6511179,-0.0551 q 0.072347,0.47542 0.3341717,0.71658 0.2652702,0.23771 0.6373376,0.23771 0.447859,0 0.757915,-0.33762 0.310056,-0.33761 0.310056,-0.89572 0,-0.53054 -0.299721,-0.83715 -0.296276,-0.30661 -0.7785852,-0.30661 -0.2997209,0 -0.5408757,0.1378 -0.2411548,0.13436 -0.3789576,0.3514 l -0.5822165,-0.0758 0.4891997,-2.59414 h 2.5114553 v 0.59255 H 9.1422535 l -0.2721604,1.35736 q 0.4547491,-0.31694 0.954284,-0.31694 0.6614529,0 1.1162019,0.45819 0.454749,0.45819 0.454749,1.17821 0,0.68557 -0.399628,1.18511 -0.485754,0.61322 -1.326351,0.61322 -0.6890137,0 -1.1265374,-0.38585 -0.4340786,-0.38585 -0.4960898,-1.02318 z m 3.6207662,1.3229 1.939574,-5.05047 h 0.720019 l 2.067041,5.05047 h -0.76136 l -0.589107,-1.52961 h -2.111827 l -0.554656,1.52961 z m 1.457264,-2.07393 h 1.712199 l -0.527095,-1.3987 q -0.241155,-0.63733 -0.358287,-1.0473 -0.09646,0.48576 -0.272161,0.96462 z"
+              onPressIn={handleShapePress.bind(null, "E5A")}
+            />
+            <Path
+              id="iE5A"
+              style={{
+                stroke: "#131313",
+                strokeWidth: 0,
+                strokeOpacity: 0.981482,
+                fill: "#000000",
+                display: sectorStaff["E5A"] ? "inline" : "none",
+              }}
+              d="m 11.90395,120.6673 -0.53507,0.53526 -0.51779,0.5178 -0.15219,0.15219 0.10096,0.10114 c 0.0366,0.0366 0.085,0.0548 0.13359,0.0548 0.0486,0 0.097,-0.0184 0.13358,-0.0548 l 0.28632,-0.28632 0.5119,-0.51191 0.28615,-0.28614 c 0.0366,-0.0366 0.055,-0.085 0.055,-0.13359 0,-0.0459 -0.0161,-0.0919 -0.0484,-0.12752 l -0.10759,-0.1072 -0.14646,0.14646 -3e-5,-1.7e-4 z m -4.22194,1.98375 -0.5119,-0.5119 -0.006,-0.007 -0.01,-0.01 c -0.0356,-0.0323 -0.0816,-0.0484 -0.12749,-0.0484 -0.0486,0 -0.097,0.0184 -0.13361,0.0548 l -0.0979,0.0979 c -0.0196,0.0196 -0.0292,0.045 -0.0292,0.07 h 7.1e-4 c 0,0.0254 0.009,0.0508 0.0286,0.07 l 0.65917,0.65916 c 0.0196,0.0196 0.045,0.0292 0.07,0.0292 v -7.5e-4 c 0.0254,0 0.0509,-0.009 0.07,-0.0286 l 0.009,-0.009 0.0894,-0.0894 c 0.0324,-0.0324 0.0503,-0.0747 0.0537,-0.11839 v -4e-4 -3.9e-4 -9.3e-4 -3.9e-4 -4e-4 -3.9e-4 -10e-4 -3.9e-4 -4e-4 -9.6e-4 -4e-4 -3.2e-4 -3.9e-4 -2.2e-4 -2.2e-4 -5.7e-4 -3.9e-4 -4e-4 -3.9e-4 -2.2e-4 -3.9e-4 -5.8e-4 -3.9e-4 -3.9e-4 -4e-4 0 -3.2e-4 -5.7e-4 -4e-4 -3.9e-4 -3.9e-4 c 0,-0.0486 -0.0184,-0.0971 -0.0548,-0.1336 l -0.01,-0.01 -2e-4,-3.9e-4 -2.3e-4,-0.002 z m 4.80141,-4.0045 -0.005,-1.28075 -1.2819,-0.005 -1.19728,1.38434 -0.39198,0.4535 -0.11593,0.13416 -0.49408,0.5715 -0.54761,0.63297 0.30168,0.30151 0.37569,-0.37571 0.24267,-0.24266 0.38727,-0.38726 0.24249,-0.24232 0.392,-0.39219 0.24232,-0.24229 0.87073,-0.87074 c 0.067,-0.067 0.1755,-0.067 0.24249,0 0.067,0.067 0.067,0.1755 0,0.24229 l -0.88837,0.88838 -0.24229,0.24231 -0.37457,0.37455 -0.24251,0.24251 -0.36753,0.36754 -0.24267,0.24267 -0.39542,0.39542 0.28518,0.28518 1.08799,-0.92348 0.26224,-0.22257 0.7028,-0.59637 1.09596,-0.93033 0.0556,-0.0472 h -3e-5 z m 0.33604,-1.45078 0.006,1.51888 c 0.004,0.0522 -0.0171,0.10531 -0.0602,0.14154 l -0.33715,0.28615 v 1.27507 c 0.0808,0.0979 0.12123,0.21802 0.12123,0.33794 0,0.12027 -0.0404,0.2406 -0.12123,0.3385 v 0.40168 l 0.29711,0.29696 c 0.0772,-0.0406 0.16243,-0.0611 0.24761,-0.0611 0.13606,0 0.27248,0.0518 0.3759,0.1554 l 0.0981,0.0979 c 0.0855,0.0856 0.12847,0.19903 0.12847,0.31233 h 7.1e-4 c 0,0.1131 -0.0431,0.22637 -0.12903,0.31233 l -0.65917,0.65918 c -0.0855,0.0855 -0.19887,0.12826 -0.31233,0.12826 v 7.6e-4 c -0.11311,0 -0.22638,-0.0431 -0.31232,-0.12904 l -0.009,-0.01 -0.089,-0.089 -2.3e-4,2.2e-4 c -0.0998,-0.0998 -0.15143,-0.2298 -0.15524,-0.36091 h -1.5775 v 0.74059 c 0,0.12847 -0.0998,0.23358 -0.22162,0.23358 H 9.88854 c -0.1218,0 -0.22161,-0.10511 -0.22161,-0.23358 v -0.74059 H 8.08944 c -0.004,0.12997 -0.055,0.25919 -0.1541,0.359 l -0.0905,0.0905 -0.009,0.01 c -0.0859,0.0859 -0.19921,0.12904 -0.31231,0.12904 v -7.5e-4 c -0.11346,0 -0.22674,-0.0429 -0.31232,-0.12827 L 6.55203,122.60915 C 6.46593,122.52325 6.423,122.40992 6.423,122.29681 h 7.2e-4 c 0,-0.11326 0.0429,-0.22673 0.12846,-0.31232 l 0.0981,-0.0979 c 0.10358,-0.10359 0.23984,-0.15541 0.3759,-0.15541 0.0852,0 0.17037,0.0203 0.24762,0.0611 l 0.29713,-0.29695 v -0.40152 c -0.0808,-0.0979 -0.12126,-0.21823 -0.12126,-0.3385 0,-0.11992 0.0404,-0.2402 0.12126,-0.33794 v -1.27506 l -0.33718,-0.28614 c -0.0431,-0.0364 -0.0636,-0.0894 -0.0602,-0.14155 l 0.006,-1.51888 c 0,-0.0943 0.0765,-0.17078 0.17078,-0.17078 l 0.22084,-7.5e-4 v -1.49176 h 2.09571 v -0.27208 H 7.16991 c -0.12182,0 -0.22161,-0.0996 -0.22161,-0.22161 v -0.22219 c 0,-0.12201 0.0998,-0.22161 0.22161,-0.22161 h 2.49697 v -0.49637 c 0,-0.12847 0.0998,-0.23359 0.22162,-0.23359 h 0.22203 c 0.12201,0 0.2216,0.10512 0.2216,0.23359 v 0.49637 h 2.49698 c 0.12182,0 0.22161,0.0996 0.22161,0.22161 v 0.22219 c 0,0.12181 -0.0996,0.22161 -0.22161,0.22161 h -2.49698 v 0.2721 h 2.09571 v 1.49176 l 0.22085,7.5e-4 c 0.0943,0 0.17077,0.0765 0.17077,0.17078 h -2.3e-4 z m -1.59386,2.9672 -0.35365,0.30017 0.37568,0.37571 0.30168,-0.30151 z m -0.61589,0.52273 -0.34588,0.29352 0.45612,0.38728 0.28518,-0.28518 -0.39562,-0.39562 z m -1.87293,-1.00258 0.40357,-0.46677 -0.88838,-0.88837 c -0.067,-0.067 -0.067,-0.17551 0,-0.2423 0.067,-0.067 0.1755,-0.067 0.24249,0 l 0.87074,0.87074 0.40854,-0.47226 -0.9713,-1.12311 -1.28189,0.005 -0.005,1.28076 0.0556,0.0472 1.1656,0.98933 -4e-5,-2.2e-4 z m -1.16559,2.29738 -0.0376,0.0376 0.2696,0.2696 0.47891,-0.47891 -0.26961,-0.26961 -0.44131,0.44152 -4e-5,-1.6e-4 z m 5.25774,0.15885 -0.51191,0.5119 -0.01,0.01 -3.6e-4,-3.9e-4 c -0.0364,0.0364 -0.0547,0.0852 -0.0547,0.13396 v 3.9e-4 4e-4 5.7e-4 3.9e-4 3.9e-4 2.2e-4 4e-4 5.7e-4 3.2e-4 4e-4 3.9e-4 2.2e-4 3.9e-4 5.7e-4 4e-4 3.9e-4 2.2e-4 2.1e-4 4e-4 5.7e-4 3.9e-4 4e-4 2.1e-4 3.3e-4 3.9e-4 3.9e-4 5.8e-4 3.9e-4 0 3.9e-4 4e-4 3.9e-4 3.9e-4 4e-4 0 3.9e-4 4e-4 3.9e-4 c 0.004,0.0433 0.0218,0.0859 0.0543,0.11839 -7.2e-4,7.5e-4 0.0808,0.0816 0.0888,0.0894 l 0.009,0.009 c 0.019,0.0189 0.0444,0.0286 0.07,0.0286 v 7.5e-4 c 0.025,0 0.0504,-0.01 0.07,-0.0292 l 0.65917,-0.65918 c 0.019,-0.019 0.0286,-0.0444 0.0286,-0.07 h 7.1e-4 c 0,-0.025 -0.01,-0.0504 -0.0292,-0.07 l -0.0979,-0.098 c -0.0366,-0.0366 -0.085,-0.0548 -0.1336,-0.0548 -0.0459,0 -0.0918,0.0161 -0.1275,0.0484 l -0.006,0.007 -0.01,0.01 4e-5,0.002 z m -0.63317,0.14835 0.26963,-0.26961 -0.0375,-0.0375 -0.44153,-0.44153 -0.26961,0.26961 0.4789,0.47892 1.6e-4,1.7e-4 z m -2.89545,-0.41495 -0.66999,-0.66999 -0.53506,-0.53525 -0.14645,-0.14647 -0.10759,0.10721 c -0.0322,0.0357 -0.0484,0.0814 -0.0484,0.12751 0,0.0486 0.0184,0.097 0.055,0.13359 l 0.28365,0.28364 0.002,0.003 0.5119,0.51191 0.005,0.005 0.28748,0.28746 c 0.0357,0.0323 0.0814,0.0484 0.1275,0.0484 0.0486,0 0.0971,-0.0184 0.13359,-0.0548 l 0.10096,-0.10114 z"
+              onPressIn={handleShapePress.bind(null, "E5A")}
+            />
+          </G>
+        </Svg>
+      </View>
+      <View style={styles.sectorList}>
+        {sectorSchedule.map(item => (
+          <View key={item.name} style={styles.sectorRow}>
+            <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}>
+              {item.name}
+            </Text>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
+            </View>
+            <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}>
+              {formatRemaining(item.timeRemaining)}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {menuVisible && (
+        <TouchableOpacity
+          style={styles.popupOverlay}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={[styles.popupMenu, popupStyle]}>
+            {selectedId && selectedId[1] === '5' && !sectorStaff[selectedId] && (
+              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
+                <GVGIcon width={20} height={20} style={styles.menuIcon} />
+                <Text style={styles.menuText}>Штаб</Text>
+              </TouchableOpacity>
+            )}
+            {selectedId && sectorStaff[selectedId] && (
+              <TouchableOpacity style={styles.menuItem} onPress={handleStaffToggle}>
+                <GVGIcon width={20} height={20} style={styles.menuIcon} />
+                <Text style={styles.menuText}>Штаб</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={openPaintModal}
+              disabled={guildList.length === 0 || sectorStaff[selectedId]}
+            >
+              <FontAwesomeIcon
+                icon={faPaintBrush}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text
+                style={[
+                  styles.menuText,
+                  (guildList.length === 0 || sectorStaff[selectedId]) &&
+                  styles.disabledText,
+                ]}
+              >
+                Перефарбувати
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={openTimeModal}
+              disabled={sectorStaff[selectedId]}
+            >
+              <FontAwesomeIcon
+                icon={faClock}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text
+                style={[
+                  styles.menuText,
+                  sectorStaff[selectedId] && styles.disabledText,
+                ]}
+              >
+                Час до відкриття
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
+              disabled={sectorStaff[selectedId]}
+              onPress={handleHelpPress.bind(null, selectedId)}
+            >
+              <FontAwesomeIcon
+                icon={faFire}
+                size={20}
+                color="#8C9093"
+                style={styles.menuIcon}
+              />
+              <Text
+                style={[
+                  styles.menuText,
+                  sectorStaff[selectedId] && styles.disabledText,
+                ]}
+              >
+                Допомагайте
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <Modal
+        visible={paintModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closePaintModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.paintModalContainer}>
+            <Text style={styles.modalText}>Перефарбувати сектор {selectedId}</Text>
+            <ScrollView style={styles.sectorList}>
+              {ownGuildName ? (
+                <TouchableOpacity
+                  style={styles.guildItem}
+                  onPress={() => handleColorSelect('#DCDCDC')}
+                >
+                  <View style={[styles.guildColorBox, { backgroundColor: '#DCDCDC' }]} />
+                  <Text style={styles.guildName}>{ownGuildName}</Text>
+                </TouchableOpacity>
+              ) : null}
+              {guildList.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.guildItem}
+                  onPress={() => handleColorSelect(item.color)}
+                >
+                  <View style={[styles.guildColorBox, { backgroundColor: item.color }]} />
+                  <Text style={styles.guildName}>{item.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={closePaintModal} style={styles.modalCloseButton}>
+              <Text style={styles.closeButtonText}>Закрити</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={timeModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeTimeModal}
+      >
+        <TouchableWithoutFeedback onPress={closeTimeModal}>
+          <View style={styles.timeModalBackground}>
+            <TouchableWithoutFeedback>
+              <View style={styles.timeModalContainer}>
+                <Text style={styles.timeModalTitle}>Час до відкриття сектору {selectedId}</Text>
+                <View style={styles.timeWheelWrapper}>
+                  <View style={styles.timeWheelContainer}>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={[
+                          <View style={[styles.colorSquare, { backgroundColor: '#0000FF' }]} />,
+                          <View style={[styles.colorSquare, { backgroundColor: '#D32F2F' }]} />,
+                        ]}
+                        selectedIndex={colorIndex}
+                        onValueChange={(_, idx) => setColorIndex(idx)}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 4 }, (_, i) => String(i))}
+                        selectedIndex={hourIndex}
+                        onValueChange={(_, idx) => setHourIndex(idx)}
+                      />
+                    </View>
+                    <View style={{ width: 60, height: 180, overflow: 'hidden' }}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))}
+                        selectedIndex={minuteIndex}
+                        onValueChange={(_, idx) => setMinuteIndex(idx)}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.timeSelectionOverlay} pointerEvents="none" />
+                </View>
+                <TouchableOpacity style={styles.timeModalButton} onPress={handleSaveTime}>
+                  <Text style={styles.timeModalButtonText}>Зберегти</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <Modal
+        visible={settingsVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <View style={styles.settingsOverlay}>
+          <View style={styles.settingsContainer}>
+            {guildInputs.map((item, index) => (
+              <View key={index} style={styles.inputRow}>
+                <Dropdown
+                  style={styles.colorDropdown}
+                  containerStyle={styles.colorDropdownContainer}
+                  data={colorOptions}
+                  labelField="label"
+                  valueField="value"
+                  value={item.color}
+                  selectedTextStyle={styles.hiddenText}
+                  onChange={val => {
+                    const updated = guildInputs.slice();
+                    updated[index].color = val.value;
+                    setGuildInputs(updated);
+                  }}
+                  renderLeftIcon={() =>
+                    item.color ? (
+                      <View style={[styles.colorSample, { backgroundColor: item.color }]} />
+                    ) : null
+                  }
+                  renderItem={option => (
+                    <View style={styles.colorItem}>
+                      <View style={[styles.colorSample, { backgroundColor: option.value }]} />
+                    </View>
+                  )}
+                  renderRightIcon={() => (
+                    <FontAwesome name="chevron-down" size={12} color="#007AFF" />
+                  )}
+                  placeholder=" "
+                />
+                <TextInput
+                  style={styles.guildInput}
+                  value={item.name}
+                  onChangeText={text => {
+                    const updated = guildInputs.slice();
+                    updated[index].name = text;
+                    setGuildInputs(updated);
+                  }}
+                  placeholder="Назва"
+                />
+              </View>
+            ))}
+            <TouchableOpacity
+              disabled={
+                guildInputs.length > 0 &&
+                (!guildInputs[guildInputs.length - 1].color ||
+                  !guildInputs[guildInputs.length - 1].name)
+              }
+              onPress={() =>
+                setGuildInputs([...guildInputs, { color: null, name: '' }])
+              }
+            >
+              <Text
+                style={[
+                  styles.addGuildText,
+                  guildInputs.length > 0 &&
+                    (!guildInputs[guildInputs.length - 1].color ||
+                      !guildInputs[guildInputs.length - 1].name)
+                    ? styles.addGuildDisabled
+                    : null,
+                ]}
+              >
+                Додати гільдію
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                disabled={!guildInputs.some(g => g.color && g.name)}
+                onPress={handleSaveGuilds}
+                style={[
+                  styles.saveButton,
+                  !guildInputs.some(g => g.color && g.name) && styles.disabledButton,
+                ]}
+              >
+                <Text style={styles.saveButtonText}>Зберегти</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSettingsVisible(false)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>Закрити</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  win: {
+    flex: 1,
+    width: "100%",
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    backgroundColor: "white",
+  },
+  mapContainer: {
+    height: HALF_HEIGHT,
+    width: "100%",
+    backgroundColor: "#f0f0f0",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  popupOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  popupMenu: {
+    position: "absolute",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 8,
+    elevation: 5,
+    flexDirection: "column",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  menuIcon: {
+    marginRight: 6,
+  },
+  menuText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    width: "100%",
+    height: HALF_HEIGHT,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  paintModalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
+    padding: 20
+  },
+  modalText: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#000',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  closeButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 8,
+    flex: 1,
+  },
+  modalCloseButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  closeButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  settingsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsContainer: {
+    backgroundColor: '#fff',
+    width: '90%',
+    borderRadius: 8,
+    padding: 20,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  colorDropdown: {
+    width: 80,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    backgroundColor: '#ffffff',
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 20,
+  },
+  colorDropdownContainer: {
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 8,
+  },
+  colorItem: {
+    padding: 6,
+    alignItems: 'center',
+  },
+  colorSample: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+  },
+  guildItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    width: '100%',
+  },
+  guildColorBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    marginRight: 20,
+  },
+  guildName: {
+    fontSize: 14,
+    color: '#000',
+  },
+  guildInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    marginLeft: 10,
+    marginBottom: 20,
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
+    flex: 1,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  addGuildText: {
+    color: '#007AFF',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  addGuildDisabled: {
+    color: '#999',
+  },
+  disabledText: {
+    color: '#999',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+  hiddenText: {
+    width: 0,
+    height: 0,
+    color: 'transparent',
+    padding: 0,
+    margin: 0,
+  },
+  timeModalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  timeModalContainer: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
+    padding: 20,
+  },
+  timeModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#000',
+    textAlign: 'center',
+  },
+  timeWheelWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+  },
+  timeWheelContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timeSelectionOverlay: {
+    position: 'absolute',
+    top: 70,
+    left: 0,
+    right: 0,
+    height: 40,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#007AFF',
+  },
+  timeModalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  timeModalButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  colorSquare: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+  },
+  sectorList: {
+    width: '100%',
+    paddingHorizontal: 10,
+    marginTop: 10,
+    maxHeight: HALF_HEIGHT,
+  },
+  sectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectorName: {
+    fontSize: 14,
+    color: '#000',
+  },
+  attackBox: {
+    width: 12,
+    height: 12,
+  },
+  sectorTime: {
+    fontSize: 14,
+    color: '#000',
+  },
+});
+
+export default GVG;
