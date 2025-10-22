@@ -6,8 +6,8 @@ import { faFire } from "@fortawesome/free-solid-svg-icons";
 import { getDatabase, ref, get, onValue } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GuildContext } from "../../GuildContext";
-import { VOLCANIC_ARCHIPELAGO_DATA } from "./waterfallData";
-import { WATERFALL_ARCHIPELAGO_DATA } from "./volcanicData";
+import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
+import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 import { useNavigation } from '@react-navigation/native';
 // Компонент інтерактивної карти режиму GBG
 
