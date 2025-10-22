@@ -114,6 +114,46 @@ const MAP_TITLE_TRANSLATIONS = {
   waterfall_archipelago: 'Водоспадний архіпелаг',
 };
 
+const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
+
+const parseStaffSectors = (rawValue) => {
+  const sectors = new Set();
+
+  const register = (value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const normalized = String(value).trim().toUpperCase();
+    if (normalized) {
+      sectors.add(normalized);
+    }
+  };
+
+  if (Array.isArray(rawValue)) {
+    rawValue.forEach(item => {
+      if (typeof item === 'string') {
+        item
+          .split(STAFF_SECTOR_SPLIT_REGEX)
+          .map(part => part.trim())
+          .filter(Boolean)
+          .forEach(register);
+      } else {
+        register(item);
+      }
+    });
+  } else if (typeof rawValue === 'string') {
+    rawValue
+      .split(STAFF_SECTOR_SPLIT_REGEX)
+      .map(part => part.trim())
+      .filter(Boolean)
+      .forEach(register);
+  } else {
+    register(rawValue);
+  }
+
+  return Array.from(sectors);
+};
+
 const getAdjacentIds = (mapKey, id) => {
   const neighbors = MAP_NEIGHBORS[mapKey] || {};
   return neighbors[id] || [];
@@ -141,6 +181,7 @@ const GVG = () => {
   const [isSectorDataLoaded, setIsSectorDataLoaded] = useState(false);
   const [opponentList, setOpponentList] = useState([]);
   const [opponentMapById, setOpponentMapById] = useState({});
+  const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
   const navigation = useNavigation();
@@ -181,9 +222,11 @@ const GVG = () => {
     setAreOpponentsLoaded(false);
     setOpponentList([]);
     setOpponentMapById({});
+    setOpponentStaffSectors({});
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) {
+        setOpponentStaffSectors({});
         setAreOpponentsLoaded(true);
         return;
       }
@@ -194,10 +237,12 @@ const GVG = () => {
           const raw = snap.val() || {};
           const byId = {};
           const list = [];
+          const staffFlags = {};
           Object.entries(raw).forEach(([key, value]) => {
             if (value && typeof value === 'object') {
               const normalizedId = value.id != null ? String(value.id) : String(key);
               const sectorColor = value.sectorColor ? String(value.sectorColor) : '#FFFFFF';
+              const staffSectors = parseStaffSectors(value.staff);
               const entry = {
                 key,
                 id: normalizedId,
@@ -206,14 +251,21 @@ const GVG = () => {
               };
               byId[normalizedId] = entry;
               list.push(entry);
+              staffSectors.forEach(sectorId => {
+                if (sectorId) {
+                  staffFlags[sectorId] = true;
+                }
+              });
             }
           });
           list.sort((a, b) => a.name.localeCompare(b.name, 'uk', { sensitivity: 'base' }));
           setOpponentMapById(byId);
           setOpponentList(list);
+          setOpponentStaffSectors(staffFlags);
         } else {
           setOpponentMapById({});
           setOpponentList([]);
+          setOpponentStaffSectors({});
         }
         setAreOpponentsLoaded(true);
       });
@@ -414,6 +466,12 @@ const GVG = () => {
       owners[gid] = ownerValue !== null ? String(ownerValue) : null;
     });
 
+    Object.keys(opponentStaffSectors).forEach(sectorId => {
+      if (opponentStaffSectors[sectorId] && availableSectors.has(sectorId)) {
+        staffFlags[sectorId] = true;
+      }
+    });
+
     const whiteSectors = sectorIds.filter(id => {
       const owner = owners[id];
       const color = colors[id];
@@ -477,7 +535,7 @@ const GVG = () => {
 
     setSectorColors(colors);
     setSectorStaff(staffFlags);
-  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, sectorSnapshot]);
+  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
 
   const handleShapePress = async (id, event) => {
     try {
