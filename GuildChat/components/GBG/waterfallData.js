@@ -26,6 +26,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A1M',
       },
     },
+    neighbors: ['B1O', 'D1B', 'A2S', 'A2T'],
   },
   'A2S': {
     fill: {
@@ -53,6 +54,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A2S',
       },
     },
+    neighbors: ['A1M', 'A2T', 'D2T', 'A3V', 'A3X'],
   },
   'A2T': {
     fill: {
@@ -80,6 +82,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A2T',
       },
     },
+    neighbors: ['A1M', 'A2S', 'B2S', 'A3Y', 'A3Z'],
   },
   'A3V': {
     fill: {
@@ -107,6 +110,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A3V',
       },
     },
+    neighbors: ['A2S', 'A3X', 'D3Z', 'A4A', 'A4B'],
   },
   'A3X': {
     fill: {
@@ -134,6 +138,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A3X',
       },
     },
+    neighbors: ['A2S', 'A3V', 'A3Y', 'A4C', 'A4D'],
   },
   'A3Y': {
     fill: {
@@ -161,6 +166,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A3Y',
       },
     },
+    neighbors: ['A2T', 'A3X', 'A3Z', 'A4E', 'A4F'],
   },
   'A3Z': {
     fill: {
@@ -188,6 +194,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'A3Z',
       },
     },
+    neighbors: ['A2T', 'A3Y', 'B3V', 'A4G', 'A4H'],
   },
   'A4A': {
     fill: {
@@ -225,6 +232,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3V', 'A4B', 'D4H'],
   },
   'A4B': {
     fill: {
@@ -261,6 +269,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3V', 'A4A', 'A4C'],
   },
   'A4C': {
     fill: {
@@ -297,6 +306,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3X', 'A4B', 'A4D'],
   },
   'A4D': {
     fill: {
@@ -333,6 +343,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3X', 'A4C', 'A4E'],
   },
   'A4E': {
     fill: {
@@ -369,6 +380,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3Y', 'A4D', 'A4F'],
   },
   'A4F': {
     fill: {
@@ -405,6 +417,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3Y', 'A4E', 'A4G'],
   },
   'A4G': {
     fill: {
@@ -441,6 +454,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3Z', 'A4F', 'A4H'],
   },
   'A4H': {
     fill: {
@@ -477,6 +491,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['A3Z', 'A4G', 'B4A'],
   },
   'B1O': {
     fill: {
@@ -504,6 +519,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B1O',
       },
     },
+    neighbors: ['A1M', 'C1N', 'B2S', 'B2T'],
   },
   'B2S': {
     fill: {
@@ -531,6 +547,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B2S',
       },
     },
+    neighbors: ['B1O', 'A2T', 'B2T', 'B3V', 'B3X'],
   },
   'B2T': {
     fill: {
@@ -558,6 +575,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B2T',
       },
     },
+    neighbors: ['B1O', 'B2S', 'C2S', 'B3Y', 'B3Z'],
   },
   'B3V': {
     fill: {
@@ -583,6 +601,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B3V',
       },
     },
+    neighbors: ['B2S', 'A3Z', 'B3X', 'B4A', 'B4B'],
   },
   'B3X': {
     fill: {
@@ -611,6 +630,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B3X',
       },
     },
+    neighbors: ['B2S', 'B3V', 'B3Y', 'B4C', 'B4D'],
   },
   'B3Y': {
     fill: {
@@ -638,6 +658,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B3Y',
       },
     },
+    neighbors: ['B2T', 'B3X', 'B3Z', 'B4E', 'B4F'],
   },
   'B3Z': {
     fill: {
@@ -663,6 +684,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'B3Z',
       },
     },
+    neighbors: ['B2T', 'B3Y', 'C3V', 'B4G', 'B4H'],
   },
   'B4A': {
     fill: {
@@ -699,6 +721,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3V', 'A4H', 'B4B'],
   },
   'B4B': {
     fill: {
@@ -735,6 +758,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3V', 'B4A', 'B4C'],
   },
   'B4C': {
     fill: {
@@ -771,6 +795,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3X', 'B4B', 'B4D'],
   },
   'B4D': {
     fill: {
@@ -807,6 +832,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3X', 'B4C', 'B4E'],
   },
   'B4E': {
     fill: {
@@ -845,6 +871,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3Y', 'B4D', 'B4F'],
   },
   'B4F': {
     fill: {
@@ -883,6 +910,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3Y', 'B4E', 'B4G'],
   },
   'B4G': {
     fill: {
@@ -921,6 +949,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3Z', 'B4F', 'B4H'],
   },
   'B4H': {
     fill: {
@@ -959,6 +988,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['B3Z', 'B4G', 'C4A'],
   },
   'C1N': {
     fill: {
@@ -986,6 +1016,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C1N',
       },
     },
+    neighbors: ['B1O', 'D1B', 'C2S', 'C2T'],
   },
   'C2S': {
     fill: {
@@ -1013,6 +1044,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C2S',
       },
     },
+    neighbors: ['C1N', 'B2T', 'C2T', 'C3V', 'C3X'],
   },
   'C2T': {
     fill: {
@@ -1040,6 +1072,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C2T',
       },
     },
+    neighbors: ['C1N', 'C2S', 'D2S', 'C3Y', 'C3Z'],
   },
   'C3V': {
     fill: {
@@ -1065,6 +1098,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C3V',
       },
     },
+    neighbors: ['C2S', 'B3Z', 'C3X', 'C4A', 'C4B'],
   },
   'C3X': {
     fill: {
@@ -1090,6 +1124,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C3X',
       },
     },
+    neighbors: ['C2S', 'C3V', 'C3Y', 'C4C', 'C4D'],
   },
   'C3Y': {
     fill: {
@@ -1115,6 +1150,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C3Y',
       },
     },
+    neighbors: ['C2T', 'C3X', 'C3Z', 'C4E', 'C4F'],
   },
   'C3Z': {
     fill: {
@@ -1140,6 +1176,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'C3Z',
       },
     },
+    neighbors: ['C2T', 'C3Y', 'D3V', 'C4G', 'C4H'],
   },
   'C4A': {
     fill: {
@@ -1178,6 +1215,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3V', 'B4H', 'C4B'],
   },
   'C4B': {
     fill: {
@@ -1216,6 +1254,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3V', 'C4A', 'C4C'],
   },
   'C4C': {
     fill: {
@@ -1254,6 +1293,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3X', 'C4B', 'C4D'],
   },
   'C4D': {
     fill: {
@@ -1292,6 +1332,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3X', 'C4C', 'C4E'],
   },
   'C4E': {
     fill: {
@@ -1330,6 +1371,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3Y', 'C4D', 'C4F'],
   },
   'C4F': {
     fill: {
@@ -1368,6 +1410,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3Y', 'C4E', 'C4G'],
   },
   'C4G': {
     fill: {
@@ -1406,6 +1449,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3Z', 'C4F', 'C4H'],
   },
   'C4H': {
     fill: {
@@ -1444,6 +1488,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['C3Z', 'C4G', 'D4A'],
   },
   'D1B': {
     fill: {
@@ -1472,6 +1517,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D1B',
       },
     },
+    neighbors: ['A1M', 'C1N', 'D2S', 'D2T'],
   },
   'D2S': {
     fill: {
@@ -1499,6 +1545,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D2S',
       },
     },
+    neighbors: ['D1B', 'C2T', 'D2T', 'D3V', 'D3X'],
   },
   'D2T': {
     fill: {
@@ -1526,6 +1573,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D2T',
       },
     },
+    neighbors: ['D1B', 'A2S', 'D2S', 'D3Y', 'D3Z'],
   },
   'D3V': {
     fill: {
@@ -1551,6 +1599,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D3V',
       },
     },
+    neighbors: ['D2S', 'C3Z', 'D3X', 'D4A', 'D4B'],
   },
   'D3X': {
     fill: {
@@ -1576,6 +1625,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D3X',
       },
     },
+    neighbors: ['D2S', 'D3V', 'D3Y', 'D4C', 'D4D'],
   },
   'D3Y': {
     fill: {
@@ -1601,6 +1651,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D3Y',
       },
     },
+    neighbors: ['D2T', 'D3X', 'D3Z', 'D4E', 'D4F'],
   },
   'D3Z': {
     fill: {
@@ -1626,6 +1677,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         ariaLabel: 'D3Z',
       },
     },
+    neighbors: ['D2T', 'A3V', 'D3Y', 'D4G', 'D4H'],
   },
   'D4A': {
     fill: {
@@ -1664,6 +1716,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3V', 'C4H', 'D4B'],
   },
   'D4B': {
     fill: {
@@ -1702,6 +1755,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3V', 'D4A', 'D4C'],
   },
   'D4C': {
     fill: {
@@ -1740,6 +1794,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3X', 'D4B', 'D4D'],
   },
   'D4D': {
     fill: {
@@ -1778,6 +1833,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3X', 'D4C', 'D4E'],
   },
   'D4E': {
     fill: {
@@ -1816,6 +1872,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3Y', 'D4D', 'D4F'],
   },
   'D4F': {
     fill: {
@@ -1854,6 +1911,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3Y', 'D4E', 'D4G'],
   },
   'D4G': {
     fill: {
@@ -1892,6 +1950,7 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3Z', 'D4F', 'D4H'],
   },
   'D4H': {
     fill: {
@@ -1930,5 +1989,6 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
         fill: '#8C9093',
       },
     },
+    neighbors: ['D3Z', 'A4A', 'D4G'],
   },
 };
