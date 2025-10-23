@@ -336,6 +336,13 @@ const GVG = () => {
 
       const iconStyle = { ...(icon?.style || {}) };
       iconStyle.display = sectorStaff[sectorId] ? 'inline' : 'none';
+      iconStyle.fill = '#000000';
+      if (
+        typeof iconStyle.stroke === 'string' &&
+        iconStyle.stroke.toLowerCase() !== 'none'
+      ) {
+        iconStyle.stroke = '#000000';
+      }
 
       return (
         <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
