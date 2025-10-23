@@ -1,4 +1,21 @@
 // Generated from map2.svg (Volcanic Archipelago)
+
+const ensureBlackIconStyles = data => {
+  Object.values(data).forEach(config => {
+    const style = config?.icon?.style;
+    if (!style) {
+      return;
+    }
+    style.fill = '#000000';
+    if (
+      typeof style.stroke === 'string' &&
+      style.stroke.toLowerCase() !== 'none'
+    ) {
+      style.stroke = '#000000';
+    }
+  });
+};
+
 export const VOLCANIC_ARCHIPELAGO_DATA = {
   'A1M': {
     fill: {
@@ -1992,3 +2009,5 @@ export const VOLCANIC_ARCHIPELAGO_DATA = {
     },
   },
 };
+
+ensureBlackIconStyles(VOLCANIC_ARCHIPELAGO_DATA);

@@ -1,4 +1,21 @@
 // Generated from GBGscreen.js (Waterfall Archipelago)
+
+const ensureBlackIconStyles = data => {
+  Object.values(data).forEach(config => {
+    const style = config?.icon?.style;
+    if (!style) {
+      return;
+    }
+    style.fill = '#000000';
+    if (
+      typeof style.stroke === 'string' &&
+      style.stroke.toLowerCase() !== 'none'
+    ) {
+      style.stroke = '#000000';
+    }
+  });
+};
+
 export const WATERFALL_ARCHIPELAGO_DATA = {
   "C5D": {
     "fill": {
@@ -2115,3 +2132,5 @@ export const WATERFALL_ARCHIPELAGO_DATA = {
     }
   }
 };
+
+ensureBlackIconStyles(WATERFALL_ARCHIPELAGO_DATA);
