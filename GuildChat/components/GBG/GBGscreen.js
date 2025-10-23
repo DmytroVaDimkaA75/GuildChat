@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useContext, useLayoutEffect } from "react";
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text, ScrollView } from "react-native";
+import React, { useState, useEffect, useContext, useLayoutEffect, useRef } from "react";
+import { View, StyleSheet, Dimensions, TouchableOpacity, Text, ScrollView, Animated } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faFire } from "@fortawesome/free-solid-svg-icons";
@@ -13,6 +13,8 @@ import { useNavigation } from '@react-navigation/native';
 
 const { height } = Dimensions.get('window');
 const HALF_HEIGHT = height * 0.5;
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
 const VOLCANIC_SVG_HEIGHT = 248.83203;
@@ -154,15 +156,60 @@ const parseStaffSectors = (rawValue) => {
   return Array.from(sectors);
 };
 
-const getAdjacentIds = (mapKey, id) => {
-  const neighbors = MAP_NEIGHBORS[mapKey] || {};
-  return neighbors[id] || [];
+const getNeighborIdsForSectors = (mapKey, sectorIds) => {
+  if (!Array.isArray(sectorIds) || sectorIds.length === 0) {
+    return [];
+  }
+
+  const data = MAP_DATA[mapKey] || {};
+  const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
+  const ownSet = new Set(sectorIds);
+  const neighbors = new Set();
+
+  sectorIds.forEach(sectorId => {
+    const config = data[sectorId];
+    const neighborList = Array.isArray(config?.neighbors)
+      ? config.neighbors
+      : Array.isArray(fallbackNeighbors[sectorId])
+        ? fallbackNeighbors[sectorId]
+        : [];
+
+    neighborList.forEach(neighborId => {
+      if (!neighborId) {
+        return;
+      }
+      if (!data[neighborId]) {
+        return;
+      }
+      if (ownSet.has(neighborId)) {
+        return;
+      }
+      neighbors.add(neighborId);
+    });
+  });
+
+  return Array.from(neighbors);
 };
 
 const formatRemaining = seconds => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   return `${h}:${String(m).padStart(2, '0')}`;
+};
+
+const getArmyColor = (army) => {
+  if (!army) {
+    return '#9e9e9e';
+  }
+
+  const normalized = String(army).trim().toLowerCase();
+  if (normalized === 'attack') {
+    return '#d32f2f';
+  }
+  if (normalized === 'defense') {
+    return '#1976d2';
+  }
+  return '#9e9e9e';
 };
 
 
@@ -176,6 +223,9 @@ const GVG = () => {
   const [sectorSchedule, setSectorSchedule] = useState([]);
   const [sectorColors, setSectorColors] = useState({});
   const [sectorSnapshot, setSectorSnapshot] = useState(null);
+  const [shortGuildId, setShortGuildId] = useState(null);
+  const [blinkingSector, setBlinkingSector] = useState(null);
+  const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
   const [currentMap, setCurrentMap] = useState(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isSectorDataLoaded, setIsSectorDataLoaded] = useState(false);
@@ -184,7 +234,46 @@ const GVG = () => {
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
+  const blinkingAnim = useRef(new Animated.Value(0)).current;
+  const blinkingLoopRef = useRef(null);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    let isActive = true;
+    (async () => {
+      try {
+        const storedId = await AsyncStorage.getItem('guildId');
+        const effectiveId = guildId || storedId;
+        if (!isActive) {
+          return;
+        }
+        if (!effectiveId) {
+          setShortGuildId(null);
+          return;
+        }
+        const parts = String(effectiveId).split('_');
+        const shortId = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+        setShortGuildId(shortId);
+      } catch (error) {
+        console.error('Не вдалося отримати короткий guildId:', error);
+        if (isActive) {
+          setShortGuildId(null);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [guildId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Math.floor(Date.now() / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let unsubscribe;
@@ -324,9 +413,21 @@ const GVG = () => {
         const lower = color.toLowerCase();
         const isWhite = lower === '#ffffff' || lower === 'white';
         fillStyle.fill = color;
-        fillStyle.stroke = isWhite ? '#000000' : 'none';
-        fillStyle.strokeWidth = isWhite ? 1 : 0;
-        fillStyle.strokeOpacity = isWhite ? 0.7 : 0;
+        if (isWhite) {
+          fillStyle.stroke = '#000000';
+          fillStyle.strokeWidth = 1;
+          fillStyle.strokeOpacity = 0.7;
+        } else {
+          const existingStroke = typeof fillStyle.stroke === 'string' ? fillStyle.stroke : null;
+          const normalizedStroke = existingStroke && existingStroke.toLowerCase() !== 'none'
+            ? existingStroke
+            : '#000000';
+          fillStyle.stroke = normalizedStroke;
+          fillStyle.strokeWidth = fillStyle.strokeWidth || 1;
+          if (fillStyle.strokeOpacity === undefined || fillStyle.strokeOpacity === null) {
+            fillStyle.strokeOpacity = 0;
+          }
+        }
       }
 
       const textStyle = { ...(text?.style || {}) };
@@ -344,14 +445,26 @@ const GVG = () => {
         iconStyle.stroke = '#000000';
       }
 
+      const isBlinking = blinkingSector === sectorId;
+      const baseFillOpacity = typeof fillStyle.fillOpacity === 'number' ? fillStyle.fillOpacity : undefined;
+      const baseStrokeOpacity = typeof fillStyle.strokeOpacity === 'number' ? fillStyle.strokeOpacity : undefined;
+      const animatedFillOpacity = isBlinking
+        ? blinkingAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })
+        : baseFillOpacity;
+      const animatedStrokeOpacity = isBlinking
+        ? blinkingAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] })
+        : baseStrokeOpacity;
+
       return (
         <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
           {fill && (
-            <Path
+            <AnimatedPath
               {...(fill.props || {})}
               d={fill.d}
               onPressIn={handleShapePress.bind(null, sectorId)}
               style={fillStyle}
+              fillOpacity={animatedFillOpacity}
+              strokeOpacity={animatedStrokeOpacity}
             />
           )}
           {text && (
@@ -382,6 +495,7 @@ const GVG = () => {
     setSectorColors({});
     setSectorSnapshot(null);
     setIsSectorDataLoaded(false);
+    setBlinkingSector(null);
   }, [currentMap, isMapLoaded]);
 
   useEffect(() => {
@@ -426,7 +540,6 @@ const GVG = () => {
 
     const colors = {};
     const staffFlags = {};
-    const owners = {};
     const availableSectors = new Set(sectorIds);
 
     sectorIds.forEach(gid => {
@@ -470,7 +583,6 @@ const GVG = () => {
 
       colors[gid] = color;
       staffFlags[gid] = staff;
-      owners[gid] = ownerValue !== null ? String(ownerValue) : null;
     });
 
     Object.keys(opponentStaffSectors).forEach(sectorId => {
@@ -479,70 +591,135 @@ const GVG = () => {
       }
     });
 
-    const whiteSectors = sectorIds.filter(id => {
-      const owner = owners[id];
-      const color = colors[id];
-      const lower = (color || '').toLowerCase();
-      if (owner === null) {
-        return !color || lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
-      }
-      if (owner === '0') {
-        return true;
-      }
-      return lower === '#ffffff' || lower === '#dcdcdc' || lower === 'white';
-    });
-
-    if (whiteSectors.length === 0) {
-      setSectorSchedule([]);
-    } else {
-      const namesSet = new Set();
-      whiteSectors.forEach(sec => {
-        getAdjacentIds(mapKey, sec).forEach(adj => {
-          if (!availableSectors.has(adj)) {
-            return;
-          }
-          if (!adj) return;
-          const colorLower = (colors[adj] || '').toLowerCase();
-          const owner = owners[adj];
-          if (owner !== null && owner !== '0') {
-            namesSet.add(adj);
-          } else if (colorLower && colorLower !== '#ffffff' && colorLower !== '#dcdcdc' && colorLower !== 'white') {
-            namesSet.add(adj);
-          }
-        });
-      });
-
-      const now = Math.floor(Date.now() / 1000);
-      const result = Array.from(namesSet)
-        .map(name => {
-          const entry = data[name];
-          if (entry && typeof entry === 'object') {
-            return {
-              name,
-              attack: entry.attack,
-              openTime: entry.openTime,
-              staff: entry.staff,
-            };
-          }
-          return { name };
-        })
-        .filter(item => item.openTime && !item.staff)
-        .map(it => ({
-          ...it,
-          timeRemaining: it.openTime - now,
-          openLocal: new Date(it.openTime * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        }))
-        .filter(it => it.timeRemaining > 0)
-        .sort((a, b) => a.timeRemaining - b.timeRemaining);
-      setSectorSchedule(result);
-    }
-
     setSectorColors(colors);
     setSectorStaff(staffFlags);
   }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
+
+  useEffect(() => {
+    if (!isMapLoaded) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
+    const mapData = MAP_DATA[mapKey] || {};
+    const sectorIds = Object.keys(mapData);
+    if (sectorIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    if (!shortGuildId) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const shortId = String(shortGuildId);
+    const ownSectors = sectorIds.filter(sectorId => {
+      const entry = data[sectorId];
+      if (!entry || typeof entry !== 'object') {
+        return false;
+      }
+      let ownerValue = null;
+      if (entry.owner !== undefined && entry.owner !== null) {
+        ownerValue = entry.owner;
+      } else if (entry.ownerId !== undefined && entry.ownerId !== null) {
+        ownerValue = entry.ownerId;
+      }
+      if (ownerValue === null || ownerValue === undefined) {
+        return false;
+      }
+      return String(ownerValue) === shortId;
+    });
+
+    if (ownSectors.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const neighborIds = getNeighborIdsForSectors(mapKey, ownSectors);
+    if (neighborIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const schedule = neighborIds
+      .map(sectorId => {
+        const entry = data[sectorId];
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        const openTime = Number(entry.openTime);
+        if (!Number.isFinite(openTime) || openTime <= 0) {
+          return null;
+        }
+        const armyRaw = entry.army != null ? String(entry.army).trim().toLowerCase() : '';
+        const normalizedArmy = armyRaw === 'attack'
+          ? 'attack'
+          : armyRaw === 'defense'
+            ? 'defense'
+            : armyRaw;
+
+        return {
+          name: sectorId,
+          openTime,
+          army: normalizedArmy,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.openTime - b.openTime);
+
+    setSectorSchedule(schedule);
+  }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
+
+  useEffect(() => {
+    if (blinkingLoopRef.current) {
+      blinkingLoopRef.current.stop();
+      blinkingLoopRef.current = null;
+    }
+
+    if (blinkingSector) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkingAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+          Animated.timing(blinkingAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+        ]),
+        { resetBeforeIteration: true },
+      );
+      blinkingLoopRef.current = loop;
+      loop.start();
+    } else {
+      blinkingAnim.setValue(0);
+    }
+
+    return () => {
+      if (blinkingLoopRef.current) {
+        blinkingLoopRef.current.stop();
+        blinkingLoopRef.current = null;
+      }
+    };
+  }, [blinkingAnim, blinkingSector]);
+
+  useEffect(() => {
+    if (!blinkingSector) {
+      return;
+    }
+    if (!sectorSchedule.some(item => item.name === blinkingSector)) {
+      setBlinkingSector(null);
+    }
+  }, [blinkingSector, sectorSchedule]);
+
+  const handleSchedulePress = (sectorId) => {
+    setBlinkingSector(prev => (prev === sectorId ? null : sectorId));
+  };
 
   const handleShapePress = async (id, event) => {
     try {
@@ -641,24 +818,6 @@ const GVG = () => {
       setPopupStyle({});
     }
   };
-
-  
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSectorSchedule(prev =>
-        prev
-          .map(item => ({
-            ...item,
-            timeRemaining: item.openTime - Math.floor(Date.now() / 1000),
-          }))
-          .filter(item => item.timeRemaining > 0)
-          .sort((a, b) => a.timeRemaining - b.timeRemaining)
-      );
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   useEffect(() => {
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
       setInfoVisible(false);
@@ -685,19 +844,36 @@ const GVG = () => {
         </Svg>
       </View>
       <View style={styles.sectorList}>
-        {sectorSchedule.map(item => (
-          <View key={item.name} style={styles.sectorRow}>
-            <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}>
-              {item.name}
-            </Text>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={[styles.attackBox, { backgroundColor: item.attack }]} />
-            </View>
-            <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}>
-              {formatRemaining(item.timeRemaining)}
-            </Text>
-          </View>
-        ))}
+        {sectorSchedule.map(item => {
+          const armyColor = getArmyColor(item.army);
+          const timeRemainingSeconds = item.openTime
+            ? Math.max(item.openTime - currentTime, 0)
+            : 0;
+          const timeLabel = item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--';
+          const isActive = blinkingSector === item.name;
+
+          return (
+            <TouchableOpacity
+              key={item.name}
+              style={[
+                styles.sectorRow,
+                isActive && styles.activeSectorRow,
+              ]}
+              onPress={() => handleSchedulePress(item.name)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}> 
+                {item.name}
+              </Text>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <View style={[styles.armyBox, { backgroundColor: armyColor }]} />
+              </View>
+              <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}> 
+                {timeLabel}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
       {infoVisible && (
         <View style={styles.infoOverlay}>
@@ -893,18 +1069,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: 8,
   },
   sectorName: {
     fontSize: 14,
     color: '#000',
   },
-  attackBox: {
+  armyBox: {
     width: 12,
     height: 12,
+    borderRadius: 2,
   },
   sectorTime: {
     fontSize: 14,
     color: '#000',
+  },
+  activeSectorRow: {
+    backgroundColor: 'rgba(25, 118, 210, 0.12)',
   },
 });
 
