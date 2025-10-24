@@ -194,7 +194,8 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
 const formatRemaining = seconds => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  return `${h}:${String(m).padStart(2, '0')}`;
+  const s = Math.max(seconds % 60, 0);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
 const getArmyColor = (army) => {
@@ -843,13 +844,13 @@ const GVG = () => {
           {renderMapPaths()}
         </Svg>
       </View>
-      <View style={styles.sectorList}>
+      <ScrollView style={styles.sectorList} contentContainerStyle={styles.sectorListContent}>
         {sectorSchedule.map(item => {
           const armyColor = getArmyColor(item.army);
           const timeRemainingSeconds = item.openTime
             ? Math.max(item.openTime - currentTime, 0)
             : 0;
-          const timeLabel = item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--';
+          const timeLabel = item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--';
           const isActive = blinkingSector === item.name;
 
           return (
@@ -862,19 +863,19 @@ const GVG = () => {
               onPress={() => handleSchedulePress(item.name)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.sectorName, { flex: 1, textAlign: 'left' }]}> 
-                {item.name}
-              </Text>
-              <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={styles.sectorNameContainer}>
                 <View style={[styles.armyBox, { backgroundColor: armyColor }]} />
+                <Text style={styles.sectorName}>
+                  {item.name}
+                </Text>
               </View>
-              <Text style={[styles.sectorTime, { flex: 1, textAlign: 'right' }]}> 
+              <Text style={styles.sectorTime}>
                 {timeLabel}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
       {infoVisible && (
         <View style={styles.infoOverlay}>
           <View style={styles.infoModal}>
@@ -1061,9 +1062,12 @@ const styles = StyleSheet.create({
   },
   sectorList: {
     width: '100%',
-    paddingHorizontal: 10,
     marginTop: 10,
     maxHeight: HALF_HEIGHT,
+  },
+  sectorListContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 12,
   },
   sectorRow: {
     flexDirection: 'row',
@@ -1072,19 +1076,30 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 6,
     borderRadius: 8,
+    justifyContent: 'space-between',
   },
-  sectorName: {
-    fontSize: 14,
-    color: '#000',
+  sectorNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
   },
   armyBox: {
     width: 12,
     height: 12,
     borderRadius: 2,
   },
+  sectorName: {
+    fontSize: 14,
+    color: '#000',
+    marginLeft: 8,
+    flexShrink: 1,
+  },
   sectorTime: {
     fontSize: 14,
     color: '#000',
+    textAlign: 'right',
+    marginLeft: 12,
+    minWidth: 72,
   },
   activeSectorRow: {
     backgroundColor: 'rgba(25, 118, 210, 0.12)',
