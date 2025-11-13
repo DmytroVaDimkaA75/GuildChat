@@ -10,6 +10,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "node": "20.11.1",
       "android": {
         "buildType": "apk"
       }
