@@ -302,27 +302,84 @@ exports.processGbgNotificationQueue = onSchedule(
 
     logger.log("Running GBG notifications check...");
 
-    const query = queueRef.orderByChild('notificationTime').endAt(nowInSeconds);
-    const snapshot = await query.once('value');
+    const pendingQuery = queueRef.orderByChild('status').equalTo('pending');
+    const snapshot = await pendingQuery.once('value');
 
     if (!snapshot.exists()) {
       logger.log("No pending GBG notifications to send.");
       return null;
     }
 
-    const promises = [];
+    const normalizationPromises = [];
+    const processingPromises = [];
 
-    snapshot.forEach(childSnapshot => {
+    snapshot.forEach((childSnapshot) => {
       const taskId = childSnapshot.key;
-      const taskData = childSnapshot.val();
-      
-      if(taskData.status === 'pending') {
-        const promise = processSingleGbgNotification(taskId, taskData, db);
-        promises.push(promise);
+      const rawTaskData = childSnapshot.val() || {};
+      const sectorId = rawTaskData.sectorId || 'unknown';
+
+      const normalizedNotificationTime = normalizeTimestampToSeconds(
+        rawTaskData.notificationTime,
+        `[${sectorId}] notificationTime`
+      );
+
+      if (!normalizedNotificationTime) {
+        logger.log(`[${sectorId}] Removing task ${taskId} with invalid notification time.`);
+        normalizationPromises.push(queueRef.child(taskId).remove());
+        return;
       }
+
+      const normalizedTargetOpenTime = normalizeTimestampToSeconds(
+        rawTaskData.targetOpenTime,
+        `[${sectorId}] targetOpenTime`
+      );
+
+      const updates = {};
+      if (rawTaskData.notificationTime !== normalizedNotificationTime) {
+        updates.notificationTime = normalizedNotificationTime;
+      }
+      if (
+        normalizedTargetOpenTime &&
+        rawTaskData.targetOpenTime !== normalizedTargetOpenTime
+      ) {
+        updates.targetOpenTime = normalizedTargetOpenTime;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        normalizationPromises.push(queueRef.child(taskId).update(updates));
+      }
+
+      if (normalizedNotificationTime > nowInSeconds) {
+        logger.log(
+          `[${sectorId}] Skipping task ${taskId}; notification scheduled for ${new Date(
+            normalizedNotificationTime * 1000
+          ).toISOString()}`
+        );
+        return;
+      }
+
+      const normalizedTaskData = {
+        ...rawTaskData,
+        notificationTime: normalizedNotificationTime,
+        targetOpenTime:
+          normalizedTargetOpenTime || rawTaskData.targetOpenTime,
+      };
+
+      processingPromises.push(
+        processSingleGbgNotification(taskId, normalizedTaskData, db)
+      );
     });
 
-    await Promise.all(promises);
+    if (normalizationPromises.length > 0) {
+      await Promise.all(normalizationPromises);
+    }
+
+    if (processingPromises.length === 0) {
+      logger.log("No GBG notifications due right now.");
+      return null;
+    }
+
+    await Promise.all(processingPromises);
     logger.log("GBG notifications check finished.");
     return null;
   }
