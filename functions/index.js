@@ -2,6 +2,7 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
+const { getMessaging } = require("firebase-admin/messaging");
 const { onValueCreated } = require("firebase-functions/v2/database");
 const fetch = require('node-fetch');
 
@@ -34,7 +35,72 @@ exports.executeDueEvents = onSchedule(
 
       switch (actionType) {
         case "notify":
-          console.log("🔔 notify:", payload);
+          try {
+            const {
+              tokens,
+              token,
+              title,
+              body,
+              notification = {},
+              data = {},
+              sound = "alert.mp3",
+            } = payload || {};
+
+            const targetTokens = Array.isArray(tokens)
+              ? tokens.filter((t) => typeof t === "string" && t.trim())
+              : token
+              ? [token]
+              : [];
+
+            if (targetTokens.length === 0) {
+              console.warn("⚠️ notify payload without tokens", payload);
+              break;
+            }
+
+            const messageNotification = {
+              ...notification,
+            };
+
+            if (!messageNotification.title && title) {
+              messageNotification.title = title;
+            }
+            if (!messageNotification.body && body) {
+              messageNotification.body = body;
+            }
+
+            const rawData =
+              data && typeof data === "object" && !Array.isArray(data) ? data : {};
+            const sanitizedData = Object.fromEntries(
+              Object.entries(rawData).map(([k, v]) => [k, String(v)])
+            );
+
+            const messaging = getMessaging();
+            const androidSound = sound ? sound.replace(/\.[^/.]+$/, "") : undefined;
+
+            await Promise.all(
+              targetTokens.map((targetToken) =>
+                messaging.send({
+                  token: targetToken,
+                  notification: Object.keys(messageNotification).length
+                    ? messageNotification
+                    : undefined,
+                  data: Object.keys(sanitizedData).length ? sanitizedData : undefined,
+                  android: androidSound
+                    ? { notification: { sound: androidSound } }
+                    : undefined,
+                  apns: sound
+                    ? { payload: { aps: { sound } } }
+                    : undefined,
+                })
+              )
+            );
+
+            console.log(
+              `📤 Sent notify event to ${targetTokens.length} recipient(s)`
+            );
+          } catch (err) {
+            console.error("❌ Failed to process notify event", err);
+          }
           break;
         default:
           console.warn("🤷 unknown actionType:", actionType);
