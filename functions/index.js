@@ -200,6 +200,28 @@ exports.testPushNotification = onRequest(
 
 const NOTIFICATION_LEAD_TIME_MINUTES = 2;
 
+function normalizeTimestampToSeconds(rawTimestamp, contextLabel = '') {
+  if (rawTimestamp === null || rawTimestamp === undefined) {
+    return null;
+  }
+
+  const numericValue = Number(rawTimestamp);
+
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return null;
+  }
+
+  if (numericValue > 1e10) {
+    const normalized = Math.floor(numericValue / 1000);
+    if (contextLabel) {
+      logger.log(`${contextLabel} Normalized millisecond timestamp ${numericValue} -> ${normalized}`);
+    }
+    return normalized;
+  }
+
+  return Math.floor(numericValue);
+}
+
 exports.scheduleGbgNotifications = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
@@ -228,8 +250,8 @@ exports.scheduleGbgNotifications = onValueWritten(
     const sectorData = event.data.after.val();
     
     const ownerId = sectorData.owner || sectorData.ownerId;
-    const openTime = Number(sectorData.openTime);
-    
+    const openTime = normalizeTimestampToSeconds(sectorData.openTime, `[${sectorId}]`);
+
     if (!ownerId || !openTime || ownerId === '0') {
       logger.log(`[${sectorId}] Sector is neutral or has no open time. Skipping.`);
       return null;
@@ -242,9 +264,9 @@ exports.scheduleGbgNotifications = onValueWritten(
       logger.log(`[${sectorId}] Sector is our own. Skipping.`);
       return null;
     }
-    
+
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const notificationTime = openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60);
+    const notificationTime = Math.floor(openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60));
 
     if (notificationTime <= nowInSeconds) {
       logger.log(`[${sectorId}] Notification time is in the past. Skipping.`);
@@ -337,8 +359,8 @@ async function processSingleGbgNotification(taskId, taskData, db) {
       if (String(neighborOwner) !== shortGuildId) {
           return false;
       }
-      const neighborOpenTime = Number(neighborData.openTime);
-      return !neighborOpenTime || neighborOpenTime <= now;
+      const neighborOpenTime = normalizeTimestampToSeconds(neighborData?.openTime);
+      return neighborOpenTime === null || neighborOpenTime <= now;
   });
 
   if (ourOpenAdjacentSectors.length === 0) {
@@ -360,23 +382,32 @@ async function processSingleGbgNotification(taskId, taskData, db) {
   const tokensSnapshots = await Promise.all(tokensPromises);
   const tokens = tokensSnapshots.map(snap => snap.val()).filter(Boolean);
 
-  if (tokens.length > 0) {
-    const message = `Відкривається сектор ${sectorId}!`;
-    
-    const payload = {
-      notification: {
-        title: "Поле битви",
-        body: message,
-        sound: "default",
-      },
-      data: {
-        screen: 'GBG',
-        sectorId: sectorId,
-      },
-    };
+  if (tokens.length === 0) {
+    logger.log(`[${sectorId}] No FCM tokens available for guild members.`);
+    return db.ref(`gbgNotificationQueue/${taskId}`).remove();
+  }
 
-    await admin.messaging().sendEachForMulticast({ tokens, ...payload })
-    logger.log(`[${sectorId}] Successfully sent notifications to ${tokens.length} members.`);
+  const message = `Відкривається сектор ${sectorId}!`;
+
+  const payload = {
+    notification: {
+      title: "Поле битви",
+      body: message,
+      sound: "default",
+    },
+    data: {
+      screen: 'GBG',
+      sectorId: sectorId,
+    },
+  };
+
+  try {
+    const response = await admin.messaging().sendEachForMulticast({ tokens, ...payload });
+    logger.log(`[${sectorId}] Successfully sent notifications to ${response.successCount} members.`);
+  } catch (error) {
+    logger.error(`[${sectorId}] Failed to send notifications:`, error);
+    await db.ref(`gbgNotificationQueue/${taskId}`).update({ status: 'error', error: error.message || 'send-failed' });
+    return null;
   }
 
   return db.ref(`gbgNotificationQueue/${taskId}`).remove();
