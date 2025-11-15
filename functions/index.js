@@ -251,11 +251,11 @@ exports.scheduleGbgNotifications = onValueWritten(
     openTime = Math.floor(openTime);
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const notificationTime = Math.floor(openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60));
+    let notificationTime = Math.floor(openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60));
 
     if (notificationTime <= nowInSeconds) {
-      logger.log(`[${sectorId}] Notification time is in the past. Skipping.`);
-      return null;
+      logger.log(`[${sectorId}] Notification time (${notificationTime}) is not in the future. Adjusting to send immediately.`);
+      notificationTime = nowInSeconds;
     }
     
     const newTask = {
