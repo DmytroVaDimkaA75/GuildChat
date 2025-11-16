@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import DatePicker from 'react-native-date-picker';
 
-const ChatMessageInput = ({ onSendMessage }) => {
+const ChatMessageInput = ({ onSendMessage, bottomInset = 0 }) => {
   const [message, setMessage] = useState('');
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
   
@@ -37,7 +37,7 @@ const ChatMessageInput = ({ onSendMessage }) => {
   };
 
   return (
-    <View>
+    <View style={[styles.wrapper, { paddingBottom: bottomInset }]}>
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -73,6 +73,9 @@ const ChatMessageInput = ({ onSendMessage }) => {
 };
 
 const styles = StyleSheet.create({
+  wrapper: {
+    backgroundColor: 'white',
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
