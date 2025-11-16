@@ -210,7 +210,10 @@ exports.scheduleGbgNotifications = onValueWritten(
     const db = admin.database();
 
     const queueRef = db.ref('gbgNotificationQueue');
-    const oldNotificationsQuery = queueRef.orderByChild('sectorId').equalTo(sectorId);
+    const guildSectorKey = `${guildId}_${sectorId}`;
+    const oldNotificationsQuery = queueRef
+      .orderByChild('guildSectorKey')
+      .equalTo(guildSectorKey);
     const oldNotificationsSnap = await oldNotificationsQuery.once('value');
     if (oldNotificationsSnap.exists()) {
       const updates = {};
@@ -262,6 +265,7 @@ exports.scheduleGbgNotifications = onValueWritten(
       guildId: guildId,
       shortGuildId: shortGuildId,
       sectorId: sectorId,
+      guildSectorKey,
       targetOpenTime: openTime,
       notificationTime: notificationTime,
       status: 'pending',
