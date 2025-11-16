@@ -337,22 +337,17 @@ async function processSingleGbgNotification(taskId, taskData, db) {
       return db.ref(`gbgNotificationQueue/${taskId}`).remove();
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const ourOpenAdjacentSectors = neighbors.filter(neighborId => {
+  const ourAdjacentSectors = neighbors.filter(neighborId => {
       const neighborData = allSectors[neighborId];
       const neighborOwner = neighborData?.owner || neighborData?.ownerId;
-      if (String(neighborOwner) !== shortGuildId) {
-          return false;
-      }
-      const neighborOpenTime = Number(neighborData.openTime);
-      return !neighborOpenTime || neighborOpenTime <= now;
+      return String(neighborOwner) === shortGuildId;
   });
 
-  if (ourOpenAdjacentSectors.length === 0) {
-      logger.log(`[${sectorId}] Abort: We have no open adjacent sectors.`);
+  if (ourAdjacentSectors.length === 0) {
+      logger.log(`[${sectorId}] Abort: We have no adjacent sectors under our control.`);
       return db.ref(`gbgNotificationQueue/${taskId}`).remove();
   }
-  
+
   logger.log(`[${sectorId}] All checks passed! Sending notification.`);
   
   const membersSnap = await db.ref(`/guilds/${guildId}/guildUsers`).once('value');
