@@ -228,8 +228,8 @@ exports.scheduleGbgNotifications = onValueWritten(
     const sectorData = event.data.after.val();
     
     const ownerId = sectorData.owner || sectorData.ownerId;
-    const openTime = Number(sectorData.openTime);
-    
+    let openTime = Number(sectorData.openTime);
+
     if (!ownerId || !openTime || ownerId === '0') {
       logger.log(`[${sectorId}] Sector is neutral or has no open time. Skipping.`);
       return null;
@@ -242,13 +242,20 @@ exports.scheduleGbgNotifications = onValueWritten(
       logger.log(`[${sectorId}] Sector is our own. Skipping.`);
       return null;
     }
-    
+
+    if (openTime > 1e10) {
+      logger.log(`[${sectorId}] Detected openTime in milliseconds. Converting to seconds.`);
+      openTime = Math.floor(openTime / 1000);
+    }
+
+    openTime = Math.floor(openTime);
+
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const notificationTime = openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60);
+    let notificationTime = Math.floor(openTime - (NOTIFICATION_LEAD_TIME_MINUTES * 60));
 
     if (notificationTime <= nowInSeconds) {
-      logger.log(`[${sectorId}] Notification time is in the past. Skipping.`);
-      return null;
+      logger.log(`[${sectorId}] Notification time (${notificationTime}) is not in the future. Adjusting to send immediately.`);
+      notificationTime = nowInSeconds;
     }
     
     const newTask = {
@@ -360,23 +367,32 @@ async function processSingleGbgNotification(taskId, taskData, db) {
   const tokensSnapshots = await Promise.all(tokensPromises);
   const tokens = tokensSnapshots.map(snap => snap.val()).filter(Boolean);
 
-  if (tokens.length > 0) {
-    const message = `Відкривається сектор ${sectorId}!`;
-    
-    const payload = {
-      notification: {
-        title: "Поле битви",
-        body: message,
-        sound: "default",
-      },
-      data: {
-        screen: 'GBG',
-        sectorId: sectorId,
-      },
-    };
+  if (tokens.length === 0) {
+    logger.log(`[${sectorId}] No FCM tokens available for guild members.`);
+    return db.ref(`gbgNotificationQueue/${taskId}`).remove();
+  }
 
-    await admin.messaging().sendEachForMulticast({ tokens, ...payload })
-    logger.log(`[${sectorId}] Successfully sent notifications to ${tokens.length} members.`);
+  const message = `Відкривається сектор ${sectorId}!`;
+
+  const payload = {
+    notification: {
+      title: "Поле битви",
+      body: message,
+      sound: "default",
+    },
+    data: {
+      screen: 'GBG',
+      sectorId: sectorId,
+    },
+  };
+
+  try {
+    const response = await admin.messaging().sendEachForMulticast({ tokens, ...payload });
+    logger.log(`[${sectorId}] Successfully sent notifications to ${response.successCount} members.`);
+  } catch (error) {
+    logger.error(`[${sectorId}] Failed to send notifications:`, error);
+    await db.ref(`gbgNotificationQueue/${taskId}`).update({ status: 'error', error: error.message || 'send-failed' });
+    return null;
   }
 
   return db.ref(`gbgNotificationQueue/${taskId}`).remove();
