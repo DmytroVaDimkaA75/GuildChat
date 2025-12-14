@@ -11,7 +11,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff",
+        "softwareKeyboardLayoutMode": "resize"
       },
       "package": "com.vadimkaa75.guildchat",
       "googleServicesFile": "./google-services.json"

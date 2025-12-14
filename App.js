@@ -8,6 +8,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GuildContext, GuildProvider } from "./GuildContext";
 import i18n from "./i18n";
 import { parsePlayerBlock } from "./parsePlayerBlock";
@@ -242,7 +243,9 @@ useEffect(() => {
 export default function App() {
   return (
     <GuildProvider>
-      <AppContent />
+      <SafeAreaProvider>
+        <AppContent />
+      </SafeAreaProvider>
     </GuildProvider>
   );
 }
