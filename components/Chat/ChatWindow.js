@@ -555,6 +555,87 @@ const InterlocutorAvatar = ({ senderId, guildId }) => {
   return <Image source={{ uri: avatar }} style={styles.interlocutorAvatar} />;
 };
 
+const ReadUserInline = ({ userId, guildId, maxLength = 12 }) => {
+  const [info, setInfo] = useState({ name: '', avatar: '' });
+
+  useEffect(() => {
+    if (userId && guildId) {
+      database()
+        .ref(`guilds/${guildId}/guildUsers/${userId}`)
+        .once('value')
+        .then((snap) => {
+          const data = snap.val() || {};
+          setInfo({ name: data.userName || '', avatar: data.imageUrl || '' });
+        })
+        .catch((e) => console.error('Error fetching user info', e));
+    }
+  }, [userId, guildId]);
+
+  const displayName = info.name.length > maxLength ? `${info.name.slice(0, maxLength)}…` : info.name;
+
+  return (
+    <>
+      <Text style={styles.readUserName}>{displayName}</Text>
+      {info.avatar ? <Image source={{ uri: info.avatar }} style={styles.readUserAvatar} /> : null}
+    </>
+  );
+};
+
+const ReadUserRow = ({ userId, guildId }) => {
+  const [info, setInfo] = useState({ name: '', avatar: '' });
+
+  useEffect(() => {
+    if (userId && guildId) {
+      database()
+        .ref(`guilds/${guildId}/guildUsers/${userId}`)
+        .once('value')
+        .then((snap) => {
+          const data = snap.val() || {};
+          setInfo({ name: data.userName || '', avatar: data.imageUrl || '' });
+        })
+        .catch((e) => console.error('Error fetching user info', e));
+    }
+  }, [userId, guildId]);
+
+  const displayName = info.name.length > 20 ? `${info.name.slice(0, 20)}…` : info.name;
+
+  return (
+    <View style={styles.readUserRow}>
+      <Text style={styles.readUserName}>{displayName}</Text>
+      {info.avatar ? <Image source={{ uri: info.avatar }} style={styles.readUserAvatar} /> : null}
+    </View>
+  );
+};
+
+const ReadUsersPopup = ({ message, guildId, isCurrentUser, onClose }) => {
+  if (!message || !message.readBy) return null;
+
+  const entries = Object.entries(message.readBy)
+    .filter(([id]) => id !== message.senderId)
+    .sort((a, b) => a[1] - b[1]);
+
+  if (entries.length <= 1) return null;
+
+  return (
+    <Modal transparent animationType="fade" visible>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.popupOverlay}>
+        <View
+          style={[
+            styles.readUsersPopup,
+            isCurrentUser ? styles.readUsersPopupPersonal : styles.readUsersPopupInterlocutor
+          ]}
+        >
+          <ScrollView>
+            {entries.map(([uid]) => (
+              <ReadUserRow key={uid} userId={uid} guildId={guildId} />
+            ))}
+          </ScrollView>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 const SenderName = ({ senderId, currentUserId, guildId }) => {
   const [name, setName] = useState('');
   useEffect(() => {
@@ -713,6 +794,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [unpinModalVisible, setUnpinModalVisible] = useState(false);
   const [messageToPin, setMessageToPin] = useState(null);
 
+  const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
+
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
 
   // NEW: modal вставки лінка для WebView-композера
@@ -828,6 +911,65 @@ const ChatWindow = ({ route, navigation }) => {
     },
     [userId, guildId, chatId]
   );
+
+  const formatReadTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const timeString = format(date, 'HH:mm', { locale });
+
+    if (date.toDateString() === now.toDateString()) {
+      return `сьогодні, ${timeString}`;
+    }
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `учора, ${timeString}`;
+    }
+    return `${format(date, 'dd MMM', { locale })}, ${timeString}`;
+  };
+
+  const renderReadReceiptOption = (message) => {
+    if (!message || chatType !== 'private') return null;
+    const { readBy, senderId } = message;
+    if (!readBy) return null;
+    const otherEntries = Object.entries(readBy).filter(([id]) => id !== senderId);
+    if (otherEntries.length === 0) return null;
+    const readTime = otherEntries[0][1];
+    return (
+      <>
+        <View style={styles.readReceiptOption}>
+          <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+          <Text style={{ color: '#eee' }}>{formatReadTime(readTime)}</Text>
+        </View>
+        <View style={styles.menuSeparator} />
+      </>
+    );
+  };
+
+  const renderGroupReadReceiptOption = (message) => {
+    if (!message || chatType !== 'group') return null;
+    const { readBy, senderId } = message;
+    if (!readBy) return null;
+    const entries = Object.entries(readBy)
+      .filter(([id]) => id !== senderId)
+      .sort((a, b) => a[1] - b[1]);
+    if (entries.length === 0) return null;
+    const [firstId] = entries[0];
+    const extra = entries.length - 1;
+    return (
+      <>
+        <TouchableOpacity disabled={extra <= 0} onPress={() => extra > 0 && setReadUsersPopupFor(message.id)}>
+          <View style={styles.readReceiptOption}>
+            <FontAwesomeIcon icon={faCheckDouble} size={16} color="#4CAF50" style={{ marginRight: 5 }} />
+            <ReadUserInline userId={firstId} guildId={guildId} />
+            {extra > 0 && <Text style={styles.extraCount}> (+{extra})</Text>}
+          </View>
+        </TouchableOpacity>
+        <View style={styles.menuSeparator} />
+      </>
+    );
+  };
 
   const handleViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
@@ -1060,6 +1202,8 @@ const ChatWindow = ({ route, navigation }) => {
                             </MenuTrigger>
 
                             <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
+                              {renderGroupReadReceiptOption(msg)}
+                              {renderReadReceiptOption(msg)}
                               <MenuOption onSelect={() => handleReply(msg)} style={styles.menuItem}>
                                 <FontAwesomeIcon icon={faReply} color="#ddd" />
                                 <Text style={styles.menuText}>Відповісти</Text>
@@ -1107,6 +1251,14 @@ const ChatWindow = ({ route, navigation }) => {
                                 <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
                               </MenuOption>
                             </MenuOptions>
+                            {readUsersPopupFor === msg.id && (
+                              <ReadUsersPopup
+                                message={msg}
+                                guildId={guildId}
+                                isCurrentUser={isMe}
+                                onClose={() => setReadUsersPopupFor(null)}
+                              />
+                            )}
                           </Menu>
                         </View>
                       );
@@ -1439,6 +1591,16 @@ const styles = StyleSheet.create({
   attachBtn: { padding: 8 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
   sendBtnActive: { backgroundColor: '#3498db' },
+  readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  readUserRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  readUserName: { color: '#fff', fontSize: 13, marginRight: 6 },
+  readUserAvatar: { width: 20, height: 20, borderRadius: 10 },
+  extraCount: { color: '#aaa', marginLeft: 4 },
+  popupOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', paddingHorizontal: 40 },
+  readUsersPopup: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
+  readUsersPopupPersonal: { alignSelf: 'flex-end' },
+  readUsersPopupInterlocutor: { alignSelf: 'flex-start' },
+  menuSeparator: { height: 1, backgroundColor: '#333', marginVertical: 6 },
   contextMenu: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   menuText: { color: '#eee', marginLeft: 12, fontSize: 15 },
