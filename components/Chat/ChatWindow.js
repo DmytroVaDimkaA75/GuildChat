@@ -62,8 +62,8 @@ import DatePicker from 'react-native-date-picker';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
 
-const INPUT_LINE_HEIGHT = 22;
-const INPUT_VERTICAL_PADDING = 20; // paddingTop 10 + paddingBottom 10
+const INPUT_LINE_HEIGHT = 20;
+const INPUT_VERTICAL_PADDING = 8; // paddingTop 4 + paddingBottom 4
 const INPUT_MAX_LINES = 5;
 const MIN_INPUT_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING;
 const MAX_INPUT_HEIGHT = INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_VERTICAL_PADDING;
@@ -143,7 +143,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   <style>
     body { margin:0; padding:0; background: transparent; }
     #editor {
-      padding: 10px 6px;
+      padding: ${INPUT_VERTICAL_PADDING / 2}px 6px;
       font-size: 16px;
       line-height: ${INPUT_LINE_HEIGHT}px;
       outline: none;
@@ -1425,8 +1425,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: INPUT_LINE_HEIGHT,
     maxHeight: MAX_INPUT_HEIGHT,
-    paddingTop: 10,
-    paddingBottom: 10
+    paddingTop: INPUT_VERTICAL_PADDING / 2,
+    paddingBottom: INPUT_VERTICAL_PADDING / 2
   },
   attachBtn: { padding: 8 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
