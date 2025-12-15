@@ -1068,6 +1068,10 @@ const ChatWindow = ({ route, navigation }) => {
     return messages.flatMap((g) => g.messages).find((m) => m.id === selectedMessageId) || null;
   };
 
+  const handlePressMessage = (messageId) => {
+    setSelectedMessageId(messageId);
+  };
+
   const handlePin = async (forAll, targetMessage = null) => {
     const msg = resolveSelectedMessage(targetMessage);
     if (!msg) return;
@@ -1116,6 +1120,37 @@ const ChatWindow = ({ route, navigation }) => {
     } catch (error) {
       console.error('Error translating message:', error);
     }
+  };
+
+  const handleCopyMessage = (message) => {
+    Clipboard.setString(message?.text || '');
+  };
+
+  const renderInlineReadInfo = (message) => {
+    if (!message || chatType !== 'group') return null;
+    const { readBy, senderId } = message;
+    if (!readBy) return null;
+
+    const entries = Object.entries(readBy)
+      .filter(([id]) => id !== senderId)
+      .sort((a, b) => a[1] - b[1]);
+
+    if (entries.length === 0) return null;
+
+    const [firstId] = entries[0];
+    const extra = entries.length - 1;
+
+    return (
+      <TouchableOpacity
+        style={styles.inlineReadInfo}
+        onPress={() => setReadUsersPopupFor(message.id)}
+        disabled={!firstId}
+      >
+        <FontAwesomeIcon icon={faCheckDouble} size={11} color="#4cd137" style={{ marginRight: 3 }} />
+        <ReadUserInline userId={firstId} guildId={guildId} maxLength={10} />
+        {extra > 0 && <Text style={styles.inlineReadExtra}>+{extra}</Text>}
+      </TouchableOpacity>
+    );
   };
 
   const pinnedMessages = messages.flatMap((g) => g.messages).filter((m) => m.pinned?.pinnedFor?.[userId]);
@@ -1181,10 +1216,18 @@ const ChatWindow = ({ route, navigation }) => {
                           {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
                           {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
                           <Menu>
-                            <MenuTrigger>
+                            <MenuTrigger
+                              onPress={() => handlePressMessage(msg.id)}
+                              triggerOnLongPress
+                              customStyles={{
+                                TriggerTouchableComponent: TouchableOpacity,
+                                triggerTouchable: {
+                                  onLongPress: () => handlePressMessage(msg.id)
+                                }
+                              }}
+                            >
                               <TouchableOpacity
                                 activeOpacity={0.9}
-                                onLongPress={() => setSelectedMessageId(msg.id)}
                                 style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}
                               >
                                 {chatType === 'group' && !isMe && <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />}
@@ -1221,13 +1264,15 @@ const ChatWindow = ({ route, navigation }) => {
                                   {msg.pinned?.isPinned && <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />}
                                   {msg.edited && <Text style={styles.editedLabel}>ред.</Text>}
                                   <Text style={styles.timestamp}>{format(new Date(msg.timestamp), 'HH:mm')}</Text>
-                                  {isMe && (
+                                  {isMe ? (
                                     <FontAwesomeIcon
                                       icon={msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId) ? faCheckDouble : faCheck}
                                       size={11}
                                       color="#4cd137"
                                       style={{ marginLeft: 4 }}
                                     />
+                                  ) : (
+                                    renderInlineReadInfo(msg)
                                   )}
                                 </View>
                               </TouchableOpacity>
@@ -1240,7 +1285,7 @@ const ChatWindow = ({ route, navigation }) => {
                                 <FontAwesomeIcon icon={faReply} color="#ddd" />
                                 <Text style={styles.menuText}>Відповісти</Text>
                               </MenuOption>
-                              <MenuOption onSelect={() => Clipboard.setString(msg.text || '')} style={styles.menuItem}>
+                              <MenuOption onSelect={() => handleCopyMessage(msg)} style={styles.menuItem}>
                                 <FontAwesomeIcon icon={faCopy} color="#ddd" />
                                 <Text style={styles.menuText}>Копіювати</Text>
                               </MenuOption>
@@ -1613,6 +1658,8 @@ const styles = StyleSheet.create({
   metaContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
   timestamp: { color: 'rgba(255,255,255,0.4)', fontSize: 10, marginRight: 4 },
   editedLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontStyle: 'italic', marginRight: 4 },
+  inlineReadInfo: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
+  inlineReadExtra: { color: '#aaa', fontSize: 10, marginLeft: 4 },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   gridImage: { width: 80, height: 80, borderRadius: 8, marginRight: 4, marginBottom: 4 },
   linkPreviewContainer: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, marginTop: 6, overflow: 'hidden' },
