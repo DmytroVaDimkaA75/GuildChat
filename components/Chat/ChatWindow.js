@@ -58,6 +58,7 @@ import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
 import DatePicker from 'react-native-date-picker';
+import translateMessage from '../../translateMessage';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
@@ -796,6 +797,9 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [readUsersPopupFor, setReadUsersPopupFor] = useState(null);
 
+  const [translationModalVisible, setTranslationModalVisible] = useState(false);
+  const [translatedText, setTranslatedText] = useState('');
+
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
 
   // NEW: modal вставки лінка для WebView-композера
@@ -1058,8 +1062,14 @@ const ChatWindow = ({ route, navigation }) => {
     composerRef.current?.clear?.();
   };
 
-  const handlePin = async (forAll) => {
-    const msg = messages.flatMap((g) => g.messages).find((m) => m.id === selectedMessageId);
+  const resolveSelectedMessage = (fallback) => {
+    if (fallback) return fallback;
+    if (!selectedMessageId) return null;
+    return messages.flatMap((g) => g.messages).find((m) => m.id === selectedMessageId) || null;
+  };
+
+  const handlePin = async (forAll, targetMessage = null) => {
+    const msg = resolveSelectedMessage(targetMessage);
     if (!msg) return;
 
     const pinnedRef = database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/pinned`);
@@ -1073,17 +1083,39 @@ const ChatWindow = ({ route, navigation }) => {
       await pinnedRef.update({ isPinned: true, [`pinnedFor/${userId}`]: true });
     }
     setPinModalVisible(false);
+    setMessageToPin(null);
     setSelectedMessageId(null);
   };
 
-  const handleUnpin = async (forAll) => {
-    const msg = messages.flatMap((g) => g.messages).find((m) => m.id === selectedMessageId);
+  const handleUnpin = async (forAll, targetMessage = null) => {
+    const msg = resolveSelectedMessage(targetMessage);
     if (!msg) return;
     const ref = database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/pinned`);
     if (forAll) await ref.remove();
     else await ref.child(`pinnedFor/${userId}`).remove();
     setUnpinModalVisible(false);
+    setMessageToPin(null);
     setSelectedMessageId(null);
+  };
+
+  const handleTranslate = async (message) => {
+    if (!message?.id || !guildId || !chatId) return;
+    try {
+      const localeCode = locale?.code || 'uk';
+      const translationRef = database().ref(
+        `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translate/${localeCode}`
+      );
+      const snap = await translationRef.once('value');
+      let translated = snap.val();
+      if (!translated) {
+        translated = await translateMessage(message.text, localeCode);
+        await translationRef.set(translated);
+      }
+      setTranslatedText(translated);
+      setTranslationModalVisible(true);
+    } catch (error) {
+      console.error('Error translating message:', error);
+    }
   };
 
   const pinnedMessages = messages.flatMap((g) => g.messages).filter((m) => m.pinned?.pinnedFor?.[userId]);
@@ -1214,11 +1246,11 @@ const ChatWindow = ({ route, navigation }) => {
                               </MenuOption>
                               {isMe && (
                                 <>
-                                  <MenuOption
-                                    onSelect={() => {
-                                      setEditMessage(msg);
-                                      setEditMessageText(msg.text || '');
-                                      // щоб не було "паралельного" введення в WebView
+                                <MenuOption
+                                  onSelect={() => {
+                                    setEditMessage(msg);
+                                    setEditMessageText(msg.text || '');
+                                    // щоб не було "паралельного" введення в WebView
                                       composerRef.current?.clear?.();
                                       setNewMessage('');
                                       setNewMessageHtml('');
@@ -1228,20 +1260,22 @@ const ChatWindow = ({ route, navigation }) => {
                                     <FontAwesomeIcon icon={faPen} color="#ddd" />
                                     <Text style={styles.menuText}>Редагувати</Text>
                                   </MenuOption>
-                                  <MenuOption
-                                    onSelect={() => {
-                                      setMessageToDelete(msg);
-                                      setDeleteModalVisible(true);
-                                    }}
-                                    style={styles.menuItem}
-                                  >
-                                    <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
+                                <MenuOption
+                                  onSelect={() => {
+                                    setMessageToDelete(msg);
+                                    setSelectedMessageId(msg.id);
+                                    setDeleteModalVisible(true);
+                                  }}
+                                  style={styles.menuItem}
+                                >
+                                  <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
                                     <Text style={[styles.menuText, { color: '#ff5b5b' }]}>Видалити</Text>
                                   </MenuOption>
                                 </>
                               )}
                               <MenuOption
                                 onSelect={() => {
+                                  setSelectedMessageId(msg.id);
                                   setMessageToPin(msg);
                                   msg.pinned?.isPinned ? setUnpinModalVisible(true) : setPinModalVisible(true);
                                 }}
@@ -1249,6 +1283,10 @@ const ChatWindow = ({ route, navigation }) => {
                               >
                                 <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
                                 <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
+                              </MenuOption>
+                              <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
+                                <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
+                                <Text style={styles.menuText}>Перекласти</Text>
                               </MenuOption>
                             </MenuOptions>
                             {readUsersPopupFor === msg.id && (
@@ -1484,11 +1522,11 @@ const ChatWindow = ({ route, navigation }) => {
           <View style={styles.modalOverlay}>
             <View style={styles.glassCard}>
               <Text style={styles.modalTitle}>Закріпити повідомлення</Text>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(false)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(false, messageToPin)}>
                 <Text style={{ color: '#fff' }}>Тільки для мене</Text>
               </TouchableOpacity>
               {chatType === 'group' && (
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(true)}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(true, messageToPin)}>
                   <Text style={{ color: '#fff' }}>Для всіх</Text>
                 </TouchableOpacity>
               )}
@@ -1503,11 +1541,11 @@ const ChatWindow = ({ route, navigation }) => {
           <View style={styles.modalOverlay}>
             <View style={styles.glassCard}>
               <Text style={styles.modalTitle}>Відкріпити повідомлення?</Text>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(false)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(false, messageToPin)}>
                 <Text style={{ color: '#fff' }}>Тільки в мене</Text>
               </TouchableOpacity>
               {chatType === 'group' && (
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(true)}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(true, messageToPin)}>
                   <Text style={{ color: '#ff5b5b' }}>Для всіх</Text>
                 </TouchableOpacity>
               )}
@@ -1519,6 +1557,25 @@ const ChatWindow = ({ route, navigation }) => {
         </Modal>
 
         <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} onClose={() => setFullSizeImageModalVisible(false)} />
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={translationModalVisible}
+          onRequestClose={() => setTranslationModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.glassCard}>
+              <Text style={styles.modalTitle}>Переклад</Text>
+              <ScrollView style={{ maxHeight: 240 }}>
+                <Text style={styles.translatedText}>{translatedText}</Text>
+              </ScrollView>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setTranslationModalVisible(false)}>
+                <Text style={{ color: '#fff' }}>Закрити</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <DatePicker
           modal
@@ -1612,6 +1669,7 @@ const styles = StyleSheet.create({
   modalBtnCancel: { flex: 1, padding: 14, backgroundColor: '#333', borderRadius: 12, alignItems: 'center', marginRight: 10 },
   modalBtnPrimary: { flex: 1, padding: 14, backgroundColor: '#3498db', borderRadius: 12, alignItems: 'center' },
   actionBtn: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: 1, borderColor: '#333' },
+  translatedText: { fontSize: 16, color: '#fff', lineHeight: 22 },
   uploadThumb: { width: 70, height: 70, borderRadius: 10, marginRight: 10 },
   spoilerWrapper: { justifyContent: 'center' },
   spoilerContainer: { backgroundColor: '#333', borderRadius: 4, paddingHorizontal: 4, justifyContent: 'center' },
