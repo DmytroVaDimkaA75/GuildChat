@@ -1181,10 +1181,12 @@ const ChatWindow = ({ route, navigation }) => {
                           {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
                           {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
                           <Menu>
-                            <MenuTrigger>
-                              <TouchableOpacity
-                                activeOpacity={0.9}
-                                onLongPress={() => setSelectedMessageId(msg.id)}
+                            <MenuTrigger
+                              triggerOnLongPress
+                              onPress={() => setSelectedMessageId(msg.id)}
+                              customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
+                            >
+                              <View
                                 style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}
                               >
                                 {chatType === 'group' && !isMe && <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />}
@@ -1230,7 +1232,7 @@ const ChatWindow = ({ route, navigation }) => {
                                     />
                                   )}
                                 </View>
-                              </TouchableOpacity>
+                              </View>
                             </MenuTrigger>
 
                             <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
