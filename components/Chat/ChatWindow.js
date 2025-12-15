@@ -352,7 +352,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   );
 
   return (
-    <View style={{ flex: 1, height }}>
+    <View style={{ height }}>
       <WebView
         ref={webRef}
         originWhitelist={['*']}
@@ -361,7 +361,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         scrollEnabled={false}
         keyboardDisplayRequiresUserAction={false}
         hideKeyboardAccessoryView={true}
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: 'transparent', height }}
       />
     </View>
   );
