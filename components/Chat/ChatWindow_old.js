@@ -2882,6 +2882,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#BDBDBD',
     marginVertical: 5,
   },
+  
 
 });
 
