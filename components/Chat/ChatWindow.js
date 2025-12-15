@@ -931,14 +931,18 @@ const ChatWindow = ({ route, navigation }) => {
   const pinnedMessages = messages.flatMap((g) => g.messages).filter((m) => m.pinned?.pinnedFor?.[userId]);
   const reversedMessages = [...messages].reverse();
 
-  const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
+  const keyboardOffset = insets.bottom;
 
   return (
     <MenuProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#121212' }} edges={['right', 'left']}>
         <StatusBar barStyle="light-content" backgroundColor="#121212" />
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={keyboardOffset}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={keyboardOffset}
+        >
           <View style={{ flex: 1 }}>
             {/* Закрепленные сообщения */}
             {pinnedMessages.length > 0 && (
