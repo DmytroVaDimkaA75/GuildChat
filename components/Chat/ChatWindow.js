@@ -397,57 +397,66 @@ const parseFormattedText = (text) => {
     if (match.index > lastIndex) {
       parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
     }
-    if (match[2]) parts.push({ type: 'bold', content: match[2] });
-    else if (match[3]) parts.push({ type: 'underline', content: match[3] });
-    else if (match[4]) parts.push({ type: 'italic', content: match[4] });
-    else if (match[5]) parts.push({ type: 'strikethrough', content: match[5] });
-    else if (match[6]) parts.push({ type: 'spoiler', content: match[6] });
+
+    const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
+    let type = 'normal';
+
+    if (match[2]) type = 'bold';
+    else if (match[3]) type = 'underline';
+    else if (match[4]) type = 'italic';
+    else if (match[5]) type = 'strikethrough';
+    else if (match[6]) type = 'spoiler';
+
+    parts.push({ type, content: parseFormattedText(matchedContent) });
     lastIndex = match.index + match[0].length;
   }
+
   if (lastIndex < text.length) {
     parts.push({ type: 'normal', content: text.slice(lastIndex) });
   }
+
   return parts;
 };
 
+const buildTextStyle = (activeStyles = []) => {
+  const style = {};
+
+  if (activeStyles.includes('bold')) style.fontWeight = 'bold';
+  if (activeStyles.includes('italic')) style.fontStyle = 'italic';
+
+  const underline = activeStyles.includes('underline');
+  const strikethrough = activeStyles.includes('strikethrough');
+
+  if (underline && strikethrough) style.textDecorationLine = 'underline line-through';
+  else if (underline) style.textDecorationLine = 'underline';
+  else if (strikethrough) style.textDecorationLine = 'line-through';
+
+  return style;
+};
+
+const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
+  parts.map((part, index) => {
+    const key = `${keyPrefix}-${index}`;
+
+    if (part.type === 'spoiler') {
+      const contentParts = Array.isArray(part.content) ? part.content : [{ type: 'normal', content: part.content }];
+      return <Spoiler key={key} content={renderFormattedParts(contentParts, activeStyles, key)} />;
+    }
+
+    const newActiveStyles = part.type === 'normal' ? activeStyles : [...activeStyles, part.type];
+    const textStyle = buildTextStyle(newActiveStyles);
+    const children = Array.isArray(part.content) ? renderFormattedParts(part.content, newActiveStyles, key) : part.content;
+
+    return (
+      <Text key={key} style={[styles.messageText, textStyle]}>
+        {children}
+      </Text>
+    );
+  });
+
 const FormattedText = ({ text }) => {
   const parts = parseFormattedText(text || '');
-  return (
-    <Text style={styles.messageText}>
-      {parts.map((part, i) => {
-        switch (part.type) {
-          case 'bold':
-            return (
-              <Text key={i} style={{ fontWeight: 'bold' }}>
-                {part.content}
-              </Text>
-            );
-          case 'italic':
-            return (
-              <Text key={i} style={{ fontStyle: 'italic' }}>
-                {part.content}
-              </Text>
-            );
-          case 'underline':
-            return (
-              <Text key={i} style={{ textDecorationLine: 'underline' }}>
-                {part.content}
-              </Text>
-            );
-          case 'strikethrough':
-            return (
-              <Text key={i} style={{ textDecorationLine: 'line-through', opacity: 0.7 }}>
-                {part.content}
-              </Text>
-            );
-          case 'spoiler':
-            return <Spoiler key={i} content={part.content} />;
-          default:
-            return <Text key={i}>{part.content}</Text>;
-        }
-      })}
-    </Text>
-  );
+  return <>{renderFormattedParts(parts)}</>;
 };
 
 const splitMessageIntoParts = (text = '') => {
