@@ -62,6 +62,12 @@ import DatePicker from 'react-native-date-picker';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
 
+const INPUT_LINE_HEIGHT = 22;
+const INPUT_VERTICAL_PADDING = 20; // paddingTop 10 + paddingBottom 10
+const INPUT_MAX_LINES = 5;
+const MIN_INPUT_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING;
+const MAX_INPUT_HEIGHT = INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_VERTICAL_PADDING;
+
 const isYouTubeURL = (url) => url.includes('youtube.com') || url.includes('youtu.be');
 const isDocsURL = (url) => url.includes('docs.google.com');
 
@@ -139,13 +145,15 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
     #editor {
       padding: 10px 6px;
       font-size: 16px;
-      line-height: 22px;
+      line-height: ${INPUT_LINE_HEIGHT}px;
       outline: none;
       min-height: ${minHeight}px;
+      max-height: ${maxHeight}px;
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
       white-space: pre-wrap;
       word-break: break-word;
+      overflow-y: auto;
     }
     #editor:empty:before {
       content: attr(data-placeholder);
@@ -344,7 +352,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   );
 
   return (
-    <View style={{ flex: 1, height }}>
+    <View style={{ height }}>
       <WebView
         ref={webRef}
         originWhitelist={['*']}
@@ -353,7 +361,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         scrollEnabled={false}
         keyboardDisplayRequiresUserAction={false}
         hideKeyboardAccessoryView={true}
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: 'transparent', height }}
       />
     </View>
   );
@@ -670,7 +678,7 @@ const ChatWindow = ({ route, navigation }) => {
 
   // Старі стани для edit mode (залишаємо як було)
   const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const [inputHeight, setInputHeight] = useState(40);
+  const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
 
   const [userId, setUserId] = useState(null);
   const [guildId, setGuildId] = useState(null);
@@ -1172,7 +1180,10 @@ const ChatWindow = ({ route, navigation }) => {
                 {/* EDIT MODE: старий TextInput */}
                 {editMessage ? (
                   <TextInput
-                    style={[styles.input, { height: Math.min(100, Math.max(40, inputHeight)) }]}
+                    style={[
+                      styles.input,
+                      { height: Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, inputHeight)) }
+                    ]}
                     value={editMessageText}
                     onChangeText={setEditMessageText}
                     onSelectionChange={({ nativeEvent: { selection } }) => setSelection(selection)}
@@ -1180,7 +1191,7 @@ const ChatWindow = ({ route, navigation }) => {
                     placeholder="Повідомлення..."
                     placeholderTextColor="#666"
                     multiline
-                    textAlignVertical="center"
+                    textAlignVertical="top"
                   />
                 ) : (
                   // NEW MESSAGE: WebView rich input (живе форматування)
@@ -1188,8 +1199,8 @@ const ChatWindow = ({ route, navigation }) => {
                     <RichTextWebInput
                       ref={composerRef}
                       placeholder="Повідомлення..."
-                      minHeight={40}
-                      maxHeight={100}
+                      minHeight={MIN_INPUT_HEIGHT}
+                      maxHeight={MAX_INPUT_HEIGHT}
                       onChange={({ html, marked, selectionActive }) => {
                         setNewMessage(marked);
                         setNewMessageHtml(html);
@@ -1408,7 +1419,15 @@ const styles = StyleSheet.create({
   replyBarText: { color: '#aaa', fontSize: 13, flex: 1 },
   formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 12, marginBottom: 8 },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 25, paddingHorizontal: 12, paddingVertical: 4 },
-  input: { flex: 1, color: '#fff', fontSize: 16, maxHeight: 100, paddingTop: 10, paddingBottom: 10 },
+  input: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: INPUT_LINE_HEIGHT,
+    maxHeight: MAX_INPUT_HEIGHT,
+    paddingTop: 10,
+    paddingBottom: 10
+  },
   attachBtn: { padding: 8 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
   sendBtnActive: { backgroundColor: '#3498db' },
