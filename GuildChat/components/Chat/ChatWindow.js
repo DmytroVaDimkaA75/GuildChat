@@ -15,7 +15,9 @@ import {
   ActivityIndicator,
   Clipboard,
   Linking,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import {
   getDatabase,
@@ -1501,7 +1503,11 @@ const renderReadReceiptOption = (message) => {
   
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+    >
       {pinnedMessagesForUser.length > 0 && (
         <View style={styles.pinnedMessageWrapper}>
           <ScrollView
@@ -2235,7 +2241,7 @@ const renderReadReceiptOption = (message) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
