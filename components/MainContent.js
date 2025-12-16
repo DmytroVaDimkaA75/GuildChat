@@ -45,14 +45,10 @@ import SleepSchedule from './Profile/SleepSchedule';
 import MapComponent from './Quant/MapComponent';
 
 // НОВЫЕ ИКОНКИ
-import GB from "./ico/menu/GB.svg";
 import Admin from "./ico/menu/setting.svg";
 import Chat from "./ico/menu/chat.svg";
-import GVG from "./ico/menu/map.svg";
-import Azbook from "./ico/menu/task.svg";
+import GVG from "./ico/GVG.svg";
 import Profile from "./ico/menu/user.svg";
-import Quant from "./ico/menu/quant.svg";
-import Servise from "./ico/menu/servise.svg";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -592,7 +588,7 @@ const renderIcon = (IconComponent) => ({ color }) => (
     <NavigationContainer key={guildId}>
       <Drawer.Navigator
         drawerContent={props => <CustomDrawerContent {...props} />}
-        initialRouteName="GB"
+        initialRouteName="GBG"
         screenOptions={{
           drawerActiveTintColor: COLORS.primary,
           drawerInactiveTintColor: COLORS.textSecondary,
@@ -605,66 +601,66 @@ const renderIcon = (IconComponent) => ({ color }) => (
           }
         }}
       >
-        <Drawer.Screen 
-            name="GB" 
-            component={GBStack} 
-            options={{ 
-                drawerLabel: t("drawer.gbLabel"), 
+        {/* <Drawer.Screen
+            name="GB"
+            component={GBStack}
+            options={{
+                drawerLabel: t("drawer.gbLabel"),
                 // Передаем компонент SVG в options, чтобы CustomDrawerContent мог его отрендерить
-                drawerIconComponent: renderIcon(GB) 
-            }} 
+                drawerIconComponent: renderIcon(GB)
+            }}
+        /> */}
+        <Drawer.Screen
+            name="ChatList"
+            component={ChatStack}
+            options={{
+                drawerLabel: t("drawer.chatLabel"),
+                drawerIconComponent: renderIcon(Chat)
+            }}
         />
-        <Drawer.Screen 
-            name="ChatList" 
-            component={ChatStack} 
-            options={{ 
-                drawerLabel: t("drawer.chatLabel"), 
-                drawerIconComponent: renderIcon(Chat) 
-            }} 
+        {/* <Drawer.Screen
+            name="Quanty"
+            component={QuantStack}
+            options={{
+                drawerLabel: t("drawer.quantLabel"),
+                drawerIconComponent: renderIcon(Quant)
+            }}
+        /> */}
+        <Drawer.Screen
+            name="GBG"
+            component={GBGStack}
+            options={{
+                drawerLabel: t("drawer.pbgLabel"),
+                drawerIconComponent: renderIcon(GVG)
+            }}
         />
-        <Drawer.Screen 
-            name="Quanty" 
-            component={QuantStack} 
-            options={{ 
-                drawerLabel: t("drawer.quantLabel"), 
-                drawerIconComponent: renderIcon(Quant) 
-            }} 
-        />
-        <Drawer.Screen 
-            name="GBG" 
-            component={GBGStack} 
-            options={{ 
-                drawerLabel: t("drawer.pbgLabel"), 
-                drawerIconComponent: renderIcon(GVG) 
-            }} 
-        />
-        <Drawer.Screen 
-            name="Culture" 
-            component={CultureStack} 
-            options={{ 
-                drawerLabel: t("drawer.culture"), 
+        {/* <Drawer.Screen
+            name="Culture"
+            component={CultureStack}
+            options={{
+                drawerLabel: t("drawer.culture"),
                 drawerIconComponent: renderIcon(Profile) // Был Culture, но в импортах его не было, заменил на Profile или добавь Boat
-            }} 
+            }}
         />
-        <Drawer.Screen 
-            name="azbook" 
-            component={QuantStack} 
-            options={{ 
-                drawerLabel: t("drawer.azbookLabel"), 
-                drawerIconComponent: renderIcon(Azbook) 
-            }} 
+        <Drawer.Screen
+            name="azbook"
+            component={QuantStack}
+            options={{
+                drawerLabel: t("drawer.azbookLabel"),
+                drawerIconComponent: renderIcon(Azbook)
+            }}
         />
-        <Drawer.Screen 
-            name="servise" 
-            component={QuantStack} 
-            options={{ 
-                drawerLabel: t("drawer.serviseLabel"), 
-                drawerIconComponent: renderIcon(Servise) 
-            }} 
-        />
-        <Drawer.Screen 
-            name="profile" 
-            component={ProfileStack} 
+        <Drawer.Screen
+            name="servise"
+            component={QuantStack}
+            options={{
+                drawerLabel: t("drawer.serviseLabel"),
+                drawerIconComponent: renderIcon(Servise)
+            }}
+        /> */}
+        <Drawer.Screen
+            name="profile"
+            component={ProfileStack}
             options={{ 
                 drawerLabel: t("drawer.profileLabel"), 
                 drawerIconComponent: renderIcon(Profile) 
