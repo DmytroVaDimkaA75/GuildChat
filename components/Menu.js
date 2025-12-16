@@ -306,6 +306,7 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
   }
 
   const handleOverlayPress = () => { if (menuOpen) toggleMenu(); };
+  const currentDate = new Date();
 
   return (
     <>
@@ -379,31 +380,51 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                 <View style={styles.menuSection}>
                     <Text style={styles.sectionTitle}>Основне</Text>
                     {menuOptions.map((option, index) => {
-                        if (!isOptionVisible(option, new Date())) return null;
-                        if (option.fullText === "Адміністративна панель" && !isGuildLeader(userRole)) return null;
+                        const isAdminPanel = option.fullText === "Адміністративна панель";
+                        const isProfile = option.fullText === "Налаштування";
+                        const isBottomGroup = isAdminPanel || isProfile;
+                        const isVisible =
+                            isOptionVisible(option, currentDate) &&
+                            !(isAdminPanel && !isGuildLeader(userRole));
+
+                        if (!isVisible) return null;
+
+                        const hasVisibleTopOptions = menuOptions
+                            .slice(0, index)
+                            .some((opt) => {
+                                const optIsAdminPanel = opt.fullText === "Адміністративна панель";
+                                const optIsProfile = opt.fullText === "Налаштування";
+                                const optIsBottomGroup = optIsAdminPanel || optIsProfile;
+                                const optVisible =
+                                    isOptionVisible(opt, currentDate) &&
+                                    !(optIsAdminPanel && !isGuildLeader(userRole));
+                                return optVisible && !optIsBottomGroup;
+                            });
 
                         const isSelected = selectedOption === index;
 
                         return (
-                            <TouchableOpacity
-                                key={index}
-                                onPress={() => handleOptionPress(additionalMenuOptions.length + index + 1)}
-                                activeOpacity={0.8}
-                                style={[styles.menuItem, isSelected && styles.menuItemSelected]}
-                            >
-                                <View style={styles.iconWrapper}>
-                                    {React.cloneElement(option.icon, { 
-                                        fill: isSelected ? COLORS.primary : (option.text === "Альтанка" ? COLORS.danger : COLORS.textSecondary) 
-                                    })}
-                                </View>
-                                <Text style={[
-                                    styles.menuItemText, 
-                                    isSelected && styles.menuItemTextSelected
-                                ]}>
-                                    {option.text}
-                                </Text>
-                                {isSelected && <View style={styles.activeIndicator} />}
-                            </TouchableOpacity>
+                            <React.Fragment key={index}>
+                                {isBottomGroup && hasVisibleTopOptions && <View style={styles.menuSeparator} />}
+                                <TouchableOpacity
+                                    onPress={() => handleOptionPress(additionalMenuOptions.length + index + 1)}
+                                    activeOpacity={0.8}
+                                    style={[styles.menuItem, isSelected && styles.menuItemSelected]}
+                                >
+                                    <View style={styles.iconWrapper}>
+                                        {React.cloneElement(option.icon, {
+                                            fill: isSelected ? COLORS.primary : (option.text === "Альтанка" ? COLORS.danger : COLORS.textSecondary)
+                                        })}
+                                    </View>
+                                    <Text style={[
+                                        styles.menuItemText,
+                                        isSelected && styles.menuItemTextSelected
+                                    ]}>
+                                        {option.text}
+                                    </Text>
+                                    {isSelected && <View style={styles.activeIndicator} />}
+                                </TouchableOpacity>
+                            </React.Fragment>
                         );
                     })}
                 </View>
@@ -565,6 +586,12 @@ const styles = StyleSheet.create({
     },
     menuItemSelected: {
         backgroundColor: COLORS.surface,
+    },
+    menuSeparator: {
+        height: 1,
+        backgroundColor: COLORS.separator,
+        marginHorizontal: 20,
+        marginVertical: 8,
     },
     iconWrapper: {
         width: 28,
