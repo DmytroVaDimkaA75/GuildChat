@@ -32,6 +32,17 @@ const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipela
 const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
 const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: 'Вулканічний архіпелаг', waterfall_archipelago: 'Водоспадний архіпелаг' };
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
+const BUILDING_BONUS_MAP = {
+    guild_command_post_improvised: 20,
+    guild_command_post_forward: 40,
+    guild_command_post_fortified: 60,
+    barracks_improvised: 20,
+    barracks: 40,
+    barracks_reinforced: 60,
+    basic_field_outpost_diamond: 20,
+    regular_field_outpost_diamond: 40,
+    advanced_field_outpost_diamond: 60,
+};
 
 const parseStaffSectors = (rawValue) => {
     const sectors = new Set();
@@ -56,6 +67,36 @@ const parseStaffSectors = (rawValue) => {
     return Array.from(sectors);
 };
 
+const getSectorOwnerId = (entry) => {
+    if (!entry || typeof entry !== 'object') return null;
+    const ownerValue = entry.owner ?? entry.ownerId;
+    if (ownerValue === undefined || ownerValue === null) return null;
+    return String(ownerValue);
+};
+
+const getBuildingsWithBonuses = (entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
+    if (buildings.length === 0) return [];
+    return buildings.reduce((list, building) => {
+        if (!building || typeof building !== 'object') return list;
+        const state = String(building.state || '').toLowerCase();
+        if (state !== 'active' && state !== 'building') return list;
+        const name = building.name ? String(building.name) : '';
+        if (!name) return list;
+        const bonus = BUILDING_BONUS_MAP[name];
+        if (!Number.isFinite(bonus)) return list;
+        if (state === 'active') {
+            list.push({ bonus, readyAt: 0 });
+            return list;
+        }
+        const readyAt = Number(building.readyAt);
+        if (!Number.isFinite(readyAt) || readyAt <= 0) return list;
+        list.push({ bonus, readyAt });
+        return list;
+    }, []);
+};
+
 const getNeighborIdsForSectors = (mapKey, sectorIds) => {
     if (!Array.isArray(sectorIds) || sectorIds.length === 0) return [];
     const data = MAP_DATA[mapKey] || {};
@@ -71,6 +112,46 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
         });
     });
     return Array.from(neighbors);
+};
+
+const getNeighborIdsForSector = (mapKey, sectorId) => {
+    if (!sectorId) return [];
+    const data = MAP_DATA[mapKey] || {};
+    const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
+    const config = data[sectorId];
+    const neighborList = Array.isArray(config?.neighbors) ? config.neighbors : Array.isArray(fallbackNeighbors[sectorId]) ? fallbackNeighbors[sectorId] : [];
+    return neighborList.filter(neighborId => neighborId && data[neighborId]);
+};
+
+const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
+    if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
+    const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
+    if (neighborIds.length === 0) return { value: 100, readyAt: null };
+    const shortId = String(shortGuildId);
+    const bonuses = [];
+    neighborIds.forEach(neighborId => {
+        const entry = sectors[neighborId];
+        if (!entry || typeof entry !== 'object') return;
+        const ownerId = getSectorOwnerId(entry);
+        if (!ownerId || ownerId !== shortId) return;
+        bonuses.push(...getBuildingsWithBonuses(entry));
+    });
+    if (bonuses.length === 0) return { value: 100, readyAt: null };
+    const totalPossible = bonuses.reduce((sum, item) => sum + item.bonus, 0);
+    if (totalPossible <= 0) return { value: 100, readyAt: null };
+    if (totalPossible <= 80) {
+        const latestReadyAt = bonuses.reduce((max, item) => Math.max(max, item.readyAt), 0);
+        return { value: 100 - totalPossible, readyAt: latestReadyAt > 0 ? latestReadyAt : null };
+    }
+    const sorted = [...bonuses].sort((a, b) => a.readyAt - b.readyAt);
+    let running = 0;
+    let targetReadyAt = 0;
+    for (const item of sorted) {
+        running += item.bonus;
+        targetReadyAt = item.readyAt;
+        if (running >= 80) break;
+    }
+    return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
 };
 
 const formatRemaining = seconds => {
@@ -345,7 +426,8 @@ const GVG = () => {
             const openTime = Number(entry.openTime);
             if (!Number.isFinite(openTime) || openTime <= 0) return null;
             const armyRaw = String(entry.army || '').trim().toLowerCase();
-            return { name: sectorId, openTime, army: armyRaw === 'attack' || armyRaw === 'defense' ? armyRaw : '' };
+            const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
+            return { name: sectorId, openTime, army: armyRaw === 'attack' || armyRaw === 'defense' ? armyRaw : '', bonusValue: bonusInfo.value, bonusReadyAt: bonusInfo.readyAt };
         }).filter(Boolean).sort((a, b) => a.openTime - b.openTime);
         setSectorSchedule(schedule);
     }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
@@ -430,13 +512,18 @@ const GVG = () => {
                     <Animated.ScrollView style={[styles.sectorList, {opacity: listFadeAnim}]} contentContainerStyle={styles.sectorListContent}>
                         {sectorSchedule.map(item => {
                             const timeRemainingSeconds = item.openTime ? Math.max(item.openTime - currentTime, 0) : 0;
+                            const bonusRemainingSeconds = item.bonusReadyAt ? Math.max(item.bonusReadyAt - currentTime, 0) : 0;
+                            const bonusTimeLabel = bonusRemainingSeconds > 0 ? ` (${formatRemaining(bonusRemainingSeconds)})` : '';
                             return (
                                 <TouchableOpacity key={item.name} style={[styles.sectorRow, blinkingSector === item.name && styles.activeSectorRow]} onPress={() => handleSchedulePress(item.name)} activeOpacity={0.8}>
                                     <View style={styles.sectorNameContainer}>
                                         <View style={[styles.armyBox, { backgroundColor: getArmyColor(item.army) }]} />
                                         <Text style={styles.sectorName}>{item.name}</Text>
                                     </View>
-                                    <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--'}</Text>
+                                    <View style={styles.sectorMeta}>
+                                        <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--'}</Text>
+                                        <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
+                                    </View>
                                 </TouchableOpacity>
                             );
                         })}
@@ -499,7 +586,9 @@ const styles = StyleSheet.create({
     sectorNameContainer: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
     armyBox: { width: 14, height: 14, borderRadius: 4, marginRight: 12 },
     sectorName: { fontSize: 16, color: '#EAEAEA', fontWeight: '600' },
+    sectorMeta: { alignItems: 'flex-end' },
     sectorTime: { fontSize: 16, color: '#EAEAEA', fontWeight: '700', fontFamily: 'monospace' },
+    sectorBonus: { marginTop: 4, fontSize: 13, color: '#A0D8FF', fontWeight: '600' },
     activeSectorRow: { backgroundColor: 'rgba(52, 152, 219, 0.2)', borderWidth: 1, borderColor: '#3498db' },
     emptyListContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -50 },
     emptyListText: { fontSize: 16, color: '#888', fontStyle: 'italic' },
