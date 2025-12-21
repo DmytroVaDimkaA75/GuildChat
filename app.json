@@ -20,7 +20,30 @@
     "plugins": [
       "@react-native-firebase/app",
       "expo-localization",
-      "expo-router"
+      "expo-router",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "GBGMapWidgetProvider",
+              "label": "GBG Карта",
+              "description": "Віджет карти GBG",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "GBGTimersWidgetProvider",
+              "label": "GBG Таймери",
+              "description": "Віджет таймерів GBG",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "resizeMode": "horizontal|vertical"
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {
