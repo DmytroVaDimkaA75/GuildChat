@@ -10,7 +10,7 @@
     android:id="@+id/widgetTitle"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="ПБГ • Рейтинг"
+    android:text="ПБГ • Мапа"
     android:textSize="16sp"
     android:textStyle="bold"
     android:textColor="@android:color/white"
@@ -20,7 +20,7 @@
     android:id="@+id/widgetLine1"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="Ліга: ..."
+    android:text="Тест: тут буде міні-мапа"
     android:textSize="14sp"
     android:textColor="@android:color/white"
     android:paddingBottom="4dp"/>
@@ -29,7 +29,7 @@
     android:id="@+id/widgetLine2"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="Місце: ..."
+    android:text="та статус секторів"
     android:textSize="14sp"
     android:textColor="@android:color/white"
     android:paddingBottom="4dp"/>
@@ -38,7 +38,7 @@
     android:id="@+id/widgetLine3"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="Очки: ..."
+    android:text="..."
     android:textSize="14sp"
     android:textColor="@android:color/white"/>
 </LinearLayout>

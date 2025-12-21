@@ -6,7 +6,7 @@ import android.content.Context
 import android.widget.RemoteViews
 import com.vadimkaa75.guildchat.R
 
-class GBGGroupsWidgetProvider : AppWidgetProvider() {
+class GBGTop5SectorsWidgetProvider : AppWidgetProvider() {
 
   override fun onUpdate(
     context: Context,
@@ -14,13 +14,11 @@ class GBGGroupsWidgetProvider : AppWidgetProvider() {
     appWidgetIds: IntArray
   ) {
     for (appWidgetId in appWidgetIds) {
-      val views = RemoteViews(context.packageName, R.layout.widget_gbg_groups)
-
-      views.setTextViewText(R.id.widgetTitle, "ПБГ • Групи")
-      views.setTextViewText(R.id.widgetLine1, "Група A: 7 гільдій")
-      views.setTextViewText(R.id.widgetLine2, "Група B: 6 гільдій")
-      views.setTextViewText(R.id.widgetLine3, "Група C: 5 гільдій")
-
+      val views = RemoteViews(context.packageName, R.layout.widget_gbg_top5_sectors)
+      views.setTextViewText(R.id.widgetTitle, "ПБГ • ТОП-5 секторів")
+      views.setTextViewText(R.id.widgetLine1, "1) Sector A1 • 02:15")
+      views.setTextViewText(R.id.widgetLine2, "2) Sector B3 • 05:40")
+      views.setTextViewText(R.id.widgetLine3, "3) Sector C2 • 09:10")
       appWidgetManager.updateAppWidget(appWidgetId, views)
     }
   }

@@ -3,6 +3,6 @@
   android:minWidth="180dp"
   android:minHeight="90dp"
   android:updatePeriodMillis="0"
-  android:initialLayout="@layout/widget_gbg_rating"
+  android:initialLayout="@layout/widget_gbg_map"
   android:resizeMode="horizontal|vertical"
   android:widgetCategory="home_screen" />

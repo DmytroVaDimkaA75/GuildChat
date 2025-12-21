@@ -3,6 +3,6 @@
   android:minWidth="180dp"
   android:minHeight="90dp"
   android:updatePeriodMillis="0"
-  android:initialLayout="@layout/widget_gbg_groups"
+  android:initialLayout="@layout/widget_gbg_top5_sectors"
   android:resizeMode="horizontal|vertical"
   android:widgetCategory="home_screen" />
