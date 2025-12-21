@@ -1,6 +1,6 @@
 {
   "name": "newguildchat",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
+    "@fortawesome/fontawesome-svg-core": "^7.1.0",
     "@fortawesome/free-brands-svg-icons": "^7.1.0",
     "@fortawesome/free-solid-svg-icons": "^7.1.0",
     "@fortawesome/react-native-fontawesome": "^0.3.2",
@@ -58,6 +59,7 @@
     "react-dom": "19.1.0",
     "react-i18next": "^16.0.0",
     "react-native": "0.81.5",
+    "react-native-android-widget": "^0.17.2",
     "react-native-crypto-js": "^1.0.0",
     "react-native-date-picker": "^5.0.13",
     "react-native-element-dropdown": "^2.12.4",
