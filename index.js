@@ -1,4 +1,4 @@
-import 'expo/build/Expo.fx';
+
 
 import messaging from '@react-native-firebase/messaging';
 import { AppRegistry, Platform } from 'react-native';
