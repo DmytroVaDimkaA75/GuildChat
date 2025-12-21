@@ -14,6 +14,7 @@ import i18n from "./i18n";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
 import AdminSettingsScreen from "./components/AdminSettingsScreen";
+import GBGWidgetSync from "./components/GBG/widgets/GBGWidgetSync";
 import MainContent from "./components/MainContent";
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
@@ -200,7 +201,12 @@ useEffect(() => {
   }
   
   if (userData) {
-      return <MainContent key={guildId} />;
+      return (
+        <>
+          <GBGWidgetSync />
+          <MainContent key={guildId} />
+        </>
+      );
   }
 
   return (
