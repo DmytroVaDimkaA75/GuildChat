@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:padding="12dp"
+  android:background="@android:color/black">
+
+  <TextView
+    android:id="@+id/widgetTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="ПБГ • Рейтинг"
+    android:textSize="16sp"
+    android:textStyle="bold"
+    android:textColor="@android:color/white"
+    android:paddingBottom="8dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine1"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Ліга: ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine2"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Місце: ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine3"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Очки: ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"/>
+</LinearLayout>
