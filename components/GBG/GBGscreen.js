@@ -19,6 +19,8 @@ import {
   View
 } from "react-native";
 import Svg, { G, Path, SvgXml } from "react-native-svg";
+import * as FileSystem from "expo-file-system";
+import { captureRef } from "react-native-view-shot";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
@@ -73,6 +75,15 @@ const BUILDING_BONUS_MAP = {
   regular_field_outpost_diamond: 40,
   advanced_field_outpost_diamond: 60,
 };
+
+const WIDGET_KEYS = {
+  MAP_PNG_URI: "widget_gbg_map_png_uri",
+  MAP_META: "widget_gbg_map_meta",
+  NEXT5: "widget_gbg_next5",
+  NEXT5_META: "widget_gbg_next5_meta",
+};
+
+const WIDGET_DIR = `${FileSystem.documentDirectory}widgets/`;
 
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
@@ -229,7 +240,7 @@ const getArmyColor = (army) => {
   return '#6c757d';
 };
 
-// ===== SVG string builder (для пайплайна віджета) =====
+// ===== SVG string builder (для віджета/збереження) =====
 
 const escapeXmlAttr = (value) => {
   return String(value)
@@ -247,7 +258,6 @@ const styleObjToSvgStyle = (styleObj) => {
 
   Object.entries(styleObj).forEach(([key, val]) => {
     if (val === undefined || val === null) return;
-    // Нестандартні ключі інкскейпу ігноруємо
     if (key === "InkscapeFontSpecification") return;
 
     const cssKey = camelToKebab(key);
@@ -260,7 +270,7 @@ const styleObjToSvgStyle = (styleObj) => {
 
 const propsToAttrs = (props) => {
   if (!props || typeof props !== "object") return "";
-  const allowed = ["id"]; // за потреби розширимо
+  const allowed = ["id"];
   return allowed
     .filter((k) => props[k] !== undefined && props[k] !== null)
     .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
@@ -330,6 +340,14 @@ ${body}
 </svg>`;
 };
 
+const ensureWidgetDir = async () => {
+  try {
+    await FileSystem.makeDirectoryAsync(WIDGET_DIR, { intermediates: true });
+  } catch (e) {}
+};
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 const GVG = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
@@ -356,10 +374,10 @@ const GVG = () => {
 
   const [infoVisible, setInfoVisible] = useState(false);
 
-  // Перемикач рендера через SvgXml (для тесту строкового SVG)
+  // тестовий перемикач (залишив як було)
   const [useXmlRender] = useState(false);
 
-  // Debug для AsyncStorage (кеш віджетів)
+  // Debug (AsyncStorage)
   const [debugWidgetVisible, setDebugWidgetVisible] = useState(false);
   const [debugWidgetData, setDebugWidgetData] = useState(null);
 
@@ -368,6 +386,12 @@ const GVG = () => {
   const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
+
+  // ВАЖЛИВО для view-shot на Android
+  const mapShotRef = useRef(null);
+
+  const lastWidgetWriteMsRef = useRef(0);
+  const widgetWriteInFlightRef = useRef(false);
 
   useEffect(() => {
     let isActive = true;
@@ -728,36 +752,6 @@ const GVG = () => {
     }
   };
 
-  // ===== Debug читання кешу віджетів з AsyncStorage =====
-  const readWidgetCacheDebug = async () => {
-    try {
-      const keys = [
-        "widget_gbg_map_png_uri",
-        "widget_gbg_map_meta",
-        "widget_gbg_next5",
-        "widget_gbg_next5_meta",
-      ];
-
-      const pairs = await AsyncStorage.multiGet(keys);
-      const raw = {};
-      pairs.forEach(([k, v]) => { raw[k] = v; });
-
-      const pretty = {
-        mapPngUri: raw.widget_gbg_map_png_uri || null,
-        mapMeta: (() => { try { return raw.widget_gbg_map_meta ? JSON.parse(raw.widget_gbg_map_meta) : null; } catch (e) { return raw.widget_gbg_map_meta; } })(),
-        next5: (() => { try { return raw.widget_gbg_next5 ? JSON.parse(raw.widget_gbg_next5) : null; } catch (e) { return raw.widget_gbg_next5; } })(),
-        next5Meta: (() => { try { return raw.widget_gbg_next5_meta ? JSON.parse(raw.widget_gbg_next5_meta) : null; } catch (e) { return raw.widget_gbg_next5_meta; } })(),
-        raw,
-      };
-
-      setDebugWidgetData(pretty);
-      setDebugWidgetVisible(true);
-    } catch (e) {
-      setDebugWidgetData({ error: String(e) });
-      setDebugWidgetVisible(true);
-    }
-  };
-
   const svgXml = useMemo(() => {
     const data = MAP_DATA[mapKey] || {};
     return buildGbgMapSvgString({
@@ -768,6 +762,136 @@ const GVG = () => {
       sectorStaff,
     });
   }, [mapKey, mapDimensions, sectorColors, sectorStaff]);
+
+  const captureMapPngToFile = async () => {
+    if (!mapShotRef.current) return null;
+
+    await ensureWidgetDir();
+    // даємо кадру “додихати”, щоб SVG точно промалювався
+    await sleep(60);
+
+    const tmpUri = await captureRef(mapShotRef.current, {
+      format: "png",
+      quality: 1,
+      result: "tmpfile",
+    });
+
+    const safeKey = String(mapKey || "map").replace(/[^a-z0-9_]+/gi, "_").toLowerCase();
+    const destUri = `${WIDGET_DIR}gbg_map_${safeKey}.png`;
+
+    try { await FileSystem.deleteAsync(destUri, { idempotent: true }); } catch (e) {}
+    await FileSystem.copyAsync({ from: tmpUri, to: destUri });
+
+    return destUri;
+  };
+
+  const writeWidgetCache = async (reason) => {
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    if (widgetWriteInFlightRef.current) return;
+
+    const nowMs = Date.now();
+    // не частіше ніж раз на хвилину
+    if (nowMs - lastWidgetWriteMsRef.current < 60 * 1000) return;
+
+    widgetWriteInFlightRef.current = true;
+
+    try {
+      const updatedAt = Date.now();
+
+      const next5 = (Array.isArray(sectorSchedule) ? sectorSchedule : [])
+        .slice(0, 5)
+        .map(item => ({
+          name: item.name,
+          openTime: Number(item.openTime) || 0,
+          army: item.army || '',
+          bonusValue: Number(item.bonusValue) || 100,
+          bonusReadyAt: item.bonusReadyAt ? Number(item.bonusReadyAt) : null,
+        }));
+
+      const next5Meta = {
+        updatedAt,
+        mapKey,
+        count: next5.length,
+        nowSec: Math.floor(Date.now() / 1000),
+        reason: reason || "",
+      };
+
+      // PNG карти
+      let pngUri = null;
+      let pngError = null;
+      try {
+        pngUri = await captureMapPngToFile();
+      } catch (e) {
+        pngError = String(e);
+      }
+
+      const mapMeta = {
+        updatedAt,
+        mapKey,
+        width: Number(mapDimensions.width),
+        height: Number(mapDimensions.height),
+        pngError: pngError || null,
+      };
+
+      // запис AsyncStorage
+      if (pngUri) {
+        await AsyncStorage.setItem(WIDGET_KEYS.MAP_PNG_URI, pngUri);
+      } else {
+        await AsyncStorage.removeItem(WIDGET_KEYS.MAP_PNG_URI);
+      }
+
+      await AsyncStorage.setItem(WIDGET_KEYS.MAP_META, JSON.stringify(mapMeta));
+      await AsyncStorage.setItem(WIDGET_KEYS.NEXT5, JSON.stringify(next5));
+      await AsyncStorage.setItem(WIDGET_KEYS.NEXT5_META, JSON.stringify(next5Meta));
+
+      lastWidgetWriteMsRef.current = nowMs;
+    } finally {
+      widgetWriteInFlightRef.current = false;
+    }
+  };
+
+  // Пишемо кеш коли екран вже готовий + коли змінюються ключові дані
+  useEffect(() => {
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    writeWidgetCache("screen-ready");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapLoaded, isSectorDataLoaded, areOpponentsLoaded, mapKey]);
+
+  useEffect(() => {
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    writeWidgetCache("data-change");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectorColors, sectorStaff, sectorSchedule]);
+
+  // Debug читання кешу віджетів з AsyncStorage
+  const readWidgetCacheDebug = async () => {
+    try {
+      const keys = [
+        WIDGET_KEYS.MAP_PNG_URI,
+        WIDGET_KEYS.MAP_META,
+        WIDGET_KEYS.NEXT5,
+        WIDGET_KEYS.NEXT5_META,
+      ];
+
+      const pairs = await AsyncStorage.multiGet(keys);
+      const raw = {};
+      pairs.forEach(([k, v]) => { raw[k] = v; });
+
+      const pretty = {
+        mapPngUri: raw[WIDGET_KEYS.MAP_PNG_URI] || null,
+        mapMeta: (() => { try { return raw[WIDGET_KEYS.MAP_META] ? JSON.parse(raw[WIDGET_KEYS.MAP_META]) : null; } catch (e) { return raw[WIDGET_KEYS.MAP_META]; } })(),
+        next5: (() => { try { return raw[WIDGET_KEYS.NEXT5] ? JSON.parse(raw[WIDGET_KEYS.NEXT5]) : null; } catch (e) { return raw[WIDGET_KEYS.NEXT5]; } })(),
+        next5Meta: (() => { try { return raw[WIDGET_KEYS.NEXT5_META] ? JSON.parse(raw[WIDGET_KEYS.NEXT5_META]) : null; } catch (e) { return raw[WIDGET_KEYS.NEXT5_META]; } })(),
+        raw,
+      };
+
+      setDebugWidgetData(pretty);
+      setDebugWidgetVisible(true);
+    } catch (e) {
+      setDebugWidgetData({ error: String(e) });
+      setDebugWidgetVisible(true);
+    }
+  };
 
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
@@ -782,22 +906,22 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
-      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-        {useXmlRender ? (
-          <SvgXml xml={svgXml} width="100%" height="100%" />
-        ) : (
-          <Svg width="100%" height="100%" viewBox={viewBox}>
-            {renderMapPaths()}
-          </Svg>
-        )}
+      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}
+      >
+        {/* ВАЖЛИВО: collapsable={false} і ref саме на View */}
+        <View ref={mapShotRef} collapsable={false} style={styles.mapShot}>
+          {useXmlRender ? (
+            <SvgXml xml={svgXml} width="100%" height="100%" />
+          ) : (
+            <Svg width="100%" height="100%" viewBox={viewBox}>
+              {renderMapPaths()}
+            </Svg>
+          )}
+        </View>
       </Animated.View>
 
-      {/* Debug-кнопка (тимчасово для перевірки AsyncStorage) */}
-      <TouchableOpacity
-        style={styles.debugBtn}
-        onPress={readWidgetCacheDebug}
-        activeOpacity={0.8}
-      >
+      {/* Debug кнопка */}
+      <TouchableOpacity style={styles.debugBtn} onPress={readWidgetCacheDebug} activeOpacity={0.8}>
         <Text style={styles.debugBtnText}>Debug: Widget cache</Text>
       </TouchableOpacity>
 
@@ -888,7 +1012,7 @@ const GVG = () => {
         </TouchableOpacity>
       )}
 
-      {/* Debug-модалка для перегляду AsyncStorage */}
+      {/* Debug-модалка */}
       {debugWidgetVisible && (
         <View style={styles.debugOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
@@ -927,6 +1051,7 @@ const styles = StyleSheet.create({
   infoButton: { marginRight: 15, padding: 5 },
 
   mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: 'hidden' },
+  mapShot: { flex: 1 },
 
   listContainer: { flex: 1, width: '100%', paddingTop: 20 },
   listTitle: { fontSize: 22, fontWeight: 'bold', color: '#E0E0E0', marginLeft: 20, marginBottom: 15 },
@@ -982,7 +1107,7 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: '600' },
   disabledText: { color: '#6a737c' },
 
-  // ===== Debug UI =====
+  // Debug UI
   debugBtn: {
     position: "absolute",
     top: HALF_HEIGHT - 44,
