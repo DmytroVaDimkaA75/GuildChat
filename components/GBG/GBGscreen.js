@@ -18,7 +18,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { G, Path, SvgXml } from "react-native-svg";
+import Svg, { G, Path } from "react-native-svg";
+import ViewShot from "react-native-view-shot";
+import * as FileSystem from "expo-file-system";
+
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
@@ -33,6 +36,7 @@ const VOLCANIC_SVG_HEIGHT = 248.83203;
 const WATERFALL_SVG_WIDTH = 138.53601;
 const WATERFALL_SVG_HEIGHT = 164.52901;
 
+// Якщо ти використовуєш SECTOR_NEIGHBORS як fallback — лишаємо як було
 const SECTOR_NEIGHBORS = {
   A2A: ["A3A", "A3B", "B2A", "X1X", "F2A", "F3B"],
   A3A: ["A4A", "A4B", "A3B", "A2A", "F3B", "F4C"],
@@ -134,15 +138,6 @@ const BUILDING_BONUS_MAP = {
   advanced_field_outpost_diamond: 60,
 };
 
-// ✅ Ключі кешу для Android-віджетів (тимчасово через AsyncStorage)
-const WIDGET_KEYS = {
-  MAP_XML: "widget_gbg_map_svg_xml",
-  MAP_META: "widget_gbg_map_meta",
-  OPEN_TOP5: "widget_gbg_open_top5",
-};
-
-const WIDGET_OPEN_LIMIT = 5;
-
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
   const register = (value) => {
@@ -224,8 +219,8 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
     const neighborList = Array.isArray(config?.neighbors)
       ? config.neighbors
       : Array.isArray(fallbackNeighbors[sectorId])
-        ? fallbackNeighbors[sectorId]
-        : [];
+      ? fallbackNeighbors[sectorId]
+      : [];
 
     neighborList.forEach((neighborId) => {
       if (!neighborId || !data[neighborId] || ownSet.has(neighborId)) return;
@@ -241,18 +236,18 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
   const data = MAP_DATA[mapKey] || {};
   const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
   const config = data[sectorId];
+
   const neighborList = Array.isArray(config?.neighbors)
     ? config.neighbors
     : Array.isArray(fallbackNeighbors[sectorId])
-      ? fallbackNeighbors[sectorId]
-      : [];
+    ? fallbackNeighbors[sectorId]
+    : [];
 
   return neighborList.filter((neighborId) => neighborId && data[neighborId]);
 };
 
 const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
-
   const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
   if (neighborIds.length === 0) return { value: 100, readyAt: null };
 
@@ -262,10 +257,8 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== "object") return;
-
     const ownerId = getSectorOwnerId(entry);
     if (!ownerId || ownerId !== shortId) return;
-
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
 
@@ -307,113 +300,25 @@ const getArmyColor = (army) => {
   return "#6c757d";
 };
 
-// ===== SVG string builder для віджетів (будуємо xml з того ж data/стилів) =====
+// ====== Віджет-пайплайн: PNG + дані топ-5 ======
 
-const escapeXmlAttr = (value) => {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+const WIDGET_DIR = `${FileSystem.documentDirectory}widgets/`;
+
+const ensureWidgetDir = async () => {
+  try {
+    const info = await FileSystem.getInfoAsync(WIDGET_DIR);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(WIDGET_DIR, { intermediates: true });
+    }
+  } catch (e) {}
 };
 
-const camelToKebab = (str) => str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
-
-const styleObjToSvgStyle = (styleObj) => {
-  if (!styleObj || typeof styleObj !== "object") return "";
-  const parts = [];
-
-  Object.entries(styleObj).forEach(([key, val]) => {
-    if (val === undefined || val === null) return;
-    // InkscapeFontSpecification не треба в xml
-    if (key === "InkscapeFontSpecification") return;
-
-    const cssKey = camelToKebab(key);
-    const cssVal = typeof val === "number" ? String(val) : String(val);
-    parts.push(`${cssKey}:${cssVal}`);
-  });
-
-  return parts.join(";");
-};
-
-const propsToAttrs = (props) => {
-  if (!props || typeof props !== "object") return "";
-  const allowed = ["id"];
-  return allowed
-    .filter((k) => props[k] !== undefined && props[k] !== null)
-    .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
-    .join(" ");
-};
-
-/**
- * Будує SVG-рядок, який візуально відповідає твоєму renderMapPaths()
- */
-const buildGbgMapSvgString = ({ mapKey, mapDimensions, mapData, sectorColors, sectorStaff }) => {
-  const w = Number(mapDimensions?.width || 0);
-  const h = Number(mapDimensions?.height || 0);
-  const viewBox = `0 0 ${w} ${h}`;
-
-  const strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
-
-  const body = Object.entries(mapData || {})
-    .map(([sectorId, config]) => {
-      if (!config || typeof config !== "object") return "";
-
-      const { fill, text, icon } = config;
-
-      // fillStyle як у додатку
-      const fillStyle = { ...(fill?.style || {}) };
-      const color = sectorColors?.[sectorId];
-      if (color) fillStyle.fill = color;
-
-      fillStyle.stroke = "#121212";
-      fillStyle.strokeWidth = strokeWidth;
-      fillStyle.strokeOpacity = 1;
-
-      // textStyle як у додатку
-      const textStyle = {
-        ...(text?.style || {}),
-        display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
-      };
-
-      // iconStyle як у додатку
-      const iconStyle = {
-        ...(icon?.style || {}),
-        display: sectorStaff?.[sectorId] ? "inline" : "none",
-        fill: "#FFFFFF",
-      };
-      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
-        iconStyle.stroke = "#FFFFFF";
-      }
-
-      const parts = [];
-
-      if (fill?.d) {
-        const attrs = propsToAttrs(fill?.props);
-        const style = styleObjToSvgStyle(fillStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      if (text?.d) {
-        const attrs = propsToAttrs(text?.props);
-        const style = styleObjToSvgStyle(textStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      if (icon?.d) {
-        const attrs = propsToAttrs(icon?.props);
-        const style = styleObjToSvgStyle(iconStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      return `<g id="${escapeXmlAttr(sectorId)}">\n${parts.join("\n")}\n</g>`;
-    })
-    .join("\n");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${viewBox}">
-${body}
-</svg>`;
+const safeJson = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch (e) {
+    return "{}";
+  }
 };
 
 const GVG = () => {
@@ -442,18 +347,28 @@ const GVG = () => {
 
   const [infoVisible, setInfoVisible] = useState(false);
 
-  // ✅ перемикач для тесту xml vs js (у віджеті кліків не буде)
-  const [useXmlRender, setUseXmlRender] = useState(false);
-
-  // ✅ час останнього запису кешу (індикатор для тесту)
-  const [widgetSavedAt, setWidgetSavedAt] = useState(0);
-
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
 
   const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
+
+  // --- ViewShot для PNG мапи
+  const mapShotRef = useRef(null);
+  const isCapturingRef = useRef(false);
+  const lastWidgetSaveAtRef = useRef(0);
+
+  const mapKey = currentMap ?? DEFAULT_MAP_KEY;
+  const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
+  const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
+
+  const mapTitle =
+    MAP_TITLE_TRANSLATIONS[mapKey] ||
+    mapKey
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
 
   useEffect(() => {
     let isActive = true;
@@ -497,6 +412,7 @@ const GVG = () => {
         setIsMapLoaded(true);
         return;
       }
+
       mapRef = database().ref(`guilds/${id}/GBG/map`);
       onMapUpdate = (snap) => {
         let nextMap = DEFAULT_MAP_KEY;
@@ -507,6 +423,7 @@ const GVG = () => {
         setCurrentMap(nextMap);
         setIsMapLoaded(true);
       };
+
       mapRef.on("value", onMapUpdate);
     })();
 
@@ -518,7 +435,6 @@ const GVG = () => {
   useEffect(() => {
     let opponentsRef;
     let onOpponentsUpdate;
-
     setAreOpponentsLoaded(false);
     setOpponentList([]);
     setOpponentMapById({});
@@ -531,6 +447,7 @@ const GVG = () => {
         setAreOpponentsLoaded(true);
         return;
       }
+
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
       onOpponentsUpdate = (snap) => {
         if (snap.exists()) {
@@ -562,6 +479,7 @@ const GVG = () => {
           setOpponentList([]);
           setOpponentStaffSectors({});
         }
+
         setAreOpponentsLoaded(true);
       };
 
@@ -572,17 +490,6 @@ const GVG = () => {
       if (opponentsRef && onOpponentsUpdate) opponentsRef.off("value", onOpponentsUpdate);
     };
   }, [guildId]);
-
-  const mapKey = currentMap ?? DEFAULT_MAP_KEY;
-  const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
-  const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
-
-  const mapTitle =
-    MAP_TITLE_TRANSLATIONS[mapKey] ||
-    mapKey
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
 
   useLayoutEffect(() => {
     if (!navigation) return;
@@ -607,9 +514,9 @@ const GVG = () => {
     const data = MAP_DATA[mapKey] || {};
     return Object.entries(data).map(([sectorId, config]) => {
       const { fill, text, icon } = config;
+
       const fillStyle = { ...(fill?.style || {}) };
       const color = sectorColors[sectorId];
-
       if (color) fillStyle.fill = color;
 
       fillStyle.stroke = "#121212";
@@ -626,6 +533,7 @@ const GVG = () => {
         display: sectorStaff[sectorId] ? "inline" : "none",
         fill: "#FFFFFF",
       };
+
       if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
         iconStyle.stroke = "#FFFFFF";
       }
@@ -675,11 +583,13 @@ const GVG = () => {
         setIsSectorDataLoaded(true);
         return;
       }
+
       sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
       onSectorsUpdate = (snap) => {
         setSectorSnapshot(snap.exists() ? snap.val() : null);
         setIsSectorDataLoaded(true);
       };
+
       sectorsRef.on("value", onSectorsUpdate);
     })();
 
@@ -722,11 +632,7 @@ const GVG = () => {
             color = "#FFFFFF";
           } else {
             const opponent = opponentMapById[ownerKey];
-            color = opponent?.sectorColor
-              ? String(opponent.sectorColor)
-              : typeof entry.color === "string"
-                ? entry.color
-                : "#FFFFFF";
+            color = opponent?.sectorColor ? String(opponent.sectorColor) : typeof entry.color === "string" ? entry.color : "#FFFFFF";
           }
         }
 
@@ -842,10 +748,7 @@ const GVG = () => {
       if (!gid) return;
 
       const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
-      const position =
-        pageX > width / 2
-          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
-          : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
+      const position = pageX > width / 2 ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) } : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
 
       setPopupStyle(position);
       setSelectedId(id);
@@ -861,103 +764,114 @@ const GVG = () => {
         Alert.alert("Помилка", "Не вдалося визначити гільдію.");
         return;
       }
-
       setPopupVisible(false);
       Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
-
       const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
       await sendNotification({ guildId: gid, sectorId: selectedId });
-
       Alert.alert("Успіх!", "Сповіщення надіслано.");
     } catch (error) {
       Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
     }
   };
 
-  // ✅ XML мапи (для віджета і для тестового перемикача)
-  const svgXml = useMemo(() => {
-    const data = MAP_DATA[mapKey] || {};
-    return buildGbgMapSvgString({
-      mapKey,
-      mapDimensions,
-      mapData: data,
-      sectorColors,
-      sectorStaff,
-    });
-  }, [mapKey, mapDimensions.width, mapDimensions.height, sectorColors, sectorStaff]);
+  // ====== ЗБЕРЕЖЕННЯ ДАНИХ ДЛЯ ВІДЖЕТІВ (раз в хвилину) ======
 
-  // ✅ Кешуємо SVG мапи для віджета
-  useEffect(() => {
-    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
-    if (!svgXml) return;
-
-    (async () => {
-      try {
-        const updatedAt = Date.now();
-        const meta = {
-          updatedAt,
-          mapKey,
-          width: mapDimensions.width,
-          height: mapDimensions.height,
-        };
-
-        await AsyncStorage.multiSet([
-          [WIDGET_KEYS.MAP_XML, svgXml],
-          [WIDGET_KEYS.MAP_META, JSON.stringify(meta)],
-        ]);
-
-        setWidgetSavedAt(updatedAt);
-      } catch (e) {}
-    })();
-  }, [
-    svgXml,
-    mapKey,
-    mapDimensions.width,
-    mapDimensions.height,
-    isMapLoaded,
-    isSectorDataLoaded,
-    areOpponentsLoaded,
-  ]);
-
-  // ✅ Кешуємо TOP-5 відкриттів для віджета
-  useEffect(() => {
-    if (!isMapLoaded || !isSectorDataLoaded) return;
-
-    (async () => {
-      try {
-        const updatedAt = Date.now();
-        const items = (sectorSchedule || []).slice(0, WIDGET_OPEN_LIMIT).map((item) => ({
-          name: item.name,
-          openTime: item.openTime,
-          army: item.army,
-          bonusValue: item.bonusValue,
-          bonusReadyAt: item.bonusReadyAt ?? null,
-        }));
-
-        await AsyncStorage.setItem(WIDGET_KEYS.OPEN_TOP5, JSON.stringify({ updatedAt, items }));
-        setWidgetSavedAt(updatedAt);
-      } catch (e) {}
-    })();
-  }, [sectorSchedule, isMapLoaded, isSectorDataLoaded]);
-
-  // ✅ Перевірка кешу (довгий тап по бейджу)
-  const handleDebugBadgeLongPress = async () => {
+  const saveNext5ForWidget = async () => {
     try {
-      const pairs = await AsyncStorage.multiGet([WIDGET_KEYS.MAP_XML, WIDGET_KEYS.MAP_META, WIDGET_KEYS.OPEN_TOP5]);
-      const byKey = {};
-      pairs.forEach(([k, v]) => {
-        byKey[k] = v;
+      const updatedAt = Date.now();
+      const next5 = (sectorSchedule || []).slice(0, 5);
+
+      await AsyncStorage.multiSet([
+        ["widget_gbg_next5", safeJson(next5)],
+        ["widget_gbg_next5_meta", safeJson({ updatedAt, mapKey })],
+      ]);
+    } catch (e) {}
+  };
+
+  const captureMapPngForWidget = async () => {
+    // Не робимо захоплення, якщо щось не готово
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    if (!mapShotRef.current) return;
+    if (popupVisible || infoVisible) return; // щоб в PNG не попали оверлеї
+
+    // Захист від паралельних capture
+    if (isCapturingRef.current) return;
+    isCapturingRef.current = true;
+
+    try {
+      await ensureWidgetDir();
+
+      // Робимо PNG у тимчасовий файл
+      const tmpUri = await mapShotRef.current.capture?.({
+        format: "png",
+        quality: 1,
+        result: "tmpfile",
       });
 
-      const mapLen = byKey[WIDGET_KEYS.MAP_XML] ? byKey[WIDGET_KEYS.MAP_XML].length : 0;
-      const metaLen = byKey[WIDGET_KEYS.MAP_META] ? byKey[WIDGET_KEYS.MAP_META].length : 0;
-      const topLen = byKey[WIDGET_KEYS.OPEN_TOP5] ? byKey[WIDGET_KEYS.OPEN_TOP5].length : 0;
+      if (!tmpUri) return;
 
-      Alert.alert("Widget cache", `MAP_XML: ${mapLen} chars\nMAP_META: ${metaLen} chars\nOPEN_TOP5: ${topLen} chars`);
+      // Кінцеве місце
+      const outUri = `${WIDGET_DIR}gbg_map_${mapKey}.png`;
+
+      // Перемістити в documentDirectory/widgets
+      // tmpUri може бути "file:///..." — expo-file-system нормально працює з таким uri
+      try {
+        const outInfo = await FileSystem.getInfoAsync(outUri);
+        if (outInfo.exists) {
+          await FileSystem.deleteAsync(outUri, { idempotent: true });
+        }
+      } catch (e) {}
+
+      await FileSystem.moveAsync({ from: tmpUri, to: outUri });
+
+      const updatedAt = Date.now();
+      const meta = {
+        updatedAt,
+        mapKey,
+        width: mapDimensions.width,
+        height: mapDimensions.height,
+      };
+
+      await AsyncStorage.multiSet([
+        ["widget_gbg_map_png_uri", outUri],
+        ["widget_gbg_map_meta", safeJson(meta)],
+      ]);
     } catch (e) {
-      Alert.alert("Widget cache", "Не вдалося прочитати кеш.");
+    } finally {
+      isCapturingRef.current = false;
     }
   };
+
+  const saveWidgetPayloadNow = async () => {
+    await saveNext5ForWidget();
+    // Дамо рендеру стабілізуватися перед capture
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        captureMapPngForWidget();
+      }, 80);
+    });
+  };
+
+  useEffect(() => {
+    // коли все вперше завантажилось — збережемо одразу
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    saveWidgetPayloadNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapLoaded, isSectorDataLoaded, areOpponentsLoaded, mapKey]);
+
+  useEffect(() => {
+    // раз на хвилину — оновлюємо кеш для віджетів
+    const interval = setInterval(() => {
+      const now = Date.now();
+      // дуже простий захист від "частіше ніж хвилина" (якщо interval зіб'ється)
+      if (now - lastWidgetSaveAtRef.current < 55 * 1000) return;
+      lastWidgetSaveAtRef.current = now;
+      saveWidgetPayloadNow();
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapKey, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded, sectorSchedule, sectorColors, sectorStaff]);
 
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
@@ -972,27 +886,13 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
+      {/* ВАЖЛИВО: ViewShot має обгортати саме те, що ми хочемо бачити у PNG */}
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-        {/* Маленький тестовий бейдж: перемикає JS/XML, long press показує кеш */}
-        <TouchableOpacity
-          style={styles.debugBadge}
-          activeOpacity={0.85}
-          onPress={() => setUseXmlRender((prev) => !prev)}
-          onLongPress={handleDebugBadgeLongPress}
-          delayLongPress={350}
-        >
-          <Text style={styles.debugBadgeText}>
-            {(useXmlRender ? "XML" : "JS") + (widgetSavedAt ? " •" : "")}
-          </Text>
-        </TouchableOpacity>
-
-        {useXmlRender ? (
-          <SvgXml xml={svgXml} width="100%" height="100%" />
-        ) : (
+        <ViewShot ref={mapShotRef} style={StyleSheet.absoluteFill} options={{ format: "png", quality: 1 }}>
           <Svg width="100%" height="100%" viewBox={viewBox}>
             {renderMapPaths()}
           </Svg>
-        )}
+        </ViewShot>
       </Animated.View>
 
       <View style={styles.listContainer}>
@@ -1019,10 +919,7 @@ const GVG = () => {
 
                   <View style={styles.sectorMeta}>
                     <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : "--:--:--"}</Text>
-                    <Text style={styles.sectorBonus}>
-                      Бонус: {item.bonusValue}
-                      {bonusTimeLabel}
-                    </Text>
+                    <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -1040,7 +937,6 @@ const GVG = () => {
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <Animated.View style={styles.infoModal}>
             <Text style={styles.infoTitle}>Суперники на мапі</Text>
-
             <ScrollView style={styles.infoList}>
               {opponentList.length === 0 ? (
                 <Text style={styles.infoEmpty}>Інформація відсутня</Text>
@@ -1053,7 +949,6 @@ const GVG = () => {
                 ))
               )}
             </ScrollView>
-
             <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
               <Text style={styles.infoCloseText}>Закрити</Text>
             </TouchableOpacity>
@@ -1145,30 +1040,18 @@ const styles = StyleSheet.create({
   infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
 
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
-  popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
+  popupMenu: {
+    position: "absolute",
+    backgroundColor: "rgba(40, 40, 40, 0.9)",
+    borderRadius: 15,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+  },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
-
-  // ✅ Мінімальний бейдж для тесту (не впливає на дизайн екрану)
-  debugBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 50,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  debugBadgeText: {
-    color: "#E0E0E0",
-    fontWeight: "700",
-    fontSize: 12,
-  },
 });
 
 export default GVG;
