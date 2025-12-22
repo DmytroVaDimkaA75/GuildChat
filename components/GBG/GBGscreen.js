@@ -5,12 +5,13 @@ import database from '@react-native-firebase/database';
 import functions from '@react-native-firebase/functions';
 import { useNavigation } from '@react-navigation/native';
 import { BlurView } from '@react-native-community/blur';
-import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, Dimensions, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import Svg, { G, Path } from "react-native-svg";
+import Svg, { G, Path, SvgXml } from "react-native-svg";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
+
 
 const { height, width } = Dimensions.get('window');
 const HALF_HEIGHT = height * 0.5;
@@ -168,6 +169,142 @@ const getArmyColor = (army) => {
     if (normalized === 'defense') return '#3498db';
     return '#6c757d';
 };
+
+// ===== SVG string builder for widget pipeline (крок 4) =====
+
+const escapeXmlAttr = (value) => {
+  // Мінімальний escape для атрибутів XML
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+};
+
+const camelToKebab = (str) => str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+
+const styleObjToSvgStyle = (styleObj) => {
+  if (!styleObj || typeof styleObj !== "object") return "";
+  const parts = [];
+
+  Object.entries(styleObj).forEach(([key, val]) => {
+    if (val === undefined || val === null) return;
+
+    // react-native-svg може мати "InkscapeFontSpecification" та інші нестандартні ключі — ігноруємо їх
+    if (key === "InkscapeFontSpecification") return;
+
+    const cssKey = camelToKebab(key);
+    // Значення чисел — як є
+    const cssVal = typeof val === "number" ? String(val) : String(val);
+    parts.push(`${cssKey}:${cssVal}`);
+  });
+
+  return parts.join(";");
+};
+
+const propsToAttrs = (props) => {
+  if (!props || typeof props !== "object") return "";
+  const allowed = ["id"]; // зараз у тебе в data props в основному id; розширимо за потреби
+  return allowed
+    .filter((k) => props[k] !== undefined && props[k] !== null)
+    .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
+    .join(" ");
+};
+
+/**
+ * Build SVG string that matches your renderMapPaths() logic (static snapshot).
+ * @param {object} args
+ * @param {string} args.mapKey
+ * @param {{width:number,height:number}} args.mapDimensions
+ * @param {object} args.mapData - MAP_DATA[mapKey]
+ * @param {object} args.sectorColors
+ * @param {object} args.sectorStaff
+ * @returns {string} SVG xml
+ */
+const buildGbgMapSvgString = ({
+  mapKey,
+  mapDimensions,
+  mapData,
+  sectorColors,
+  sectorStaff,
+}) => {
+  const w = Number(mapDimensions?.width || 0);
+  const h = Number(mapDimensions?.height || 0);
+  const viewBox = `0 0 ${w} ${h}`;
+
+  const strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
+
+  const body = Object.entries(mapData || {})
+    .map(([sectorId, config]) => {
+      if (!config || typeof config !== "object") return "";
+
+      const { fill, text, icon } = config;
+
+      // === fillStyle як у додатку ===
+      const fillStyle = { ...(fill?.style || {}) };
+      const color = sectorColors?.[sectorId];
+      if (color) fillStyle.fill = color;
+
+      fillStyle.stroke = "#121212";
+      fillStyle.strokeWidth = strokeWidth;
+      fillStyle.strokeOpacity = 1;
+
+      // fillOpacity в тебе може бути undefined — тоді не ставимо
+      // (якщо треба — додамо)
+
+      // === textStyle як у додатку ===
+      const textStyle = {
+        ...(text?.style || {}),
+        display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
+      };
+
+      // === iconStyle як у додатку ===
+      const iconStyle = {
+        ...(icon?.style || {}),
+        display: sectorStaff?.[sectorId] ? "inline" : "none",
+        fill: "#FFFFFF",
+      };
+      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
+        iconStyle.stroke = "#FFFFFF";
+      }
+
+      const parts = [];
+
+      if (fill?.d) {
+        const attrs = propsToAttrs(fill?.props);
+        const style = styleObjToSvgStyle(fillStyle);
+        parts.push(
+          `<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`
+        );
+      }
+
+      if (text?.d) {
+        const attrs = propsToAttrs(text?.props);
+        const style = styleObjToSvgStyle(textStyle);
+        parts.push(
+          `<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`
+        );
+      }
+
+      if (icon?.d) {
+        const attrs = propsToAttrs(icon?.props);
+        const style = styleObjToSvgStyle(iconStyle);
+        parts.push(
+          `<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`
+        );
+      }
+
+      // Групу <g> можна опустити (onPress не потрібен), але залишимо для структури
+      return `<g id="${escapeXmlAttr(sectorId)}">\n${parts.join("\n")}\n</g>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${viewBox}">
+${body}
+</svg>`;
+};
+
 
 const GVG = () => {
     const [selectedId, setSelectedId] = useState(null);
@@ -499,12 +636,32 @@ const GVG = () => {
             </View>
         );
     }
+
+    const [useXmlRender, setUseXmlRender] = useState(false);
+
+        const svgXml = useMemo(() => {
+        const data = MAP_DATA[mapKey] || {};
+        return buildGbgMapSvgString({
+            mapKey,
+            mapDimensions,
+            mapData: data,
+            sectorColors,
+            sectorStaff,
+        });
+    }, [mapKey, mapDimensions, sectorColors, sectorStaff]);
+
+    
     
     return (
         <View style={styles.win}>
             <StatusBar barStyle="light-content" />
             <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-                <Svg width="100%" height="100%" viewBox={viewBox}>{renderMapPaths()}</Svg>
+                {useXmlRender ? (
+                    <SvgXml xml={svgXml} width="100%" height="100%" />
+                ) : (
+                    <Svg width="100%" height="100%" viewBox={viewBox}>{renderMapPaths()}</Svg>
+                )}
+
             </Animated.View>
             <View style={styles.listContainer}>
                 <Text style={styles.listTitle}>Відкриття секторів</Text>
