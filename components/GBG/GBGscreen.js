@@ -27,15 +27,17 @@ const SECTOR_NEIGHBORS = {
 };
 
 const WATERFALL_NEIGHBORS = {};
-
 const DEFAULT_MAP_KEY = 'volcanic_archipelago';
+
 const MAP_DIMENSIONS = {
   [DEFAULT_MAP_KEY]: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
   waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT }
 };
+
 const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipelago: WATERFALL_NEIGHBORS };
 const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
 const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: 'Вулканічний архіпелаг', waterfall_archipelago: 'Водоспадний архіпелаг' };
+
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
 
 const BUILDING_BONUS_MAP = {
@@ -52,11 +54,13 @@ const BUILDING_BONUS_MAP = {
 
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
+
   const register = (value) => {
     if (value === undefined || value === null) return;
     const normalized = String(value).trim().toUpperCase();
     if (normalized) sectors.add(normalized);
   };
+
   if (Array.isArray(rawValue)) {
     rawValue.forEach(item => {
       if (typeof item === 'string') {
@@ -70,6 +74,7 @@ const parseStaffSectors = (rawValue) => {
   } else {
     register(rawValue);
   }
+
   return Array.from(sectors);
 };
 
@@ -84,20 +89,27 @@ const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== 'object') return [];
   const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
   if (buildings.length === 0) return [];
+
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== 'object') return list;
+
     const state = String(building.state || '').toLowerCase();
     if (state !== 'active' && state !== 'building') return list;
+
     const name = building.name ? String(building.name) : '';
     if (!name) return list;
+
     const bonus = BUILDING_BONUS_MAP[name];
     if (!Number.isFinite(bonus)) return list;
+
     if (state === 'active') {
       list.push({ bonus, readyAt: 0 });
       return list;
     }
+
     const readyAt = Number(building.readyAt);
     if (!Number.isFinite(readyAt) || readyAt <= 0) return list;
+
     list.push({ bonus, readyAt });
     return list;
   }, []);
@@ -109,6 +121,7 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
   const ownSet = new Set(sectorIds);
   const neighbors = new Set();
+
   sectorIds.forEach(sectorId => {
     const config = data[sectorId];
     const neighborList = Array.isArray(config?.neighbors)
@@ -116,11 +129,13 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
       : Array.isArray(fallbackNeighbors[sectorId])
         ? fallbackNeighbors[sectorId]
         : [];
+
     neighborList.forEach(neighborId => {
       if (!neighborId || !data[neighborId] || ownSet.has(neighborId)) return;
       neighbors.add(neighborId);
     });
   });
+
   return Array.from(neighbors);
 };
 
@@ -139,18 +154,25 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
 
 const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
+
   const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
   if (neighborIds.length === 0) return { value: 100, readyAt: null };
+
   const shortId = String(shortGuildId);
   const bonuses = [];
+
   neighborIds.forEach(neighborId => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== 'object') return;
+
     const ownerId = getSectorOwnerId(entry);
     if (!ownerId || ownerId !== shortId) return;
+
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
+
   if (bonuses.length === 0) return { value: 100, readyAt: null };
+
   const totalPossible = bonuses.reduce((sum, item) => sum + item.bonus, 0);
   if (totalPossible <= 0) return { value: 100, readyAt: null };
 
@@ -162,11 +184,13 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   const sorted = [...bonuses].sort((a, b) => a.readyAt - b.readyAt);
   let running = 0;
   let targetReadyAt = 0;
+
   for (const item of sorted) {
     running += item.bonus;
     targetReadyAt = item.readyAt;
     if (running >= 80) break;
   }
+
   return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
 };
 
@@ -185,9 +209,8 @@ const getArmyColor = (army) => {
   return '#6c757d';
 };
 
-// ===== SVG string builder for widget pipeline (крок 4) =====
+// ===== SVG string builder (для майбутнього віджета як "картинка") =====
 
-// Мінімальний escape для атрибутів XML
 const escapeXmlAttr = (value) => {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -198,15 +221,12 @@ const escapeXmlAttr = (value) => {
 
 const camelToKebab = (str) => str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
 
-// Перетворюємо style object у style="a:b;c:d"
 const styleObjToSvgStyle = (styleObj) => {
   if (!styleObj || typeof styleObj !== "object") return "";
   const parts = [];
 
   Object.entries(styleObj).forEach(([key, val]) => {
     if (val === undefined || val === null) return;
-
-    // Не стандартні ключі з Inkscape/інше — ігноруємо
     if (key === "InkscapeFontSpecification") return;
 
     const cssKey = camelToKebab(key);
@@ -217,7 +237,6 @@ const styleObjToSvgStyle = (styleObj) => {
   return parts.join(";");
 };
 
-// З props переносимо тільки потрібне (поки це id)
 const propsToAttrs = (props) => {
   if (!props || typeof props !== "object") return "";
   const allowed = ["id"];
@@ -227,9 +246,6 @@ const propsToAttrs = (props) => {
     .join(" ");
 };
 
-/**
- * Будуємо SVG string, який повторює логіку renderMapPaths(), але як "статичний" знімок.
- */
 const buildGbgMapSvgString = ({
   mapKey,
   mapDimensions,
@@ -249,7 +265,6 @@ const buildGbgMapSvgString = ({
 
       const { fill, text, icon } = config;
 
-      // === fillStyle як у додатку ===
       const fillStyle = { ...(fill?.style || {}) };
       const color = sectorColors?.[sectorId];
       if (color) fillStyle.fill = color;
@@ -258,13 +273,11 @@ const buildGbgMapSvgString = ({
       fillStyle.strokeWidth = strokeWidth;
       fillStyle.strokeOpacity = 1;
 
-      // === textStyle як у додатку ===
       const textStyle = {
         ...(text?.style || {}),
         display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
       };
 
-      // === iconStyle як у додатку ===
       const iconStyle = {
         ...(icon?.style || {}),
         display: sectorStaff?.[sectorId] ? "inline" : "none",
@@ -279,25 +292,19 @@ const buildGbgMapSvgString = ({
       if (fill?.d) {
         const attrs = propsToAttrs(fill?.props);
         const style = styleObjToSvgStyle(fillStyle);
-        parts.push(
-          `<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`
-        );
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`);
       }
 
       if (text?.d) {
         const attrs = propsToAttrs(text?.props);
         const style = styleObjToSvgStyle(textStyle);
-        parts.push(
-          `<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`
-        );
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`);
       }
 
       if (icon?.d) {
         const attrs = propsToAttrs(icon?.props);
         const style = styleObjToSvgStyle(iconStyle);
-        parts.push(
-          `<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`
-        );
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`);
       }
 
       return `<g id="${escapeXmlAttr(sectorId)}">\n${parts.join("\n")}\n</g>`;
@@ -311,8 +318,8 @@ ${body}
 };
 
 const GVG = () => {
-  // ✅ ВАЖЛИВО: хуки ТІЛЬКИ зверху, ДО будь-яких return
-  const [useXmlRender, setUseXmlRender] = useState(false); // для тесту SvgXml (можеш тимчасово зробити true)
+  // ✅ Тестовий перемикач рендера (натискай на бейдж JS/XML)
+  const [useXmlRender, setUseXmlRender] = useState(false);
 
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
@@ -371,12 +378,15 @@ const GVG = () => {
   useEffect(() => {
     let mapRef;
     let onMapUpdate;
+
     setIsMapLoaded(false);
     setCurrentMap(null);
     setIsSectorDataLoaded(false);
+
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) { setCurrentMap(DEFAULT_MAP_KEY); setIsMapLoaded(true); return; }
+
       mapRef = database().ref(`guilds/${id}/GBG/map`);
       onMapUpdate = snap => {
         let nextMap = DEFAULT_MAP_KEY;
@@ -389,19 +399,23 @@ const GVG = () => {
       };
       mapRef.on('value', onMapUpdate);
     })();
+
     return () => { if (mapRef && onMapUpdate) mapRef.off('value', onMapUpdate); };
   }, [guildId]);
 
   useEffect(() => {
     let opponentsRef;
     let onOpponentsUpdate;
+
     setAreOpponentsLoaded(false);
     setOpponentList([]);
     setOpponentMapById({});
     setOpponentStaffSectors({});
+
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) { setOpponentStaffSectors({}); setAreOpponentsLoaded(true); return; }
+
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
       onOpponentsUpdate = snap => {
         if (snap.exists()) {
@@ -409,17 +423,21 @@ const GVG = () => {
           const byId = {};
           const list = [];
           const staffFlags = {};
+
           Object.entries(raw).forEach(([key, value]) => {
             if (value && typeof value === 'object') {
               const normalizedId = value.id != null ? String(value.id) : String(key);
               const sectorColor = value.sectorColor ? String(value.sectorColor) : '#FFFFFF';
               const staffSectors = parseStaffSectors(value.staff);
+
               const entry = { key, id: normalizedId, name: value.name || normalizedId, sectorColor };
               byId[normalizedId] = entry;
               list.push(entry);
+
               staffSectors.forEach(sectorId => { if (sectorId) staffFlags[sectorId] = true; });
             }
           });
+
           list.sort((a, b) => a.name.localeCompare(b.name, 'uk', { sensitivity: 'base' }));
           setOpponentMapById(byId);
           setOpponentList(list);
@@ -431,8 +449,10 @@ const GVG = () => {
         }
         setAreOpponentsLoaded(true);
       };
+
       opponentsRef.on('value', onOpponentsUpdate);
     })();
+
     return () => { if (opponentsRef && onOpponentsUpdate) opponentsRef.off('value', onOpponentsUpdate); };
   }, [guildId]);
 
@@ -442,7 +462,6 @@ const GVG = () => {
 
   const mapTitle = MAP_TITLE_TRANSLATIONS[mapKey] || mapKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-  // ✅ SvgXml: генеруємо SVG string ДО loader return
   const svgXml = useMemo(() => {
     const data = MAP_DATA[mapKey] || {};
     return buildGbgMapSvgString({
@@ -481,10 +500,12 @@ const GVG = () => {
     try {
       const gid = guildId || await AsyncStorage.getItem('guildId');
       if (!gid) return;
+
       const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
       const position = pageX > width / 2
         ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
         : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
+
       setPopupStyle(position);
       setSelectedId(id);
       setPopupVisible(true);
@@ -495,9 +516,9 @@ const GVG = () => {
     const data = MAP_DATA[mapKey] || {};
     return Object.entries(data).map(([sectorId, config]) => {
       const { fill, text, icon } = config;
+
       const fillStyle = { ...(fill?.style || {}) };
       const color = sectorColors[sectorId];
-
       if (color) fillStyle.fill = color;
 
       fillStyle.stroke = '#121212';
@@ -557,11 +578,14 @@ const GVG = () => {
 
   useEffect(() => {
     if (!isMapLoaded) return;
+
     let sectorsRef;
     let onSectorsUpdate;
+
     (async () => {
       const id = guildId || await AsyncStorage.getItem('guildId');
       if (!id) { setSectorSnapshot(null); setIsSectorDataLoaded(true); return; }
+
       sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
       onSectorsUpdate = snap => {
         setSectorSnapshot(snap.exists() ? snap.val() : null);
@@ -569,6 +593,7 @@ const GVG = () => {
       };
       sectorsRef.on('value', onSectorsUpdate);
     })();
+
     return () => { if (sectorsRef && onSectorsUpdate) sectorsRef.off('value', onSectorsUpdate); };
   }, [guildId, isMapLoaded]);
 
@@ -578,6 +603,7 @@ const GVG = () => {
     const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
+
     if (sectorIds.length === 0) { setSectorColors({}); setSectorStaff({}); setSectorSchedule([]); return; }
 
     const colors = {};
@@ -586,12 +612,14 @@ const GVG = () => {
 
     sectorIds.forEach(gid => {
       const entry = data[gid];
+
       let color = '#FFFFFF';
       let staff = false;
       let ownerValue = null;
 
       if (entry && typeof entry === 'object') {
         if (typeof entry.color === 'string') color = entry.color;
+
         ownerValue = entry.owner ?? entry.ownerId;
         if (ownerValue !== null) {
           const ownerKey = String(ownerValue);
@@ -604,6 +632,7 @@ const GVG = () => {
               : (typeof entry.color === 'string' ? entry.color : '#FFFFFF');
           }
         }
+
         staff = !!entry.staff;
       } else if (typeof entry === 'string') {
         color = entry;
@@ -627,6 +656,7 @@ const GVG = () => {
     const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
+
     if (sectorIds.length === 0) { setSectorSchedule([]); return; }
 
     const ownSectors = sectorIds.filter(id => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
@@ -708,7 +738,6 @@ const GVG = () => {
     }
   };
 
-  // ✅ Loader return ТІЛЬКИ після всіх hooks
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
       <View style={styles.loaderContainer}>
@@ -723,6 +752,15 @@ const GVG = () => {
       <StatusBar barStyle="light-content" />
 
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
+        {/* ✅ Бейдж-індикатор режиму. Натисни щоб перемикнути */}
+        <TouchableOpacity
+          style={styles.debugBadge}
+          activeOpacity={0.8}
+          onPress={() => setUseXmlRender(prev => !prev)}
+        >
+          <Text style={styles.debugBadgeText}>{useXmlRender ? "XML" : "JS"}</Text>
+        </TouchableOpacity>
+
         {useXmlRender ? (
           <SvgXml xml={svgXml} width="100%" height="100%" />
         ) : (
@@ -758,12 +796,8 @@ const GVG = () => {
                   </View>
 
                   <View style={styles.sectorMeta}>
-                    <Text style={styles.sectorTime}>
-                      {item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--'}
-                    </Text>
-                    <Text style={styles.sectorBonus}>
-                      Бонус: {item.bonusValue}{bonusTimeLabel}
-                    </Text>
+                    <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--'}</Text>
+                    <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -863,7 +897,24 @@ const styles = StyleSheet.create({
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: '600' },
-  disabledText: { color: '#6a737c' }
+  disabledText: { color: '#6a737c' },
+
+  // ✅ ДОДАНО: індикатор режиму (не ламає дизайн, маленький)
+  debugBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 999,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  debugBadgeText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 12,
+  },
 });
 
 export default GVG;
