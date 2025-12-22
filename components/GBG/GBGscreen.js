@@ -1,18 +1,29 @@
 import { faFire, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import database from '@react-native-firebase/database';
-import functions from '@react-native-firebase/functions';
-import { useNavigation } from '@react-navigation/native';
-import { BlurView } from '@react-native-community/blur';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import database from "@react-native-firebase/database";
+import functions from "@react-native-firebase/functions";
+import { useNavigation } from "@react-navigation/native";
+import { BlurView } from "@react-native-community/blur";
 import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Dimensions, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Svg, { G, Path, SvgXml } from "react-native-svg";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
-const { height, width } = Dimensions.get('window');
+const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -23,20 +34,91 @@ const WATERFALL_SVG_WIDTH = 138.53601;
 const WATERFALL_SVG_HEIGHT = 164.52901;
 
 const SECTOR_NEIGHBORS = {
-  A2A: ['A3A', 'A3B', 'B2A', 'X1X', 'F2A', 'F3B'], A3A: ['A4A', 'A4B', 'A3B', 'A2A', 'F3B', 'F4C'], A3B: ['A4B', 'A4C', 'B3A', 'B2A', 'A2A', 'A3A'], A4A: ['A5A', 'A5B', 'A4B', 'A3A', 'F4C', 'F5D'], A4B: ['A5B', 'A5C', 'A4C', 'A3B', 'A3A', 'A4A'], A4C: ['A5C', 'A5D', 'B4A', 'B3A', 'A3B', 'A4B'], A5A: ['A5B', 'A4A', 'F5D'], A5B: ['A5C', 'A4B', 'A4A', 'A5A'], A5C: ['A5D', 'A4C', 'A4B', 'A5B'], A5D: ['B5A', 'B4A', 'A4C', 'A5C'], B2A: ['A3B', 'B3A', 'B3B', 'C2A', 'X1X', 'A2A'], B3A: ['A4C', 'B4A', 'B4B', 'B3B', 'B2A', 'A3B'], B3B: ['B3A', 'B4B', 'B4C', 'C3A', 'C2A', 'B2A'], B4A: ['A5D', 'B5A', 'B5B', 'B4B', 'B3A', 'A4C'], B4B: ['B4A', 'B5B', 'B5C', 'B4C', 'B3B', 'B3A'], B4C: ['B4B', 'B5C', 'B5D', 'C4A', 'C3A', 'B3B'], B5A: ['B5B', 'B4A', 'A5D'], B5B: ['B5A', 'B5C', 'B4B', 'B4A'], B5C: ['B5B', 'B5D', 'B4C', 'B4B'], B5D: ['B5C', 'C5A', 'C4A', 'B4C'], C2A: ['B2A', 'B3B', 'C3A', 'C3B', 'D2A', 'X1X'], C3A: ['B3B', 'B4C', 'C4A', 'C4B', 'C3B', 'C2A'], C3B: ['C2A', 'C3A', 'C4B', 'C4C', 'D3A', 'D2A'], C4A: ['B4C', 'B5D', 'C5A', 'C5B', 'C4B', 'C3A'], C4B: ['C3A', 'C4A', 'C5B', 'C5C', 'C4C', 'C3B'], C4C: ['C3B', 'C4B', 'C5C', 'C5D', 'D4A', 'D3A'], C5A: ['B5D', 'C5B', 'C4A'], C5B: ['C4A', 'C5A', 'C5C', 'C4B'], C5C: ['C4B', 'C5B', 'C5D', 'C4C'], C5D: ['C4C', 'C5C', 'D5A', 'D4A'], D2A: ['X1X', 'C2A', 'C3B', 'D3A', 'D3B', 'E2A'], D3A: ['D2A', 'C3B', 'C4C', 'D4A', 'D4B', 'D3B'], D3B: ['E2A', 'D2A', 'D3A', 'D4B', 'D4C', 'E3A'], D4A: ['D3A', 'C4C', 'C5D', 'D5A', 'D5B', 'D4B'], D4B: ['D3B', 'D3A', 'D4A', 'D5B', 'D5C', 'D4C'], D4C: ['E3A', 'D3B', 'D4B', 'D5C', 'D5D', 'E4A'], D5A: ['D4A', 'C5D', 'D5B'], D5B: ['D4B', 'D4A', 'D5A', 'D5C'], D5C: ['D4C', 'D4B', 'D5B', 'D5D'], D5D: ['E4A', 'D4C', 'D5C', 'E5A'], E2A: ['F2A', 'X1X', 'D2A', 'D3B', 'E3A', 'E3B'], E3A: ['E3B', 'E2A', 'D3B', 'D4C', 'E4A', 'E4B'], E3B: ['F3A', 'F2A', 'E2A', 'E3A', 'E4B', 'E4C'], E4A: ['E4B', 'E3A', 'D4C', 'D5D', 'E5A', 'E5B'], E4B: ['E4C', 'E3B', 'E3A', 'E4A', 'E5B', 'E5C'], E4C: ['F4A', 'F3A', 'E3B', 'E4B', 'E5C', 'E5D'], E5A: ['E5B', 'E4A', 'D5D'], E5B: ['E5C', 'E4B', 'E4A', 'E5A'], E5C: ['E5D', 'E4C', 'E4B', 'E5B'], E5D: ['F5A', 'F4A', 'E4C', 'E5C'], F2A: ['F3B', 'A2A', 'X1X', 'E2A', 'E3B', 'F3A'], F3A: ['F4B', 'F3B', 'F2A', 'E3B', 'E4C', 'F4A'], F3B: ['F4C', 'A3A', 'A2A', 'F2A', 'F3A', 'F4B'], F4A: ['F5B', 'F4B', 'F3A', 'E4C', 'E5D', 'F5A'], F4B: ['F5C', 'F4C', 'F3B', 'F3A', 'F4A', 'F5B'], F4C: ['F5D', 'A4A', 'A3A', 'F3B', 'F4B', 'F5C'], F5A: ['F5B', 'F4A', 'E5D'], F5B: ['F5C', 'F4B', 'F4A', 'F5A'], F5C: ['F5D', 'F4C', 'F4B', 'F5B'], F5D: ['A5A', 'A4A', 'F4C', 'F5C'], X1X: ['A2A', 'B2A', 'C2A', 'D2A', 'E2A', 'F2A'],
+  A2A: ["A3A", "A3B", "B2A", "X1X", "F2A", "F3B"],
+  A3A: ["A4A", "A4B", "A3B", "A2A", "F3B", "F4C"],
+  A3B: ["A4B", "A4C", "B3A", "B2A", "A2A", "A3A"],
+  A4A: ["A5A", "A5B", "A4B", "A3A", "F4C", "F5D"],
+  A4B: ["A5B", "A5C", "A4C", "A3B", "A3A", "A4A"],
+  A4C: ["A5C", "A5D", "B4A", "B3A", "A3B", "A4B"],
+  A5A: ["A5B", "A4A", "F5D"],
+  A5B: ["A5C", "A4B", "A4A", "A5A"],
+  A5C: ["A5D", "A4C", "A4B", "A5B"],
+  A5D: ["B5A", "B4A", "A4C", "A5C"],
+  B2A: ["A3B", "B3A", "B3B", "C2A", "X1X", "A2A"],
+  B3A: ["A4C", "B4A", "B4B", "B3B", "B2A", "A3B"],
+  B3B: ["B3A", "B4B", "B4C", "C3A", "C2A", "B2A"],
+  B4A: ["A5D", "B5A", "B5B", "B4B", "B3A", "A4C"],
+  B4B: ["B4A", "B5B", "B5C", "B4C", "B3B", "B3A"],
+  B4C: ["B4B", "B5C", "B5D", "C4A", "C3A", "B3B"],
+  B5A: ["B5B", "B4A", "A5D"],
+  B5B: ["B5A", "B5C", "B4B", "B4A"],
+  B5C: ["B5B", "B5D", "B4C", "B4B"],
+  B5D: ["B5C", "C5A", "C4A", "B4C"],
+  C2A: ["B2A", "B3B", "C3A", "C3B", "D2A", "X1X"],
+  C3A: ["B3B", "B4C", "C4A", "C4B", "C3B", "C2A"],
+  C3B: ["C2A", "C3A", "C4B", "C4C", "D3A", "D2A"],
+  C4A: ["B4C", "B5D", "C5A", "C5B", "C4B", "C3A"],
+  C4B: ["C3A", "C4A", "C5B", "C5C", "C4C", "C3B"],
+  C4C: ["C3B", "C4B", "C5C", "C5D", "D4A", "D3A"],
+  C5A: ["B5D", "C5B", "C4A"],
+  C5B: ["C4A", "C5A", "C5C", "C4B"],
+  C5C: ["C4B", "C5B", "C5D", "C4C"],
+  C5D: ["C4C", "C5C", "D5A", "D4A"],
+  D2A: ["X1X", "C2A", "C3B", "D3A", "D3B", "E2A"],
+  D3A: ["D2A", "C3B", "C4C", "D4A", "D4B", "D3B"],
+  D3B: ["E2A", "D2A", "D3A", "D4B", "D4C", "E3A"],
+  D4A: ["D3A", "C4C", "C5D", "D5A", "D5B", "D4B"],
+  D4B: ["D3B", "D3A", "D4A", "D5B", "D5C", "D4C"],
+  D4C: ["E3A", "D3B", "D4B", "D5C", "D5D", "E4A"],
+  D5A: ["D4A", "C5D", "D5B"],
+  D5B: ["D4B", "D4A", "D5A", "D5C"],
+  D5C: ["D4C", "D4B", "D5B", "D5D"],
+  D5D: ["E4A", "D4C", "D5C", "E5A"],
+  E2A: ["F2A", "X1X", "D2A", "D3B", "E3A", "E3B"],
+  E3A: ["E3B", "E2A", "D3B", "D4C", "E4A", "E4B"],
+  E3B: ["F3A", "F2A", "E2A", "E3A", "E4B", "E4C"],
+  E4A: ["E4B", "E3A", "D4C", "D5D", "E5A", "E5B"],
+  E4B: ["E4C", "E3B", "E3A", "E4A", "E5B", "E5C"],
+  E4C: ["F4A", "F3A", "E3B", "E4B", "E5C", "E5D"],
+  E5A: ["E5B", "E4A", "D5D"],
+  E5B: ["E5C", "E4B", "E4A", "E5A"],
+  E5C: ["E5D", "E4C", "E4B", "E5B"],
+  E5D: ["F5A", "F4A", "E4C", "E5C"],
+  F2A: ["F3B", "A2A", "X1X", "E2A", "E3B", "F3A"],
+  F3A: ["F4B", "F3B", "F2A", "E3B", "E4C", "F4A"],
+  F3B: ["F4C", "A3A", "A2A", "F2A", "F3A", "F4B"],
+  F4A: ["F5B", "F4B", "F3A", "E4C", "E5D", "F5A"],
+  F4B: ["F5C", "F4C", "F3B", "F3A", "F4A", "F5B"],
+  F4C: ["F5D", "A4A", "A3A", "F3B", "F4B", "F5C"],
+  F5A: ["F5B", "F4A", "E5D"],
+  F5B: ["F5C", "F4B", "F4A", "F5A"],
+  F5C: ["F5D", "F4C", "F4B", "F5B"],
+  F5D: ["A5A", "A4A", "F4C", "F5C"],
+  X1X: ["A2A", "B2A", "C2A", "D2A", "E2A", "F2A"],
 };
 
 const WATERFALL_NEIGHBORS = {};
-const DEFAULT_MAP_KEY = 'volcanic_archipelago';
+const DEFAULT_MAP_KEY = "volcanic_archipelago";
 
 const MAP_DIMENSIONS = {
   [DEFAULT_MAP_KEY]: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
-  waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT }
+  waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT },
 };
 
-const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipelago: WATERFALL_NEIGHBORS };
-const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
-const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: 'Вулканічний архіпелаг', waterfall_archipelago: 'Водоспадний архіпелаг' };
+const MAP_NEIGHBORS = {
+  [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS,
+  waterfall_archipelago: WATERFALL_NEIGHBORS,
+};
+
+const MAP_DATA = {
+  [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA,
+  waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA,
+};
+
+const MAP_TITLE_TRANSLATIONS = {
+  volcanic_archipelago: "Вулканічний архіпелаг",
+  waterfall_archipelago: "Водоспадний архіпелаг",
+};
 
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
 
@@ -52,9 +134,17 @@ const BUILDING_BONUS_MAP = {
   advanced_field_outpost_diamond: 60,
 };
 
+// ✅ Ключі кешу для Android-віджетів (тимчасово через AsyncStorage)
+const WIDGET_KEYS = {
+  MAP_XML: "widget_gbg_map_svg_xml",
+  MAP_META: "widget_gbg_map_meta",
+  OPEN_TOP5: "widget_gbg_open_top5",
+};
+
+const WIDGET_OPEN_LIMIT = 5;
+
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
-
   const register = (value) => {
     if (value === undefined || value === null) return;
     const normalized = String(value).trim().toUpperCase();
@@ -62,15 +152,23 @@ const parseStaffSectors = (rawValue) => {
   };
 
   if (Array.isArray(rawValue)) {
-    rawValue.forEach(item => {
-      if (typeof item === 'string') {
-        item.split(STAFF_SECTOR_SPLIT_REGEX).map(part => part.trim()).filter(Boolean).forEach(register);
+    rawValue.forEach((item) => {
+      if (typeof item === "string") {
+        item
+          .split(STAFF_SECTOR_SPLIT_REGEX)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach(register);
       } else {
         register(item);
       }
     });
-  } else if (typeof rawValue === 'string') {
-    rawValue.split(STAFF_SECTOR_SPLIT_REGEX).map(part => part.trim()).filter(Boolean).forEach(register);
+  } else if (typeof rawValue === "string") {
+    rawValue
+      .split(STAFF_SECTOR_SPLIT_REGEX)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach(register);
   } else {
     register(rawValue);
   }
@@ -79,30 +177,29 @@ const parseStaffSectors = (rawValue) => {
 };
 
 const getSectorOwnerId = (entry) => {
-  if (!entry || typeof entry !== 'object') return null;
+  if (!entry || typeof entry !== "object") return null;
   const ownerValue = entry.owner ?? entry.ownerId;
   if (ownerValue === undefined || ownerValue === null) return null;
   return String(ownerValue);
 };
 
 const getBuildingsWithBonuses = (entry) => {
-  if (!entry || typeof entry !== 'object') return [];
+  if (!entry || typeof entry !== "object") return [];
   const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
   if (buildings.length === 0) return [];
 
   return buildings.reduce((list, building) => {
-    if (!building || typeof building !== 'object') return list;
+    if (!building || typeof building !== "object") return list;
+    const state = String(building.state || "").toLowerCase();
+    if (state !== "active" && state !== "building") return list;
 
-    const state = String(building.state || '').toLowerCase();
-    if (state !== 'active' && state !== 'building') return list;
-
-    const name = building.name ? String(building.name) : '';
+    const name = building.name ? String(building.name) : "";
     if (!name) return list;
 
     const bonus = BUILDING_BONUS_MAP[name];
     if (!Number.isFinite(bonus)) return list;
 
-    if (state === 'active') {
+    if (state === "active") {
       list.push({ bonus, readyAt: 0 });
       return list;
     }
@@ -122,7 +219,7 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   const ownSet = new Set(sectorIds);
   const neighbors = new Set();
 
-  sectorIds.forEach(sectorId => {
+  sectorIds.forEach((sectorId) => {
     const config = data[sectorId];
     const neighborList = Array.isArray(config?.neighbors)
       ? config.neighbors
@@ -130,7 +227,7 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
         ? fallbackNeighbors[sectorId]
         : [];
 
-    neighborList.forEach(neighborId => {
+    neighborList.forEach((neighborId) => {
       if (!neighborId || !data[neighborId] || ownSet.has(neighborId)) return;
       neighbors.add(neighborId);
     });
@@ -149,7 +246,8 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
     : Array.isArray(fallbackNeighbors[sectorId])
       ? fallbackNeighbors[sectorId]
       : [];
-  return neighborList.filter(neighborId => neighborId && data[neighborId]);
+
+  return neighborList.filter((neighborId) => neighborId && data[neighborId]);
 };
 
 const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
@@ -161,9 +259,9 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   const shortId = String(shortGuildId);
   const bonuses = [];
 
-  neighborIds.forEach(neighborId => {
+  neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
-    if (!entry || typeof entry !== 'object') return;
+    if (!entry || typeof entry !== "object") return;
 
     const ownerId = getSectorOwnerId(entry);
     if (!ownerId || ownerId !== shortId) return;
@@ -194,22 +292,22 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
 };
 
-const formatRemaining = seconds => {
+const formatRemaining = (seconds) => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.max(seconds % 60, 0);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
 const getArmyColor = (army) => {
-  if (!army) return '#6c757d';
+  if (!army) return "#6c757d";
   const normalized = String(army).trim().toLowerCase();
-  if (normalized === 'attack') return '#e74c3c';
-  if (normalized === 'defense') return '#3498db';
-  return '#6c757d';
+  if (normalized === "attack") return "#e74c3c";
+  if (normalized === "defense") return "#3498db";
+  return "#6c757d";
 };
 
-// ===== SVG string builder (для майбутнього віджета як "картинка") =====
+// ===== SVG string builder для віджетів (будуємо xml з того ж data/стилів) =====
 
 const escapeXmlAttr = (value) => {
   return String(value)
@@ -227,6 +325,7 @@ const styleObjToSvgStyle = (styleObj) => {
 
   Object.entries(styleObj).forEach(([key, val]) => {
     if (val === undefined || val === null) return;
+    // InkscapeFontSpecification не треба в xml
     if (key === "InkscapeFontSpecification") return;
 
     const cssKey = camelToKebab(key);
@@ -246,13 +345,10 @@ const propsToAttrs = (props) => {
     .join(" ");
 };
 
-const buildGbgMapSvgString = ({
-  mapKey,
-  mapDimensions,
-  mapData,
-  sectorColors,
-  sectorStaff,
-}) => {
+/**
+ * Будує SVG-рядок, який візуально відповідає твоєму renderMapPaths()
+ */
+const buildGbgMapSvgString = ({ mapKey, mapDimensions, mapData, sectorColors, sectorStaff }) => {
   const w = Number(mapDimensions?.width || 0);
   const h = Number(mapDimensions?.height || 0);
   const viewBox = `0 0 ${w} ${h}`;
@@ -265,6 +361,7 @@ const buildGbgMapSvgString = ({
 
       const { fill, text, icon } = config;
 
+      // fillStyle як у додатку
       const fillStyle = { ...(fill?.style || {}) };
       const color = sectorColors?.[sectorId];
       if (color) fillStyle.fill = color;
@@ -273,11 +370,13 @@ const buildGbgMapSvgString = ({
       fillStyle.strokeWidth = strokeWidth;
       fillStyle.strokeOpacity = 1;
 
+      // textStyle як у додатку
       const textStyle = {
         ...(text?.style || {}),
         display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
       };
 
+      // iconStyle як у додатку
       const iconStyle = {
         ...(icon?.style || {}),
         display: sectorStaff?.[sectorId] ? "inline" : "none",
@@ -318,9 +417,6 @@ ${body}
 };
 
 const GVG = () => {
-  // ✅ Тестовий перемикач рендера (натискай на бейдж JS/XML)
-  const [useXmlRender, setUseXmlRender] = useState(false);
-
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -346,6 +442,12 @@ const GVG = () => {
 
   const [infoVisible, setInfoVisible] = useState(false);
 
+  // ✅ перемикач для тесту xml vs js (у віджеті кліків не буде)
+  const [useXmlRender, setUseXmlRender] = useState(false);
+
+  // ✅ час останнього запису кешу (індикатор для тесту)
+  const [widgetSavedAt, setWidgetSavedAt] = useState(0);
+
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
 
@@ -357,17 +459,23 @@ const GVG = () => {
     let isActive = true;
     (async () => {
       try {
-        const storedId = await AsyncStorage.getItem('guildId');
+        const storedId = await AsyncStorage.getItem("guildId");
         const effectiveId = guildId || storedId;
-        if (!isActive || !effectiveId) { setShortGuildId(null); return; }
-        const parts = String(effectiveId).split('_');
+        if (!isActive || !effectiveId) {
+          setShortGuildId(null);
+          return;
+        }
+        const parts = String(effectiveId).split("_");
         const shortId = parts.length > 1 ? parts[parts.length - 1] : parts[0];
         setShortGuildId(shortId);
       } catch (error) {
         if (isActive) setShortGuildId(null);
       }
     })();
-    return () => { isActive = false; };
+
+    return () => {
+      isActive = false;
+    };
   }, [guildId]);
 
   useEffect(() => {
@@ -378,29 +486,33 @@ const GVG = () => {
   useEffect(() => {
     let mapRef;
     let onMapUpdate;
-
     setIsMapLoaded(false);
     setCurrentMap(null);
     setIsSectorDataLoaded(false);
 
     (async () => {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id) { setCurrentMap(DEFAULT_MAP_KEY); setIsMapLoaded(true); return; }
-
+      const id = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!id) {
+        setCurrentMap(DEFAULT_MAP_KEY);
+        setIsMapLoaded(true);
+        return;
+      }
       mapRef = database().ref(`guilds/${id}/GBG/map`);
-      onMapUpdate = snap => {
+      onMapUpdate = (snap) => {
         let nextMap = DEFAULT_MAP_KEY;
         if (snap.exists()) {
           const value = snap.val();
-          if (typeof value === 'string' && MAP_DIMENSIONS[value]) nextMap = value;
+          if (typeof value === "string" && MAP_DIMENSIONS[value]) nextMap = value;
         }
         setCurrentMap(nextMap);
         setIsMapLoaded(true);
       };
-      mapRef.on('value', onMapUpdate);
+      mapRef.on("value", onMapUpdate);
     })();
 
-    return () => { if (mapRef && onMapUpdate) mapRef.off('value', onMapUpdate); };
+    return () => {
+      if (mapRef && onMapUpdate) mapRef.off("value", onMapUpdate);
+    };
   }, [guildId]);
 
   useEffect(() => {
@@ -413,11 +525,14 @@ const GVG = () => {
     setOpponentStaffSectors({});
 
     (async () => {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id) { setOpponentStaffSectors({}); setAreOpponentsLoaded(true); return; }
-
+      const id = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!id) {
+        setOpponentStaffSectors({});
+        setAreOpponentsLoaded(true);
+        return;
+      }
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
-      onOpponentsUpdate = snap => {
+      onOpponentsUpdate = (snap) => {
         if (snap.exists()) {
           const raw = snap.val() || {};
           const byId = {};
@@ -425,20 +540,20 @@ const GVG = () => {
           const staffFlags = {};
 
           Object.entries(raw).forEach(([key, value]) => {
-            if (value && typeof value === 'object') {
+            if (value && typeof value === "object") {
               const normalizedId = value.id != null ? String(value.id) : String(key);
-              const sectorColor = value.sectorColor ? String(value.sectorColor) : '#FFFFFF';
+              const sectorColor = value.sectorColor ? String(value.sectorColor) : "#FFFFFF";
               const staffSectors = parseStaffSectors(value.staff);
-
               const entry = { key, id: normalizedId, name: value.name || normalizedId, sectorColor };
               byId[normalizedId] = entry;
               list.push(entry);
-
-              staffSectors.forEach(sectorId => { if (sectorId) staffFlags[sectorId] = true; });
+              staffSectors.forEach((sectorId) => {
+                if (sectorId) staffFlags[sectorId] = true;
+              });
             }
           });
 
-          list.sort((a, b) => a.name.localeCompare(b.name, 'uk', { sensitivity: 'base' }));
+          list.sort((a, b) => a.name.localeCompare(b.name, "uk", { sensitivity: "base" }));
           setOpponentMapById(byId);
           setOpponentList(list);
           setOpponentStaffSectors(staffFlags);
@@ -450,42 +565,36 @@ const GVG = () => {
         setAreOpponentsLoaded(true);
       };
 
-      opponentsRef.on('value', onOpponentsUpdate);
+      opponentsRef.on("value", onOpponentsUpdate);
     })();
 
-    return () => { if (opponentsRef && onOpponentsUpdate) opponentsRef.off('value', onOpponentsUpdate); };
+    return () => {
+      if (opponentsRef && onOpponentsUpdate) opponentsRef.off("value", onOpponentsUpdate);
+    };
   }, [guildId]);
 
   const mapKey = currentMap ?? DEFAULT_MAP_KEY;
   const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
 
-  const mapTitle = MAP_TITLE_TRANSLATIONS[mapKey] || mapKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
-  const svgXml = useMemo(() => {
-    const data = MAP_DATA[mapKey] || {};
-    return buildGbgMapSvgString({
-      mapKey,
-      mapDimensions,
-      mapData: data,
-      sectorColors,
-      sectorStaff,
-    });
-  }, [mapKey, mapDimensions.width, mapDimensions.height, sectorColors, sectorStaff]);
+  const mapTitle =
+    MAP_TITLE_TRANSLATIONS[mapKey] ||
+    mapKey
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
 
   useLayoutEffect(() => {
     if (!navigation) return;
     navigation.setOptions({
       headerTitle: mapTitle,
       headerStyle: {
-        backgroundColor: '#1c1c1e',
-        shadowColor: 'transparent',
+        backgroundColor: "#1c1c1e",
+        shadowColor: "transparent",
         elevation: 0,
       },
-      headerTintColor: '#E0E0E0',
-      headerTitleStyle: {
-        fontWeight: 'bold',
-      },
+      headerTintColor: "#E0E0E0",
+      headerTitleStyle: { fontWeight: "bold" },
       headerRight: () => (
         <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
           <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
@@ -494,40 +603,32 @@ const GVG = () => {
     });
   }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
 
-  const handleSchedulePress = (sectorId) => setBlinkingSector(prev => (prev === sectorId ? null : sectorId));
-
-  const handleShapePress = async (id, event) => {
-    try {
-      const gid = guildId || await AsyncStorage.getItem('guildId');
-      if (!gid) return;
-
-      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
-      const position = pageX > width / 2
-        ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
-        : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
-
-      setPopupStyle(position);
-      setSelectedId(id);
-      setPopupVisible(true);
-    } catch (err) {}
-  };
-
   const renderMapPaths = () => {
     const data = MAP_DATA[mapKey] || {};
     return Object.entries(data).map(([sectorId, config]) => {
       const { fill, text, icon } = config;
-
       const fillStyle = { ...(fill?.style || {}) };
       const color = sectorColors[sectorId];
+
       if (color) fillStyle.fill = color;
 
-      fillStyle.stroke = '#121212';
-      fillStyle.strokeWidth = mapKey === 'volcanic_archipelago' ? 0.7 : 1.5;
+      fillStyle.stroke = "#121212";
+      fillStyle.strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
       fillStyle.strokeOpacity = 1;
 
-      const textStyle = { ...(text?.style || {}), display: sectorStaff[sectorId] ? 'none' : (text?.style?.display ?? 'inline') };
-      const iconStyle = { ...(icon?.style || {}), display: sectorStaff[sectorId] ? 'inline' : 'none', fill: '#FFFFFF' };
-      if (typeof iconStyle.stroke === 'string' && iconStyle.stroke.toLowerCase() !== 'none') iconStyle.stroke = '#FFFFFF';
+      const textStyle = {
+        ...(text?.style || {}),
+        display: sectorStaff[sectorId] ? "none" : text?.style?.display ?? "inline",
+      };
+
+      const iconStyle = {
+        ...(icon?.style || {}),
+        display: sectorStaff[sectorId] ? "inline" : "none",
+        fill: "#FFFFFF",
+      };
+      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
+        iconStyle.stroke = "#FFFFFF";
+      }
 
       const isBlinking = blinkingSector === sectorId;
       const animatedFillOpacity = isBlinking
@@ -545,22 +646,8 @@ const GVG = () => {
               fillOpacity={animatedFillOpacity}
             />
           )}
-          {text && (
-            <Path
-              {...text.props}
-              d={text.d}
-              onPressIn={(e) => handleShapePress(sectorId, e)}
-              style={textStyle}
-            />
-          )}
-          {icon && (
-            <Path
-              {...icon.props}
-              d={icon.d}
-              onPressIn={(e) => handleShapePress(sectorId, e)}
-              style={iconStyle}
-            />
-          )}
+          {text && <Path {...text.props} d={text.d} onPressIn={(e) => handleShapePress(sectorId, e)} style={textStyle} />}
+          {icon && <Path {...icon.props} d={icon.d} onPressIn={(e) => handleShapePress(sectorId, e)} style={iconStyle} />}
         </G>
       );
     });
@@ -578,71 +665,81 @@ const GVG = () => {
 
   useEffect(() => {
     if (!isMapLoaded) return;
-
     let sectorsRef;
     let onSectorsUpdate;
 
     (async () => {
-      const id = guildId || await AsyncStorage.getItem('guildId');
-      if (!id) { setSectorSnapshot(null); setIsSectorDataLoaded(true); return; }
-
+      const id = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!id) {
+        setSectorSnapshot(null);
+        setIsSectorDataLoaded(true);
+        return;
+      }
       sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
-      onSectorsUpdate = snap => {
+      onSectorsUpdate = (snap) => {
         setSectorSnapshot(snap.exists() ? snap.val() : null);
         setIsSectorDataLoaded(true);
       };
-      sectorsRef.on('value', onSectorsUpdate);
+      sectorsRef.on("value", onSectorsUpdate);
     })();
 
-    return () => { if (sectorsRef && onSectorsUpdate) sectorsRef.off('value', onSectorsUpdate); };
+    return () => {
+      if (sectorsRef && onSectorsUpdate) sectorsRef.off("value", onSectorsUpdate);
+    };
   }, [guildId, isMapLoaded]);
 
   useEffect(() => {
     if (!isMapLoaded || !areOpponentsLoaded) return;
 
-    const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
+    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
 
-    if (sectorIds.length === 0) { setSectorColors({}); setSectorStaff({}); setSectorSchedule([]); return; }
+    if (sectorIds.length === 0) {
+      setSectorColors({});
+      setSectorStaff({});
+      setSectorSchedule([]);
+      return;
+    }
 
     const colors = {};
     const staffFlags = {};
     const availableSectors = new Set(sectorIds);
 
-    sectorIds.forEach(gid => {
+    sectorIds.forEach((gid) => {
       const entry = data[gid];
-
-      let color = '#FFFFFF';
+      let color = "#FFFFFF";
       let staff = false;
       let ownerValue = null;
 
-      if (entry && typeof entry === 'object') {
-        if (typeof entry.color === 'string') color = entry.color;
-
+      if (entry && typeof entry === "object") {
+        if (typeof entry.color === "string") color = entry.color;
         ownerValue = entry.owner ?? entry.ownerId;
+
         if (ownerValue !== null) {
           const ownerKey = String(ownerValue);
-          if (ownerKey === '0') {
-            color = '#FFFFFF';
+          if (ownerKey === "0") {
+            color = "#FFFFFF";
           } else {
             const opponent = opponentMapById[ownerKey];
             color = opponent?.sectorColor
               ? String(opponent.sectorColor)
-              : (typeof entry.color === 'string' ? entry.color : '#FFFFFF');
+              : typeof entry.color === "string"
+                ? entry.color
+                : "#FFFFFF";
           }
         }
 
         staff = !!entry.staff;
-      } else if (typeof entry === 'string') {
+      } else if (typeof entry === "string") {
         color = entry;
       }
 
-      colors[gid] = color || '#FFFFFF';
+      colors[gid] = color || "#FFFFFF";
       staffFlags[gid] = staff;
     });
 
-    Object.keys(opponentStaffSectors).forEach(sectorId => {
+    Object.keys(opponentStaffSectors).forEach((sectorId) => {
       if (opponentStaffSectors[sectorId] && availableSectors.has(sectorId)) staffFlags[sectorId] = true;
     });
 
@@ -651,38 +748,53 @@ const GVG = () => {
   }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
 
   useEffect(() => {
-    if (!isMapLoaded || !shortGuildId) { setSectorSchedule([]); return; }
+    if (!isMapLoaded || !shortGuildId) {
+      setSectorSchedule([]);
+      return;
+    }
 
-    const data = sectorSnapshot && typeof sectorSnapshot === 'object' ? sectorSnapshot : {};
+    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
 
-    if (sectorIds.length === 0) { setSectorSchedule([]); return; }
+    if (sectorIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
 
-    const ownSectors = sectorIds.filter(id => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
-    if (ownSectors.length === 0) { setSectorSchedule([]); return; }
+    const ownSectors = sectorIds.filter((id) => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
+    if (ownSectors.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
 
     const neighborIds = getNeighborIdsForSectors(mapKey, ownSectors);
-    if (neighborIds.length === 0) { setSectorSchedule([]); return; }
+    if (neighborIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
 
-    const schedule = neighborIds.map(sectorId => {
-      const entry = data[sectorId];
-      if (!entry || typeof entry !== 'object') return null;
+    const schedule = neighborIds
+      .map((sectorId) => {
+        const entry = data[sectorId];
+        if (!entry || typeof entry !== "object") return null;
 
-      const openTime = Number(entry.openTime);
-      if (!Number.isFinite(openTime) || openTime <= 0) return null;
+        const openTime = Number(entry.openTime);
+        if (!Number.isFinite(openTime) || openTime <= 0) return null;
 
-      const armyRaw = String(entry.army || '').trim().toLowerCase();
-      const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
+        const armyRaw = String(entry.army || "").trim().toLowerCase();
+        const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
 
-      return {
-        name: sectorId,
-        openTime,
-        army: armyRaw === 'attack' || armyRaw === 'defense' ? armyRaw : '',
-        bonusValue: bonusInfo.value,
-        bonusReadyAt: bonusInfo.readyAt
-      };
-    }).filter(Boolean).sort((a, b) => a.openTime - b.openTime);
+        return {
+          name: sectorId,
+          openTime,
+          army: armyRaw === "attack" || armyRaw === "defense" ? armyRaw : "",
+          bonusValue: bonusInfo.value,
+          bonusReadyAt: bonusInfo.readyAt,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.openTime - b.openTime);
 
     setSectorSchedule(schedule);
   }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
@@ -703,7 +815,9 @@ const GVG = () => {
       blinkingAnim.setValue(0);
     }
 
-    return () => { if (blinkingLoopRef.current) blinkingLoopRef.current.stop(); };
+    return () => {
+      if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
+    };
   }, [blinkingAnim, blinkingSector]);
 
   useEffect(() => {
@@ -720,21 +834,128 @@ const GVG = () => {
     }
   }, [sectorSchedule]);
 
+  const handleSchedulePress = (sectorId) => setBlinkingSector((prev) => (prev === sectorId ? null : sectorId));
+
+  const handleShapePress = async (id, event) => {
+    try {
+      const gid = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!gid) return;
+
+      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
+      const position =
+        pageX > width / 2
+          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
+          : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
+
+      setPopupStyle(position);
+      setSelectedId(id);
+      setPopupVisible(true);
+    } catch (err) {}
+  };
+
   const handleHelpPress = async () => {
     if (!selectedId) return;
     try {
-      const gid = guildId || await AsyncStorage.getItem('guildId');
-      if (!gid) { Alert.alert("Помилка", "Не вдалося визначити гільдію."); return; }
+      const gid = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!gid) {
+        Alert.alert("Помилка", "Не вдалося визначити гільдію.");
+        return;
+      }
 
       setPopupVisible(false);
       Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
 
-      const sendNotification = functions().httpsCallable('sendGbgHelpNotification');
+      const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
       await sendNotification({ guildId: gid, sectorId: selectedId });
 
       Alert.alert("Успіх!", "Сповіщення надіслано.");
     } catch (error) {
       Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
+    }
+  };
+
+  // ✅ XML мапи (для віджета і для тестового перемикача)
+  const svgXml = useMemo(() => {
+    const data = MAP_DATA[mapKey] || {};
+    return buildGbgMapSvgString({
+      mapKey,
+      mapDimensions,
+      mapData: data,
+      sectorColors,
+      sectorStaff,
+    });
+  }, [mapKey, mapDimensions.width, mapDimensions.height, sectorColors, sectorStaff]);
+
+  // ✅ Кешуємо SVG мапи для віджета
+  useEffect(() => {
+    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    if (!svgXml) return;
+
+    (async () => {
+      try {
+        const updatedAt = Date.now();
+        const meta = {
+          updatedAt,
+          mapKey,
+          width: mapDimensions.width,
+          height: mapDimensions.height,
+        };
+
+        await AsyncStorage.multiSet([
+          [WIDGET_KEYS.MAP_XML, svgXml],
+          [WIDGET_KEYS.MAP_META, JSON.stringify(meta)],
+        ]);
+
+        setWidgetSavedAt(updatedAt);
+      } catch (e) {}
+    })();
+  }, [
+    svgXml,
+    mapKey,
+    mapDimensions.width,
+    mapDimensions.height,
+    isMapLoaded,
+    isSectorDataLoaded,
+    areOpponentsLoaded,
+  ]);
+
+  // ✅ Кешуємо TOP-5 відкриттів для віджета
+  useEffect(() => {
+    if (!isMapLoaded || !isSectorDataLoaded) return;
+
+    (async () => {
+      try {
+        const updatedAt = Date.now();
+        const items = (sectorSchedule || []).slice(0, WIDGET_OPEN_LIMIT).map((item) => ({
+          name: item.name,
+          openTime: item.openTime,
+          army: item.army,
+          bonusValue: item.bonusValue,
+          bonusReadyAt: item.bonusReadyAt ?? null,
+        }));
+
+        await AsyncStorage.setItem(WIDGET_KEYS.OPEN_TOP5, JSON.stringify({ updatedAt, items }));
+        setWidgetSavedAt(updatedAt);
+      } catch (e) {}
+    })();
+  }, [sectorSchedule, isMapLoaded, isSectorDataLoaded]);
+
+  // ✅ Перевірка кешу (довгий тап по бейджу)
+  const handleDebugBadgeLongPress = async () => {
+    try {
+      const pairs = await AsyncStorage.multiGet([WIDGET_KEYS.MAP_XML, WIDGET_KEYS.MAP_META, WIDGET_KEYS.OPEN_TOP5]);
+      const byKey = {};
+      pairs.forEach(([k, v]) => {
+        byKey[k] = v;
+      });
+
+      const mapLen = byKey[WIDGET_KEYS.MAP_XML] ? byKey[WIDGET_KEYS.MAP_XML].length : 0;
+      const metaLen = byKey[WIDGET_KEYS.MAP_META] ? byKey[WIDGET_KEYS.MAP_META].length : 0;
+      const topLen = byKey[WIDGET_KEYS.OPEN_TOP5] ? byKey[WIDGET_KEYS.OPEN_TOP5].length : 0;
+
+      Alert.alert("Widget cache", `MAP_XML: ${mapLen} chars\nMAP_META: ${metaLen} chars\nOPEN_TOP5: ${topLen} chars`);
+    } catch (e) {
+      Alert.alert("Widget cache", "Не вдалося прочитати кеш.");
     }
   };
 
@@ -752,13 +973,17 @@ const GVG = () => {
       <StatusBar barStyle="light-content" />
 
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-        {/* ✅ Бейдж-індикатор режиму. Натисни щоб перемикнути */}
+        {/* Маленький тестовий бейдж: перемикає JS/XML, long press показує кеш */}
         <TouchableOpacity
           style={styles.debugBadge}
-          activeOpacity={0.8}
-          onPress={() => setUseXmlRender(prev => !prev)}
+          activeOpacity={0.85}
+          onPress={() => setUseXmlRender((prev) => !prev)}
+          onLongPress={handleDebugBadgeLongPress}
+          delayLongPress={350}
         >
-          <Text style={styles.debugBadgeText}>{useXmlRender ? "XML" : "JS"}</Text>
+          <Text style={styles.debugBadgeText}>
+            {(useXmlRender ? "XML" : "JS") + (widgetSavedAt ? " •" : "")}
+          </Text>
         </TouchableOpacity>
 
         {useXmlRender ? (
@@ -774,14 +999,11 @@ const GVG = () => {
         <Text style={styles.listTitle}>Відкриття секторів</Text>
 
         {sectorSchedule.length > 0 ? (
-          <Animated.ScrollView
-            style={[styles.sectorList, { opacity: listFadeAnim }]}
-            contentContainerStyle={styles.sectorListContent}
-          >
-            {sectorSchedule.map(item => {
+          <Animated.ScrollView style={[styles.sectorList, { opacity: listFadeAnim }]} contentContainerStyle={styles.sectorListContent}>
+            {sectorSchedule.map((item) => {
               const timeRemainingSeconds = item.openTime ? Math.max(item.openTime - currentTime, 0) : 0;
               const bonusRemainingSeconds = item.bonusReadyAt ? Math.max(item.bonusReadyAt - currentTime, 0) : 0;
-              const bonusTimeLabel = bonusRemainingSeconds > 0 ? ` (${formatRemaining(bonusRemainingSeconds)})` : '';
+              const bonusTimeLabel = bonusRemainingSeconds > 0 ? ` (${formatRemaining(bonusRemainingSeconds)})` : "";
 
               return (
                 <TouchableOpacity
@@ -796,8 +1018,11 @@ const GVG = () => {
                   </View>
 
                   <View style={styles.sectorMeta}>
-                    <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : '--:--:--'}</Text>
-                    <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
+                    <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : "--:--:--"}</Text>
+                    <Text style={styles.sectorBonus}>
+                      Бонус: {item.bonusValue}
+                      {bonusTimeLabel}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -820,9 +1045,9 @@ const GVG = () => {
               {opponentList.length === 0 ? (
                 <Text style={styles.infoEmpty}>Інформація відсутня</Text>
               ) : (
-                opponentList.map(op => (
+                opponentList.map((op) => (
                   <View key={op.key ?? op.id} style={styles.infoRow}>
-                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || '#FFFFFF' }]} />
+                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
                     <Text style={styles.infoName}>{op.name || op.id}</Text>
                   </View>
                 ))
@@ -840,20 +1065,14 @@ const GVG = () => {
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
           <Animated.View style={[styles.popupMenu, popupStyle]} onStartShouldSetResponder={() => true}>
-            <TouchableOpacity
-              style={styles.menuItem}
-              disabled={!selectedId || sectorStaff[selectedId]}
-              onPress={handleHelpPress}
-            >
+            <TouchableOpacity style={styles.menuItem} disabled={!selectedId || sectorStaff[selectedId]} onPress={handleHelpPress}>
               <FontAwesomeIcon
                 icon={faFire}
                 size={20}
                 color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"}
                 style={styles.menuIcon}
               />
-              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>
-                Допомагайте
-              </Text>
+              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>Допомагайте</Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
@@ -864,54 +1083,89 @@ const GVG = () => {
 
 const styles = StyleSheet.create({
   win: { flex: 1, backgroundColor: "#121212" },
-  loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: "#121212" },
-  loaderText: { marginTop: 15, fontSize: 16, color: '#E0E0E0', fontWeight: '500' },
+  loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
+  loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
+
   infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: 'hidden' },
-  listContainer: { flex: 1, width: '100%', paddingTop: 20 },
-  listTitle: { fontSize: 22, fontWeight: 'bold', color: '#E0E0E0', marginLeft: 20, marginBottom: 15 },
-  sectorList: { width: '100%' },
+
+  mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: "hidden" },
+
+  listContainer: { flex: 1, width: "100%", paddingTop: 20 },
+  listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0", marginLeft: 20, marginBottom: 15 },
+
+  sectorList: { width: "100%" },
   sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  sectorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 15, backgroundColor: '#282828', borderRadius: 12, marginBottom: 10, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1.41 },
-  sectorNameContainer: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
+
+  sectorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    backgroundColor: "#282828",
+    borderRadius: 12,
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+
+  sectorNameContainer: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
   armyBox: { width: 14, height: 14, borderRadius: 4, marginRight: 12 },
-  sectorName: { fontSize: 16, color: '#EAEAEA', fontWeight: '600' },
-  sectorMeta: { alignItems: 'flex-end' },
-  sectorTime: { fontSize: 16, color: '#EAEAEA', fontWeight: '700', fontFamily: 'monospace' },
-  sectorBonus: { marginTop: 4, fontSize: 13, color: '#A0D8FF', fontWeight: '600' },
-  activeSectorRow: { backgroundColor: 'rgba(52, 152, 219, 0.2)', borderWidth: 1, borderColor: '#3498db' },
-  emptyListContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -50 },
-  emptyListText: { fontSize: 16, color: '#888', fontStyle: 'italic' },
-  infoOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  infoModal: { width: '85%', maxHeight: HALF_HEIGHT * 1.2, backgroundColor: 'rgba(30, 30, 30, 0.9)', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
-  infoTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 20, textAlign: 'center' },
+  sectorName: { fontSize: 16, color: "#EAEAEA", fontWeight: "600" },
+
+  sectorMeta: { alignItems: "flex-end" },
+  sectorTime: { fontSize: 16, color: "#EAEAEA", fontWeight: "700", fontFamily: "monospace" },
+  sectorBonus: { marginTop: 4, fontSize: 13, color: "#A0D8FF", fontWeight: "600" },
+
+  activeSectorRow: { backgroundColor: "rgba(52, 152, 219, 0.2)", borderWidth: 1, borderColor: "#3498db" },
+
+  emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
+  emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
+
+  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
+  infoModal: {
+    width: "85%",
+    maxHeight: HALF_HEIGHT * 1.2,
+    backgroundColor: "rgba(30, 30, 30, 0.9)",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
   infoList: { maxHeight: HALF_HEIGHT * 0.7 },
-  infoEmpty: { textAlign: 'center', color: '#999', paddingVertical: 15, fontSize: 16 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: '#555' },
-  infoName: { flex: 1, fontSize: 17, color: '#E0E0E0' },
-  infoClose: { marginTop: 20, alignSelf: 'center', paddingHorizontal: 25, paddingVertical: 10, backgroundColor: '#3498db', borderRadius: 25 },
-  infoCloseText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
+  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
+  infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
+  infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
+  infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
-  popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
-  menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: '600' },
-  disabledText: { color: '#6a737c' },
+  menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
+  disabledText: { color: "#6a737c" },
 
-  // ✅ ДОДАНО: індикатор режиму (не ламає дизайн, маленький)
+  // ✅ Мінімальний бейдж для тесту (не впливає на дизайн екрану)
   debugBadge: {
     position: "absolute",
-    top: 8,
-    left: 8,
-    zIndex: 999,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    top: 10,
+    right: 10,
+    zIndex: 50,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   debugBadgeText: {
-    color: "#fff",
+    color: "#E0E0E0",
     fontWeight: "700",
     fontSize: 12,
   },
