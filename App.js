@@ -18,6 +18,8 @@ import MainContent from "./components/MainContent";
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
 
+import { handleGbgWidgetMessage } from './components/GBG/widgetGbgPush';
+
 const firebaseConfig = {
   apiKey: "AIzaSyA8Qqv9S22rdYGfHiONlZ6Ss2El4EC95hw",
   authDomain: "guildchat-5d8c1.firebaseapp.com",
@@ -32,10 +34,6 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
   console.log('✅ Firebase инициализирован успешно!');
 }
-
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('Message handled in the background!', remoteMessage);
-});
 
 const Stack = createStackNavigator();
 
@@ -72,78 +70,95 @@ const AppContent = () => {
     initLanguage();
   }, []);
 
-useEffect(() => {
-  const setupPushNotifications = async () => {
-    try {
-      if (Platform.OS === 'ios') {
-        const authStatus = await messaging().requestPermission();
-        const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+  useEffect(() => {
+    const setupPushNotifications = async () => {
+      try {
+        if (Platform.OS === 'ios') {
+          const authStatus = await messaging().requestPermission();
+          const enabled =
+            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+            authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-        if (enabled) {
-          console.log('Разрешение для iOS получено:', authStatus);
-        }
-      } else if (Platform.OS === 'android') {
-        if (Platform.Version >= 33) {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-            {
-              title: "Разрешение на уведомления",
-              message: "Приложение хочет отправлять вам уведомления",
-              buttonPositive: "Разрешить",
-              buttonNegative: "Отклонить",
+          if (enabled) {
+            console.log('Разрешение для iOS получено:', authStatus);
+          }
+        } else if (Platform.OS === 'android') {
+          if (Platform.Version >= 33) {
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+              {
+                title: "Разрешение на уведомления",
+                message: "Приложение хочет отправлять вам уведомления",
+                buttonPositive: "Разрешить",
+                buttonNegative: "Отклонить",
+              }
+            );
+            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+              console.log('Пользователь отклонил разрешение на уведомления');
+              return;
             }
-          );
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-             console.log('Пользователь отклонил разрешение на уведомления');
-             return;
           }
         }
-      }
 
-      if (Platform.OS === 'android') {
-        await notifee.createChannel({
-          id: 'default',
-          name: 'Default Channel',
-          importance: AndroidImportance.HIGH,
-        });
-        console.log('Канал уведомлений "default" создан/обновлен.');
-      }
-      
-      const fcmToken = await messaging().getToken();
-      if (fcmToken) {
-        console.log("FCM Token:", fcmToken);
-
-        const currentUserId = await AsyncStorage.getItem('userId'); 
-        if (currentUserId) {
-          database()
-            .ref(`/users/${currentUserId}/fcmToken`)
-            .set(fcmToken)
-            .then(() => console.log('FCM токен успешно сохранен в базу данных!'));
+        if (Platform.OS === 'android') {
+          await notifee.createChannel({
+            id: 'default',
+            name: 'Default Channel',
+            importance: AndroidImportance.HIGH,
+          });
+          console.log('Канал уведомлений "default" создан/обновлен.');
         }
+
+        const fcmToken = await messaging().getToken();
+        if (fcmToken) {
+          console.log("FCM Token:", fcmToken);
+
+          const currentUserId = await AsyncStorage.getItem('userId');
+          if (currentUserId) {
+            await database().ref(`/users/${currentUserId}/fcmToken`).set(fcmToken);
+            console.log('FCM токен успешно сохранен в базу данных!');
+          }
+        }
+
+      } catch (error) {
+        console.error("Ошибка при настройке push-уведомлений:", error);
       }
+    };
 
-    } catch (error) {
-      console.error("Ошибка при настройке push-уведомлений:", error);
-    }
-  };
+    setupPushNotifications();
 
-  setupPushNotifications();
+    // ✅ Foreground messages
+    const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+      try {
+        const type = remoteMessage?.data?.type ? String(remoteMessage.data.type) : '';
 
-  const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-    console.log('Получено уведомление в открытом приложении:', remoteMessage);
-    notifee.displayNotification({
-      title: remoteMessage.notification.title,
-      body: remoteMessage.notification.body,
-      android: {
-        channelId: 'default',
-      },
+        // ✅ Наш “тихий” пуш для оновлення кешу віджета
+        if (type === 'gbg_widget_update') {
+          await handleGbgWidgetMessage(remoteMessage);
+          return; // НЕ показуємо Notifee
+        }
+
+        // ✅ Звичайні повідомлення (notification payload)
+        const title = remoteMessage?.notification?.title;
+        const body = remoteMessage?.notification?.body;
+
+        if (title || body) {
+          await notifee.displayNotification({
+            title: title || '',
+            body: body || '',
+            android: { channelId: 'default' },
+          });
+        } else {
+          // якщо прийшов data-only іншого типу — просто лог
+          console.log('Получено data-only сообщение в foreground:', remoteMessage?.data || {});
+        }
+      } catch (e) {
+        console.log('onMessage error:', e);
+      }
     });
-  });
 
-  return unsubscribeForeground;
-}, []);
+    return unsubscribeForeground;
+  }, []);
 
   useEffect(() => {
     const checkAndLogWorldData = async () => {
@@ -160,7 +175,9 @@ useEffect(() => {
             console.log("ID гильдии:", data.guildId);
           }
         }
-      } catch (e) { console.log("Ошибка парсинга:", e); }
+      } catch (e) {
+        console.log("Ошибка парсинга:", e);
+      }
 
       if (guildId) {
         fetchUserData();
@@ -183,8 +200,8 @@ useEffect(() => {
         setUserData(false);
       }
     } catch (error) {
-        console.error("Ошибка загрузки данных пользователя:", error);
-        setUserData(false);
+      console.error("Ошибка загрузки данных пользователя:", error);
+      setUserData(false);
     } finally {
       setLoading(false);
       setChecked(true);
@@ -195,12 +212,10 @@ useEffect(() => {
     return (<View style={styles.container}><ActivityIndicator size="large" color="#0000ff" /></View>);
   }
 
-  if (!checked) {
-      return null;
-  }
-  
+  if (!checked) return null;
+
   if (userData) {
-      return <MainContent key={guildId} />;
+    return <MainContent key={guildId} />;
   }
 
   return (

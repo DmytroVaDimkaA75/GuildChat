@@ -1,7 +1,7 @@
 const { onValueCreated, onValueWritten } = require("firebase-functions/v2/database");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall } = require("firebase-functions/v2/https");
-const { logger } = require("firebase-functions");
+const { logger  } = require("firebase-functions");
 const admin = require("firebase-admin");
 
 admin.initializeApp();

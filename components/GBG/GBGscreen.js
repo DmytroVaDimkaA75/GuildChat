@@ -5,12 +5,13 @@ import database from "@react-native-firebase/database";
 import functions from "@react-native-firebase/functions";
 import { useNavigation } from "@react-navigation/native";
 import { BlurView } from "@react-native-community/blur";
-import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,9 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { G, Path, SvgXml } from "react-native-svg";
-import ViewShot from "react-native-view-shot";
-import * as FileSystem from "expo-file-system/legacy";
+import Svg, { G, Path } from "react-native-svg";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
@@ -35,7 +34,12 @@ const VOLCANIC_SVG_HEIGHT = 248.83203;
 const WATERFALL_SVG_WIDTH = 138.53601;
 const WATERFALL_SVG_HEIGHT = 164.52901;
 
-// ⚠️ Не змінював — залишив як у тебе
+// ======= AsyncStorage keys (віджети) =======
+const WIDGET_GBG_MAP_PNG_URI_KEY = "widget_gbg_map_png_uri";
+const WIDGET_GBG_MAP_META_KEY = "widget_gbg_map_meta";
+const WIDGET_GBG_NEXT5_KEY = "widget_gbg_next5";
+const WIDGET_GBG_NEXT5_META_KEY = "widget_gbg_next5_meta";
+
 const SECTOR_NEIGHBORS = {
   A2A: ["A3A", "A3B", "B2A", "X1X", "F2A", "F3B"],
   A3A: ["A4A", "A4B", "A3B", "A2A", "F3B", "F4C"],
@@ -137,15 +141,6 @@ const BUILDING_BONUS_MAP = {
   advanced_field_outpost_diamond: 60,
 };
 
-// ===== ключі кешу віджетів (AsyncStorage) =====
-const WIDGET_KEYS = {
-  MAP_PNG_URI: "widget_gbg_map_png_uri",
-  MAP_META: "widget_gbg_map_meta",
-  NEXT5: "widget_gbg_next5",
-  NEXT5_META: "widget_gbg_next5_meta",
-};
-
-// ===== helpers =====
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
   const register = (value) => {
@@ -193,10 +188,8 @@ const getBuildingsWithBonuses = (entry) => {
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== "object") return list;
-
     const state = String(building.state || "").toLowerCase();
     if (state !== "active" && state !== "building") return list;
-
     const name = building.name ? String(building.name) : "";
     if (!name) return list;
 
@@ -210,7 +203,6 @@ const getBuildingsWithBonuses = (entry) => {
 
     const readyAt = Number(building.readyAt);
     if (!Number.isFinite(readyAt) || readyAt <= 0) return list;
-
     list.push({ bonus, readyAt });
     return list;
   }, []);
@@ -218,7 +210,6 @@ const getBuildingsWithBonuses = (entry) => {
 
 const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   if (!Array.isArray(sectorIds) || sectorIds.length === 0) return [];
-
   const data = MAP_DATA[mapKey] || {};
   const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
   const ownSet = new Set(sectorIds);
@@ -231,7 +222,6 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
       : Array.isArray(fallbackNeighbors[sectorId])
       ? fallbackNeighbors[sectorId]
       : [];
-
     neighborList.forEach((neighborId) => {
       if (!neighborId || !data[neighborId] || ownSet.has(neighborId)) return;
       neighbors.add(neighborId);
@@ -246,13 +236,11 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
   const data = MAP_DATA[mapKey] || {};
   const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
   const config = data[sectorId];
-
   const neighborList = Array.isArray(config?.neighbors)
     ? config.neighbors
     : Array.isArray(fallbackNeighbors[sectorId])
     ? fallbackNeighbors[sectorId]
     : [];
-
   return neighborList.filter((neighborId) => neighborId && data[neighborId]);
 };
 
@@ -268,10 +256,8 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== "object") return;
-
     const ownerId = getSectorOwnerId(entry);
     if (!ownerId || ownerId !== shortId) return;
-
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
 
@@ -313,160 +299,17 @@ const getArmyColor = (army) => {
   return "#6c757d";
 };
 
-// ===== SVG -> XML string (для SvgXml та скріншота) =====
-const escapeXmlAttr = (value) => {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-};
-
-const camelToKebab = (str) => str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
-
-const styleObjToSvgStyle = (styleObj) => {
-  if (!styleObj || typeof styleObj !== "object") return "";
-  const parts = [];
-
-  Object.entries(styleObj).forEach(([key, val]) => {
-    if (val === undefined || val === null) return;
-    if (key === "InkscapeFontSpecification") return;
-
-    const cssKey = camelToKebab(key);
-    const cssVal = typeof val === "number" ? String(val) : String(val);
-    parts.push(`${cssKey}:${cssVal}`);
-  });
-
-  return parts.join(";");
-};
-
-const propsToAttrs = (props) => {
-  if (!props || typeof props !== "object") return "";
-  const allowed = ["id"];
-  return allowed
-    .filter((k) => props[k] !== undefined && props[k] !== null)
-    .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
-    .join(" ");
-};
-
-const buildGbgMapSvgString = ({ mapKey, mapDimensions, mapData, sectorColors, sectorStaff }) => {
-  const w = Number(mapDimensions?.width || 0);
-  const h = Number(mapDimensions?.height || 0);
-  const viewBox = `0 0 ${w} ${h}`;
-  const strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
-
-  const body = Object.entries(mapData || {})
-    .map(([sectorId, config]) => {
-      if (!config || typeof config !== "object") return "";
-
-      const { fill, text, icon } = config;
-
-      const fillStyle = { ...(fill?.style || {}) };
-      const color = sectorColors?.[sectorId];
-      if (color) fillStyle.fill = color;
-
-      fillStyle.stroke = "#121212";
-      fillStyle.strokeWidth = strokeWidth;
-      fillStyle.strokeOpacity = 1;
-
-      const textStyle = {
-        ...(text?.style || {}),
-        display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
-      };
-
-      const iconStyle = {
-        ...(icon?.style || {}),
-        display: sectorStaff?.[sectorId] ? "inline" : "none",
-        fill: "#FFFFFF",
-      };
-      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
-        iconStyle.stroke = "#FFFFFF";
-      }
-
-      const parts = [];
-
-      if (fill?.d) {
-        const attrs = propsToAttrs(fill?.props);
-        const style = styleObjToSvgStyle(fillStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      if (text?.d) {
-        const attrs = propsToAttrs(text?.props);
-        const style = styleObjToSvgStyle(textStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      if (icon?.d) {
-        const attrs = propsToAttrs(icon?.props);
-        const style = styleObjToSvgStyle(iconStyle);
-        parts.push(`<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`);
-      }
-
-      return `<g id="${escapeXmlAttr(sectorId)}">\n${parts.join("\n")}\n</g>`;
-    })
-    .join("\n");
-
-  // Без XML header — SvgXml стабільніше
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${viewBox}">\n${body}\n</svg>`;
-};
-
-// ===== кеш віджетів =====
-const safeJsonParse = (str) => {
+const safeParse = (v) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string") return v;
   try {
-    return JSON.parse(str);
-  } catch (e) {
-    return null;
+    return JSON.parse(v);
+  } catch {
+    return v;
   }
 };
 
-const waitNextFrame = () =>
-  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-const saveWidgetMapPngFromCaptureUri = async (captureUri, mapKey) => {
-  const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
-  if (!dir) throw new Error("No cacheDirectory/documentDirectory available");
-
-  const targetUri = `${dir}gbg_map_widget_${String(mapKey || "map")}.png`;
-
-  // На всяк випадок — прибираємо старий файл
-  try {
-    await FileSystem.deleteAsync(targetUri, { idempotent: true });
-  } catch (e) {}
-
-  // 🔥 ВАЖЛИВО: тут і була твоя помилка. Вона пропадає, якщо FileSystem імпортувати з "expo-file-system/legacy"
-  await FileSystem.copyAsync({ from: captureUri, to: targetUri });
-
-  return targetUri;
-};
-
-const setWidgetMapCache = async ({ pngUri, meta }) => {
-  await AsyncStorage.multiSet([
-    [WIDGET_KEYS.MAP_PNG_URI, pngUri || ""],
-    [WIDGET_KEYS.MAP_META, JSON.stringify(meta || {})],
-  ]);
-};
-
-const setWidgetNext5Cache = async ({ list, meta }) => {
-  await AsyncStorage.multiSet([
-    [WIDGET_KEYS.NEXT5, JSON.stringify(Array.isArray(list) ? list : [])],
-    [WIDGET_KEYS.NEXT5_META, JSON.stringify(meta || {})],
-  ]);
-};
-
-const readWidgetCacheSnapshot = async () => {
-  const keys = [WIDGET_KEYS.MAP_PNG_URI, WIDGET_KEYS.MAP_META, WIDGET_KEYS.NEXT5, WIDGET_KEYS.NEXT5_META];
-  const pairs = await AsyncStorage.multiGet(keys);
-
-  const map = {};
-  pairs.forEach(([k, v]) => {
-    map[k] = v;
-  });
-
-  return map;
-};
-
-const GBGscreen = () => {
+const GVG = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -492,9 +335,9 @@ const GBGscreen = () => {
 
   const [infoVisible, setInfoVisible] = useState(false);
 
-  // debug modal
-  const [widgetDebugVisible, setWidgetDebugVisible] = useState(false);
-  const [widgetDebugText, setWidgetDebugText] = useState("");
+  // ======= Debug modal (AsyncStorage cache) =======
+  const [cacheVisible, setCacheVisible] = useState(false);
+  const [cacheDump, setCacheDump] = useState(null);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
@@ -503,10 +346,46 @@ const GBGscreen = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // ViewShot ref для PNG карти
-  const mapShotRef = useRef(null);
-  const lastMapCacheAtRef = useRef(0);
-  const lastNext5CacheAtRef = useRef(0);
+  // щоб long press по "i" НЕ відкривав infoVisible
+  const didLongPressRef = useRef(false);
+
+  const loadWidgetCache = async () => {
+    try {
+      const keys = [
+        WIDGET_GBG_MAP_PNG_URI_KEY,
+        WIDGET_GBG_MAP_META_KEY,
+        WIDGET_GBG_NEXT5_KEY,
+        WIDGET_GBG_NEXT5_META_KEY,
+      ];
+      const pairs = await AsyncStorage.multiGet(keys);
+      const obj = {};
+      pairs.forEach(([k, v]) => {
+        obj[k] = safeParse(v);
+      });
+      setCacheDump(obj);
+    } catch (e) {
+      setCacheDump({ error: String(e?.message || e) });
+    }
+  };
+
+  const openCacheModal = async () => {
+    await loadWidgetCache();
+    setCacheVisible(true);
+  };
+
+  const handleInfoPress = () => {
+    // якщо щойно був long press — гасимо onPress
+    if (didLongPressRef.current) {
+      didLongPressRef.current = false;
+      return;
+    }
+    setInfoVisible(true);
+  };
+
+  const handleInfoLongPress = async () => {
+    didLongPressRef.current = true;
+    await openCacheModal();
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -525,6 +404,7 @@ const GBGscreen = () => {
         if (isActive) setShortGuildId(null);
       }
     })();
+
     return () => {
       isActive = false;
     };
@@ -535,11 +415,9 @@ const GBGscreen = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // mapKey з БД
   useEffect(() => {
     let mapRef;
     let onMapUpdate;
-
     setIsMapLoaded(false);
     setCurrentMap(null);
     setIsSectorDataLoaded(false);
@@ -551,7 +429,6 @@ const GBGscreen = () => {
         setIsMapLoaded(true);
         return;
       }
-
       mapRef = database().ref(`guilds/${id}/GBG/map`);
       onMapUpdate = (snap) => {
         let nextMap = DEFAULT_MAP_KEY;
@@ -562,7 +439,6 @@ const GBGscreen = () => {
         setCurrentMap(nextMap);
         setIsMapLoaded(true);
       };
-
       mapRef.on("value", onMapUpdate);
     })();
 
@@ -571,7 +447,6 @@ const GBGscreen = () => {
     };
   }, [guildId]);
 
-  // opponents
   useEffect(() => {
     let opponentsRef;
     let onOpponentsUpdate;
@@ -588,7 +463,6 @@ const GBGscreen = () => {
         setAreOpponentsLoaded(true);
         return;
       }
-
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
       onOpponentsUpdate = (snap) => {
         if (snap.exists()) {
@@ -634,7 +508,6 @@ const GBGscreen = () => {
   const mapKey = currentMap ?? DEFAULT_MAP_KEY;
   const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
-
   const mapTitle =
     MAP_TITLE_TRANSLATIONS[mapKey] ||
     mapKey
@@ -653,39 +526,22 @@ const GBGscreen = () => {
         elevation: 0,
       },
       headerTintColor: "#E0E0E0",
-      headerTitleStyle: {
-        fontWeight: "bold",
-      },
+      headerTitleStyle: { fontWeight: "bold" },
+
+      // === ВАЖЛИВО: long press НА КНОПЦІ "i" ===
       headerRight: () => (
         <TouchableOpacity
           style={styles.infoButton}
-          onPress={() => setInfoVisible(true)}
-          onLongPress={async () => {
-            try {
-              const snap = await readWidgetCacheSnapshot();
-              const mapMeta = safeJsonParse(snap[WIDGET_KEYS.MAP_META] || "");
-              const nextMeta = safeJsonParse(snap[WIDGET_KEYS.NEXT5_META] || "");
-              const next5 = safeJsonParse(snap[WIDGET_KEYS.NEXT5] || "");
-
-              const text =
-                `widget_gbg_map_png_uri:\n${snap[WIDGET_KEYS.MAP_PNG_URI] || "null"}\n\n` +
-                `widget_gbg_map_meta:\n${mapMeta ? JSON.stringify(mapMeta, null, 2) : (snap[WIDGET_KEYS.MAP_META] || "null")}\n\n` +
-                `widget_gbg_next5:\n${Array.isArray(next5) ? JSON.stringify(next5, null, 2) : (snap[WIDGET_KEYS.NEXT5] || "null")}\n\n` +
-                `widget_gbg_next5_meta:\n${nextMeta ? JSON.stringify(nextMeta, null, 2) : (snap[WIDGET_KEYS.NEXT5_META] || "null")}`;
-
-              setWidgetDebugText(text);
-              setWidgetDebugVisible(true);
-            } catch (e) {
-              setWidgetDebugText(String(e?.message || e));
-              setWidgetDebugVisible(true);
-            }
-          }}
+          onPress={handleInfoPress}
+          onLongPress={handleInfoLongPress}
+          delayLongPress={550}
+          activeOpacity={0.7}
         >
           <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, mapTitle]);
+  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
 
   const renderMapPaths = () => {
     const data = MAP_DATA[mapKey] || {};
@@ -700,18 +556,38 @@ const GBGscreen = () => {
       fillStyle.strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
       fillStyle.strokeOpacity = 1;
 
-      const textStyle = { ...(text?.style || {}), display: sectorStaff[sectorId] ? "none" : (text?.style?.display ?? "inline") };
-      const iconStyle = { ...(icon?.style || {}), display: sectorStaff[sectorId] ? "inline" : "none", fill: "#FFFFFF" };
-      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") iconStyle.stroke = "#FFFFFF";
+      const textStyle = {
+        ...(text?.style || {}),
+        display: sectorStaff[sectorId] ? "none" : text?.style?.display ?? "inline",
+      };
+
+      const iconStyle = {
+        ...(icon?.style || {}),
+        display: sectorStaff[sectorId] ? "inline" : "none",
+        fill: "#FFFFFF",
+      };
+      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
+        iconStyle.stroke = "#FFFFFF";
+      }
 
       const isBlinking = blinkingSector === sectorId;
-      const animatedFillOpacity = isBlinking ? blinkingAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] }) : fillStyle.fillOpacity;
+      const animatedFillOpacity = isBlinking
+        ? blinkingAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] })
+        : fillStyle.fillOpacity;
 
       return (
-        <G key={sectorId}>
-          {fill && <AnimatedPath {...fill.props} d={fill.d} style={fillStyle} fillOpacity={animatedFillOpacity} />}
-          {text && <Path {...text.props} d={text.d} style={textStyle} />}
-          {icon && <Path {...icon.props} d={icon.d} style={iconStyle} />}
+        <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
+          {fill && (
+            <AnimatedPath
+              {...fill.props}
+              d={fill.d}
+              onPressIn={(e) => handleShapePress(sectorId, e)}
+              style={fillStyle}
+              fillOpacity={animatedFillOpacity}
+            />
+          )}
+          {text && <Path {...text.props} d={text.d} onPressIn={(e) => handleShapePress(sectorId, e)} style={textStyle} />}
+          {icon && <Path {...icon.props} d={icon.d} onPressIn={(e) => handleShapePress(sectorId, e)} style={iconStyle} />}
         </G>
       );
     });
@@ -727,10 +603,8 @@ const GBGscreen = () => {
     setBlinkingSector(null);
   }, [currentMap, isMapLoaded]);
 
-  // sectors snapshot
   useEffect(() => {
     if (!isMapLoaded) return;
-
     let sectorsRef;
     let onSectorsUpdate;
 
@@ -741,13 +615,11 @@ const GBGscreen = () => {
         setIsSectorDataLoaded(true);
         return;
       }
-
       sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
       onSectorsUpdate = (snap) => {
         setSectorSnapshot(snap.exists() ? snap.val() : null);
         setIsSectorDataLoaded(true);
       };
-
       sectorsRef.on("value", onSectorsUpdate);
     })();
 
@@ -756,14 +628,12 @@ const GBGscreen = () => {
     };
   }, [guildId, isMapLoaded]);
 
-  // colors + staff flags
   useEffect(() => {
     if (!isMapLoaded || !areOpponentsLoaded) return;
 
     const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
-
     if (sectorIds.length === 0) {
       setSectorColors({});
       setSectorStaff({});
@@ -779,19 +649,22 @@ const GBGscreen = () => {
       const entry = data[gid];
       let color = "#FFFFFF";
       let staff = false;
-      let ownerValue = null;
 
       if (entry && typeof entry === "object") {
         if (typeof entry.color === "string") color = entry.color;
 
-        ownerValue = entry.owner ?? entry.ownerId;
-        if (ownerValue !== null) {
+        const ownerValue = entry.owner ?? entry.ownerId;
+        if (ownerValue !== null && ownerValue !== undefined) {
           const ownerKey = String(ownerValue);
           if (ownerKey === "0") {
             color = "#FFFFFF";
           } else {
             const opponent = opponentMapById[ownerKey];
-            color = opponent?.sectorColor ? String(opponent.sectorColor) : (typeof entry.color === "string" ? entry.color : "#FFFFFF");
+            color = opponent?.sectorColor
+              ? String(opponent.sectorColor)
+              : typeof entry.color === "string"
+              ? entry.color
+              : "#FFFFFF";
           }
         }
 
@@ -812,7 +685,6 @@ const GBGscreen = () => {
     setSectorStaff(staffFlags);
   }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
 
-  // schedule
   useEffect(() => {
     if (!isMapLoaded || !shortGuildId) {
       setSectorSchedule([]);
@@ -822,7 +694,6 @@ const GBGscreen = () => {
     const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
     const sectorIds = Object.keys(mapData);
-
     if (sectorIds.length === 0) {
       setSectorSchedule([]);
       return;
@@ -865,7 +736,6 @@ const GBGscreen = () => {
     setSectorSchedule(schedule);
   }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
 
-  // blink anim
   useEffect(() => {
     if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
 
@@ -903,13 +773,16 @@ const GBGscreen = () => {
 
   const handleSchedulePress = (sectorId) => setBlinkingSector((prev) => (prev === sectorId ? null : sectorId));
 
-  const handleShapePress = async (id) => {
-    // Віджет — без кліків. У додатку кліки лишаємо як були.
+  const handleShapePress = async (id, event) => {
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) return;
-
-      setPopupStyle({ left: 20, top: 60 });
+      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
+      const position =
+        pageX > width / 2
+          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
+          : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
+      setPopupStyle(position);
       setSelectedId(id);
       setPopupVisible(true);
     } catch (err) {}
@@ -917,139 +790,21 @@ const GBGscreen = () => {
 
   const handleHelpPress = async () => {
     if (!selectedId) return;
-
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) {
         Alert.alert("Помилка", "Не вдалося визначити гільдію.");
         return;
       }
-
       setPopupVisible(false);
       Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
-
       const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
       await sendNotification({ guildId: gid, sectorId: selectedId });
-
       Alert.alert("Успіх!", "Сповіщення надіслано.");
     } catch (error) {
       Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
     }
   };
-
-  // ===== SvgXml для PNG-кешу =====
-  const svgXml = useMemo(() => {
-    const data = MAP_DATA[mapKey] || {};
-    return buildGbgMapSvgString({
-      mapKey,
-      mapDimensions,
-      mapData: data,
-      sectorColors,
-      sectorStaff,
-    });
-  }, [mapKey, mapDimensions, sectorColors, sectorStaff]);
-
-  const captureWidth = 700;
-  const captureHeight = Math.round(captureWidth * (mapDimensions.height / mapDimensions.width));
-
-  // ===== ОНОВЛЕННЯ КЕШУ PNG (раз на хвилину) =====
-  useEffect(() => {
-    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
-    if (!svgXml) return;
-
-    let cancelled = false;
-
-    (async () => {
-      const now = Date.now();
-      if (now - lastMapCacheAtRef.current < 60 * 1000) return;
-
-      try {
-        // чекаємо, щоб SvgXml реально промалювався у ViewShot
-        await waitNextFrame();
-        if (cancelled) return;
-
-        const shot = mapShotRef.current;
-        if (!shot || typeof shot.capture !== "function") throw new Error("ViewShot ref is not ready");
-
-        const captureUri = await shot.capture();
-        if (cancelled) return;
-
-        const pngUri = await saveWidgetMapPngFromCaptureUri(captureUri, mapKey);
-        if (cancelled) return;
-
-        await setWidgetMapCache({
-          pngUri,
-          meta: {
-            updatedAt: now,
-            mapKey,
-            width: mapDimensions.width,
-            height: mapDimensions.height,
-            pngError: null,
-          },
-        });
-
-        lastMapCacheAtRef.current = now;
-      } catch (e) {
-        const msg = String(e?.message || e);
-
-        await setWidgetMapCache({
-          pngUri: null,
-          meta: {
-            updatedAt: now,
-            mapKey,
-            width: mapDimensions.width,
-            height: mapDimensions.height,
-            pngError: msg,
-          },
-        });
-
-        lastMapCacheAtRef.current = now;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, mapDimensions.height, mapDimensions.width, svgXml]);
-
-  // ===== ОНОВЛЕННЯ КЕШУ next5 (раз на хвилину) =====
-  useEffect(() => {
-    if (!isMapLoaded || !isSectorDataLoaded) return;
-
-    let cancelled = false;
-
-    (async () => {
-      const now = Date.now();
-      if (now - lastNext5CacheAtRef.current < 60 * 1000) return;
-
-      try {
-        const next5 = (sectorSchedule || []).slice(0, 5).map((item) => ({
-          name: item.name,
-          openTime: item.openTime,
-          army: item.army,
-          bonusValue: item.bonusValue,
-          bonusReadyAt: item.bonusReadyAt,
-        }));
-
-        await setWidgetNext5Cache({
-          list: next5,
-          meta: {
-            updatedAt: now,
-            mapKey,
-            count: next5.length,
-          },
-        });
-
-        lastNext5CacheAtRef.current = now;
-      } catch (e) {
-        lastNext5CacheAtRef.current = now;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isMapLoaded, isSectorDataLoaded, mapKey, sectorSchedule]);
 
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
@@ -1065,58 +820,9 @@ const GBGscreen = () => {
       <StatusBar barStyle="light-content" />
 
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-        {/* Реальний рендер (як у додатку) */}
         <Svg width="100%" height="100%" viewBox={viewBox}>
-          {Object.entries(MAP_DATA[mapKey] || {}).map(([sectorId, config]) => {
-            const { fill, text, icon } = config;
-
-            const fillStyle = { ...(fill?.style || {}) };
-            const color = sectorColors[sectorId];
-            if (color) fillStyle.fill = color;
-
-            fillStyle.stroke = "#121212";
-            fillStyle.strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
-            fillStyle.strokeOpacity = 1;
-
-            const textStyle = { ...(text?.style || {}), display: sectorStaff[sectorId] ? "none" : (text?.style?.display ?? "inline") };
-            const iconStyle = { ...(icon?.style || {}), display: sectorStaff[sectorId] ? "inline" : "none", fill: "#FFFFFF" };
-            if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") iconStyle.stroke = "#FFFFFF";
-
-            const isBlinking = blinkingSector === sectorId;
-            const animatedFillOpacity = isBlinking ? blinkingAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] }) : fillStyle.fillOpacity;
-
-            return (
-              <G key={sectorId} onPress={() => handleShapePress(sectorId)}>
-                {fill && (
-                  <AnimatedPath
-                    {...fill.props}
-                    d={fill.d}
-                    onPressIn={() => handleShapePress(sectorId)}
-                    style={fillStyle}
-                    fillOpacity={animatedFillOpacity}
-                  />
-                )}
-                {text && <Path {...text.props} d={text.d} onPressIn={() => handleShapePress(sectorId)} style={textStyle} />}
-                {icon && <Path {...icon.props} d={icon.d} onPressIn={() => handleShapePress(sectorId)} style={iconStyle} />}
-              </G>
-            );
-          })}
+          {renderMapPaths()}
         </Svg>
-
-        {/* Прихований рендер для PNG (ViewShot + SvgXml) */}
-        <View style={styles.hiddenCaptureWrap} pointerEvents="none">
-          <ViewShot
-            ref={mapShotRef}
-            options={{
-              format: "png",
-              quality: 1,
-              result: "tmpfile",
-            }}
-            style={{ backgroundColor: "#1c1c1e" }}
-          >
-            <SvgXml xml={svgXml} width={captureWidth} height={captureHeight} />
-          </ViewShot>
-        </View>
       </Animated.View>
 
       <View style={styles.listContainer}>
@@ -1159,7 +865,7 @@ const GBGscreen = () => {
         )}
       </View>
 
-      {/* Opponents info */}
+      {/* ===== Info modal (tap на "i") ===== */}
       {infoVisible && (
         <View style={styles.infoOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
@@ -1186,64 +892,64 @@ const GBGscreen = () => {
         </View>
       )}
 
-      {/* Popup */}
+      {/* ===== Popup menu ===== */}
       {popupVisible && (
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
           <Animated.View style={[styles.popupMenu, popupStyle]} onStartShouldSetResponder={() => true}>
             <TouchableOpacity style={styles.menuItem} disabled={!selectedId || sectorStaff[selectedId]} onPress={handleHelpPress}>
-              <FontAwesomeIcon
-                icon={faFire}
-                size={20}
-                color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"}
-                style={styles.menuIcon}
-              />
+              <FontAwesomeIcon icon={faFire} size={20} color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"} style={styles.menuIcon} />
               <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>Допомагайте</Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
       )}
 
-      {/* Widget cache debug modal */}
-      {widgetDebugVisible && (
-        <View style={styles.infoOverlay}>
+      {/* ===== Widget cache modal (LONG PRESS на "i") ===== */}
+      <Modal visible={cacheVisible} transparent animationType="fade" onRequestClose={() => setCacheVisible(false)}>
+        <View style={styles.cacheOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.debugModal}>
-            <Text style={styles.debugTitle}>Widget cache (AsyncStorage)</Text>
+          <View style={styles.cacheModal}>
+            <Text style={styles.cacheTitle}>Widget cache (AsyncStorage)</Text>
 
-            <ScrollView style={styles.debugBody}>
-              <Text style={styles.debugText}>{widgetDebugText || "—"}</Text>
+            <ScrollView style={styles.cacheScroll} contentContainerStyle={{ paddingBottom: 10 }}>
+              <Text style={styles.cacheKey}>widget_gbg_map_png_uri:</Text>
+              <Text style={styles.cacheValue}>{String(cacheDump?.[WIDGET_GBG_MAP_PNG_URI_KEY] ?? "null")}</Text>
+
+              <Text style={styles.cacheKey}>widget_gbg_map_meta:</Text>
+              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_MAP_META_KEY] ?? null, null, 2)}</Text>
+
+              <Text style={styles.cacheKey}>widget_gbg_next5:</Text>
+              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_NEXT5_KEY] ?? null, null, 2)}</Text>
+
+              <Text style={styles.cacheKey}>widget_gbg_next5_meta:</Text>
+              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_NEXT5_META_KEY] ?? null, null, 2)}</Text>
             </ScrollView>
 
-            <TouchableOpacity style={styles.debugClose} onPress={() => setWidgetDebugVisible(false)}>
-              <Text style={styles.debugCloseText}>Закрити</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <TouchableOpacity style={styles.cacheBtn} onPress={loadWidgetCache}>
+                <Text style={styles.cacheBtnText}>Оновити</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cacheBtn} onPress={() => setCacheVisible(false)}>
+                <Text style={styles.cacheBtnText}>Закрити</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   win: { flex: 1, backgroundColor: "#121212" },
-
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
 
-  infoButton: { marginRight: 15, padding: 5 },
+  infoButton: { marginRight: 15, padding: 8 },
 
   mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: "hidden" },
-
-  // прихований блок для ViewShot
-  hiddenCaptureWrap: {
-    position: "absolute",
-    left: -99999,
-    top: -99999,
-    width: 10,
-    height: 10,
-    opacity: 0,
-  },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0", marginLeft: 20, marginBottom: 15 },
@@ -1266,11 +972,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
   },
-
   sectorNameContainer: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
   armyBox: { width: 14, height: 14, borderRadius: 4, marginRight: 12 },
   sectorName: { fontSize: 16, color: "#EAEAEA", fontWeight: "600" },
-
   sectorMeta: { alignItems: "flex-end" },
   sectorTime: { fontSize: 16, color: "#EAEAEA", fontWeight: "700", fontFamily: "monospace" },
   sectorBonus: { marginTop: 4, fontSize: 13, color: "#A0D8FF", fontWeight: "600" },
@@ -1281,7 +985,6 @@ const styles = StyleSheet.create({
   emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
 
   infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
-
   infoModal: {
     width: "85%",
     maxHeight: HALF_HEIGHT * 1.2,
@@ -1291,42 +994,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
-
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
   infoList: { maxHeight: HALF_HEIGHT * 0.7 },
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
-
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
   infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
-
   infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
   infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
 
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
   popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
-
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
 
-  debugModal: {
-    width: "90%",
-    maxHeight: HALF_HEIGHT * 1.35,
+  // ===== Widget cache modal styles =====
+  cacheOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
+  cacheModal: {
+    width: "88%",
+    maxHeight: HALF_HEIGHT * 1.3,
     backgroundColor: "rgba(30, 30, 30, 0.92)",
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
-
-  debugTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 12, textAlign: "center" },
-  debugBody: { maxHeight: HALF_HEIGHT * 0.8 },
-  debugText: { color: "#E0E0E0", fontSize: 14, lineHeight: 18, fontFamily: "monospace" },
-
-  debugClose: { marginTop: 16, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
-  debugCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+  cacheTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", textAlign: "center", marginBottom: 12 },
+  cacheScroll: { maxHeight: HALF_HEIGHT * 0.85 },
+  cacheKey: { color: "#7fd3ff", fontSize: 14, marginTop: 10, fontWeight: "700" },
+  cacheValue: { color: "#E0E0E0", fontSize: 13, marginTop: 4, fontFamily: "monospace" },
+  cacheBtn: { marginTop: 14, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 18 },
+  cacheBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "bold" },
 });
 
-export default GBGscreen;
+export default GVG;
