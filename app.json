@@ -20,7 +20,8 @@
     "plugins": [
       "@react-native-firebase/app",
       "expo-localization",
-      "expo-router"
+      "expo-router",
+      "./plugins/withGbgWidgets"
     ],
     "extra": {
       "eas": {
