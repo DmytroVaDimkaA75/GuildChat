@@ -1,25 +1,20 @@
-import { faFire, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Dimensions, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from "@react-native-firebase/database";
 import functions from "@react-native-firebase/functions";
+
 import { useNavigation } from "@react-navigation/native";
 import { BlurView } from "@react-native-community/blur";
-import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import Svg, { G, Path } from "react-native-svg";
+
+import Svg, { G, Path, SvgXml } from "react-native-svg";
+import { captureRef } from "react-native-view-shot";
+import * as FileSystem from "expo-file-system/legacy";
+
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faFire, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
+
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
@@ -29,17 +24,36 @@ const HALF_HEIGHT = height * 0.5;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-const VOLCANIC_SVG_WIDTH = 248.83203;
-const VOLCANIC_SVG_HEIGHT = 248.83203;
-const WATERFALL_SVG_WIDTH = 138.53601;
-const WATERFALL_SVG_HEIGHT = 164.52901;
-
-// ======= AsyncStorage keys (віджети) =======
+// ====== Widget cache keys (AsyncStorage) ======
 const WIDGET_GBG_MAP_PNG_URI_KEY = "widget_gbg_map_png_uri";
 const WIDGET_GBG_MAP_META_KEY = "widget_gbg_map_meta";
 const WIDGET_GBG_NEXT5_KEY = "widget_gbg_next5";
 const WIDGET_GBG_NEXT5_META_KEY = "widget_gbg_next5_meta";
 
+// ====== Map dimensions ======
+const VOLCANIC_SVG_WIDTH = 248.83203;
+const VOLCANIC_SVG_HEIGHT = 248.83203;
+const WATERFALL_SVG_WIDTH = 138.53601;
+const WATERFALL_SVG_HEIGHT = 164.52901;
+
+const DEFAULT_MAP_KEY = "volcanic_archipelago";
+
+const MAP_DIMENSIONS = {
+  [DEFAULT_MAP_KEY]: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
+  waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT },
+};
+
+const MAP_DATA = {
+  [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA,
+  waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA,
+};
+
+const MAP_TITLE_TRANSLATIONS = {
+  volcanic_archipelago: "Вулканічний архіпелаг",
+  waterfall_archipelago: "Водоспадний архіпелаг",
+};
+
+// ====== Fallback neighbors (тільки якщо у data нема neighbors) ======
 const SECTOR_NEIGHBORS = {
   A2A: ["A3A", "A3B", "B2A", "X1X", "F2A", "F3B"],
   A3A: ["A4A", "A4B", "A3B", "A2A", "F3B", "F4C"],
@@ -105,41 +119,14 @@ const SECTOR_NEIGHBORS = {
 };
 
 const WATERFALL_NEIGHBORS = {};
-const DEFAULT_MAP_KEY = "volcanic_archipelago";
-
-const MAP_DIMENSIONS = {
-  [DEFAULT_MAP_KEY]: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
-  waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT },
-};
 
 const MAP_NEIGHBORS = {
   [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS,
   waterfall_archipelago: WATERFALL_NEIGHBORS,
 };
 
-const MAP_DATA = {
-  [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA,
-  waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA,
-};
-
-const MAP_TITLE_TRANSLATIONS = {
-  volcanic_archipelago: "Вулканічний архіпелаг",
-  waterfall_archipelago: "Водоспадний архіпелаг",
-};
-
-const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
-
-const BUILDING_BONUS_MAP = {
-  guild_command_post_improvised: 20,
-  guild_command_post_forward: 40,
-  guild_command_post_fortified: 60,
-  barracks_improvised: 20,
-  barracks: 40,
-  barracks_reinforced: 60,
-  basic_field_outpost_diamond: 20,
-  regular_field_outpost_diamond: 40,
-  advanced_field_outpost_diamond: 60,
-};
+// ====== Staff parsing ======
+const STAFF_SECTOR_SPLIT_REGEX = /[\,\s;|\/\\]+/;
 
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
@@ -152,26 +139,31 @@ const parseStaffSectors = (rawValue) => {
   if (Array.isArray(rawValue)) {
     rawValue.forEach((item) => {
       if (typeof item === "string") {
-        item
-          .split(STAFF_SECTOR_SPLIT_REGEX)
-          .map((part) => part.trim())
-          .filter(Boolean)
-          .forEach(register);
+        item.split(STAFF_SECTOR_SPLIT_REGEX).map((p) => p.trim()).filter(Boolean).forEach(register);
       } else {
         register(item);
       }
     });
   } else if (typeof rawValue === "string") {
-    rawValue
-      .split(STAFF_SECTOR_SPLIT_REGEX)
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .forEach(register);
+    rawValue.split(STAFF_SECTOR_SPLIT_REGEX).map((p) => p.trim()).filter(Boolean).forEach(register);
   } else {
     register(rawValue);
   }
 
   return Array.from(sectors);
+};
+
+// ====== Bonus buildings ======
+const BUILDING_BONUS_MAP = {
+  guild_command_post_improvised: 20,
+  guild_command_post_forward: 40,
+  guild_command_post_fortified: 60,
+  barracks_improvised: 20,
+  barracks: 40,
+  barracks_reinforced: 60,
+  basic_field_outpost_diamond: 20,
+  regular_field_outpost_diamond: 40,
+  advanced_field_outpost_diamond: 60,
 };
 
 const getSectorOwnerId = (entry) => {
@@ -188,8 +180,10 @@ const getBuildingsWithBonuses = (entry) => {
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== "object") return list;
+
     const state = String(building.state || "").toLowerCase();
     if (state !== "active" && state !== "building") return list;
+
     const name = building.name ? String(building.name) : "";
     if (!name) return list;
 
@@ -203,15 +197,33 @@ const getBuildingsWithBonuses = (entry) => {
 
     const readyAt = Number(building.readyAt);
     if (!Number.isFinite(readyAt) || readyAt <= 0) return list;
+
     list.push({ bonus, readyAt });
     return list;
   }, []);
 };
 
-const getNeighborIdsForSectors = (mapKey, sectorIds) => {
-  if (!Array.isArray(sectorIds) || sectorIds.length === 0) return [];
+const getNeighborIdsForSector = (mapKey, sectorId) => {
+  if (!sectorId) return [];
   const data = MAP_DATA[mapKey] || {};
   const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
+
+  const config = data[sectorId];
+  const neighborList = Array.isArray(config?.neighbors)
+    ? config.neighbors
+    : Array.isArray(fallbackNeighbors[sectorId])
+      ? fallbackNeighbors[sectorId]
+      : [];
+
+  return neighborList.filter((neighborId) => neighborId && data[neighborId]);
+};
+
+const getNeighborIdsForSectors = (mapKey, sectorIds) => {
+  if (!Array.isArray(sectorIds) || sectorIds.length === 0) return [];
+
+  const data = MAP_DATA[mapKey] || {};
+  const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
+
   const ownSet = new Set(sectorIds);
   const neighbors = new Set();
 
@@ -220,8 +232,9 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
     const neighborList = Array.isArray(config?.neighbors)
       ? config.neighbors
       : Array.isArray(fallbackNeighbors[sectorId])
-      ? fallbackNeighbors[sectorId]
-      : [];
+        ? fallbackNeighbors[sectorId]
+        : [];
+
     neighborList.forEach((neighborId) => {
       if (!neighborId || !data[neighborId] || ownSet.has(neighborId)) return;
       neighbors.add(neighborId);
@@ -229,19 +242,6 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   });
 
   return Array.from(neighbors);
-};
-
-const getNeighborIdsForSector = (mapKey, sectorId) => {
-  if (!sectorId) return [];
-  const data = MAP_DATA[mapKey] || {};
-  const fallbackNeighbors = MAP_NEIGHBORS[mapKey] || {};
-  const config = data[sectorId];
-  const neighborList = Array.isArray(config?.neighbors)
-    ? config.neighbors
-    : Array.isArray(fallbackNeighbors[sectorId])
-    ? fallbackNeighbors[sectorId]
-    : [];
-  return neighborList.filter((neighborId) => neighborId && data[neighborId]);
 };
 
 const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
@@ -256,8 +256,10 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== "object") return;
+
     const ownerId = getSectorOwnerId(entry);
     if (!ownerId || ownerId !== shortId) return;
+
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
 
@@ -266,11 +268,13 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   const totalPossible = bonuses.reduce((sum, item) => sum + item.bonus, 0);
   if (totalPossible <= 0) return { value: 100, readyAt: null };
 
+  // якщо сумарно <= 80 — бонус = 100 - сума
   if (totalPossible <= 80) {
     const latestReadyAt = bonuses.reduce((max, item) => Math.max(max, item.readyAt), 0);
     return { value: 100 - totalPossible, readyAt: latestReadyAt > 0 ? latestReadyAt : null };
   }
 
+  // якщо > 80 — шукаємо момент коли набирається 80, але бонус ніколи < 20
   const sorted = [...bonuses].sort((a, b) => a.readyAt - b.readyAt);
   let running = 0;
   let targetReadyAt = 0;
@@ -299,21 +303,135 @@ const getArmyColor = (army) => {
   return "#6c757d";
 };
 
-const safeParse = (v) => {
-  if (v === null || v === undefined) return null;
-  if (typeof v !== "string") return v;
+// ===== SVG builder (для PNG кешу) =====
+const escapeXmlAttr = (value) => {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+};
+
+const camelToKebab = (str) => str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+
+const styleObjToSvgStyle = (styleObj) => {
+  if (!styleObj || typeof styleObj !== "object") return "";
+  const parts = [];
+
+  Object.entries(styleObj).forEach(([key, val]) => {
+    if (val === undefined || val === null) return;
+    if (key === "InkscapeFontSpecification") return;
+
+    const cssKey = camelToKebab(key);
+    const cssVal = typeof val === "number" ? String(val) : String(val);
+    parts.push(`${cssKey}:${cssVal}`);
+  });
+
+  return parts.join(";");
+};
+
+const propsToAttrs = (props) => {
+  if (!props || typeof props !== "object") return "";
+  const allowed = ["id"];
+  return allowed
+    .filter((k) => props[k] !== undefined && props[k] !== null)
+    .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
+    .join(" ");
+};
+
+const buildGbgMapSvgString = ({ mapKey, mapDimensions, mapData, sectorColors, sectorStaff }) => {
+  const w = Number(mapDimensions?.width || 0);
+  const h = Number(mapDimensions?.height || 0);
+  const viewBox = `0 0 ${w} ${h}`;
+  const strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
+
+  const body = Object.entries(mapData || {})
+    .map(([sectorId, config]) => {
+      if (!config || typeof config !== "object") return "";
+
+      const { fill, text, icon } = config;
+
+      const fillStyle = { ...(fill?.style || {}) };
+      const color = sectorColors?.[sectorId];
+      if (color) fillStyle.fill = color;
+
+      fillStyle.stroke = "#121212";
+      fillStyle.strokeWidth = strokeWidth;
+      fillStyle.strokeOpacity = 1;
+
+      const textStyle = {
+        ...(text?.style || {}),
+        display: sectorStaff?.[sectorId] ? "none" : (text?.style?.display ?? "inline"),
+      };
+
+      const iconStyle = {
+        ...(icon?.style || {}),
+        display: sectorStaff?.[sectorId] ? "inline" : "none",
+        fill: "#FFFFFF",
+      };
+      if (typeof iconStyle.stroke === "string" && iconStyle.stroke.toLowerCase() !== "none") {
+        iconStyle.stroke = "#FFFFFF";
+      }
+
+      const parts = [];
+
+      if (fill?.d) {
+        const attrs = propsToAttrs(fill?.props);
+        const style = styleObjToSvgStyle(fillStyle);
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(style)}" />`);
+      }
+
+      if (text?.d) {
+        const attrs = propsToAttrs(text?.props);
+        const style = styleObjToSvgStyle(textStyle);
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(style)}" />`);
+      }
+
+      if (icon?.d) {
+        const attrs = propsToAttrs(icon?.props);
+        const style = styleObjToSvgStyle(iconStyle);
+        parts.push(`<path ${attrs} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(style)}" />`);
+      }
+
+      return `<g id="${escapeXmlAttr(sectorId)}">\n${parts.join("\n")}\n</g>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${viewBox}">
+${body}
+</svg>`;
+};
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const safeJsonParse = (raw, fallback) => {
   try {
-    return JSON.parse(v);
-  } catch {
-    return v;
+    if (typeof raw !== "string") return fallback;
+    return JSON.parse(raw);
+  } catch (e) {
+    return fallback;
   }
 };
 
-const GVG = () => {
+const pretty = (value) => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (e) {
+    return String(value);
+  }
+};
+
+// ======= Screen =======
+const GBGscreen = () => {
+  const navigation = useNavigation();
+  const { guildId } = useContext(GuildContext);
+
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
-  const { guildId } = useContext(GuildContext);
 
   const [sectorStaff, setSectorStaff] = useState({});
   const [sectorSchedule, setSectorSchedule] = useState([]);
@@ -321,6 +439,7 @@ const GVG = () => {
   const [sectorSnapshot, setSectorSnapshot] = useState(null);
 
   const [shortGuildId, setShortGuildId] = useState(null);
+
   const [blinkingSector, setBlinkingSector] = useState(null);
   const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
 
@@ -333,91 +452,57 @@ const GVG = () => {
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
 
-  const [infoVisible, setInfoVisible] = useState(false);
+  // Кнопка i -> debug
+  const [widgetDebugVisible, setWidgetDebugVisible] = useState(false);
 
-  // ======= Debug modal (AsyncStorage cache) =======
-  const [cacheVisible, setCacheVisible] = useState(false);
-  const [cacheDump, setCacheDump] = useState(null);
+  // Рендер: interactive SVG або Xml
+  const [useXmlRender, setUseXmlRender] = useState(false);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
 
-  const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // щоб long press по "i" НЕ відкривав infoVisible
-  const didLongPressRef = useRef(false);
+  // Ref для hidden capture view (PNG)
+  const captureBoxRef = useRef(null);
 
-  const loadWidgetCache = async () => {
-    try {
-      const keys = [
-        WIDGET_GBG_MAP_PNG_URI_KEY,
-        WIDGET_GBG_MAP_META_KEY,
-        WIDGET_GBG_NEXT5_KEY,
-        WIDGET_GBG_NEXT5_META_KEY,
-      ];
-      const pairs = await AsyncStorage.multiGet(keys);
-      const obj = {};
-      pairs.forEach(([k, v]) => {
-        obj[k] = safeParse(v);
-      });
-      setCacheDump(obj);
-    } catch (e) {
-      setCacheDump({ error: String(e?.message || e) });
-    }
-  };
-
-  const openCacheModal = async () => {
-    await loadWidgetCache();
-    setCacheVisible(true);
-  };
-
-  const handleInfoPress = () => {
-    // якщо щойно був long press — гасимо onPress
-    if (didLongPressRef.current) {
-      didLongPressRef.current = false;
-      return;
-    }
-    setInfoVisible(true);
-  };
-
-  const handleInfoLongPress = async () => {
-    didLongPressRef.current = true;
-    await openCacheModal();
-  };
-
+  // ===== Short guild id =====
   useEffect(() => {
     let isActive = true;
+
     (async () => {
       try {
         const storedId = await AsyncStorage.getItem("guildId");
         const effectiveId = guildId || storedId;
+
         if (!isActive || !effectiveId) {
           setShortGuildId(null);
           return;
         }
+
         const parts = String(effectiveId).split("_");
         const shortId = parts.length > 1 ? parts[parts.length - 1] : parts[0];
         setShortGuildId(shortId);
-      } catch (error) {
+      } catch (e) {
         if (isActive) setShortGuildId(null);
       }
     })();
 
-    return () => {
-      isActive = false;
-    };
+    return () => { isActive = false; };
   }, [guildId]);
 
+  // ===== Clock =====
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(interval);
   }, []);
 
+  // ===== Map key from Firebase =====
   useEffect(() => {
     let mapRef;
     let onMapUpdate;
+
     setIsMapLoaded(false);
     setCurrentMap(null);
     setIsSectorDataLoaded(false);
@@ -429,6 +514,7 @@ const GVG = () => {
         setIsMapLoaded(true);
         return;
       }
+
       mapRef = database().ref(`guilds/${id}/GBG/map`);
       onMapUpdate = (snap) => {
         let nextMap = DEFAULT_MAP_KEY;
@@ -439,6 +525,7 @@ const GVG = () => {
         setCurrentMap(nextMap);
         setIsMapLoaded(true);
       };
+
       mapRef.on("value", onMapUpdate);
     })();
 
@@ -447,6 +534,7 @@ const GVG = () => {
     };
   }, [guildId]);
 
+  // ===== Opponents =====
   useEffect(() => {
     let opponentsRef;
     let onOpponentsUpdate;
@@ -463,6 +551,7 @@ const GVG = () => {
         setAreOpponentsLoaded(true);
         return;
       }
+
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
       onOpponentsUpdate = (snap) => {
         if (snap.exists()) {
@@ -476,16 +565,17 @@ const GVG = () => {
               const normalizedId = value.id != null ? String(value.id) : String(key);
               const sectorColor = value.sectorColor ? String(value.sectorColor) : "#FFFFFF";
               const staffSectors = parseStaffSectors(value.staff);
+
               const entry = { key, id: normalizedId, name: value.name || normalizedId, sectorColor };
               byId[normalizedId] = entry;
               list.push(entry);
-              staffSectors.forEach((sectorId) => {
-                if (sectorId) staffFlags[sectorId] = true;
-              });
+
+              staffSectors.forEach((sectorId) => { if (sectorId) staffFlags[sectorId] = true; });
             }
           });
 
           list.sort((a, b) => a.name.localeCompare(b.name, "uk", { sensitivity: "base" }));
+
           setOpponentMapById(byId);
           setOpponentList(list);
           setOpponentStaffSectors(staffFlags);
@@ -494,6 +584,7 @@ const GVG = () => {
           setOpponentList([]);
           setOpponentStaffSectors({});
         }
+
         setAreOpponentsLoaded(true);
       };
 
@@ -508,16 +599,13 @@ const GVG = () => {
   const mapKey = currentMap ?? DEFAULT_MAP_KEY;
   const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
+
   const mapTitle =
     MAP_TITLE_TRANSLATIONS[mapKey] ||
-    mapKey
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
+    mapKey.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
+  // ===== Header =====
   useLayoutEffect(() => {
-    if (!navigation) return;
-
     navigation.setOptions({
       headerTitle: mapTitle,
       headerStyle: {
@@ -527,24 +615,380 @@ const GVG = () => {
       },
       headerTintColor: "#E0E0E0",
       headerTitleStyle: { fontWeight: "bold" },
-
-      // === ВАЖЛИВО: long press НА КНОПЦІ "i" ===
       headerRight: () => (
-        <TouchableOpacity
-          style={styles.infoButton}
-          onPress={handleInfoPress}
-          onLongPress={handleInfoLongPress}
-          delayLongPress={550}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.infoButton} onPress={() => setWidgetDebugVisible(true)}>
           <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+  }, [navigation, mapTitle]);
 
+  // ===== Reset on map switch =====
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    setSectorStaff({});
+    setSectorSchedule([]);
+    setSectorColors({});
+    setSectorSnapshot(null);
+    setIsSectorDataLoaded(false);
+    setBlinkingSector(null);
+  }, [currentMap, isMapLoaded]);
+
+  // ===== Sectors snapshot =====
+  useEffect(() => {
+    if (!isMapLoaded) return;
+
+    let sectorsRef;
+    let onSectorsUpdate;
+
+    (async () => {
+      const id = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!id) {
+        setSectorSnapshot(null);
+        setIsSectorDataLoaded(true);
+        return;
+      }
+
+      sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
+      onSectorsUpdate = (snap) => {
+        setSectorSnapshot(snap.exists() ? snap.val() : null);
+        setIsSectorDataLoaded(true);
+      };
+
+      sectorsRef.on("value", onSectorsUpdate);
+    })();
+
+    return () => {
+      if (sectorsRef && onSectorsUpdate) sectorsRef.off("value", onSectorsUpdate);
+    };
+  }, [guildId, isMapLoaded]);
+
+  // ===== Colors & staff flags =====
+  useEffect(() => {
+    if (!isMapLoaded || !areOpponentsLoaded) return;
+
+    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
+    const mapData = MAP_DATA[mapKey] || {};
+    const sectorIds = Object.keys(mapData);
+
+    if (sectorIds.length === 0) {
+      setSectorColors({});
+      setSectorStaff({});
+      setSectorSchedule([]);
+      return;
+    }
+
+    const colors = {};
+    const staffFlags = {};
+    const availableSectors = new Set(sectorIds);
+
+    sectorIds.forEach((gid) => {
+      const entry = data[gid];
+      let color = "#FFFFFF";
+      let staff = false;
+      let ownerValue = null;
+
+      if (entry && typeof entry === "object") {
+        if (typeof entry.color === "string") color = entry.color;
+
+        ownerValue = entry.owner ?? entry.ownerId;
+        if (ownerValue !== null && ownerValue !== undefined) {
+          const ownerKey = String(ownerValue);
+          if (ownerKey === "0") {
+            color = "#FFFFFF";
+          } else {
+            const opponent = opponentMapById[ownerKey];
+            color = opponent?.sectorColor
+              ? String(opponent.sectorColor)
+              : (typeof entry.color === "string" ? entry.color : "#FFFFFF");
+          }
+        }
+
+        staff = !!entry.staff;
+      } else if (typeof entry === "string") {
+        color = entry;
+      }
+
+      colors[gid] = color || "#FFFFFF";
+      staffFlags[gid] = staff;
+    });
+
+    Object.keys(opponentStaffSectors).forEach((sectorId) => {
+      if (opponentStaffSectors[sectorId] && availableSectors.has(sectorId)) staffFlags[sectorId] = true;
+    });
+
+    setSectorColors(colors);
+    setSectorStaff(staffFlags);
+  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
+
+  // ===== Schedule (neighbor sectors of own sectors) =====
+  useEffect(() => {
+    if (!isMapLoaded || !shortGuildId) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
+    const mapData = MAP_DATA[mapKey] || {};
+    const sectorIds = Object.keys(mapData);
+
+    if (sectorIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const ownSectors = sectorIds.filter((id) => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
+    if (ownSectors.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const neighborIds = getNeighborIdsForSectors(mapKey, ownSectors);
+    if (neighborIds.length === 0) {
+      setSectorSchedule([]);
+      return;
+    }
+
+    const schedule = neighborIds
+      .map((sectorId) => {
+        const entry = data[sectorId];
+        if (!entry || typeof entry !== "object") return null;
+
+        const openTime = Number(entry.openTime);
+        if (!Number.isFinite(openTime) || openTime <= 0) return null;
+
+        const armyRaw = String(entry.army || "").trim().toLowerCase();
+        const army = armyRaw === "attack" || armyRaw === "defense" ? armyRaw : "";
+
+        const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
+        return {
+          name: sectorId,
+          openTime,
+          army,
+          bonusValue: bonusInfo.value,
+          bonusReadyAt: bonusInfo.readyAt,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.openTime - b.openTime);
+
+    setSectorSchedule(schedule);
+  }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
+
+  // ===== Blink animation =====
+  useEffect(() => {
+    if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
+
+    if (blinkingSector) {
+      blinkingLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkingAnim, { toValue: 1, duration: 800, useNativeDriver: false }),
+          Animated.timing(blinkingAnim, { toValue: 0, duration: 800, useNativeDriver: false }),
+        ]),
+        { resetBeforeIteration: true }
+      );
+      blinkingLoopRef.current.start();
+    } else {
+      blinkingAnim.setValue(0);
+    }
+
+    return () => {
+      if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
+    };
+  }, [blinkingAnim, blinkingSector]);
+
+  // ===== Fade-in =====
+  useEffect(() => {
+    if (isMapLoaded && isSectorDataLoaded && areOpponentsLoaded) {
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    }
+  }, [isMapLoaded, isSectorDataLoaded, areOpponentsLoaded, fadeAnim]);
+
+  useEffect(() => {
+    if (sectorSchedule.length > 0) {
+      Animated.timing(listFadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    } else {
+      listFadeAnim.setValue(0);
+    }
+  }, [sectorSchedule, listFadeAnim]);
+
+  const handleSchedulePress = (sectorId) => setBlinkingSector((prev) => (prev === sectorId ? null : sectorId));
+
+  const handleShapePress = async (id, event) => {
+    try {
+      const gid = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!gid) return;
+
+      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
+      const position =
+        pageX > width / 2
+          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
+          : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
+
+      setPopupStyle(position);
+      setSelectedId(id);
+      setPopupVisible(true);
+    } catch (e) {}
+  };
+
+  const handleHelpPress = async () => {
+    if (!selectedId) return;
+
+    try {
+      const gid = guildId || (await AsyncStorage.getItem("guildId"));
+      if (!gid) {
+        Alert.alert("Помилка", "Не вдалося визначити гільдію.");
+        return;
+      }
+
+      setPopupVisible(false);
+      Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
+
+      const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
+      await sendNotification({ guildId: gid, sectorId: selectedId });
+
+      Alert.alert("Успіх!", "Сповіщення надіслано.");
+    } catch (error) {
+      Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
+    }
+  };
+
+  // ===== SVG XML (для PNG кешу + опційного рендера) =====
+  const svgXml = useMemo(() => {
+    const data = MAP_DATA[mapKey] || {};
+    return buildGbgMapSvgString({
+      mapKey,
+      mapDimensions,
+      mapData: data,
+      sectorColors,
+      sectorStaff,
+    });
+  }, [mapKey, mapDimensions, sectorColors, sectorStaff]);
+
+  // ===== Manual widget cache refresh (PNG + next5) =====
+  const buildNext5Payload = () => {
+    const next5 = (sectorSchedule || []).slice(0, 5).map((item) => ({
+      sectorId: item.name,
+      openTime: item.openTime || 0,
+      army: item.army || "",
+      bonusValue: Number.isFinite(item.bonusValue) ? item.bonusValue : 100,
+      bonusReadyAt: item.bonusReadyAt ? Number(item.bonusReadyAt) : 0,
+    }));
+
+    return next5;
+  };
+
+  const writeNext5ToCache = async (next5) => {
+    const now = Date.now();
+    const meta = { updatedAt: now, mapKey, count: Array.isArray(next5) ? next5.length : 0 };
+
+    await AsyncStorage.multiSet([
+      [WIDGET_GBG_NEXT5_KEY, JSON.stringify(next5 || [])],
+      [WIDGET_GBG_NEXT5_META_KEY, JSON.stringify(meta)],
+    ]);
+  };
+
+  const captureMapPngToCache = async () => {
+    const now = Date.now();
+    const metaBase = { updatedAt: now, mapKey, width: mapDimensions.width, height: mapDimensions.height, pngError: null };
+
+    try {
+      if (!captureBoxRef.current) throw new Error("captureBoxRef is null");
+
+      // Даємо 1 кадр щоб SvgXml точно промалювався
+      await wait(60);
+
+      const tmpUri = await captureRef(captureBoxRef, {
+        format: "png",
+        quality: 1,
+        result: "tmpfile",
+      });
+
+      const fileName = `gbg_map_widget_${mapKey}.png`;
+      const finalUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+      // copyAsync з legacy щоб не ловити deprecated warning
+      await FileSystem.copyAsync({ from: tmpUri, to: finalUri });
+
+      await AsyncStorage.multiSet([
+        [WIDGET_GBG_MAP_PNG_URI_KEY, finalUri],
+        [WIDGET_GBG_MAP_META_KEY, JSON.stringify(metaBase)],
+      ]);
+
+      return { ok: true, uri: finalUri, error: null };
+    } catch (e) {
+      const errText = e?.message ? String(e.message) : "PNG capture error";
+
+      const meta = { ...metaBase, pngError: errText };
+      await AsyncStorage.multiSet([
+        [WIDGET_GBG_MAP_PNG_URI_KEY, "null"],
+        [WIDGET_GBG_MAP_META_KEY, JSON.stringify(meta)],
+      ]);
+
+      return { ok: false, uri: null, error: errText };
+    }
+  };
+
+  const refreshWidgetCacheManually = async () => {
+    // 1) next5
+    const next5 = buildNext5Payload();
+    await writeNext5ToCache(next5);
+
+    // 2) png
+    await captureMapPngToCache();
+  };
+
+  // ===== Debug modal state (reads AsyncStorage) =====
+  const [widgetCacheDump, setWidgetCacheDump] = useState({
+    mapPngUri: null,
+    mapMeta: null,
+    next5: null,
+    next5Meta: null,
+  });
+
+  const readWidgetCacheDump = async () => {
+    const pairs = await AsyncStorage.multiGet([
+      WIDGET_GBG_MAP_PNG_URI_KEY,
+      WIDGET_GBG_MAP_META_KEY,
+      WIDGET_GBG_NEXT5_KEY,
+      WIDGET_GBG_NEXT5_META_KEY,
+    ]);
+
+    const dict = {};
+    pairs.forEach(([k, v]) => (dict[k] = v));
+
+    setWidgetCacheDump({
+      mapPngUri: dict[WIDGET_GBG_MAP_PNG_URI_KEY] ?? null,
+      mapMeta: safeJsonParse(dict[WIDGET_GBG_MAP_META_KEY], null),
+      next5: safeJsonParse(dict[WIDGET_GBG_NEXT5_KEY], null),
+      next5Meta: safeJsonParse(dict[WIDGET_GBG_NEXT5_META_KEY], null),
+    });
+  };
+
+  useEffect(() => {
+    if (!widgetDebugVisible) return;
+    readWidgetCacheDump().catch(() => {});
+  }, [widgetDebugVisible]);
+
+  // ===== Simulate data-only push (щоб “перевірити зараз”) =====
+  const simulateDataOnlyPush = async () => {
+    const fakeNext5 = [
+      { sectorId: "B4G", openTime: Math.floor(Date.now() / 1000) + 900, army: "defense", bonusValue: 20, bonusReadyAt: 0 },
+      { sectorId: "D3Z", openTime: Math.floor(Date.now() / 1000) + 1200, army: "attack", bonusValue: 20, bonusReadyAt: 0 },
+      { sectorId: "D4D", openTime: Math.floor(Date.now() / 1000) + 1500, army: "defense", bonusValue: 20, bonusReadyAt: 0 },
+      { sectorId: "A2S", openTime: Math.floor(Date.now() / 1000) + 1800, army: "attack", bonusValue: 20, bonusReadyAt: 0 },
+      { sectorId: "C4C", openTime: Math.floor(Date.now() / 1000) + 2100, army: "defense", bonusValue: 20, bonusReadyAt: 0 },
+    ];
+
+    // Симуляція: наче прийшло з Firebase (data-only)
+    await writeNext5ToCache(fakeNext5);
+    await readWidgetCacheDump();
+  };
+
+  // ===== Render interactive SVG paths =====
   const renderMapPaths = () => {
     const data = MAP_DATA[mapKey] || {};
+
     return Object.entries(data).map(([sectorId, config]) => {
       const { fill, text, icon } = config;
 
@@ -558,7 +1002,7 @@ const GVG = () => {
 
       const textStyle = {
         ...(text?.style || {}),
-        display: sectorStaff[sectorId] ? "none" : text?.style?.display ?? "inline",
+        display: sectorStaff[sectorId] ? "none" : (text?.style?.display ?? "inline"),
       };
 
       const iconStyle = {
@@ -593,219 +1037,7 @@ const GVG = () => {
     });
   };
 
-  useEffect(() => {
-    if (!isMapLoaded) return;
-    setSectorStaff({});
-    setSectorSchedule([]);
-    setSectorColors({});
-    setSectorSnapshot(null);
-    setIsSectorDataLoaded(false);
-    setBlinkingSector(null);
-  }, [currentMap, isMapLoaded]);
-
-  useEffect(() => {
-    if (!isMapLoaded) return;
-    let sectorsRef;
-    let onSectorsUpdate;
-
-    (async () => {
-      const id = guildId || (await AsyncStorage.getItem("guildId"));
-      if (!id) {
-        setSectorSnapshot(null);
-        setIsSectorDataLoaded(true);
-        return;
-      }
-      sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
-      onSectorsUpdate = (snap) => {
-        setSectorSnapshot(snap.exists() ? snap.val() : null);
-        setIsSectorDataLoaded(true);
-      };
-      sectorsRef.on("value", onSectorsUpdate);
-    })();
-
-    return () => {
-      if (sectorsRef && onSectorsUpdate) sectorsRef.off("value", onSectorsUpdate);
-    };
-  }, [guildId, isMapLoaded]);
-
-  useEffect(() => {
-    if (!isMapLoaded || !areOpponentsLoaded) return;
-
-    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
-    const mapData = MAP_DATA[mapKey] || {};
-    const sectorIds = Object.keys(mapData);
-    if (sectorIds.length === 0) {
-      setSectorColors({});
-      setSectorStaff({});
-      setSectorSchedule([]);
-      return;
-    }
-
-    const colors = {};
-    const staffFlags = {};
-    const availableSectors = new Set(sectorIds);
-
-    sectorIds.forEach((gid) => {
-      const entry = data[gid];
-      let color = "#FFFFFF";
-      let staff = false;
-
-      if (entry && typeof entry === "object") {
-        if (typeof entry.color === "string") color = entry.color;
-
-        const ownerValue = entry.owner ?? entry.ownerId;
-        if (ownerValue !== null && ownerValue !== undefined) {
-          const ownerKey = String(ownerValue);
-          if (ownerKey === "0") {
-            color = "#FFFFFF";
-          } else {
-            const opponent = opponentMapById[ownerKey];
-            color = opponent?.sectorColor
-              ? String(opponent.sectorColor)
-              : typeof entry.color === "string"
-              ? entry.color
-              : "#FFFFFF";
-          }
-        }
-
-        staff = !!entry.staff;
-      } else if (typeof entry === "string") {
-        color = entry;
-      }
-
-      colors[gid] = color || "#FFFFFF";
-      staffFlags[gid] = staff;
-    });
-
-    Object.keys(opponentStaffSectors).forEach((sectorId) => {
-      if (opponentStaffSectors[sectorId] && availableSectors.has(sectorId)) staffFlags[sectorId] = true;
-    });
-
-    setSectorColors(colors);
-    setSectorStaff(staffFlags);
-  }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
-
-  useEffect(() => {
-    if (!isMapLoaded || !shortGuildId) {
-      setSectorSchedule([]);
-      return;
-    }
-
-    const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
-    const mapData = MAP_DATA[mapKey] || {};
-    const sectorIds = Object.keys(mapData);
-    if (sectorIds.length === 0) {
-      setSectorSchedule([]);
-      return;
-    }
-
-    const ownSectors = sectorIds.filter((id) => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
-    if (ownSectors.length === 0) {
-      setSectorSchedule([]);
-      return;
-    }
-
-    const neighborIds = getNeighborIdsForSectors(mapKey, ownSectors);
-    if (neighborIds.length === 0) {
-      setSectorSchedule([]);
-      return;
-    }
-
-    const schedule = neighborIds
-      .map((sectorId) => {
-        const entry = data[sectorId];
-        if (!entry || typeof entry !== "object") return null;
-
-        const openTime = Number(entry.openTime);
-        if (!Number.isFinite(openTime) || openTime <= 0) return null;
-
-        const armyRaw = String(entry.army || "").trim().toLowerCase();
-        const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
-
-        return {
-          name: sectorId,
-          openTime,
-          army: armyRaw === "attack" || armyRaw === "defense" ? armyRaw : "",
-          bonusValue: bonusInfo.value,
-          bonusReadyAt: bonusInfo.readyAt,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.openTime - b.openTime);
-
-    setSectorSchedule(schedule);
-  }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
-
-  useEffect(() => {
-    if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
-
-    if (blinkingSector) {
-      blinkingLoopRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(blinkingAnim, { toValue: 1, duration: 800, useNativeDriver: false }),
-          Animated.timing(blinkingAnim, { toValue: 0, duration: 800, useNativeDriver: false }),
-        ]),
-        { resetBeforeIteration: true }
-      );
-      blinkingLoopRef.current.start();
-    } else {
-      blinkingAnim.setValue(0);
-    }
-
-    return () => {
-      if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
-    };
-  }, [blinkingAnim, blinkingSector]);
-
-  useEffect(() => {
-    if (isMapLoaded && isSectorDataLoaded && areOpponentsLoaded) {
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-    }
-  }, [isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
-
-  useEffect(() => {
-    if (sectorSchedule.length > 0) {
-      Animated.timing(listFadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    } else {
-      listFadeAnim.setValue(0);
-    }
-  }, [sectorSchedule]);
-
-  const handleSchedulePress = (sectorId) => setBlinkingSector((prev) => (prev === sectorId ? null : sectorId));
-
-  const handleShapePress = async (id, event) => {
-    try {
-      const gid = guildId || (await AsyncStorage.getItem("guildId"));
-      if (!gid) return;
-      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
-      const position =
-        pageX > width / 2
-          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
-          : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
-      setPopupStyle(position);
-      setSelectedId(id);
-      setPopupVisible(true);
-    } catch (err) {}
-  };
-
-  const handleHelpPress = async () => {
-    if (!selectedId) return;
-    try {
-      const gid = guildId || (await AsyncStorage.getItem("guildId"));
-      if (!gid) {
-        Alert.alert("Помилка", "Не вдалося визначити гільдію.");
-        return;
-      }
-      setPopupVisible(false);
-      Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
-      const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
-      await sendNotification({ guildId: gid, sectorId: selectedId });
-      Alert.alert("Успіх!", "Сповіщення надіслано.");
-    } catch (error) {
-      Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
-    }
-  };
-
+  // ===== Loading =====
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
       <View style={styles.loaderContainer}>
@@ -819,17 +1051,36 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
+      {/* ===== Hidden capture box for PNG widget cache ===== */}
+      <View
+        ref={captureBoxRef}
+        collapsable={false}
+        pointerEvents="none"
+        style={styles.captureBox}
+      >
+        <SvgXml xml={svgXml} width="100%" height="100%" />
+      </View>
+
+      {/* ===== Map ===== */}
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
-        <Svg width="100%" height="100%" viewBox={viewBox}>
-          {renderMapPaths()}
-        </Svg>
+        {useXmlRender ? (
+          <SvgXml xml={svgXml} width="100%" height="100%" />
+        ) : (
+          <Svg width="100%" height="100%" viewBox={viewBox}>
+            {renderMapPaths()}
+          </Svg>
+        )}
       </Animated.View>
 
+      {/* ===== Schedule list ===== */}
       <View style={styles.listContainer}>
         <Text style={styles.listTitle}>Відкриття секторів</Text>
 
         {sectorSchedule.length > 0 ? (
-          <Animated.ScrollView style={[styles.sectorList, { opacity: listFadeAnim }]} contentContainerStyle={styles.sectorListContent}>
+          <Animated.ScrollView
+            style={[styles.sectorList, { opacity: listFadeAnim }]}
+            contentContainerStyle={styles.sectorListContent}
+          >
             {sectorSchedule.map((item) => {
               const timeRemainingSeconds = item.openTime ? Math.max(item.openTime - currentTime, 0) : 0;
               const bonusRemainingSeconds = item.bonusReadyAt ? Math.max(item.bonusReadyAt - currentTime, 0) : 0;
@@ -849,10 +1100,7 @@ const GVG = () => {
 
                   <View style={styles.sectorMeta}>
                     <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : "--:--:--"}</Text>
-                    <Text style={styles.sectorBonus}>
-                      Бонус: {item.bonusValue}
-                      {bonusTimeLabel}
-                    </Text>
+                    <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -865,89 +1113,92 @@ const GVG = () => {
         )}
       </View>
 
-      {/* ===== Info modal (tap на "i") ===== */}
-      {infoVisible && (
-        <View style={styles.infoOverlay}>
-          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
-            <Text style={styles.infoTitle}>Суперники на мапі</Text>
-
-            <ScrollView style={styles.infoList}>
-              {opponentList.length === 0 ? (
-                <Text style={styles.infoEmpty}>Інформація відсутня</Text>
-              ) : (
-                opponentList.map((op) => (
-                  <View key={op.key ?? op.id} style={styles.infoRow}>
-                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
-                    <Text style={styles.infoName}>{op.name || op.id}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-
-            <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
-              <Text style={styles.infoCloseText}>Закрити</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      )}
-
       {/* ===== Popup menu ===== */}
       {popupVisible && (
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
+
           <Animated.View style={[styles.popupMenu, popupStyle]} onStartShouldSetResponder={() => true}>
-            <TouchableOpacity style={styles.menuItem} disabled={!selectedId || sectorStaff[selectedId]} onPress={handleHelpPress}>
-              <FontAwesomeIcon icon={faFire} size={20} color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"} style={styles.menuIcon} />
-              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>Допомагайте</Text>
+            <TouchableOpacity
+              style={styles.menuItem}
+              disabled={!selectedId || sectorStaff[selectedId]}
+              onPress={handleHelpPress}
+            >
+              <FontAwesomeIcon
+                icon={faFire}
+                size={20}
+                color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"}
+                style={styles.menuIcon}
+              />
+              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>
+                Допомагайте
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
       )}
 
-      {/* ===== Widget cache modal (LONG PRESS на "i") ===== */}
-      <Modal visible={cacheVisible} transparent animationType="fade" onRequestClose={() => setCacheVisible(false)}>
-        <View style={styles.cacheOverlay}>
-          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.cacheModal}>
-            <Text style={styles.cacheTitle}>Widget cache (AsyncStorage)</Text>
+      {/* ===== Debug modal opened by "i" ===== */}
+      {widgetDebugVisible && (
+        <View style={styles.infoOverlay}>
+          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={6} />
 
-            <ScrollView style={styles.cacheScroll} contentContainerStyle={{ paddingBottom: 10 }}>
-              <Text style={styles.cacheKey}>widget_gbg_map_png_uri:</Text>
-              <Text style={styles.cacheValue}>{String(cacheDump?.[WIDGET_GBG_MAP_PNG_URI_KEY] ?? "null")}</Text>
+          <View style={styles.debugModal}>
+            <Text style={styles.debugTitle}>Widget cache (AsyncStorage)</Text>
 
-              <Text style={styles.cacheKey}>widget_gbg_map_meta:</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_MAP_META_KEY] ?? null, null, 2)}</Text>
+            <ScrollView style={styles.debugScroll} contentContainerStyle={styles.debugScrollContent}>
+              <Text style={styles.debugKey}>widget_gbg_map_png_uri:</Text>
+              <Text style={styles.debugValue}>{pretty(widgetCacheDump.mapPngUri)}</Text>
 
-              <Text style={styles.cacheKey}>widget_gbg_next5:</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_NEXT5_KEY] ?? null, null, 2)}</Text>
+              <Text style={styles.debugKey}>widget_gbg_map_meta:</Text>
+              <Text style={styles.debugValue}>{pretty(widgetCacheDump.mapMeta)}</Text>
 
-              <Text style={styles.cacheKey}>widget_gbg_next5_meta:</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.[WIDGET_GBG_NEXT5_META_KEY] ?? null, null, 2)}</Text>
+              <Text style={styles.debugKey}>widget_gbg_next5:</Text>
+              <Text style={styles.debugValue}>{pretty(widgetCacheDump.next5)}</Text>
+
+              <Text style={styles.debugKey}>widget_gbg_next5_meta:</Text>
+              <Text style={styles.debugValue}>{pretty(widgetCacheDump.next5Meta)}</Text>
             </ScrollView>
 
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <TouchableOpacity style={styles.cacheBtn} onPress={loadWidgetCache}>
-                <Text style={styles.cacheBtnText}>Оновити</Text>
+            <View style={styles.debugButtonsRow}>
+              <TouchableOpacity
+                style={styles.debugBtnPrimary}
+                onPress={async () => {
+                  await refreshWidgetCacheManually();
+                  await readWidgetCacheDump();
+                }}
+              >
+                <Text style={styles.debugBtnText}>Оновити</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.cacheBtn} onPress={() => setCacheVisible(false)}>
-                <Text style={styles.cacheBtnText}>Закрити</Text>
+              <TouchableOpacity
+                style={styles.debugBtnSecondary}
+                onPress={simulateDataOnlyPush}
+              >
+                <Text style={styles.debugBtnText}>Тест data-only</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.debugBtnPrimary}
+                onPress={() => setWidgetDebugVisible(false)}
+              >
+                <Text style={styles.debugBtnText}>Закрити</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   win: { flex: 1, backgroundColor: "#121212" },
+
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
 
-  infoButton: { marginRight: 15, padding: 8 },
+  infoButton: { marginRight: 15, padding: 5 },
 
   mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
@@ -972,9 +1223,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
   },
+
   sectorNameContainer: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
   armyBox: { width: 14, height: 14, borderRadius: 4, marginRight: 12 },
   sectorName: { fontSize: 16, color: "#EAEAEA", fontWeight: "600" },
+
   sectorMeta: { alignItems: "flex-end" },
   sectorTime: { fontSize: 16, color: "#EAEAEA", fontWeight: "700", fontFamily: "monospace" },
   sectorBonus: { marginTop: 4, fontSize: 13, color: "#A0D8FF", fontWeight: "600" },
@@ -984,49 +1237,86 @@ const styles = StyleSheet.create({
   emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
   emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
 
-  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  infoModal: {
-    width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
-    backgroundColor: "rgba(30, 30, 30, 0.9)",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
-  infoList: { maxHeight: HALF_HEIGHT * 0.7 },
-  infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
-  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
-  infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
-  infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
-  infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
-  popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
+  popupMenu: {
+    position: "absolute",
+    backgroundColor: "rgba(40, 40, 40, 0.9)",
+    borderRadius: 15,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+  },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
 
-  // ===== Widget cache modal styles =====
-  cacheOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
-  cacheModal: {
+  // Debug modal
+  infoOverlay: {
+    position: "absolute",
+    top: 0, bottom: 0, left: 0, right: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 50,
+  },
+
+  debugModal: {
     width: "88%",
-    maxHeight: HALF_HEIGHT * 1.3,
-    backgroundColor: "rgba(30, 30, 30, 0.92)",
-    borderRadius: 20,
+    maxHeight: "72%",
+    backgroundColor: "rgba(20, 20, 20, 0.92)",
+    borderRadius: 22,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
-  cacheTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", textAlign: "center", marginBottom: 12 },
-  cacheScroll: { maxHeight: HALF_HEIGHT * 0.85 },
-  cacheKey: { color: "#7fd3ff", fontSize: 14, marginTop: 10, fontWeight: "700" },
-  cacheValue: { color: "#E0E0E0", fontSize: 13, marginTop: 4, fontFamily: "monospace" },
-  cacheBtn: { marginTop: 14, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 18 },
-  cacheBtnText: { color: "#FFFFFF", fontSize: 15, fontWeight: "bold" },
+
+  debugTitle: { fontSize: 22, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 12 },
+
+  debugScroll: { flexGrow: 0 },
+  debugScrollContent: { paddingBottom: 8 },
+
+  debugKey: { marginTop: 14, color: "#64b5f6", fontSize: 16, fontWeight: "700" },
+  debugValue: { marginTop: 6, color: "#eaeaea", fontSize: 14, fontFamily: "monospace" },
+
+  debugButtonsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  debugBtnPrimary: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#2e86de",
+    borderRadius: 18,
+    flexGrow: 1,
+    alignItems: "center",
+  },
+
+  debugBtnSecondary: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#3a3a3a",
+    borderRadius: 18,
+    flexGrow: 1,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  debugBtnText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+
+  // Hidden capture box (PNG)
+  captureBox: {
+    position: "absolute",
+    left: -9999,
+    top: -9999,
+    width: 520,
+    height: 520,
+    opacity: 0,
+  },
 });
 
-export default GVG;
+export default GBGscreen;
