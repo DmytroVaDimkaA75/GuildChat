@@ -6,7 +6,7 @@ import messaging from '@react-native-firebase/messaging';
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GuildContext, GuildProvider } from "./GuildContext";
@@ -18,8 +18,6 @@ import MainContent from "./components/MainContent";
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
 
-import { refreshGbgWidgetCacheFromFirebase } from './components/GBG/gbgWidgetRefresh';
-
 const firebaseConfig = {
   apiKey: "AIzaSyA8Qqv9S22rdYGfHiONlZ6Ss2El4EC95hw",
   authDomain: "guildchat-5d8c1.firebaseapp.com",
@@ -30,9 +28,10 @@ const firebaseConfig = {
   appId: "1:220187331504:web:d7929f971088bf2d946475"
 };
 
+// ✅ Ініціалізація Firebase (як у тебе було)
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
-  console.log('✅ Firebase инициализирован успешно!');
+  console.log('✅ Firebase іниціалізовано успішно!');
 }
 
 const Stack = createStackNavigator();
@@ -44,6 +43,9 @@ const AppContent = () => {
   const [userData, setUserData] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // ✅ щоб не створювати канал багато разів
+  const channelReadyRef = useRef(false);
 
   useEffect(() => {
     const initLanguage = async () => {
@@ -61,7 +63,7 @@ const AppContent = () => {
         }
         i18n.changeLanguage(lang);
       } catch (error) {
-        console.error("Ошибка при инициализации языка:", error);
+        console.error("Помилка ініціалізації мови:", error);
         i18n.changeLanguage('uk');
       } finally {
         setLanguageLoaded(true);
@@ -71,8 +73,31 @@ const AppContent = () => {
   }, []);
 
   useEffect(() => {
+    const ensureAndroidChannel = async () => {
+      try {
+        if (Platform.OS !== 'android') return;
+        if (channelReadyRef.current) return;
+
+        await notifee.createChannel({
+          id: 'default',
+          name: 'Default Channel',
+          importance: AndroidImportance.HIGH,
+        });
+
+        channelReadyRef.current = true;
+        console.log('✅ Канал notifee "default" створено/оновлено.');
+      } catch (e) {
+        console.log('❌ Помилка створення каналу notifee:', e?.message || String(e));
+      }
+    };
+
+    ensureAndroidChannel();
+  }, []);
+
+  useEffect(() => {
     const setupPushNotifications = async () => {
       try {
+        // ✅ Дозволи
         if (Platform.OS === 'ios') {
           const authStatus = await messaging().requestPermission();
           const enabled =
@@ -80,95 +105,93 @@ const AppContent = () => {
             authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
           if (enabled) {
-            console.log('Разрешение для iOS получено:', authStatus);
+            console.log('✅ Дозвіл iOS отримано:', authStatus);
+          } else {
+            console.log('⚠️ Дозвіл iOS не надано:', authStatus);
           }
         } else if (Platform.OS === 'android') {
           if (Platform.Version >= 33) {
             const granted = await PermissionsAndroid.request(
               PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
               {
-                title: "Разрешение на уведомления",
-                message: "Приложение хочет отправлять вам уведомления",
-                buttonPositive: "Разрешить",
-                buttonNegative: "Отклонить",
+                title: "Дозвіл на сповіщення",
+                message: "Додаток хоче надсилати вам сповіщення",
+                buttonPositive: "Дозволити",
+                buttonNegative: "Відхилити",
               }
             );
             if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-              console.log('Пользователь отклонил разрешение на уведомления');
-              // ⚠️ Для data-only на Android 13+ це не завжди критично, але для звичайних нотифікацій — так
+              console.log('⚠️ Користувач відхилив дозвіл на сповіщення');
+              // Все одно можемо працювати з data-only для віджета, але видимих пушів не буде
             }
           }
         }
 
-        if (Platform.OS === 'android') {
-          await notifee.createChannel({
-            id: 'default',
-            name: 'Default Channel',
-            importance: AndroidImportance.HIGH,
-          });
-          console.log('Канал уведомлений "default" создан/обновлен.');
-        }
-
+        // ✅ Отримати і зберегти FCM токен
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
-          console.log("FCM Token:", fcmToken);
+          console.log("✅ FCM Token:", fcmToken);
 
           const currentUserId = await AsyncStorage.getItem('userId');
           if (currentUserId) {
             await database().ref(`/users/${currentUserId}/fcmToken`).set(fcmToken);
-            console.log('FCM токен успешно сохранен в базу данных!');
+            console.log('✅ FCM токен збережено в БД');
           }
         }
-
-        // ✅ Якщо токен зміниться — оновимо в БД
-        const unsubTokenRefresh = messaging().onTokenRefresh(async (newToken) => {
-          try {
-            const currentUserId = await AsyncStorage.getItem('userId');
-            if (currentUserId && newToken) {
-              await database().ref(`/users/${currentUserId}/fcmToken`).set(newToken);
-            }
-          } catch (e) {}
-        });
-
-        return () => {
-          try { unsubTokenRefresh && unsubTokenRefresh(); } catch (e) {}
-        };
-
       } catch (error) {
-        console.error("Ошибка при настройке push-уведомлений:", error);
+        console.error("❌ Помилка налаштування push:", error);
       }
     };
 
-    let cleanupTokenRefresh;
-    setupPushNotifications().then((cleanup) => { cleanupTokenRefresh = cleanup; });
+    setupPushNotifications();
 
-    // ✅ Foreground: якщо прийшов data-only для віджета — тихо оновлюємо кеш, без нотифікації
-    const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+    // ✅ Оновлення токена (важливо)
+    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async (newToken) => {
       try {
-        const data = remoteMessage?.data || {};
-        if (data?.type === 'gbg_widget_refresh') {
-          await refreshGbgWidgetCacheFromFirebase({
-            guildId: data.guildId || null,
-            reason: data.reason || '',
-            sectorId: data.sectorId || '',
-          });
-          return;
+        const currentUserId = await AsyncStorage.getItem('userId');
+        if (currentUserId && newToken) {
+          await database().ref(`/users/${currentUserId}/fcmToken`).set(newToken);
+          console.log('✅ FCM токен оновлено в БД');
         }
+      } catch (e) {
+        console.log('❌ Помилка onTokenRefresh:', e?.message || String(e));
+      }
+    });
 
-        // Звичайна нотифікація — показуємо
-        if (remoteMessage?.notification?.title || remoteMessage?.notification?.body) {
-          await notifee.displayNotification({
-            title: remoteMessage?.notification?.title || '',
-            body: remoteMessage?.notification?.body || '',
-            android: { channelId: 'default' },
-          });
-        }
-      } catch (e) {}
+    // ✅ Foreground handler (безпечний для data-only)
+    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+      try {
+        const title =
+          remoteMessage?.notification?.title ||
+          remoteMessage?.data?.title ||
+          'Повідомлення';
+
+        const body =
+          remoteMessage?.notification?.body ||
+          remoteMessage?.data?.body ||
+          '';
+
+        console.log('✅ Foreground message data:', remoteMessage?.data || {});
+
+        // Якщо це data-only без тексту — не показуємо
+        if (!title && !body) return;
+
+        // На Android — показ через notifee
+        await notifee.displayNotification({
+          title,
+          body,
+          android: {
+            channelId: 'default',
+          },
+        });
+      } catch (e) {
+        console.log('❌ onMessage error:', e?.message || String(e));
+      }
     });
 
     return () => {
-      unsubscribeForeground && unsubscribeForeground();
-      cleanupTokenRefresh && cleanupTokenRefresh();
+      unsubscribeForeground();
+      unsubscribeTokenRefresh();
     };
   }, []);
 
@@ -183,11 +206,13 @@ const AppContent = () => {
           const html = await (await fetch(url)).text();
           const data = parsePlayerBlock(html);
           if (data) {
-            console.log("Имя игрока:", data.userName);
-            console.log("ID гильдии:", data.guildId);
+            console.log("Ім'я гравця:", data.userName);
+            console.log("ID гільдії:", data.guildId);
           }
         }
-      } catch (e) { console.log("Ошибка парсинга:", e); }
+      } catch (e) {
+        console.log("Помилка парсингу:", e);
+      }
 
       if (guildId) {
         fetchUserData();
@@ -196,6 +221,7 @@ const AppContent = () => {
         setChecked(true);
       }
     };
+
     checkAndLogWorldData();
   }, [guildId]);
 
@@ -210,7 +236,7 @@ const AppContent = () => {
         setUserData(false);
       }
     } catch (error) {
-      console.error("Ошибка загрузки данных пользователя:", error);
+      console.error("Помилка завантаження даних користувача:", error);
       setUserData(false);
     } finally {
       setLoading(false);
@@ -219,7 +245,11 @@ const AppContent = () => {
   };
 
   if (!languageLoaded || loading) {
-    return (<View style={styles.container}><ActivityIndicator size="large" color="#0000ff" /></View>);
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
   }
 
   if (!checked) return null;
@@ -233,7 +263,8 @@ const AppContent = () => {
       <Stack.Navigator initialRouteName="RoleSelectionScreen">
         <Stack.Screen name="RoleSelectionScreen" options={{ headerShown: false }}>
           {props => (
-            <RoleSelectionScreen {...props}
+            <RoleSelectionScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
             />
@@ -242,7 +273,8 @@ const AppContent = () => {
 
         <Stack.Screen name="AdminSettingsScreen" options={{ headerShown: false }}>
           {props => (
-            <AdminSettingsScreen {...props}
+            <AdminSettingsScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
               onConfirm={() => setUserData(true)}
@@ -253,7 +285,8 @@ const AppContent = () => {
 
         <Stack.Screen name="UserSettingsScreen" options={{ headerShown: false }}>
           {props => (
-            <UserSettingsScreen {...props}
+            <UserSettingsScreen
+              {...props}
               selectedOption={selectedOption}
               onCountryPress={c => setSelectedOption(c.name)}
               fetch={fetchUserData}
