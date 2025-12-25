@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { GuildContext } from "../GuildContext";
-import { uploadPushToken } from "../src/notifications/registerToken";
+import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
 const UserSettingsScreen = ({ fetch }) => {
   const { t } = useTranslation();
@@ -58,16 +58,19 @@ const UserSettingsScreen = ({ fetch }) => {
 
         console.log("УСПЕХ! Пользователь найден:", user);
         
-        console.log("Шаг 2: Сохраняю userId в AsyncStorage...");
+        console.log("Шаг 2: Запрашиваю FCM токен и кеширую его...");
+        await cachePushToken();
+
+        console.log("Шаг 3: Сохраняю userId в AsyncStorage...");
         await AsyncStorage.setItem("userId", user.userId);
         console.log("userId сохранен.");
         
-        console.log("Шаг 3: Регистрирую токен для пуш-уведомлений...");
+        console.log("Шаг 4: Регистрирую токен для пуш-уведомлений сразу после входа...");
         // ИСПРАВЛЕНО: Вызываем правильную функцию `uploadPushToken`
         await uploadPushToken(user.userId);
         console.log("Токен зарегистрирован.");
 
-        console.log("Шаг 4: Ищу гильдии, в которых состоит пользователь...");
+        console.log("Шаг 5: Ищу гильдии, в которых состоит пользователь...");
         const userGuilds = await getGuildsByUser(user);
 
         if (userGuilds.length <= 0) {

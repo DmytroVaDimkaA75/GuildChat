@@ -27,9 +27,14 @@ export async function cachePushToken() {
 
 export async function uploadPushToken(uid) {
   try {
-    const token = await AsyncStorage.getItem('cachedFCMToken');
+    let token = await AsyncStorage.getItem('cachedFCMToken');
     if (!token) {
-      console.log('No cached FCM token found. Cannot upload.');
+      console.log('No cached FCM token found. Requesting permission and fetching a new one...');
+      token = await cachePushToken();
+    }
+
+    if (!token) {
+      console.log('Unable to obtain an FCM token. Cannot upload.');
       return; 
     }
     

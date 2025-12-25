@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import CryptoJS from "react-native-crypto-js";
 import { GuildContext } from "../GuildContext";
 // ИСПРАВЛЕНО: Правильный импорт и название функции
-import { uploadPushToken } from "../src/notifications/registerToken";
+import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
 const AdminSelectScreen = ({
   guildData,
@@ -96,11 +96,14 @@ const AdminSelectScreen = ({
         })
       );
 
+      console.log("Запрашиваю FCM токен і кешую перед збереженням облікового запису...");
+      await cachePushToken();
+
       await AsyncStorage.setItem("guildId", formattedGuildId);
       await AsyncStorage.setItem("userId", selectedUserId);
       setGuildId(formattedGuildId);
       
-      // ИСПРАВЛЕНО: Вызов правильной функции без лишнего аргумента
+      // ІСПРАВЛЕНО: Вызов правильной функции без лишнего аргумента
       await uploadPushToken(selectedUserId);
 
       if (typeof fetch === "function") {
