@@ -3,14 +3,14 @@ import { AppRegistry } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
 
-// ✅ Background handler має бути ТІЛЬКИ тут (в entry file)
+import { syncGbgWidgetCacheFromFirebase } from './components/GBG/widgetCache';
+
+// ✅ Фоновий handler має бути ТУТ (entry point), щоб працював у headless режимі
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   try {
-    // Тут буде твоя логіка оновлення кешу/віджетів по data-only пушу
-    // (поки просто лог для перевірки)
-    console.log('Message handled in the background!', remoteMessage?.data || {});
+    await syncGbgWidgetCacheFromFirebase(remoteMessage);
   } catch (e) {
-    console.log('Background handler error:', e?.message || String(e));
+    // не ламаємо запуск у фоні
   }
 });
 

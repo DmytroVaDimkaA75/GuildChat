@@ -261,28 +261,33 @@ const GVG = () => {
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
   const { guildId } = useContext(GuildContext);
+
   const [sectorStaff, setSectorStaff] = useState({});
   const [sectorSchedule, setSectorSchedule] = useState([]);
   const [sectorColors, setSectorColors] = useState({});
   const [sectorSnapshot, setSectorSnapshot] = useState(null);
+
   const [shortGuildId, setShortGuildId] = useState(null);
   const [blinkingSector, setBlinkingSector] = useState(null);
   const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
+
   const [currentMap, setCurrentMap] = useState(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isSectorDataLoaded, setIsSectorDataLoaded] = useState(false);
+
   const [opponentList, setOpponentList] = useState([]);
   const [opponentMapById, setOpponentMapById] = useState({});
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
-  const [infoVisible, setInfoVisible] = useState(false);
 
-  // ✅ Debug cache modal
-  const [cacheVisible, setCacheVisible] = useState(false);
+  // ✅ Модалка кнопки "i": вкладки Суперники / Кеш
+  const [infoVisible, setInfoVisible] = useState(false);
+  const [infoTab, setInfoTab] = useState("opponents"); // 'opponents' | 'cache'
   const [cacheDump, setCacheDump] = useState(null);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
+
   const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
@@ -412,6 +417,27 @@ const GVG = () => {
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ");
 
+  const openInfo = async (tab) => {
+    setInfoTab(tab);
+    setInfoVisible(true);
+
+    if (tab === "cache") {
+      try {
+        const dump = await readWidgetCacheDump();
+        setCacheDump(dump);
+      } catch (e) {
+        setCacheDump(null);
+      }
+    }
+  };
+
+  const refreshCacheDump = async () => {
+    try {
+      const dump = await readWidgetCacheDump();
+      setCacheDump(dump);
+    } catch (e) {}
+  };
+
   useLayoutEffect(() => {
     if (!navigation) return;
     navigation.setOptions({
@@ -426,7 +452,8 @@ const GVG = () => {
         fontWeight: "bold",
       },
       headerRight: () => (
-        <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
+        // ✅ Кнопка "i" відкриває МОДАЛКУ (Суперники / Кеш)
+        <TouchableOpacity style={styles.infoButton} onPress={() => openInfo("opponents")}>
           <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
         </TouchableOpacity>
       ),
@@ -651,6 +678,7 @@ const GVG = () => {
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) return;
+
       const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
       const position =
         pageX > width / 2
@@ -682,15 +710,13 @@ const GVG = () => {
   };
 
   // =============================
-  // ✅ ВАЖЛИВО: Автокеш для віджета
+  // ✅ Автокеш для віджета
   // =============================
-
   const lastNext5JsonRef = useRef("");
   const lastMapKeyRef = useRef("");
   const lastMapColorsStaffJsonRef = useRef("");
 
   useEffect(() => {
-    // Пишемо next5 в кеш, коли є sectorSchedule (реальні дані)
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
 
     const next5 = (sectorSchedule || []).slice(0, 5).map((item) => ({
@@ -713,7 +739,6 @@ const GVG = () => {
   }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, sectorSchedule]);
 
   useEffect(() => {
-    // Пишемо map_state + map_xml в кеш, коли є кольори/персонал/мапа
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
 
     const colorsStaffJson = JSON.stringify({ sectorColors, sectorStaff });
@@ -728,20 +753,6 @@ const GVG = () => {
       } catch (e) {}
     })();
   }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
-
-  // =============================
-  // ✅ Debug: показати кеш з кнопки "i"
-  // =============================
-
-  const openCacheDump = async () => {
-    try {
-      const dump = await readWidgetCacheDump();
-      setCacheDump(dump);
-      setCacheVisible(true);
-    } catch (e) {
-      Alert.alert("Помилка", "Не вдалося прочитати кеш.");
-    }
-  };
 
   // ===== Loader =====
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
@@ -764,14 +775,7 @@ const GVG = () => {
       </Animated.View>
 
       <View style={styles.listContainer}>
-        <View style={styles.listTitleRow}>
-          <Text style={styles.listTitle}>Відкриття секторів</Text>
-
-          {/* ✅ DEBUG кнопка кешу */}
-          <TouchableOpacity style={styles.cacheBtn} onPress={openCacheDump}>
-            <Text style={styles.cacheBtnText}>Кеш</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.listTitle}>Відкриття секторів</Text>
 
         {sectorSchedule.length > 0 ? (
           <Animated.ScrollView style={[styles.sectorList, { opacity: listFadeAnim }]} contentContainerStyle={styles.sectorListContent}>
@@ -806,71 +810,97 @@ const GVG = () => {
         )}
       </View>
 
-      {infoVisible && (
-        <View style={styles.infoOverlay}>
-          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
-            <Text style={styles.infoTitle}>Суперники на мапі</Text>
-            <ScrollView style={styles.infoList}>
-              {opponentList.length === 0 ? (
-                <Text style={styles.infoEmpty}>Інформація відсутня</Text>
-              ) : (
-                opponentList.map((op) => (
-                  <View key={op.key ?? op.id} style={styles.infoRow}>
-                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
-                    <Text style={styles.infoName}>{op.name || op.id}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-            <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
-              <Text style={styles.infoCloseText}>Закрити</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      )}
-
+      {/* ✅ Popup "Допомагайте" */}
       {popupVisible && (
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
           <Animated.View style={[styles.popupMenu, popupStyle]} onStartShouldSetResponder={() => true}>
             <TouchableOpacity style={styles.menuItem} disabled={!selectedId || sectorStaff[selectedId]} onPress={handleHelpPress}>
-              <FontAwesomeIcon icon={faFire} size={20} color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"} style={styles.menuIcon} />
+              <FontAwesomeIcon
+                icon={faFire}
+                size={20}
+                color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"}
+                style={styles.menuIcon}
+              />
               <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>Допомагайте</Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
       )}
 
-      {/* ✅ Modal: Widget cache dump */}
-      {cacheVisible && (
-        <View style={styles.cacheOverlay}>
+      {/* ✅ Модалка кнопки "i" */}
+      {infoVisible && (
+        <View style={styles.infoOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.cacheModal}>
-            <Text style={styles.cacheTitle}>Widget cache</Text>
+          <View style={styles.infoModal}>
+            <View style={styles.infoTabs}>
+              <TouchableOpacity
+                style={[styles.infoTabBtn, infoTab === "opponents" && styles.infoTabBtnActive]}
+                onPress={() => setInfoTab("opponents")}
+              >
+                <Text style={[styles.infoTabText, infoTab === "opponents" && styles.infoTabTextActive]}>Суперники</Text>
+              </TouchableOpacity>
 
-            <ScrollView style={styles.cacheScroll}>
-              <Text style={styles.cacheLabel}>updatedAt:</Text>
-              <Text style={styles.cacheValue}>{cacheDump?.updatedAt || "null"}</Text>
+              <TouchableOpacity
+                style={[styles.infoTabBtn, infoTab === "cache" && styles.infoTabBtnActive]}
+                onPress={async () => {
+                  setInfoTab("cache");
+                  await refreshCacheDump();
+                }}
+              >
+                <Text style={[styles.infoTabText, infoTab === "cache" && styles.infoTabTextActive]}>Кеш віджета</Text>
+              </TouchableOpacity>
+            </View>
 
-              <Text style={styles.cacheLabel}>widget_gbg_next5:</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.next5 || null, null, 2)}</Text>
+            {infoTab === "opponents" ? (
+              <>
+                <Text style={styles.infoTitle}>Суперники на мапі</Text>
+                <ScrollView style={styles.infoList}>
+                  {opponentList.length === 0 ? (
+                    <Text style={styles.infoEmpty}>Інформація відсутня</Text>
+                  ) : (
+                    opponentList.map((op) => (
+                      <View key={op.key ?? op.id} style={styles.infoRow}>
+                        <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
+                        <Text style={styles.infoName}>{op.name || op.id}</Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <View style={styles.cacheHeaderRow}>
+                  <Text style={styles.infoTitle}>Кеш віджета</Text>
+                  <TouchableOpacity style={styles.cacheRefreshBtn} onPress={refreshCacheDump}>
+                    <Text style={styles.cacheRefreshText}>Оновити</Text>
+                  </TouchableOpacity>
+                </View>
 
-              <Text style={styles.cacheLabel}>widget_gbg_map_state:</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.mapState || null, null, 2)}</Text>
+                <ScrollView style={styles.cacheScroll}>
+                  <Text style={styles.cacheLabel}>updatedAt:</Text>
+                  <Text style={styles.cacheValue}>{cacheDump?.updatedAt || "null"}</Text>
 
-              <Text style={styles.cacheLabel}>widget_gbg_map_xml:</Text>
-              <Text style={styles.cacheValue}>
-                length: {cacheDump?.mapXml?.length || 0}
-                {"\n\n"}
-                head:
-                {"\n"}
-                {cacheDump?.mapXml?.head || ""}
-              </Text>
-            </ScrollView>
+                  <Text style={styles.cacheLabel}>widget_gbg_next5:</Text>
+                  <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.next5 || null, null, 2)}</Text>
 
-            <TouchableOpacity style={styles.cacheClose} onPress={() => setCacheVisible(false)}>
-              <Text style={styles.cacheCloseText}>Закрити</Text>
+                  <Text style={styles.cacheLabel}>widget_gbg_map_state:</Text>
+                  <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.mapState || null, null, 2)}</Text>
+
+                  <Text style={styles.cacheLabel}>widget_gbg_map_xml:</Text>
+                  <Text style={styles.cacheValue}>
+                    length: {cacheDump?.mapXml?.length || 0}
+                    {"\n\n"}
+                    head:
+                    {"\n"}
+                    {cacheDump?.mapXml?.head || ""}
+                  </Text>
+                </ScrollView>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
+              <Text style={styles.infoCloseText}>Закрити</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -884,15 +914,10 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
   infoButton: { marginRight: 15, padding: 5 },
+
   mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: "hidden" },
-
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
-
-  listTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 15 },
-  listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
-
-  cacheBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cacheBtnText: { color: "#E0E0E0", fontWeight: "700" },
+  listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0", marginLeft: 20, marginBottom: 15 },
 
   sectorList: { width: "100%" },
   sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
@@ -921,25 +946,6 @@ const styles = StyleSheet.create({
   emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
   emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
 
-  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  infoModal: {
-    width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
-    backgroundColor: "rgba(30, 30, 30, 0.9)",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
-  infoList: { maxHeight: HALF_HEIGHT * 0.7 },
-  infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
-  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
-  infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
-  infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
-  infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
   popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
@@ -947,14 +953,51 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
 
-  cacheOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  cacheModal: { width: "90%", maxHeight: HALF_HEIGHT * 1.5, backgroundColor: "rgba(30, 30, 30, 0.92)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cacheTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
-  cacheScroll: { maxHeight: HALF_HEIGHT * 1.2 },
-  cacheLabel: { marginTop: 12, color: "#A0D8FF", fontWeight: "800" },
+  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
+  infoModal: {
+    width: "90%",
+    maxHeight: HALF_HEIGHT * 1.6,
+    backgroundColor: "rgba(30, 30, 30, 0.92)",
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  infoTabs: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  infoTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+  },
+  infoTabBtnActive: {
+    backgroundColor: "rgba(52, 152, 219, 0.25)",
+    borderColor: "rgba(52, 152, 219, 0.55)",
+  },
+  infoTabText: { color: "#cfcfcf", fontWeight: "800" },
+  infoTabTextActive: { color: "#E0E0E0" },
+
+  infoTitle: { fontSize: 18, fontWeight: "900", color: "#FFFFFF", textAlign: "center", marginBottom: 10 },
+  infoList: { maxHeight: HALF_HEIGHT * 0.9 },
+  infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
+  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
+  infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
+
+  cacheHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  cacheRefreshBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  cacheRefreshText: { color: "#E0E0E0", fontWeight: "800" },
+
+  cacheScroll: { maxHeight: HALF_HEIGHT * 1.05 },
+  cacheLabel: { marginTop: 12, color: "#A0D8FF", fontWeight: "900" },
   cacheValue: { marginTop: 6, color: "#E0E0E0", fontFamily: "monospace", fontSize: 12 },
-  cacheClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
-  cacheCloseText: { color: "#fff", fontWeight: "800" },
+
+  infoClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
+  infoCloseText: { color: "#fff", fontWeight: "900" },
 });
 
 export default GVG;

@@ -1,121 +1,144 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules } from "react-native";
-import { buildGbgMapSvgStringFromState, getDefaultMapKey } from "./gbgSvgBuilder";
 
-const KEYS = {
-  next5: "widget_gbg_next5",
-  mapState: "widget_gbg_map_state",
-  mapXml: "widget_gbg_map_xml",
-  updatedAt: "widget_gbg_updated_at",
-};
+const { GbgWidgetBridge } = NativeModules;
 
-const getWidgetBridge = () => {
-  // Якщо у тебе вже є нативний модуль для оновлення віджета — він підхопиться тут.
-  return (
-    NativeModules.GbgWidgetBridge ||
-    NativeModules.WidgetBridge ||
-    NativeModules.GBGWidgetBridge ||
-    null
-  );
-};
+// ✅ Ключі — як у тебе в дебаг-вікні
+const KEY_UPDATED_AT = "widget_gbg_updated_at";
+const KEY_NEXT5 = "widget_gbg_next5";
+const KEY_MAP_STATE = "widget_gbg_map_state";
+const KEY_MAP_XML = "widget_gbg_map_xml";
 
-export const requestWidgetRefresh = async () => {
+// -------------------------
+// helpers
+// -------------------------
+const nowMs = () => String(Date.now());
+
+const safeJsonStringify = (obj) => {
   try {
-    const bridge = getWidgetBridge();
-    if (!bridge) return;
-
-    // Під різні назви методів (підхопимо те, що існує)
-    if (typeof bridge.requestUpdate === "function") await bridge.requestUpdate();
-    else if (typeof bridge.refresh === "function") await bridge.refresh();
-    else if (typeof bridge.update === "function") await bridge.update();
+    return JSON.stringify(obj);
   } catch (e) {
-    // Тихо ігноруємо — це не критично
+    return null;
   }
 };
 
-const setUpdatedAt = async () => {
-  await AsyncStorage.setItem(KEYS.updatedAt, String(Date.now()));
+const safeJsonParse = (raw) => {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
 };
 
-export const writeNext5ToCache = async (list) => {
-  const safe = Array.isArray(list) ? list : [];
-  await AsyncStorage.setItem(KEYS.next5, JSON.stringify(safe));
-  await setUpdatedAt();
-  await requestWidgetRefresh();
+const prefsSet = async (key, value) => {
+  if (!GbgWidgetBridge?.setString) return;
+  try {
+    await GbgWidgetBridge.setString(key, value);
+  } catch (e) {}
 };
 
-export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff }) => {
-  const state = {
-    mapKey: mapKey || getDefaultMapKey(),
-    sectorColors: sectorColors && typeof sectorColors === "object" ? sectorColors : {},
-    sectorStaff: sectorStaff && typeof sectorStaff === "object" ? sectorStaff : {},
+const prefsGet = async (key) => {
+  if (!GbgWidgetBridge?.getString) return null;
+  try {
+    const v = await GbgWidgetBridge.getString(key);
+    return v == null ? null : String(v);
+  } catch (e) {
+    return null;
+  }
+};
+
+const requestWidgetUpdate = async () => {
+  if (!GbgWidgetBridge?.requestWidgetUpdate) return;
+  try {
+    await GbgWidgetBridge.requestWidgetUpdate();
+  } catch (e) {}
+};
+
+// -------------------------
+// public API
+// -------------------------
+export const writeNext5ToCache = async (next5) => {
+  const json = safeJsonStringify(Array.isArray(next5) ? next5 : []);
+  if (!json) return;
+
+  const updatedAt = nowMs();
+
+  // 1) AsyncStorage (для додатка/дебага)
+  await AsyncStorage.setItem(KEY_NEXT5, json);
+  await AsyncStorage.setItem(KEY_UPDATED_AT, updatedAt);
+
+  // 2) SharedPreferences (для віджета)
+  await prefsSet(KEY_NEXT5, json);
+  await prefsSet(KEY_UPDATED_AT, updatedAt);
+
+  // 3) Форс-оновлення віджета
+  await requestWidgetUpdate();
+};
+
+export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff, mapXml }) => {
+  const mapState = {
+    mapKey: mapKey || "volcanic_archipelago",
+    sectorColors: sectorColors || {},
+    sectorStaff: sectorStaff || {},
   };
 
-  const xml = buildGbgMapSvgStringFromState({
-    mapKey: state.mapKey,
-    sectorColors: state.sectorColors,
-    sectorStaff: state.sectorStaff,
-  });
+  const mapStateJson = safeJsonStringify(mapState);
+  if (!mapStateJson) return;
 
-  await AsyncStorage.setItem(KEYS.mapState, JSON.stringify(state));
-  await AsyncStorage.setItem(KEYS.mapXml, xml);
-  await setUpdatedAt();
-  await requestWidgetRefresh();
+  const xml = typeof mapXml === "string" ? mapXml : "";
+  const updatedAt = nowMs();
+
+  // 1) AsyncStorage
+  await AsyncStorage.setItem(KEY_MAP_STATE, mapStateJson);
+  await AsyncStorage.setItem(KEY_MAP_XML, xml);
+  await AsyncStorage.setItem(KEY_UPDATED_AT, updatedAt);
+
+  // 2) SharedPreferences
+  await prefsSet(KEY_MAP_STATE, mapStateJson);
+  await prefsSet(KEY_MAP_XML, xml);
+  await prefsSet(KEY_UPDATED_AT, updatedAt);
+
+  // 3) Форс-оновлення віджета
+  await requestWidgetUpdate();
 };
 
 export const readWidgetCacheDump = async () => {
-  const entries = await AsyncStorage.multiGet([KEYS.updatedAt, KEYS.next5, KEYS.mapState, KEYS.mapXml]);
-  const map = Object.fromEntries(entries);
+  // AsyncStorage
+  const [aUpdatedAt, aNext5, aMapState, aMapXml] = await Promise.all([
+    AsyncStorage.getItem(KEY_UPDATED_AT),
+    AsyncStorage.getItem(KEY_NEXT5),
+    AsyncStorage.getItem(KEY_MAP_STATE),
+    AsyncStorage.getItem(KEY_MAP_XML),
+  ]);
 
-  let next5 = null;
-  let mapState = null;
+  // SharedPrefs
+  const [pUpdatedAt, pNext5, pMapState, pMapXml] = await Promise.all([
+    prefsGet(KEY_UPDATED_AT),
+    prefsGet(KEY_NEXT5),
+    prefsGet(KEY_MAP_STATE),
+    prefsGet(KEY_MAP_XML),
+  ]);
 
-  try { next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null; } catch (e) {}
-  try { mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null; } catch (e) {}
-
-  const xml = map[KEYS.mapXml] || "";
-  const xmlLen = xml.length;
-  const xmlHead = xml ? xml.slice(0, 600) : "";
-
-  return {
-    updatedAt: map[KEYS.updatedAt] || null,
-    next5,
-    mapState,
-    mapXml: { length: xmlLen, head: xmlHead },
+  const asyncStorage = {
+    updatedAt: aUpdatedAt || null,
+    next5: safeJsonParse(aNext5),
+    mapState: safeJsonParse(aMapState),
+    mapXml: aMapXml ? { length: aMapXml.length, head: aMapXml.slice(0, 600) } : null,
   };
-};
 
-/**
- * Обробник data-only FCM для віджетів.
- * Очікуваний формат:
- * remoteMessage.data.kind = 'widget_gbg_next5' | 'widget_gbg_map_full'
- * remoteMessage.data.payload = JSON.stringify(...)
- */
-export const processWidgetRemoteMessage = async (remoteMessage) => {
-  try {
-    const data = remoteMessage?.data || {};
-    const kind = String(data.kind || data.type || "").trim();
+  const sharedPrefs = {
+    updatedAt: pUpdatedAt || null,
+    next5: safeJsonParse(pNext5),
+    mapState: safeJsonParse(pMapState),
+    mapXml: pMapXml ? { length: pMapXml.length, head: pMapXml.slice(0, 600) } : null,
+  };
 
-    if (!kind.startsWith("widget_")) return false;
-
-    const payloadRaw = data.payload || data.json || "";
-    let payload = null;
-    try { payload = payloadRaw ? JSON.parse(payloadRaw) : null; } catch (e) { payload = null; }
-
-    if (kind === "widget_gbg_next5") {
-      // payload: [{sectorId, openTime, army, bonusValue, bonusReadyAt}, ...]
-      await writeNext5ToCache(Array.isArray(payload) ? payload : []);
-      return true;
-    }
-
-    if (kind === "widget_gbg_map_full") {
-      // payload: { mapKey, sectorColors, sectorStaff }
-      await writeFullMapToCache(payload || {});
-      return true;
-    }
-
-    return false;
-  } catch (e) {
-    return false;
-  }
+  // ✅ щоб твій існуючий UI не ламати — вертаємо старі поля теж
+  return {
+    updatedAt: asyncStorage.updatedAt,
+    next5: asyncStorage.next5,
+    mapState: asyncStorage.mapState,
+    mapXml: asyncStorage.mapXml,
+    sharedPrefs, // додатково: для перевірки, що віджет бачить ті ж дані
+  };
 };
