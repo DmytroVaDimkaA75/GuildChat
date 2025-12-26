@@ -15,19 +15,18 @@ class GbgWidgetBridgeModule(private val reactCtx: ReactApplicationContext) : Rea
 
   private val tag = "GbgWidgetBridge"
 
-  // Сюди закладемо кілька варіантів на випадок, якщо package/назва класу відрізняються
   private val top5ProviderCandidates = listOf(
     "com.vadimkaa75.guildchat.widget.GBGTop5SectorsWidgetProvider",
     "com.vadimkaa75.guildchat.GBGTop5SectorsWidgetProvider",
     "com.vadimkaa75.guildchat.widget.GbgTop5SectorsWidgetProvider",
-    "com.vadimkaa75.guildchat.GbgTop5SectorsWidgetProvider",
+    "com.vadimkaa75.guildchat.GbgTop5SectorsWidgetProvider"
   )
 
   private val mapProviderCandidates = listOf(
     "com.vadimkaa75.guildchat.widget.GBGMapWidgetProvider",
     "com.vadimkaa75.guildchat.GBGMapWidgetProvider",
     "com.vadimkaa75.guildchat.widget.GbgMapWidgetProvider",
-    "com.vadimkaa75.guildchat.GbgMapWidgetProvider",
+    "com.vadimkaa75.guildchat.GbgMapWidgetProvider"
   )
 
   @ReactMethod
@@ -66,10 +65,10 @@ class GbgWidgetBridgeModule(private val reactCtx: ReactApplicationContext) : Rea
     return try {
       val appWidgetManager = AppWidgetManager.getInstance(context)
       val component = ComponentName(context, providerClass)
-      val ids = appWidgetManager.getAppWidgetIds(component)
+      val ids = appWidgetManager.getAppWidgetIds(component) // IntArray
 
-      if (ids.isNullOrEmpty()) {
-        // Віджет не доданий на робочий стіл — це НЕ помилка
+      // ✅ ФІКС: для IntArray є isEmpty(), а не isNullOrEmpty()
+      if (ids.isEmpty()) {
         Log.d(tag, "No widget instances for $providerClassName")
         true
       } else {
