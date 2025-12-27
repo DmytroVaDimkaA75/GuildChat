@@ -1,144 +1,94 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NativeModules } from "react-native";
+import { requireNativeModule } from 'expo-modules-core';
+import { VOLCANIC_ARCHIPELAGO_DATA } from './volcanicData';
+import { WATERFALL_ARCHIPELAGO_DATA } from './waterfallData';
 
-const { GbgWidgetBridge } = NativeModules;
+const Native = requireNativeModule('GbgWidgetBridge');
 
-// ✅ Ключі — як у тебе в дебаг-вікні
-const KEY_UPDATED_AT = "widget_gbg_updated_at";
-const KEY_NEXT5 = "widget_gbg_next5";
-const KEY_MAP_STATE = "widget_gbg_map_state";
-const KEY_MAP_XML = "widget_gbg_map_xml";
+const VOLCANIC_SVG_WIDTH = 248.83203;
+const VOLCANIC_SVG_HEIGHT = 248.83203;
+const WATERFALL_SVG_WIDTH = 138.53601;
+const WATERFALL_SVG_HEIGHT = 164.52901;
 
-// -------------------------
-// helpers
-// -------------------------
-const nowMs = () => String(Date.now());
+const DEFAULT_MAP_KEY = 'volcanic_archipelago';
 
-const safeJsonStringify = (obj) => {
-  try {
-    return JSON.stringify(obj);
-  } catch (e) {
-    return null;
-  }
+const MAP_DIMENSIONS = {
+  volcanic_archipelago: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
+  waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT },
 };
 
-const safeJsonParse = (raw) => {
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    return null;
-  }
+const MAP_DATA = {
+  volcanic_archipelago: VOLCANIC_ARCHIPELAGO_DATA,
+  waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA,
 };
 
-const prefsSet = async (key, value) => {
-  if (!GbgWidgetBridge?.setString) return;
-  try {
-    await GbgWidgetBridge.setString(key, value);
-  } catch (e) {}
+const safeStr = (v) => (v === undefined || v === null ? '' : String(v));
+
+const escapeXmlAttr = (value) => {
+  return safeStr(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 };
 
-const prefsGet = async (key) => {
-  if (!GbgWidgetBridge?.getString) return null;
-  try {
-    const v = await GbgWidgetBridge.getString(key);
-    return v == null ? null : String(v);
-  } catch (e) {
-    return null;
-  }
+const buildMapSvgXml = ({ mapKey, sectorColors, sectorStaff }) => {
+  const mk = MAP_DIMENSIONS[mapKey] ? mapKey : DEFAULT_MAP_KEY;
+  const dims = MAP_DIMENSIONS[mk] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
+  const data = MAP_DATA[mk] || {};
+
+  const strokeWidth = mk === 'volcanic_archipelago' ? 0.7 : 1.5;
+
+  let svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" ` +
+    `viewBox="0 0 ${dims.width} ${dims.height}" ` +
+    `width="${dims.width}" height="${dims.height}">`;
+
+  Object.entries(data).forEach(([sectorId, cfg]) => {
+    const fill = cfg?.fill;
+    if (!fill || !fill.d) return;
+
+    const color = sectorColors && sectorColors[sectorId] ? sectorColors[sectorId] : (fill?.style?.fill || '#FFFFFF');
+    const isStaff = !!(sectorStaff && sectorStaff[sectorId]);
+
+    // ✅ якщо сектор "staff" — робимо трішки яскравішу обводку
+    const stroke = isStaff ? '#FFFFFF' : '#121212';
+
+    svg +=
+      `<path ` +
+      `d="${escapeXmlAttr(fill.d)}" ` +
+      `fill="${escapeXmlAttr(color)}" ` +
+      `stroke="${escapeXmlAttr(stroke)}" ` +
+      `stroke-width="${strokeWidth}" ` +
+      `stroke-opacity="1" ` +
+      `fill-opacity="1" />`;
+  });
+
+  svg += `</svg>`;
+  return svg;
 };
 
-const requestWidgetUpdate = async () => {
-  if (!GbgWidgetBridge?.requestWidgetUpdate) return;
-  try {
-    await GbgWidgetBridge.requestWidgetUpdate();
-  } catch (e) {}
-};
+export async function writeNext5ToCache(next5) {
+  const arr = Array.isArray(next5) ? next5 : [];
+  const json = JSON.stringify(arr);
+  // ✅ native сам оновить віджети після запису
+  await Native.setCache(json, null, null);
+}
 
-// -------------------------
-// public API
-// -------------------------
-export const writeNext5ToCache = async (next5) => {
-  const json = safeJsonStringify(Array.isArray(next5) ? next5 : []);
-  if (!json) return;
+export async function writeFullMapToCache({ mapKey, sectorColors, sectorStaff }) {
+  const mk = MAP_DIMENSIONS[mapKey] ? mapKey : DEFAULT_MAP_KEY;
 
-  const updatedAt = nowMs();
-
-  // 1) AsyncStorage (для додатка/дебага)
-  await AsyncStorage.setItem(KEY_NEXT5, json);
-  await AsyncStorage.setItem(KEY_UPDATED_AT, updatedAt);
-
-  // 2) SharedPreferences (для віджета)
-  await prefsSet(KEY_NEXT5, json);
-  await prefsSet(KEY_UPDATED_AT, updatedAt);
-
-  // 3) Форс-оновлення віджета
-  await requestWidgetUpdate();
-};
-
-export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff, mapXml }) => {
   const mapState = {
-    mapKey: mapKey || "volcanic_archipelago",
+    mapKey: mk,
     sectorColors: sectorColors || {},
     sectorStaff: sectorStaff || {},
   };
 
-  const mapStateJson = safeJsonStringify(mapState);
-  if (!mapStateJson) return;
+  const mapXml = buildMapSvgXml(mapState);
 
-  const xml = typeof mapXml === "string" ? mapXml : "";
-  const updatedAt = nowMs();
+  await Native.setCache(null, JSON.stringify(mapState), mapXml);
+}
 
-  // 1) AsyncStorage
-  await AsyncStorage.setItem(KEY_MAP_STATE, mapStateJson);
-  await AsyncStorage.setItem(KEY_MAP_XML, xml);
-  await AsyncStorage.setItem(KEY_UPDATED_AT, updatedAt);
-
-  // 2) SharedPreferences
-  await prefsSet(KEY_MAP_STATE, mapStateJson);
-  await prefsSet(KEY_MAP_XML, xml);
-  await prefsSet(KEY_UPDATED_AT, updatedAt);
-
-  // 3) Форс-оновлення віджета
-  await requestWidgetUpdate();
-};
-
-export const readWidgetCacheDump = async () => {
-  // AsyncStorage
-  const [aUpdatedAt, aNext5, aMapState, aMapXml] = await Promise.all([
-    AsyncStorage.getItem(KEY_UPDATED_AT),
-    AsyncStorage.getItem(KEY_NEXT5),
-    AsyncStorage.getItem(KEY_MAP_STATE),
-    AsyncStorage.getItem(KEY_MAP_XML),
-  ]);
-
-  // SharedPrefs
-  const [pUpdatedAt, pNext5, pMapState, pMapXml] = await Promise.all([
-    prefsGet(KEY_UPDATED_AT),
-    prefsGet(KEY_NEXT5),
-    prefsGet(KEY_MAP_STATE),
-    prefsGet(KEY_MAP_XML),
-  ]);
-
-  const asyncStorage = {
-    updatedAt: aUpdatedAt || null,
-    next5: safeJsonParse(aNext5),
-    mapState: safeJsonParse(aMapState),
-    mapXml: aMapXml ? { length: aMapXml.length, head: aMapXml.slice(0, 600) } : null,
-  };
-
-  const sharedPrefs = {
-    updatedAt: pUpdatedAt || null,
-    next5: safeJsonParse(pNext5),
-    mapState: safeJsonParse(pMapState),
-    mapXml: pMapXml ? { length: pMapXml.length, head: pMapXml.slice(0, 600) } : null,
-  };
-
-  // ✅ щоб твій існуючий UI не ламати — вертаємо старі поля теж
-  return {
-    updatedAt: asyncStorage.updatedAt,
-    next5: asyncStorage.next5,
-    mapState: asyncStorage.mapState,
-    mapXml: asyncStorage.mapXml,
-    sharedPrefs, // додатково: для перевірки, що віджет бачить ті ж дані
-  };
-};
+export async function readWidgetCacheDump() {
+  // ✅ читаємо саме те, що читають віджети
+  return await Native.getCacheDump();
+}

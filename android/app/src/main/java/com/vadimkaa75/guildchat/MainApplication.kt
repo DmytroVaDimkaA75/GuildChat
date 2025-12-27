@@ -37,6 +37,12 @@ class MainApplication : Application(), ReactApplication {
       }
   )
 
+  override fun getPackages(): List<ReactPackage> =
+    PackageList(this).packages.apply {
+      add(com.vadimkaa75.guildchat.widget.GbgWidgetBridgePackage())
+    }
+
+
   override val reactHost: ReactHost
     get() = ReactNativeHostWrapper.createReactHost(applicationContext, reactNativeHost)
 

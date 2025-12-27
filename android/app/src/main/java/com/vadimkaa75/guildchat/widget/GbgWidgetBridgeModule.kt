@@ -1,88 +1,66 @@
 package com.vadimkaa75.guildchat.widget
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.util.Log
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 
-class GbgWidgetBridgeModule(private val reactCtx: ReactApplicationContext) : ReactContextBaseJavaModule(reactCtx) {
+class GbgWidgetBridgeModule(private val reactContext: ReactApplicationContext) :
+  ReactContextBaseJavaModule(reactContext) {
 
   override fun getName(): String = "GbgWidgetBridge"
 
-  private val tag = "GbgWidgetBridge"
-
-  private val top5ProviderCandidates = listOf(
-    "com.vadimkaa75.guildchat.widget.GBGTop5SectorsWidgetProvider",
-    "com.vadimkaa75.guildchat.GBGTop5SectorsWidgetProvider",
-    "com.vadimkaa75.guildchat.widget.GbgTop5SectorsWidgetProvider",
-    "com.vadimkaa75.guildchat.GbgTop5SectorsWidgetProvider"
-  )
-
-  private val mapProviderCandidates = listOf(
-    "com.vadimkaa75.guildchat.widget.GBGMapWidgetProvider",
-    "com.vadimkaa75.guildchat.GBGMapWidgetProvider",
-    "com.vadimkaa75.guildchat.widget.GbgMapWidgetProvider",
-    "com.vadimkaa75.guildchat.GbgMapWidgetProvider"
-  )
-
   @ReactMethod
-  fun refreshWidgets() {
-    refreshTop5Widget()
-    refreshMapWidget()
-  }
+  fun setCache(next5Json: String?, mapStateJson: String?, mapXml: String?, promise: Promise) {
+    try {
+      val ctx = reactContext.applicationContext
 
-  @ReactMethod
-  fun refreshTop5Widget() {
-    val context: Context = reactCtx.applicationContext
-    refreshByCandidates(context, top5ProviderCandidates)
-  }
+      // ✅ Часткове оновлення: що прийшло — те записали
+      if (next5Json != null) WidgetState.setNext5Json(ctx, next5Json)
+      if (mapStateJson != null) WidgetState.setMapStateJson(ctx, mapStateJson)
+      if (mapXml != null) WidgetState.setMapXml(ctx, mapXml)
 
-  @ReactMethod
-  fun refreshMapWidget() {
-    val context: Context = reactCtx.applicationContext
-    refreshByCandidates(context, mapProviderCandidates)
-  }
+      // ✅ Тригеримо перемальовку віджетів
+      WidgetState.broadcastRefresh(ctx)
 
-  private fun refreshByCandidates(context: Context, candidates: List<String>) {
-    for (className in candidates) {
-      val ok = trySendUpdateBroadcast(context, className)
-      if (ok) return
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("GBG_SET_CACHE_FAILED", e)
     }
-    Log.w(tag, "No widget provider class found for candidates: $candidates")
   }
 
-  private fun trySendUpdateBroadcast(context: Context, providerClassName: String): Boolean {
-    val providerClass: Class<*> = try {
-      Class.forName(providerClassName)
-    } catch (e: Throwable) {
-      return false
+  @ReactMethod
+  fun refreshWidgets(promise: Promise) {
+    try {
+      val ctx = reactContext.applicationContext
+      WidgetState.broadcastRefresh(ctx)
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("GBG_REFRESH_FAILED", e)
     }
+  }
 
-    return try {
-      val appWidgetManager = AppWidgetManager.getInstance(context)
-      val component = ComponentName(context, providerClass)
-      val ids = appWidgetManager.getAppWidgetIds(component) // IntArray
+  @ReactMethod
+  fun getCacheDump(promise: Promise) {
+    try {
+      val ctx = reactContext.applicationContext
+      val dump = WidgetState.getCacheDump(ctx)
 
-      // ✅ ФІКС: для IntArray є isEmpty(), а не isNullOrEmpty()
-      if (ids.isEmpty()) {
-        Log.d(tag, "No widget instances for $providerClassName")
-        true
-      } else {
-        val intent = Intent(context, providerClass).apply {
-          action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-          putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
-        }
-        context.sendBroadcast(intent)
-        Log.d(tag, "Widget update broadcast sent to $providerClassName (count=${ids.size})")
-        true
-      }
-    } catch (e: Throwable) {
-      Log.e(tag, "Failed to broadcast update to $providerClassName", e)
-      false
+      val out = Arguments.createMap()
+      out.putDouble("updatedAt", (dump["updatedAt"] as? Long ?: 0L).toDouble())
+      out.putString("next5", dump["next5"] as? String ?: "null")
+      out.putString("mapState", dump["mapState"] as? String ?: "null")
+
+      val mapXmlObj = dump["mapXml"] as? Map<*, *>
+      val mx = Arguments.createMap()
+      mx.putInt("length", (mapXmlObj?.get("length") as? Int) ?: 0)
+      mx.putString("head", (mapXmlObj?.get("head") as? String) ?: "")
+      out.putMap("mapXml", mx)
+
+      promise.resolve(out)
+    } catch (e: Exception) {
+      promise.reject("GBG_DUMP_FAILED", e)
     }
   }
 }

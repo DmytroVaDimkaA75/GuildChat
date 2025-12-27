@@ -23,17 +23,29 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
-    <receiver android:name="com.vadimkaa75.guildchat.widgets.GBGMapWidgetProvider" android:exported="true" android:permission="android.permission.BIND_APPWIDGET" android:label="ПБГ • Мапа">
+    <receiver
+      android:name=".widget.GBGTop5SectorsWidgetProvider"
+      android:exported="true">
       <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="com.vadimkaa75.guildchat.GBG_WIDGET_REFRESH" />
       </intent-filter>
-      <meta-data android:name="android.appwidget.provider" android:resource="@xml/gbg_map_widget_info"/>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/gbg_top5_sectors_widget_info" />
     </receiver>
-    <receiver android:name="com.vadimkaa75.guildchat.widgets.GBGTop5SectorsWidgetProvider" android:exported="true" android:permission="android.permission.BIND_APPWIDGET" android:label="ПБГ • ТОП-5 секторів">
+
+    <receiver
+      android:name=".widget.GBGMapWidgetProvider"
+      android:exported="true">
       <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="com.vadimkaa75.guildchat.GBG_WIDGET_REFRESH" />
       </intent-filter>
-      <meta-data android:name="android.appwidget.provider" android:resource="@xml/gbg_top5_sectors_widget_info"/>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/gbg_map_widget_info" />
     </receiver>
+
   </application>
 </manifest>
