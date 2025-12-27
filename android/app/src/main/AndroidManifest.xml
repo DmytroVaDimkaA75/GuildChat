@@ -25,10 +25,16 @@
     </activity>
     <receiver
       android:name=".widget.GBGTop5SectorsWidgetProvider"
+<<<<<<< HEAD
       android:exported="true">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         <action android:name="com.vadimkaa75.guildchat.GBG_WIDGET_REFRESH" />
+=======
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+>>>>>>> 2061334eafe525d52ec7165b4ec9e665d549c2c8
       </intent-filter>
       <meta-data
         android:name="android.appwidget.provider"
@@ -37,10 +43,16 @@
 
     <receiver
       android:name=".widget.GBGMapWidgetProvider"
+<<<<<<< HEAD
       android:exported="true">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         <action android:name="com.vadimkaa75.guildchat.GBG_WIDGET_REFRESH" />
+=======
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+>>>>>>> 2061334eafe525d52ec7165b4ec9e665d549c2c8
       </intent-filter>
       <meta-data
         android:name="android.appwidget.provider"

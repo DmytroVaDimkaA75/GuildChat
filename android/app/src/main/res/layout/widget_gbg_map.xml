@@ -3,6 +3,7 @@
   android:id="@+id/w_root"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
+<<<<<<< HEAD
   android:background="@drawable/widget_bg_rounded"
   android:padding="14dp"
   android:orientation="vertical">
@@ -24,4 +25,34 @@
     android:textSize="14sp"
     android:text="Немає даних"/>
 
+=======
+  android:orientation="vertical"
+  android:padding="12dp">
+
+  <TextView
+    android:id="@+id/gbg_map_title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="ПБГ · мапа"
+    android:textStyle="bold"
+    android:textSize="16sp"
+    android:textColor="#FFFFFF" />
+
+  <TextView
+    android:id="@+id/gbg_map_status"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp"
+    android:paddingTop="6dp" />
+
+  <TextView
+    android:id="@+id/gbg_map_xml_status"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp"
+    android:paddingTop="4dp" />
+
+>>>>>>> 2061334eafe525d52ec7165b4ec9e665d549c2c8
 </LinearLayout>

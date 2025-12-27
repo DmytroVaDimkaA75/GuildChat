@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+<<<<<<< HEAD
   android:minWidth="240dp"
   android:minHeight="120dp"
+=======
+  android:minWidth="250dp"
+  android:minHeight="110dp"
+>>>>>>> 2061334eafe525d52ec7165b4ec9e665d549c2c8
   android:updatePeriodMillis="0"
   android:initialLayout="@layout/widget_gbg_top5_sectors"
   android:resizeMode="horizontal|vertical"
