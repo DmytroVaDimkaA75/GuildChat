@@ -3,42 +3,51 @@
   android:layout_width="match_parent"
   android:layout_height="match_parent"
   android:orientation="vertical"
-  android:padding="12dp"
-  android:background="@android:color/black">
+  android:padding="12dp">
 
   <TextView
-    android:id="@+id/widgetTitle"
+    android:id="@+id/gbg_title"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="ПБГ • ТОП-5 секторів"
-    android:textSize="16sp"
+    android:text="ПБГ · топ-5 секторів"
     android:textStyle="bold"
-    android:textColor="@android:color/white"
-    android:paddingBottom="8dp"/>
+    android:textSize="16sp"
+    android:textColor="#FFFFFF" />
 
   <TextView
-    android:id="@+id/widgetLine1"
+    android:id="@+id/gbg_line_1"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="1) ..."
+    android:textColor="#FFFFFF"
     android:textSize="14sp"
-    android:textColor="@android:color/white"
-    android:paddingBottom="4dp"/>
+    android:paddingTop="6dp" />
 
   <TextView
-    android:id="@+id/widgetLine2"
+    android:id="@+id/gbg_line_2"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="2) ..."
-    android:textSize="14sp"
-    android:textColor="@android:color/white"
-    android:paddingBottom="4dp"/>
+    android:textColor="#FFFFFF"
+    android:textSize="14sp" />
 
   <TextView
-    android:id="@+id/widgetLine3"
+    android:id="@+id/gbg_line_3"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="3) ..."
-    android:textSize="14sp"
-    android:textColor="@android:color/white"/>
+    android:textColor="#FFFFFF"
+    android:textSize="14sp" />
+
+  <TextView
+    android:id="@+id/gbg_line_4"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp" />
+
+  <TextView
+    android:id="@+id/gbg_line_5"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp" />
+
 </LinearLayout>

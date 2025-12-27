@@ -3,42 +3,31 @@
   android:layout_width="match_parent"
   android:layout_height="match_parent"
   android:orientation="vertical"
-  android:padding="12dp"
-  android:background="@android:color/black">
+  android:padding="12dp">
 
   <TextView
-    android:id="@+id/widgetTitle"
+    android:id="@+id/gbg_map_title"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="ПБГ • Мапа"
-    android:textSize="16sp"
+    android:text="ПБГ · мапа"
     android:textStyle="bold"
-    android:textColor="@android:color/white"
-    android:paddingBottom="8dp"/>
+    android:textSize="16sp"
+    android:textColor="#FFFFFF" />
 
   <TextView
-    android:id="@+id/widgetLine1"
+    android:id="@+id/gbg_map_status"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="Тест: тут буде міні-мапа"
+    android:textColor="#FFFFFF"
     android:textSize="14sp"
-    android:textColor="@android:color/white"
-    android:paddingBottom="4dp"/>
+    android:paddingTop="6dp" />
 
   <TextView
-    android:id="@+id/widgetLine2"
+    android:id="@+id/gbg_map_xml_status"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="та статус секторів"
+    android:textColor="#FFFFFF"
     android:textSize="14sp"
-    android:textColor="@android:color/white"
-    android:paddingBottom="4dp"/>
+    android:paddingTop="4dp" />
 
-  <TextView
-    android:id="@+id/widgetLine3"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:text="..."
-    android:textSize="14sp"
-    android:textColor="@android:color/white"/>
 </LinearLayout>
