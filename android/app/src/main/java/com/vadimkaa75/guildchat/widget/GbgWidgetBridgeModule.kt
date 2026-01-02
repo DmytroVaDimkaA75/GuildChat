@@ -29,8 +29,11 @@ class GbgWidgetBridgeModule(reactContext: ReactApplicationContext) : ReactContex
 
   private fun refreshInternal(promise: Promise) {
     try {
-      val context = reactApplicationContext.currentActivity?.applicationContext ?: reactApplicationContext
-      GbgWidgetUpdater.refreshAll(context)
+      currentActivity?.let { activity ->
+        GbgWidgetUpdater.refreshAll(activity.applicationContext)
+      } ?: run {
+        GbgWidgetUpdater.refreshAll(reactApplicationContext)
+      }
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("GBG_WIDGET_UPDATE_ERROR", e)
