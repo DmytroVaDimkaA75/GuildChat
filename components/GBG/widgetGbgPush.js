@@ -25,12 +25,12 @@ const tryTriggerNativeWidgetRefresh = async () => {
   try {
     if (Platform.OS !== 'android') return;
 
-    // Назву модуля підставиш, якщо він у тебе існує.
-    // Напр.: NativeModules.GbgWidgetUpdater?.refreshAll()
-    const mod = NativeModules?.GbgWidgetUpdater;
-    if (mod && typeof mod.refreshAll === 'function') {
-      await mod.refreshAll();
-    }
+    const bridge = NativeModules?.GbgWidgetBridge || NativeModules?.GbgWidgetUpdater;
+
+    if (bridge?.refreshAll) return await bridge.refreshAll();
+    if (bridge?.requestUpdate) return await bridge.requestUpdate();
+    if (bridge?.refresh) return await bridge.refresh();
+    if (bridge?.update) return await bridge.update();
   } catch (e) {
     // нічого
   }
@@ -51,7 +51,7 @@ export const handleGbgWidgetMessage = async (remoteMessage) => {
   const data = remoteMessage?.data || {};
   const type = String(data.type || '');
 
-  if (type !== 'gbg_widget_update') return;
+  if (type !== 'gbg_widget_update') return false;
 
   const mapKey = data.mapKey ? String(data.mapKey) : null;
 
@@ -94,6 +94,8 @@ export const handleGbgWidgetMessage = async (remoteMessage) => {
 
   // ✅ Спроба оновити нативний віджет (якщо є модуль)
   await tryTriggerNativeWidgetRefresh();
+
+  return true;
 };
 
 /**

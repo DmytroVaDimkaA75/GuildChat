@@ -25,7 +25,8 @@ export const requestWidgetRefresh = async () => {
     if (!bridge) return;
 
     // Під різні назви методів (підхопимо те, що існує)
-    if (typeof bridge.requestUpdate === "function") await bridge.requestUpdate();
+    if (typeof bridge.refreshAll === "function") await bridge.refreshAll();
+    else if (typeof bridge.requestUpdate === "function") await bridge.requestUpdate();
     else if (typeof bridge.refresh === "function") await bridge.refresh();
     else if (typeof bridge.update === "function") await bridge.update();
   } catch (e) {
@@ -44,11 +45,13 @@ export const writeNext5ToCache = async (list) => {
   await requestWidgetRefresh();
 };
 
-export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff }) => {
+export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff, sectorOwners, shortGuildId }) => {
   const state = {
     mapKey: mapKey || getDefaultMapKey(),
     sectorColors: sectorColors && typeof sectorColors === "object" ? sectorColors : {},
     sectorStaff: sectorStaff && typeof sectorStaff === "object" ? sectorStaff : {},
+    sectorOwners: sectorOwners && typeof sectorOwners === "object" ? sectorOwners : {},
+    shortGuildId: shortGuildId ? String(shortGuildId) : null,
   };
 
   const xml = buildGbgMapSvgStringFromState({
@@ -109,7 +112,7 @@ export const processWidgetRemoteMessage = async (remoteMessage) => {
     }
 
     if (kind === "widget_gbg_map_full") {
-      // payload: { mapKey, sectorColors, sectorStaff }
+      // payload: { mapKey, sectorColors, sectorStaff, sectorOwners?, shortGuildId? }
       await writeFullMapToCache(payload || {});
       return true;
     }

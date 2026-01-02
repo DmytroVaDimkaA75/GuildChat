@@ -246,6 +246,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
   const sectorIds = Object.keys(mapData);
   const sectorColors = {};
   const sectorStaff = {};
+  const sectorOwners = {};
 
   sectorIds.forEach((sid) => {
     const entry = sectors[sid];
@@ -274,6 +275,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
 
     sectorColors[sid] = color || '#FFFFFF';
     sectorStaff[sid] = staff;
+    sectorOwners[sid] = entry && entry.owner != null ? String(entry.owner) : entry && entry.ownerId != null ? String(entry.ownerId) : null;
   });
 
   // opponent staff перекриває
@@ -321,6 +323,8 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
     mapData,
     sectorColors,
     sectorStaff,
+    sectorOwners,
+    shortGuildId,
   });
 
   // Можеш залишити для локального дебагу, але не треба у проді:
