@@ -262,6 +262,7 @@ const GVG = () => {
   const [popupStyle, setPopupStyle] = useState({});
   const { guildId } = useContext(GuildContext);
   const [sectorStaff, setSectorStaff] = useState({});
+  const [sectorOwners, setSectorOwners] = useState({});
   const [sectorSchedule, setSectorSchedule] = useState([]);
   const [sectorColors, setSectorColors] = useState({});
   const [sectorSnapshot, setSectorSnapshot] = useState(null);
@@ -478,6 +479,7 @@ const GVG = () => {
     setSectorStaff({});
     setSectorSchedule([]);
     setSectorColors({});
+    setSectorOwners({});
     setSectorSnapshot(null);
     setIsSectorDataLoaded(false);
     setBlinkingSector(null);
@@ -523,6 +525,7 @@ const GVG = () => {
 
     const colors = {};
     const staffFlags = {};
+    const ownersMap = {};
     const availableSectors = new Set(sectorIds);
 
     sectorIds.forEach((gid) => {
@@ -551,6 +554,7 @@ const GVG = () => {
 
       colors[gid] = color || "#FFFFFF";
       staffFlags[gid] = staff;
+      ownersMap[gid] = ownerValue === undefined || ownerValue === null ? null : String(ownerValue);
     });
 
     Object.keys(opponentStaffSectors).forEach((sectorId) => {
@@ -559,6 +563,7 @@ const GVG = () => {
 
     setSectorColors(colors);
     setSectorStaff(staffFlags);
+    setSectorOwners(ownersMap);
   }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
 
   useEffect(() => {
@@ -687,7 +692,7 @@ const GVG = () => {
 
   const lastNext5JsonRef = useRef("");
   const lastMapKeyRef = useRef("");
-  const lastMapColorsStaffJsonRef = useRef("");
+  const lastMapStateJsonRef = useRef("");
 
   useEffect(() => {
     // Пишемо next5 в кеш, коли є sectorSchedule (реальні дані)
@@ -716,18 +721,18 @@ const GVG = () => {
     // Пишемо map_state + map_xml в кеш, коли є кольори/персонал/мапа
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
 
-    const colorsStaffJson = JSON.stringify({ sectorColors, sectorStaff });
-    if (lastMapKeyRef.current === mapKey && lastMapColorsStaffJsonRef.current === colorsStaffJson) return;
+    const mapStateJson = JSON.stringify({ sectorColors, sectorStaff, sectorOwners, shortGuildId });
+    if (lastMapKeyRef.current === mapKey && lastMapStateJsonRef.current === mapStateJson) return;
 
     lastMapKeyRef.current = mapKey;
-    lastMapColorsStaffJsonRef.current = colorsStaffJson;
+    lastMapStateJsonRef.current = mapStateJson;
 
     (async () => {
       try {
-        await writeFullMapToCache({ mapKey, sectorColors, sectorStaff });
+        await writeFullMapToCache({ mapKey, sectorColors, sectorStaff, sectorOwners, shortGuildId });
       } catch (e) {}
     })();
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
+  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff, sectorOwners, shortGuildId]);
 
   // =============================
   // ✅ Debug: показати кеш з кнопки "i"

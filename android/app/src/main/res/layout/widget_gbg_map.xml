@@ -20,7 +20,7 @@
     android:id="@+id/widgetLine1"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="Тест: тут буде міні-мапа"
+    android:text="Власні: 0 • Ворожі: 0"
     android:textSize="14sp"
     android:textColor="@android:color/white"
     android:paddingBottom="4dp"/>
@@ -29,7 +29,7 @@
     android:id="@+id/widgetLine2"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="та статус секторів"
+    android:text="Нейтральні: 0 • Штабів: 0"
     android:textSize="14sp"
     android:textColor="@android:color/white"
     android:paddingBottom="4dp"/>
@@ -38,7 +38,25 @@
     android:id="@+id/widgetLine3"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="..."
+    android:text="Найближчі: ... "
     android:textSize="14sp"
-    android:textColor="@android:color/white"/>
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine4"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Фокус: ---"
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="8dp"/>
+
+  <TextView
+    android:id="@+id/widgetUpdatedAt"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Оновлено: --:--"
+    android:textSize="12sp"
+    android:textColor="#A0D8FF"/>
 </LinearLayout>

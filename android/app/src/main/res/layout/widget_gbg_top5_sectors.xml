@@ -40,5 +40,32 @@
     android:layout_height="wrap_content"
     android:text="3) ..."
     android:textSize="14sp"
-    android:textColor="@android:color/white"/>
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine4"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="4) ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <TextView
+    android:id="@+id/widgetLine5"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="5) ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="6dp"/>
+
+  <TextView
+    android:id="@+id/widgetUpdatedAt"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Оновлено: --:--"
+    android:textSize="12sp"
+    android:textColor="#A0D8FF"/>
 </LinearLayout>
