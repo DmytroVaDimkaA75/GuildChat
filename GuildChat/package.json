@@ -20,6 +20,7 @@
     "@react-native-community/datetimepicker": "8.2.0",
     "@react-native-firebase/app": "^20.4.0",
     "@react-native-firebase/database": "^20.4.0",
+    "@react-native-firebase/messaging": "^20.4.0",
     "@react-native-firebase/firestore": "^20.4.0",
     "@react-native-picker/picker": "2.9.0",
     "@react-navigation/drawer": "^6.7.2",
