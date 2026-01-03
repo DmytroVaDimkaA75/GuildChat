@@ -1,16 +1,27 @@
-import messaging from '@react-native-firebase/messaging';
-import { AppRegistry } from 'react-native';
-import App from './App';
-import { name as appName } from './app.json';
+import messaging from "@react-native-firebase/messaging";
+import { AppRegistry } from "react-native";
+import App from "./App";
+import { name as appName } from "./app.json";
+import { processWidgetRemoteMessage } from "./components/GBG/widgetCache";
+import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRefresh";
 
-// ✅ Background handler має бути ТІЛЬКИ тут (в entry file)
-messaging().setBackgroundMessageHandler(async remoteMessage => {
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
-    // Тут буде твоя логіка оновлення кешу/віджетів по data-only пушу
-    // (поки просто лог для перевірки)
-    console.log('Message handled in the background!', remoteMessage?.data || {});
+    // 1) Якщо прилетів готовий payload "widget_*" — застосовуємо напряму (найкращий шлях)
+    const handled = await processWidgetRemoteMessage(remoteMessage);
+    if (handled) return;
+
+    // 2) Якщо прилетів лише тригер — тягнемо дані з Firebase і формуємо кеш
+    const data = remoteMessage?.data || {};
+    if (String(data.type || "") === "gbg_refresh_widget") {
+      await refreshGbgWidgetCacheFromFirebase({
+        guildId: data.guildId ? String(data.guildId) : null,
+        reason: "fcm-trigger",
+        sectorId: data.sectorId ? String(data.sectorId) : "",
+      });
+    }
   } catch (e) {
-    console.log('Background handler error:', e?.message || String(e));
+    // У проді без логів
   }
 });
 

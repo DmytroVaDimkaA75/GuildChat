@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NativeModules } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import { buildGbgMapSvgStringFromState, getDefaultMapKey } from "./gbgSvgBuilder";
 
 const KEYS = {
@@ -10,7 +10,6 @@ const KEYS = {
 };
 
 const getWidgetBridge = () => {
-  // Якщо у тебе вже є нативний модуль для оновлення віджета — він підхопиться тут.
   return (
     NativeModules.GbgWidgetBridge ||
     NativeModules.WidgetBridge ||
@@ -21,16 +20,15 @@ const getWidgetBridge = () => {
 
 export const requestWidgetRefresh = async () => {
   try {
+    if (Platform.OS !== "android") return;
     const bridge = getWidgetBridge();
     if (!bridge) return;
 
-    // Під різні назви методів (підхопимо те, що існує)
-    if (typeof bridge.requestUpdate === "function") await bridge.requestUpdate();
+    if (typeof bridge.refreshAll === "function") await bridge.refreshAll();
+    else if (typeof bridge.requestUpdate === "function") await bridge.requestUpdate();
     else if (typeof bridge.refresh === "function") await bridge.refresh();
     else if (typeof bridge.update === "function") await bridge.update();
-  } catch (e) {
-    // Тихо ігноруємо — це не критично
-  }
+  } catch (e) {}
 };
 
 const setUpdatedAt = async () => {
@@ -39,8 +37,18 @@ const setUpdatedAt = async () => {
 
 export const writeNext5ToCache = async (list) => {
   const safe = Array.isArray(list) ? list : [];
-  await AsyncStorage.setItem(KEYS.next5, JSON.stringify(safe));
+  const json = JSON.stringify(safe);
+  await AsyncStorage.setItem(KEYS.next5, json);
   await setUpdatedAt();
+
+  // ✅ Передаємо next5 у SharedPreferences (щоб віджет читав без AsyncStorage)
+  try {
+    const bridge = getWidgetBridge();
+    if (bridge && typeof bridge.setNext5 === "function") {
+      await bridge.setNext5(json);
+    }
+  } catch (e) {}
+
   await requestWidgetRefresh();
 };
 
@@ -51,6 +59,7 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
     sectorStaff: sectorStaff && typeof sectorStaff === "object" ? sectorStaff : {},
   };
 
+  // XML залишаємо в AsyncStorage (знадобиться, якщо пізніше рендеритимеш PNG)
   const xml = buildGbgMapSvgStringFromState({
     mapKey: state.mapKey,
     sectorColors: state.sectorColors,
@@ -60,6 +69,22 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
   await AsyncStorage.setItem(KEYS.mapState, JSON.stringify(state));
   await AsyncStorage.setItem(KEYS.mapXml, xml);
   await setUpdatedAt();
+
+  // ✅ Для віджета мапи передаємо легкий meta-json (швидко й стабільно)
+  const meta = {
+    mapKey: state.mapKey,
+    updatedAt: Date.now(),
+    sectorsCount: Object.keys(state.sectorColors || {}).length,
+    staffCount: Object.values(state.sectorStaff || {}).filter(Boolean).length,
+  };
+
+  try {
+    const bridge = getWidgetBridge();
+    if (bridge && typeof bridge.setMapMeta === "function") {
+      await bridge.setMapMeta(JSON.stringify(meta));
+    }
+  } catch (e) {}
+
   await requestWidgetRefresh();
 };
 
@@ -70,8 +95,12 @@ export const readWidgetCacheDump = async () => {
   let next5 = null;
   let mapState = null;
 
-  try { next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null; } catch (e) {}
-  try { mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null; } catch (e) {}
+  try {
+    next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null;
+  } catch (e) {}
+  try {
+    mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null;
+  } catch (e) {}
 
   const xml = map[KEYS.mapXml] || "";
   const xmlLen = xml.length;
@@ -100,10 +129,13 @@ export const processWidgetRemoteMessage = async (remoteMessage) => {
 
     const payloadRaw = data.payload || data.json || "";
     let payload = null;
-    try { payload = payloadRaw ? JSON.parse(payloadRaw) : null; } catch (e) { payload = null; }
+    try {
+      payload = payloadRaw ? JSON.parse(payloadRaw) : null;
+    } catch (e) {
+      payload = null;
+    }
 
     if (kind === "widget_gbg_next5") {
-      // payload: [{sectorId, openTime, army, bonusValue, bonusReadyAt}, ...]
       await writeNext5ToCache(Array.isArray(payload) ? payload : []);
       return true;
     }

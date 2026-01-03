@@ -40,5 +40,25 @@
     android:layout_height="wrap_content"
     android:text="3) ..."
     android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <!-- ✅ ДОДАЛИ -->
+  <TextView
+    android:id="@+id/widgetLine4"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="4) ..."
+    android:textSize="14sp"
+    android:textColor="@android:color/white"
+    android:paddingBottom="4dp"/>
+
+  <!-- ✅ ДОДАЛИ -->
+  <TextView
+    android:id="@+id/widgetLine5"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="5) ..."
+    android:textSize="14sp"
     android:textColor="@android:color/white"/>
 </LinearLayout>
