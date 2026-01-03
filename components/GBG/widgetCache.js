@@ -38,10 +38,11 @@ const setUpdatedAt = async () => {
 export const writeNext5ToCache = async (list) => {
   const safe = Array.isArray(list) ? list : [];
   const json = JSON.stringify(safe);
+
   await AsyncStorage.setItem(KEYS.next5, json);
   await setUpdatedAt();
 
-  // ✅ Передаємо next5 у SharedPreferences (щоб віджет читав без AsyncStorage)
+  // ✅ Пишемо і в SharedPreferences (щоб віджет бачив без AsyncStorage)
   try {
     const bridge = getWidgetBridge();
     if (bridge && typeof bridge.setNext5 === "function") {
@@ -59,7 +60,6 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
     sectorStaff: sectorStaff && typeof sectorStaff === "object" ? sectorStaff : {},
   };
 
-  // XML залишаємо в AsyncStorage (знадобиться, якщо пізніше рендеритимеш PNG)
   const xml = buildGbgMapSvgStringFromState({
     mapKey: state.mapKey,
     sectorColors: state.sectorColors,
@@ -70,7 +70,7 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
   await AsyncStorage.setItem(KEYS.mapXml, xml);
   await setUpdatedAt();
 
-  // ✅ Для віджета мапи передаємо легкий meta-json (швидко й стабільно)
+  // ✅ Легкий meta-json для віджета (стабільно, швидко)
   const meta = {
     mapKey: state.mapKey,
     updatedAt: Date.now(),
@@ -95,12 +95,8 @@ export const readWidgetCacheDump = async () => {
   let next5 = null;
   let mapState = null;
 
-  try {
-    next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null;
-  } catch (e) {}
-  try {
-    mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null;
-  } catch (e) {}
+  try { next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null; } catch (e) {}
+  try { mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null; } catch (e) {}
 
   const xml = map[KEYS.mapXml] || "";
   const xmlLen = xml.length;
@@ -115,8 +111,7 @@ export const readWidgetCacheDump = async () => {
 };
 
 /**
- * Обробник data-only FCM для віджетів.
- * Очікуваний формат:
+ * data-only FCM handler for widgets:
  * remoteMessage.data.kind = 'widget_gbg_next5' | 'widget_gbg_map_full'
  * remoteMessage.data.payload = JSON.stringify(...)
  */
@@ -129,11 +124,7 @@ export const processWidgetRemoteMessage = async (remoteMessage) => {
 
     const payloadRaw = data.payload || data.json || "";
     let payload = null;
-    try {
-      payload = payloadRaw ? JSON.parse(payloadRaw) : null;
-    } catch (e) {
-      payload = null;
-    }
+    try { payload = payloadRaw ? JSON.parse(payloadRaw) : null; } catch (e) { payload = null; }
 
     if (kind === "widget_gbg_next5") {
       await writeNext5ToCache(Array.isArray(payload) ? payload : []);
@@ -141,7 +132,6 @@ export const processWidgetRemoteMessage = async (remoteMessage) => {
     }
 
     if (kind === "widget_gbg_map_full") {
-      // payload: { mapKey, sectorColors, sectorStaff }
       await writeFullMapToCache(payload || {});
       return true;
     }

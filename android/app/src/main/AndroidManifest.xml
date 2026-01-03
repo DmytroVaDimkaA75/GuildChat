@@ -23,17 +23,27 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
-    <receiver android:name="com.vadimkaa75.guildchat.widgets.GBGTop5SectorsWidgetProvider" android:exported="false">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_gbg_top5_info" />
-    </receiver>
-    <receiver android:name="com.vadimkaa75.guildchat.widgets.GBGMapWidgetProvider" android:exported="false">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_gbg_map_info" />
-    </receiver>
+    <receiver
+  android:name="com.vadimkaa75.guildchat.widgets.GBGTop5SectorsWidgetProvider"
+  android:exported="false">
+  <intent-filter>
+    <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+  </intent-filter>
+  <meta-data
+    android:name="android.appwidget.provider"
+    android:resource="@xml/widget_gbg_top5_info" />
+</receiver>
+
+<receiver
+  android:name="com.vadimkaa75.guildchat.widgets.GBGMapWidgetProvider"
+  android:exported="false">
+  <intent-filter>
+    <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+  </intent-filter>
+  <meta-data
+    android:name="android.appwidget.provider"
+    android:resource="@xml/widget_gbg_map_info" />
+</receiver>
+
   </application>
 </manifest>
