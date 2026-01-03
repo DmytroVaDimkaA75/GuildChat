@@ -108,7 +108,7 @@ const MAP_DIMENSIONS = {
 };
 const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipelago: WATERFALL_NEIGHBORS };
 const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
-const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: "Вулканічний архіпелаг", waterfall_archipelago: "Водоспадний архіпелаг" };
+const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: "Вулканічний архіпелаг", waterfall_archipelago: "Архіпелаг Водоспадів" };
 
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
 const BUILDING_BONUS_MAP = {
