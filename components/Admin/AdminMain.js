@@ -261,7 +261,7 @@ const AdminMain = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.userName}>{guildName}</Text>
       </View>
@@ -282,7 +282,7 @@ const AdminMain = () => {
                 ],
               }}
             >
-              <Ionicons name="chevron-down" size={22} color="#0088cc" />
+              <Ionicons name="chevron-down" size={22} color="#3498db" />
             </Animated.View>
           </TouchableOpacity>
         </View>
@@ -357,7 +357,7 @@ const AdminMain = () => {
                         onPress={() => handleCopyPassword(member.password)}
                         style={{ marginLeft: 10 }}
                       >
-                        <FontAwesomeIcon icon={faCopy} size={18} color="#0088cc" />
+                        <FontAwesomeIcon icon={faCopy} size={18} color="#3498db" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -390,12 +390,12 @@ const AdminMain = () => {
                   onPress={() => handleEditBranch(branch.id)}
                   style={{ marginRight: 16 }}
                 >
-                  <FontAwesome name="pencil" size={18} color="#0088cc" />
+                  <FontAwesome name="pencil" size={18} color="#3498db" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDeleteBranch(branch.id)}
                 >
-                  <FontAwesome name="trash" size={18} color="#0088cc" />
+                  <FontAwesome name="trash" size={18} color="#3498db" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -409,29 +409,47 @@ const AdminMain = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#121212',
   },
+  content: { paddingBottom: 24 },
   header: {
-    padding: 16,
-    backgroundColor: '#517da2',
+    padding: 20,
+    backgroundColor: '#1c1c1e',
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   userName: {
     fontSize: 24,
-    color: '#fff',
+    color: '#E0E0E0',
+    fontWeight: '700',
   },
   divider: {
-    height: 8,
-    backgroundColor: '#e0e0e0',
+    height: 1,
+    backgroundColor: '#1f1f1f',
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 1,
   },
   section: {
     paddingHorizontal: 16,
-    marginTop: 12,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#0088cc',
-    marginVertical: 8,
+    fontWeight: '700',
+    color: '#A0D8FF',
+    marginBottom: 6,
   },
   itemRow: {
     flexDirection: 'row',
@@ -451,6 +469,7 @@ const styles = StyleSheet.create({
   mainText: {
     fontSize: 14,
     marginLeft: 8,
+    color: '#E0E0E0',
   },
   subHeaderRow: {
     flexDirection: 'row',
@@ -476,7 +495,8 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#0088cc',
+    borderWidth: 2,
+    borderColor: '#3498db',
     marginRight: 8,
   },
   iconSpacing: {

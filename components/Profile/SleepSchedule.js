@@ -262,7 +262,7 @@ const SleepSchedule = () => {
         <Path d={ringPath} fill="#e0e0e0" fillRule="evenodd" />
 
         {/* Синя дуга (шкали) */}
-        <Path d={d} fill="#007AFF" />
+        <Path d={d} fill="#3498db" />
 
         {/* Маленьке коло (фон розмітки) */}
         <Circle cx={cx} cy={cy} r={smallDiameter / 2} fill="#ffffff" />
@@ -310,7 +310,7 @@ const SleepSchedule = () => {
 
         {/* Група "start" (ручка з AlarmClockIcon) */}
         <G transform={`translate(${greenX1}, ${greenY1})`} {...greenStartPanResponder.panHandlers}>
-          <Circle cx={0} cy={0} r={startRadiusControl} fill="#007AFF" />
+          <Circle cx={0} cy={0} r={startRadiusControl} fill="#3498db" />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - startIconOffset}, ${ICON_POSITION_SHIFT_Y - startIconOffset})`}>
             <AlarmClockIcon
               width={startIconSize}
@@ -322,7 +322,7 @@ const SleepSchedule = () => {
 
         {/* Група "end" (ручка з BedIcon) */}
         <G transform={`translate(${greenX2}, ${greenY2})`} {...greenEndPanResponder.panHandlers}>
-          <Circle cx={0} cy={0} r={endRadiusControl} fill="#007AFF" />
+          <Circle cx={0} cy={0} r={endRadiusControl} fill="#3498db" />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - endIconOffset}, ${ICON_POSITION_SHIFT_Y - endIconOffset})`}>
             <BedIcon
               width={endIconSize}
@@ -359,31 +359,38 @@ const SleepSchedule = () => {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#121212',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
   },
   daysRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 12,
     gap: 3,
   },
   dayButton: {
-    paddingVertical: 4,      // між попередніми 2 і 6
-    paddingHorizontal: 9,    // між попередніми 6 і 10
-    borderRadius: 7,         // між 6 і 8
-    backgroundColor: '#eee',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     marginHorizontal: 1.5,
-    minWidth: 28,            // між 24 і 32
+    minWidth: 32,
     alignItems: 'center',
   },
   dayButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: 'rgba(52,152,219,0.15)',
+    borderColor: '#3498db',
   },
   dayButtonText: {
-    color: '#333',
-    fontWeight: 'bold',
-    fontSize: 15,            // між 13 і 16
+    color: '#E0E0E0',
+    fontWeight: '700',
+    fontSize: 15,
   },
   dayButtonTextActive: {
     color: '#fff',

@@ -146,7 +146,7 @@ const ProfileMain = () => {
   }, []);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Шапка */}
       <View style={styles.header}>
         <Text style={styles.userName}>{userName}</Text>
@@ -161,12 +161,12 @@ const ProfileMain = () => {
               <View style={styles.rowContent}>
                 <Text style={styles.mainText}>{g.worldName}</Text>
                 {g.worldName === activeWorld && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color="#0088cc"
-                    style={styles.iconSpacing}
-                  />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color="#3498db"
+                  style={styles.iconSpacing}
+                />
                 )}
               </View>
               <Text style={styles.mainText}>{convertRole(g.role)}</Text>
@@ -193,11 +193,11 @@ const ProfileMain = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Налаштування додатку</Text>
         <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('AddSchedule')}>
-          <FontAwesomeIcon icon={faClock} size={20} style={{ color: '#BDBDBD', marginRight: 8 }} />
+          <FontAwesomeIcon icon={faClock} size={20} style={{ color: '#A0A6AD', marginRight: 10 }} />
           <Text style={styles.mainText}>Розклад</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('LanguageSelector')}>
-          <FontAwesomeIcon icon={faGlobe} size={20} style={{ color: '#BDBDBD', marginRight: 8 }} />
+          <FontAwesomeIcon icon={faGlobe} size={20} style={{ color: '#A0A6AD', marginRight: 10 }} />
           <Text style={styles.mainText}>Мова</Text>
         </TouchableOpacity>
       </View>
@@ -217,7 +217,7 @@ const ProfileMain = () => {
           <Ionicons
             name={isCultureSettingsOpen ? 'chevron-up' : 'chevron-down'}
             size={20}
-            color="#BDBDBD"
+            color="#A0A6AD"
             style={styles.marginAutoLeft}
           />
         </TouchableOpacity>
@@ -227,7 +227,7 @@ const ProfileMain = () => {
             <View style={styles.subHeaderRow}>
               <Text style={styles.mainText}>Переважний час виробництв</Text>
               <TouchableOpacity onPress={toggleProductionOpen} style={styles.marginAutoLeft}>
-                <Ionicons name="ellipsis-horizontal" size={20} color="#BDBDBD" />
+                <Ionicons name="ellipsis-horizontal" size={20} color="#A0A6AD" />
               </TouchableOpacity>
             </View>
             {isProductionOpen && productionTimeOptions.map(time => (
@@ -237,7 +237,7 @@ const ProfileMain = () => {
                 onPress={() => selectProductionTime(time)}
               >
                 {selectedProductionTime === time ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#0088cc" style={{ marginRight: 8 }} />
+                  <Ionicons name="checkmark-circle" size={20} color="#3498db" style={{ marginRight: 8 }} />
                 ) : (
                   <View style={styles.radioUnselected} />
                 )}
@@ -262,51 +262,58 @@ const ProfileMain = () => {
 export default ProfileMain;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  container: { flex: 1, backgroundColor: '#121212' },
+  content: { paddingBottom: 24 },
   header: {
-    padding: 16,
-    backgroundColor: '#517da2',
+    padding: 20,
+    backgroundColor: '#1c1c1e',
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
-  userName: {
-    fontSize: 24,
-    color: '#fff',
-  },
+  userName: { fontSize: 24, color: '#E0E0E0', fontWeight: '700' },
   divider: {
-    height: 8,
-    backgroundColor: '#e0e0e0',
+    height: 1,
+    backgroundColor: '#1f1f1f',
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 1,
   },
   section: {
+    backgroundColor: '#1e1e1e',
     paddingHorizontal: 16,
-    marginTop: 12,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#0088cc',
-    marginVertical: 8,
+    fontWeight: '700',
+    color: '#A0D8FF',
+    marginBottom: 6,
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   itemRowNoBorder: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  rowContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  mainText: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
+  rowContent: { flexDirection: 'row', alignItems: 'center' },
+  mainText: { fontSize: 14, marginLeft: 8, color: '#E0E0E0' },
   subHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -317,27 +324,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 56,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   subItemRowDisabled: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingLeft: 56,
-    paddingVertical: 8,
-    marginBottom: 16,
+    paddingVertical: 10,
+    marginBottom: 12,
   },
   radioUnselected: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#0088cc',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#3498db',
     marginRight: 8,
   },
-  iconSpacing: {
-    marginRight: 8,
-  },
-  marginAutoLeft: {
-    marginLeft: 'auto',
-  },
+  iconSpacing: { marginRight: 10 },
+  marginAutoLeft: { marginLeft: 'auto' },
 });

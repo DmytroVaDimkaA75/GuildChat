@@ -130,7 +130,7 @@ const ProfileData = () => {
   const daysArray = getDaysArray(tempMonthIndex);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={styles.label}>Ваше ім’я</Text>
         <TextInput
@@ -214,64 +214,71 @@ const ProfileData = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
-    padding: 15,
+    backgroundColor: '#121212',
+    paddingHorizontal: 16,
   },
+  content: { paddingVertical: 16 },
   section: {
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
+    backgroundColor: '#1e1e1e',
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
   label: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#A0D8FF',
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   input: {
     fontSize: 16,
-    color: '#000',
+    color: '#E0E0E0',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    paddingVertical: 5,
+    borderBottomColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 6,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 4,
   },
   dr: {
     fontSize: 16,
-    color: '#000',
+    color: '#E0E0E0',
   },
   link: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#3498db',
+    fontWeight: '700',
   },
-  // Модальне вікно відкривається знизу екрану
   modalBackground: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: '#1e1e1e',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     width: '100%',
     padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 15,
-    color: '#000',
+    color: '#E0E0E0',
     textAlign: 'center',
   },
   wheelWrapper: {
@@ -283,28 +290,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Оверлей із синіми лініями, який займає центральний рядок (наприклад, 40px висоти)
   selectionOverlay: {
     position: 'absolute',
-    top: 70, // (180 / 2) - (40 / 2)
+    top: 70,
     left: 0,
     right: 0,
     height: 40,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#3498db',
   },
   modalButtonSave: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#3498db',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 15,
+    marginTop: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   modalButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '700',
   },
 });
 
