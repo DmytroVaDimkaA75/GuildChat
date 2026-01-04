@@ -176,6 +176,23 @@ const getBuildingsWithBonuses = (entry) => {
   }, []);
 };
 
+const getActiveBuildingsWithBonuses = (entry) => {
+  if (!entry || typeof entry !== "object") return [];
+  const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
+  if (buildings.length === 0) return [];
+  return buildings.reduce((list, building) => {
+    if (!building || typeof building !== "object") return list;
+    const state = String(building.state || "").toLowerCase();
+    if (state !== "active") return list;
+    const name = building.name ? String(building.name) : "";
+    if (!name) return list;
+    const bonus = BUILDING_BONUS_MAP[name];
+    if (!Number.isFinite(bonus)) return list;
+    list.push({ bonus, readyAt: 0 });
+    return list;
+  }, []);
+};
+
 const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   if (!Array.isArray(sectorIds) || sectorIds.length === 0) return [];
   const data = MAP_DATA[mapKey] || {};
@@ -239,6 +256,28 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
     if (running >= 80) break;
   }
   return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
+};
+
+const calculateSectorBonusActiveOnly = ({ mapKey, sectorId, sectors, shortGuildId }) => {
+  if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
+  const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
+  if (neighborIds.length === 0) return { value: 100, readyAt: null };
+  const shortId = String(shortGuildId);
+  const bonuses = [];
+  neighborIds.forEach((neighborId) => {
+    const entry = sectors[neighborId];
+    if (!entry || typeof entry !== "object") return;
+    const ownerId = getSectorOwnerId(entry);
+    if (!ownerId || ownerId !== shortId) return;
+    bonuses.push(...getActiveBuildingsWithBonuses(entry));
+  });
+  if (bonuses.length === 0) return { value: 100, readyAt: null };
+  const totalPossible = bonuses.reduce((sum, item) => sum + item.bonus, 0);
+  if (totalPossible <= 0) return { value: 100, readyAt: null };
+  if (totalPossible <= 80) {
+    return { value: 100 - totalPossible, readyAt: null };
+  }
+  return { value: 20, readyAt: null };
 };
 
 const formatRemaining = (seconds) => {
@@ -697,7 +736,14 @@ const GVG = () => {
       sectorId: item.name,
       openTime: item.openTime || 0,
       army: item.army || "",
-      bonusValue: Number.isFinite(item.bonusValue) ? item.bonusValue : 100,
+      bonusValue: Number.isFinite(item.bonusValue)
+        ? calculateSectorBonusActiveOnly({
+            mapKey,
+            sectorId: item.name,
+            sectors: sectorSnapshot,
+            shortGuildId,
+          }).value
+        : 100,
       bonusReadyAt: item.bonusReadyAt ? Number(item.bonusReadyAt) : 0,
     }));
 
