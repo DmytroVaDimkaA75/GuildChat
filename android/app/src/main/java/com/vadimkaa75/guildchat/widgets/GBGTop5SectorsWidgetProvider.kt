@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 import com.vadimkaa75.guildchat.R
 import org.json.JSONArray
@@ -28,6 +29,15 @@ class GBGTop5SectorsWidgetProvider : AppWidgetProvider() {
       val list = try { JSONArray(json) } catch (_: Throwable) { JSONArray() }
 
       for (i in 0 until 5) {
+        val iconId = when (i) {
+          0 -> R.id.widgetArmyIcon1
+          1 -> R.id.widgetArmyIcon2
+          2 -> R.id.widgetArmyIcon3
+          3 -> R.id.widgetArmyIcon4
+          4 -> R.id.widgetArmyIcon5
+          else -> R.id.widgetArmyIcon1
+        }
+
         val prefixId = when (i) {
           0 -> R.id.widgetPrefix1
           1 -> R.id.widgetPrefix2
@@ -62,40 +72,52 @@ class GBGTop5SectorsWidgetProvider : AppWidgetProvider() {
           val army = obj.optString("army", "")
           val bonusValue = obj.optInt("bonusValue", 100)
 
-          val prefix = "${i + 1}) $sectorId • "
+          // 1) Немає "1)" — тільки сектор + розділювач
+          views.setTextViewText(prefixId, "$sectorId • ")
 
-          val armyShort = when (army.lowercase()) {
-            "attack" -> "atk"
-            "defense" -> "def"
-            else -> ""
+          // 2) Тільки бонус (без atk/def текстом)
+          val bonusPart = if (bonusValue != 100) " • $bonusValue%" else ""
+          views.setTextViewText(suffixId, bonusPart)
+
+          // 3) Кольоровий квадрат замість текстового atk/def
+          val armyKey = army.lowercase()
+          when (armyKey) {
+            "attack", "atk" -> {
+              views.setViewVisibility(iconId, View.VISIBLE)
+              views.setImageViewResource(iconId, R.drawable.widget_army_atk_square)
+            }
+            "defense", "def" -> {
+              views.setViewVisibility(iconId, View.VISIBLE)
+              views.setImageViewResource(iconId, R.drawable.widget_army_def_square)
+            }
+            else -> {
+              // якщо тип армії невідомий — ховаємо квадрат
+              views.setViewVisibility(iconId, View.GONE)
+            }
           }
 
-          val armyPart = if (armyShort.isNotEmpty()) " • $armyShort" else ""
-          val bonusPart = if (bonusValue != 100) " • $bonusValue%" else ""
-          val suffix = "$armyPart$bonusPart"
-
-          views.setTextViewText(prefixId, prefix)
-          views.setTextViewText(suffixId, suffix)
-
+          // 4) Таймер: якщо < 1 години — показуємо "0:MM:SS"
           if (openTimeSec > 0L) {
             val openTimeMs = openTimeSec * 1000L
             val remainingMs = openTimeMs - System.currentTimeMillis()
 
             if (remainingMs > 0L) {
-              // Chronometer у RemoteViews очікує base в шкалі elapsedRealtime()
               val base = SystemClock.elapsedRealtime() + remainingMs
-              views.setChronometer(chronoId, base, null, true)
+              val format = if (remainingMs < 3600_000L) "0:%s" else "%s"
+              views.setChronometer(chronoId, base, format, true)
             } else {
-              // Вже відкрито або час минув
               views.setChronometer(chronoId, SystemClock.elapsedRealtime(), null, false)
-              views.setTextViewText(chronoId, "00:00")
+              views.setTextViewText(chronoId, "0:00:00")
             }
           } else {
             views.setChronometer(chronoId, SystemClock.elapsedRealtime(), null, false)
             views.setTextViewText(chronoId, "--:--")
           }
+
         } else {
-          views.setTextViewText(prefixId, "${i + 1}) ...")
+          // Порожні рядки
+          views.setViewVisibility(iconId, View.GONE)
+          views.setTextViewText(prefixId, "...")
           views.setTextViewText(suffixId, "")
           views.setChronometer(chronoId, SystemClock.elapsedRealtime(), null, false)
           views.setTextViewText(chronoId, "--:--")
