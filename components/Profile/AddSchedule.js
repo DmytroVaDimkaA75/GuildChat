@@ -23,24 +23,21 @@ const AddSchedule = () => {
       <Text style={styles.description}>
         Режим буде автоматично ввімкнено, якщо хоча б одна з умов нижче виконується.
       </Text>
-      
-           
+
       <View style={styles.suggestedConditionsContainer}>
         <Text style={styles.suggestedTitle}>Запропоновані умови</Text>
-        <TouchableOpacity style={styles.suggestedItem}  onPress={handleSleepSchedule}>
+        <TouchableOpacity style={styles.suggestedItem} onPress={handleSleepSchedule}>
           <Text style={styles.suggestedText}>Час активності</Text>
-          <MaterialIcons name="add" size={24} color="green" />
+          <MaterialIcons name="add" size={24} color="#3498db" />
         </TouchableOpacity>
       </View>
-      
-      
-      
+
       <View style={styles.buttonsContainer}>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Скасувати</Text>
+        <TouchableOpacity style={styles.buttonSecondary}>
+          <Text style={styles.buttonTextSecondary}>Скасувати</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Готово</Text>
+        <TouchableOpacity style={styles.buttonPrimary}>
+          <Text style={styles.buttonTextPrimary}>Готово</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -49,36 +46,42 @@ const AddSchedule = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: '#F5F5F5',
     flex: 1,
+    padding: 20,
+    backgroundColor: '#121212',
   },
   header: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#E0E0E0',
+    marginBottom: 8,
   },
   description: {
     fontSize: 14,
-    color: '#777',
-    marginBottom: 10,
+    color: '#9BA1A6',
+    marginBottom: 16,
+    lineHeight: 20,
   },
   scheduleContainer: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#1e1e1e',
     padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   scheduleTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#E0E0E0',
   },
   scheduleTime: {
     fontSize: 14,
-    color: '#555',
+    color: '#C7CDD3',
   },
   scheduleDays: {
     fontSize: 14,
-    color: '#555',
+    color: '#C7CDD3',
     marginBottom: 10,
   },
   suggestedConditionsContainer: {
@@ -86,46 +89,70 @@ const styles = StyleSheet.create({
   },
   suggestedTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#777',
-    marginBottom: 5,
+    fontWeight: '700',
+    color: '#A0D8FF',
+    marginBottom: 8,
   },
   suggestedItem: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#1e1e1e',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   suggestedText: {
     fontSize: 16,
+    color: '#E0E0E0',
   },
   pickerContainer: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#1e1e1e',
     padding: 10,
     borderRadius: 10,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#E0E0E0',
   },
   buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: 24,
   },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 10,
-    borderRadius: 10,
-    width: '45%',
+  buttonPrimary: {
+    backgroundColor: '#3498db',
+    paddingVertical: 12,
+    borderRadius: 12,
+    width: '48%',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  buttonText: {
-    color: '#FFF',
+  buttonSecondary: {
+    backgroundColor: '#1e1e1e',
+    paddingVertical: 12,
+    borderRadius: 12,
+    width: '48%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  buttonTextPrimary: {
+    color: '#fff',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  buttonTextSecondary: {
+    color: '#E0E0E0',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

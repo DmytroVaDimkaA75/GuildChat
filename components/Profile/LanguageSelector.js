@@ -76,16 +76,16 @@ const LanguageSelector = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Мова</Text>
-      <ScrollView>
+      <ScrollView contentContainerStyle={styles.listContent}>
         {supportedLanguages.map((lang) => (
           <TouchableOpacity
             key={lang.code}
-            style={styles.languageOption}
+            style={[styles.languageOption, selectedLanguage === lang.code && styles.languageOptionActive]}
             onPress={() => handleLanguageChange(lang.code)}
           >
             <Text style={styles.languageText}>{lang.label}</Text>
             {selectedLanguage === lang.code && (
-              <Ionicons name="checkmark" size={24} color="#0088CC" />
+              <Ionicons name="checkmark" size={22} color="#3498db" />
             )}
           </TouchableOpacity>
         ))}
@@ -99,26 +99,37 @@ export default LanguageSelector;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#121212",
     paddingHorizontal: 16,
     paddingTop: 16,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 12,
-    color: "#222222",
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 16,
+    color: "#E0E0E0",
+  },
+  listContent: {
+    paddingBottom: 16,
   },
   languageOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  languageOptionActive: {
+    borderColor: "#3498db",
+    backgroundColor: "rgba(52,152,219,0.1)",
   },
   languageText: {
     fontSize: 16,
-    color: "#333333",
+    color: "#E0E0E0",
   },
 });
