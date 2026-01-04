@@ -163,17 +163,20 @@ const getSectorOwnerId = (entry) => {
 
 const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== "object") return [];
-  const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
+  const rawBuildings = entry.buildings;
+  const buildings =
+    Array.isArray(rawBuildings) ? rawBuildings : rawBuildings && typeof rawBuildings === "object" ? Object.values(rawBuildings) : [];
   if (buildings.length === 0) return [];
   const isStaffSector = !!entry.staff;
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== "object") return list;
     const state = String(building.state || "").toLowerCase();
     if (state !== "active" && state !== "building") return list;
-    const name = building.name ? String(building.name) : "";
+    const name = building.name ? String(building.name).toLowerCase() : "";
     if (!name) return list;
     const baseBonus = BUILDING_BONUS_MAP[name];
     const staffOnlyBonus = STAFF_ONLY_BUILDING_BONUS_MAP[name];
+    const bonus = Number.isFinite(baseBonus) ? baseBonus : Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
     const bonus = Number.isFinite(baseBonus) ? baseBonus : isStaffSector && Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
     if (!Number.isFinite(bonus)) return list;
     if (state === "active") {
