@@ -43,6 +43,14 @@ const BUILDING_BONUS_MAP = {
   regular_field_outpost_diamond: 40,
   advanced_field_outpost_diamond: 60,
 };
+const STAFF_ONLY_BUILDING_BONUS_MAP = {
+  guild_fieldcamp_small: 26,
+  guild_fieldcamp: 52,
+  guild_fieldcamp_fortified: 80,
+  basic_guild_fortress_diamond: 26,
+  regular_guild_fortress_diamond: 52,
+  advanced_guild_fortress_diamond: 80,
+};
 
 const parseStaffSectors = (rawValue) => {
   const sectors = new Set();
@@ -88,6 +96,7 @@ const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== 'object') return [];
   const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
   if (buildings.length === 0) return [];
+  const isStaffSector = !!entry.staff;
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== 'object') return list;
@@ -98,7 +107,9 @@ const getBuildingsWithBonuses = (entry) => {
     const name = building.name ? String(building.name) : '';
     if (!name) return list;
 
-    const bonus = BUILDING_BONUS_MAP[name];
+    const baseBonus = BUILDING_BONUS_MAP[name];
+    const staffOnlyBonus = STAFF_ONLY_BUILDING_BONUS_MAP[name];
+    const bonus = Number.isFinite(baseBonus) ? baseBonus : (isStaffSector && Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null);
     if (!Number.isFinite(bonus)) return list;
 
     if (state === 'active') {
