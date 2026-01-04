@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import database from '@react-native-firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faChevronRight, faUserGroup, faCommentDots } from '@fortawesome/free-solid-svg-icons';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -12,6 +13,7 @@ const ChatList = ({ chats, guildId, userId }) => {
   const navigation = useNavigation();
   const [usersMap, setUsersMap] = useState({});
   const listOpacity = useRef(new Animated.Value(0)).current;
+  const { t } = useTranslation();
 
   useEffect(() => {
     Animated.timing(listOpacity, {
@@ -74,7 +76,7 @@ const ChatList = ({ chats, guildId, userId }) => {
           </View>
           <View style={styles.chatInfo}>
             <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
-            <Text style={styles.subText}>Приватний чат</Text>
+            <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
           </View>
           <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
         </AnimatedTouchable>
@@ -102,13 +104,13 @@ const ChatList = ({ chats, guildId, userId }) => {
               <Text style={styles.avatarText}>{initials}</Text>
             </View>
           )}
-          <View style={styles.chatInfo}>
-            <Text style={styles.chatName} numberOfLines={1}>{item.name}</Text>
-            <View style={styles.row}>
-              <FontAwesomeIcon icon={faUserGroup} size={10} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
-              <Text style={styles.subText}>Груповий чат</Text>
+            <View style={styles.chatInfo}>
+              <Text style={styles.chatName} numberOfLines={1}>{item.name}</Text>
+              <View style={styles.row}>
+                <FontAwesomeIcon icon={faUserGroup} size={10} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
+                <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
+              </View>
             </View>
-          </View>
           <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
         </AnimatedTouchable>
       );
@@ -119,7 +121,7 @@ const ChatList = ({ chats, guildId, userId }) => {
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Повідомлення</Text>
+        <Text style={styles.headerTitle}>{t('chatList.title')}</Text>
       </View>
       <Animated.FlatList
         data={chats}
@@ -133,8 +135,8 @@ const ChatList = ({ chats, guildId, userId }) => {
             <View style={styles.emptyIconCircle}>
               <FontAwesomeIcon icon={faCommentDots} size={40} color="rgba(255,255,255,0.5)" />
             </View>
-            <Text style={styles.emptyMessage}>Немає доступних чатів</Text>
-            <Text style={styles.emptySubMessage}>Розпочніть нову розмову вже зараз</Text>
+            <Text style={styles.emptyMessage}>{t('chatList.emptyTitle')}</Text>
+            <Text style={styles.emptySubMessage}>{t('chatList.emptySubtitle')}</Text>
           </View>
         }
       />

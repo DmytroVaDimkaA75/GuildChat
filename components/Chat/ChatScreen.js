@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { useEffect, useState } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import ChatList from './ChatList';
 import MessageInput from './ChatMessageInput';
 import MessageList from './ChatMessageList';
@@ -11,6 +12,7 @@ const ChatScreen = () => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [guildId, setGuildId] = useState(null);
   const [userId, setUserId] = useState(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -45,12 +47,12 @@ const ChatScreen = () => {
 
       setChats(userChats);
     }, (error) => {
-      console.error("Ошибка при прослушивании чатов:", error);
+      console.error(t('chatScreen.listenError'), error);
     });
 
     return () => chatsRef.off('value', onChatsChange);
 
-  }, [guildId, userId]); 
+  }, [guildId, userId, t]); 
 
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
