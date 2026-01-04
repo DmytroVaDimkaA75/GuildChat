@@ -96,6 +96,7 @@ const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== 'object') return [];
   const buildings = Array.isArray(entry.buildings) ? entry.buildings : [];
   if (buildings.length === 0) return [];
+  const isStaffSector = !!entry.staff;
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== 'object') return list;
