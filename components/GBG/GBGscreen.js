@@ -177,7 +177,7 @@ const getBuildingsWithBonuses = (entry) => {
     const baseBonus = BUILDING_BONUS_MAP[name];
     const staffOnlyBonus = STAFF_ONLY_BUILDING_BONUS_MAP[name];
     const bonus = Number.isFinite(baseBonus) ? baseBonus : Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
-    const bonus = Number.isFinite(baseBonus) ? baseBonus : isStaffSector && Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
+    //const bonus = Number.isFinite(baseBonus) ? baseBonus : isStaffSector && Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
     if (!Number.isFinite(bonus)) return list;
     if (state === "active") {
       list.push({ bonus, readyAt: 0 });
