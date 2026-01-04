@@ -282,7 +282,7 @@ const ruTranslation = {
     ok: "OK"
   },
   chatStack: {
-    chatScreenTitle: "Альтанка",
+    chatScreenTitle: "Беседка",
     guildMembersListTitle: "Новое сообщение",
     newGroupChatTitle: "Создать группу",
     chatWindowTitle: "Чат"
@@ -316,7 +316,7 @@ const ruTranslation = {
   },
   drawer: {
     gbLabel: "Великие сооружения",
-    chatLabel: "Альтанка",
+    chatLabel: "Беседка",
     quantLabel: "Квантовые вторжения",
     pbgLabel: "Поле битвы гильдий",
     azbookLabel: "Азбука",
