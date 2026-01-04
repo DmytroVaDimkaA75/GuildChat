@@ -684,6 +684,20 @@ const renderIcon = (IconComponent) => ({ color }) => (
 export default function MainContent() {
 
   useEffect(() => {
+    const resolveNotificationContent = (remoteMessage) => {
+      const notificationTitle = remoteMessage?.notification?.title;
+      const notificationBody = remoteMessage?.notification?.body;
+
+      // Підтримка data-only повідомлень
+      const dataTitle = remoteMessage?.data?.title;
+      const dataBody = remoteMessage?.data?.body;
+
+      const title = notificationTitle || dataTitle || "";
+      const body = notificationBody || dataBody || "";
+
+      return { title, body };
+    };
+
     const setupPushNotifications = async () => {
       const authStatus = await messaging().requestPermission();
       const enabled =
@@ -712,10 +726,13 @@ export default function MainContent() {
 
       const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
         console.log('FCM Message arrived in foreground!', JSON.stringify(remoteMessage));
-        
+
+        const { title, body } = resolveNotificationContent(remoteMessage);
+        if (!title && !body) return;
+
         await notifee.displayNotification({
-          title: remoteMessage.notification.title,
-          body: remoteMessage.notification.body,
+          title,
+          body,
           android: {
             channelId: 'default',
             importance: AndroidImportance.HIGH,

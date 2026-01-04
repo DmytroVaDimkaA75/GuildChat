@@ -23,13 +23,27 @@ const getFCMToken = async () => {
   }
 };
 
+const resolveNotificationContent = (remoteMessage) => {
+  const notificationTitle = remoteMessage?.notification?.title;
+  const notificationBody = remoteMessage?.notification?.body;
+
+  const dataTitle = remoteMessage?.data?.title;
+  const dataBody = remoteMessage?.data?.body;
+
+  const title = notificationTitle || dataTitle || "";
+  const body = notificationBody || dataBody || "";
+
+  return { title, body };
+};
+
 const initializeForegroundListener = () => {
   const unsubscribe = messaging().onMessage(async remoteMessage => {
     console.log('A new FCM message arrived!', JSON.stringify(remoteMessage));
-    Alert.alert(
-      remoteMessage.notification.title,
-      remoteMessage.notification.body
-    );
+
+    const { title, body } = resolveNotificationContent(remoteMessage);
+    if (!title && !body) return;
+
+    Alert.alert(title, body);
   });
 
   return unsubscribe;
