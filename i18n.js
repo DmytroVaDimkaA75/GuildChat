@@ -72,6 +72,46 @@ const ukTranslation = {
   gbgStack: {
     gbgScreenTitle: "Поле битви гільдій"
   },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Вулканічний архіпелаг",
+      waterfall_archipelago: "Архіпелаг Водоспадів"
+    },
+    loaderText: "Завантаження карти...",
+    listTitle: "Відкриття секторів",
+    cacheButton: "Кеш",
+    bonusLabel: "Бонус: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "Найближчим часом секторів немає",
+    info: {
+      title: "Суперники на мапі",
+      empty: "Інформація відсутня",
+      close: "Закрити"
+    },
+    popup: {
+      help: "Допомагайте"
+    },
+    help: {
+      sendingTitle: "Відправка...",
+      sendingMessage: "Надсилаємо сповіщення всім членам гільдії.",
+      successTitle: "Успіх!",
+      successMessage: "Сповіщення надіслано."
+    },
+    errors: {
+      title: "Помилка",
+      guildNotFound: "Не вдалося визначити гільдію.",
+      helpFailed: "Не вдалося надіслати сповіщення. Спробуйте пізніше.",
+      cacheReadFailed: "Не вдалося прочитати кеш."
+    },
+    cache: {
+      title: "Кеш віджета",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Закрити"
+    }
+  },
   profileStack: {
     profileMainTitle: "Налаштування профілю",
     profileDataTitle: "Дані профілю",
@@ -299,6 +339,46 @@ const ruTranslation = {
   },
   gbgStack: {
     gbgScreenTitle: "Поле битвы гильдий"
+  },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Вулканический архипелаг",
+      waterfall_archipelago: "Архипелаг Водопадов"
+    },
+    loaderText: "Загрузка карты...",
+    listTitle: "Открытие секторов",
+    cacheButton: "Кэш",
+    bonusLabel: "Бонус: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "В ближайшее время нет секторов",
+    info: {
+      title: "Соперники на карте",
+      empty: "Информация отсутствует",
+      close: "Закрыть"
+    },
+    popup: {
+      help: "Помогайте"
+    },
+    help: {
+      sendingTitle: "Отправка...",
+      sendingMessage: "Отправляем уведомление всем членам гильдии.",
+      successTitle: "Успех!",
+      successMessage: "Уведомление отправлено."
+    },
+    errors: {
+      title: "Ошибка",
+      guildNotFound: "Не удалось определить гильдию.",
+      helpFailed: "Не удалось отправить уведомление. Попробуйте позже.",
+      cacheReadFailed: "Не удалось прочитать кеш."
+    },
+    cache: {
+      title: "Кэш виджета",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Закрыть"
+    }
   },
   profileStack: {
     profileMainTitle: "Настройка профиля",
@@ -528,6 +608,46 @@ const beTranslation = {
   gbgStack: {
     gbgScreenTitle: "Поле бітвы гільдый"
   },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Вулканічны архіпелаг",
+      waterfall_archipelago: "Архіпелаг Вадаспадаў"
+    },
+    loaderText: "Загрузка мапы...",
+    listTitle: "Адкрыццё сектараў",
+    cacheButton: "Кэш",
+    bonusLabel: "Бонус: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "Бліжэйшым часам сектараў няма",
+    info: {
+      title: "Супернікі на мапе",
+      empty: "Інфармацыя адсутнічае",
+      close: "Закрыць"
+    },
+    popup: {
+      help: "Дапамагайце"
+    },
+    help: {
+      sendingTitle: "Адпраўка...",
+      sendingMessage: "Адпраўляем апавяшчэнне ўсім членам гільдыі.",
+      successTitle: "Поспех!",
+      successMessage: "Апавяшчэнне адпраўлена."
+    },
+    errors: {
+      title: "Памылка",
+      guildNotFound: "Не ўдалося вызначыць гільдыю.",
+      helpFailed: "Не ўдалося адправіць апавяшчэнне. Паспрабуйце пазней.",
+      cacheReadFailed: "Не ўдалося прачытаць кэш."
+    },
+    cache: {
+      title: "Кэш віджэта",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Закрыць"
+    }
+  },
   profileStack: {
     profileMainTitle: "Налада профілю",
     profileDataTitle: "Дадзеныя профілю",
@@ -756,6 +876,46 @@ const deTranslation = {
   gbgStack: {
     gbgScreenTitle: "Gildenkampffeld"
   },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Vulkanischer Archipel",
+      waterfall_archipelago: "Wasserfall-Archipel"
+    },
+    loaderText: "Karte wird geladen...",
+    listTitle: "Sektorenöffnungen",
+    cacheButton: "Cache",
+    bonusLabel: "Bonus: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "Keine Sektoren in Kürze",
+    info: {
+      title: "Gegner auf der Karte",
+      empty: "Keine Informationen verfügbar",
+      close: "Schließen"
+    },
+    popup: {
+      help: "Um Hilfe bitten"
+    },
+    help: {
+      sendingTitle: "Senden...",
+      sendingMessage: "Benachrichtigen alle Gildenmitglieder.",
+      successTitle: "Erfolg!",
+      successMessage: "Benachrichtigung gesendet."
+    },
+    errors: {
+      title: "Fehler",
+      guildNotFound: "Gilde konnte nicht ermittelt werden.",
+      helpFailed: "Benachrichtigung konnte nicht gesendet werden. Bitte später erneut versuchen.",
+      cacheReadFailed: "Cache konnte nicht gelesen werden."
+    },
+    cache: {
+      title: "Widget-Cache",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Schließen"
+    }
+  },
   profileStack: {
     profileMainTitle: "Profileinstellungen",
     profileDataTitle: "Profildaten",
@@ -982,6 +1142,46 @@ const enOverrides = {
   gbgStack: {
     gbgScreenTitle: "Guild battlegrounds"
   },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Volcanic Archipelago",
+      waterfall_archipelago: "Waterfall Archipelago"
+    },
+    loaderText: "Loading map...",
+    listTitle: "Sector openings",
+    cacheButton: "Cache",
+    bonusLabel: "Bonus: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "No sectors expected soon",
+    info: {
+      title: "Opponents on the map",
+      empty: "No information available",
+      close: "Close"
+    },
+    popup: {
+      help: "Request help"
+    },
+    help: {
+      sendingTitle: "Sending...",
+      sendingMessage: "Notifying all guild members.",
+      successTitle: "Success!",
+      successMessage: "Notification sent."
+    },
+    errors: {
+      title: "Error",
+      guildNotFound: "Could not determine guild.",
+      helpFailed: "Could not send notification. Please try again later.",
+      cacheReadFailed: "Could not read cache."
+    },
+    cache: {
+      title: "Widget cache",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Close"
+    }
+  },
   profileStack: {
     profileMainTitle: "Profile settings",
     profileDataTitle: "Profile data",
@@ -1067,6 +1267,46 @@ const plOverrides = {
   },
   gbgStack: {
     gbgScreenTitle: "Pola bitew gildii"
+  },
+  gbgScreen: {
+    mapTitles: {
+      volcanic_archipelago: "Archipel Wulkaniczny",
+      waterfall_archipelago: "Archipel Wodospadów"
+    },
+    loaderText: "Ładowanie mapy...",
+    listTitle: "Otwarcia sektorów",
+    cacheButton: "Pamięć podręczna",
+    bonusLabel: "Premia: {{value}}{{time}}",
+    bonusTimeRemaining: " ({{time}})",
+    emptySchedule: "W najbliższym czasie brak sektorów",
+    info: {
+      title: "Przeciwnicy na mapie",
+      empty: "Brak informacji",
+      close: "Zamknij"
+    },
+    popup: {
+      help: "Wezwij pomoc"
+    },
+    help: {
+      sendingTitle: "Wysyłanie...",
+      sendingMessage: "Powiadamiamy wszystkich członków gildii.",
+      successTitle: "Sukces!",
+      successMessage: "Powiadomienie wysłane."
+    },
+    errors: {
+      title: "Błąd",
+      guildNotFound: "Nie udało się ustalić gildii.",
+      helpFailed: "Nie udało się wysłać powiadomienia. Spróbuj ponownie później.",
+      cacheReadFailed: "Nie udało się odczytać pamięci podręcznej."
+    },
+    cache: {
+      title: "Pamięć podręczna widżetu",
+      updatedAt: "updatedAt:",
+      next5: "widget_gbg_next5:",
+      mapState: "widget_gbg_map_state:",
+      mapXml: "widget_gbg_map_xml:",
+      close: "Zamknij"
+    }
   },
   profileStack: {
     profileMainTitle: "Ustawienia profilu",

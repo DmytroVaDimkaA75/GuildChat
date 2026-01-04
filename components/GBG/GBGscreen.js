@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
+import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
@@ -300,6 +301,7 @@ const GVG = () => {
   const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
+  const { t } = useTranslation();
 
   useEffect(() => {
     let isActive = true;
@@ -419,12 +421,14 @@ const GVG = () => {
   const mapKey = currentMap ?? DEFAULT_MAP_KEY;
   const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const viewBox = `0 0 ${mapDimensions.width} ${mapDimensions.height}`;
-  const mapTitle =
-    MAP_TITLE_TRANSLATIONS[mapKey] ||
-    mapKey
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
+  const mapTitle = t(`gbgScreen.mapTitles.${mapKey}`, {
+    defaultValue:
+      MAP_TITLE_TRANSLATIONS[mapKey] ||
+      mapKey
+        .split("_")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" "),
+  });
 
   useLayoutEffect(() => {
     if (!navigation) return;
@@ -682,16 +686,16 @@ const GVG = () => {
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) {
-        Alert.alert("Помилка", "Не вдалося визначити гільдію.");
+        Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.guildNotFound"));
         return;
       }
       setPopupVisible(false);
-      Alert.alert("Відправка...", "Надсилаємо сповіщення всім членам гільдії.");
+      Alert.alert(t("gbgScreen.help.sendingTitle"), t("gbgScreen.help.sendingMessage"));
       const sendNotification = functions().httpsCallable("sendGbgHelpNotification");
       await sendNotification({ guildId: gid, sectorId: selectedId });
-      Alert.alert("Успіх!", "Сповіщення надіслано.");
+      Alert.alert(t("gbgScreen.help.successTitle"), t("gbgScreen.help.successMessage"));
     } catch (error) {
-      Alert.alert("Помилка", "Не вдалося надіслати сповіщення. Спробуйте пізніше.");
+      Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.helpFailed"));
     }
   };
 
@@ -753,7 +757,7 @@ const GVG = () => {
       setCacheDump(dump);
       setCacheVisible(true);
     } catch (e) {
-      Alert.alert("Помилка", "Не вдалося прочитати кеш.");
+      Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.cacheReadFailed"));
     }
   };
 
@@ -762,7 +766,7 @@ const GVG = () => {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loaderText}>Завантаження карти...</Text>
+        <Text style={styles.loaderText}>{t("gbgScreen.loaderText")}</Text>
       </View>
     );
   }
@@ -779,11 +783,11 @@ const GVG = () => {
 
       <View style={styles.listContainer}>
         <View style={styles.listTitleRow}>
-          <Text style={styles.listTitle}>Відкриття секторів</Text>
+          <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
           {/* ✅ DEBUG кнопка кешу */}
           <TouchableOpacity style={styles.cacheBtn} onPress={openCacheDump}>
-            <Text style={styles.cacheBtnText}>Кеш</Text>
+            <Text style={styles.cacheBtnText}>{t("gbgScreen.cacheButton")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -792,7 +796,8 @@ const GVG = () => {
             {sectorSchedule.map((item) => {
               const timeRemainingSeconds = item.openTime ? Math.max(item.openTime - currentTime, 0) : 0;
               const bonusRemainingSeconds = item.bonusReadyAt ? Math.max(item.bonusReadyAt - currentTime, 0) : 0;
-              const bonusTimeLabel = bonusRemainingSeconds > 0 ? ` (${formatRemaining(bonusRemainingSeconds)})` : "";
+              const bonusTimeLabel =
+                bonusRemainingSeconds > 0 ? t("gbgScreen.bonusTimeRemaining", { time: formatRemaining(bonusRemainingSeconds) }) : "";
 
               return (
                 <TouchableOpacity
@@ -807,7 +812,7 @@ const GVG = () => {
                   </View>
                   <View style={styles.sectorMeta}>
                     <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : "--:--:--"}</Text>
-                    <Text style={styles.sectorBonus}>Бонус: {item.bonusValue}{bonusTimeLabel}</Text>
+                    <Text style={styles.sectorBonus}>{t("gbgScreen.bonusLabel", { value: item.bonusValue, time: bonusTimeLabel })}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -815,7 +820,7 @@ const GVG = () => {
           </Animated.ScrollView>
         ) : (
           <View style={styles.emptyListContainer}>
-            <Text style={styles.emptyListText}>Найближчим часом секторів немає</Text>
+            <Text style={styles.emptyListText}>{t("gbgScreen.emptySchedule")}</Text>
           </View>
         )}
       </View>
@@ -824,10 +829,10 @@ const GVG = () => {
         <View style={styles.infoOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <Animated.View style={styles.infoModal}>
-            <Text style={styles.infoTitle}>Суперники на мапі</Text>
+            <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
             <ScrollView style={styles.infoList}>
               {opponentList.length === 0 ? (
-                <Text style={styles.infoEmpty}>Інформація відсутня</Text>
+                <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
               ) : (
                 opponentList.map((op) => (
                   <View key={op.key ?? op.id} style={styles.infoRow}>
@@ -838,7 +843,7 @@ const GVG = () => {
               )}
             </ScrollView>
             <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
-              <Text style={styles.infoCloseText}>Закрити</Text>
+              <Text style={styles.infoCloseText}>{t("gbgScreen.info.close")}</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -850,7 +855,7 @@ const GVG = () => {
           <Animated.View style={[styles.popupMenu, popupStyle]} onStartShouldSetResponder={() => true}>
             <TouchableOpacity style={styles.menuItem} disabled={!selectedId || sectorStaff[selectedId]} onPress={handleHelpPress}>
               <FontAwesomeIcon icon={faFire} size={20} color={!selectedId || sectorStaff[selectedId] ? "#6a737c" : "#e74c3c"} style={styles.menuIcon} />
-              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>Допомагайте</Text>
+              <Text style={[styles.menuText, (!selectedId || sectorStaff[selectedId]) && styles.disabledText]}>{t("gbgScreen.popup.help")}</Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
@@ -861,19 +866,19 @@ const GVG = () => {
         <View style={styles.cacheOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <View style={styles.cacheModal}>
-            <Text style={styles.cacheTitle}>Widget cache</Text>
+            <Text style={styles.cacheTitle}>{t("gbgScreen.cache.title")}</Text>
 
             <ScrollView style={styles.cacheScroll}>
-              <Text style={styles.cacheLabel}>updatedAt:</Text>
+              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.updatedAt")}</Text>
               <Text style={styles.cacheValue}>{cacheDump?.updatedAt || "null"}</Text>
 
-              <Text style={styles.cacheLabel}>widget_gbg_next5:</Text>
+              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.next5")}</Text>
               <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.next5 || null, null, 2)}</Text>
 
-              <Text style={styles.cacheLabel}>widget_gbg_map_state:</Text>
+              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapState")}</Text>
               <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.mapState || null, null, 2)}</Text>
 
-              <Text style={styles.cacheLabel}>widget_gbg_map_xml:</Text>
+              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapXml")}</Text>
               <Text style={styles.cacheValue}>
                 length: {cacheDump?.mapXml?.length || 0}
                 {"\n\n"}
@@ -884,7 +889,7 @@ const GVG = () => {
             </ScrollView>
 
             <TouchableOpacity style={styles.cacheClose} onPress={() => setCacheVisible(false)}>
-              <Text style={styles.cacheCloseText}>Закрити</Text>
+              <Text style={styles.cacheCloseText}>{t("gbgScreen.cache.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
