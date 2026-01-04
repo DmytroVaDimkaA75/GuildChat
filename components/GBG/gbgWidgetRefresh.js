@@ -99,6 +99,7 @@ const getBuildingsWithBonuses = (entry) => {
     ? rawBuildings
     : (rawBuildings && typeof rawBuildings === 'object' ? Object.values(rawBuildings) : []);
   if (buildings.length === 0) return [];
+  const isStaffSector = !!entry.staff;
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== 'object') return list;
