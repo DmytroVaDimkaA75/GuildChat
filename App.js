@@ -164,7 +164,7 @@ const AppContent = () => {
         const title =
           remoteMessage?.notification?.title ||
           remoteMessage?.data?.title ||
-          'Повідомлення';
+          '';
 
         const body =
           remoteMessage?.notification?.body ||
