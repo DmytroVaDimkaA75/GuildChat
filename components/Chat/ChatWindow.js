@@ -34,7 +34,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
-  FlatList,
+  SectionList,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -96,6 +96,21 @@ const extractUrlsFromHtml = (html = '') => {
   }
   // унікальні
   return Array.from(new Set(out));
+};
+
+const findPrimaryLink = (message) => {
+  if (!message) return null;
+  const matchFromText = (message.text || '').match(/https?:\/\/[^\s]+/);
+  if (matchFromText?.[0]) return matchFromText[0];
+  const htmlLinks = extractUrlsFromHtml(message.html || '');
+  return htmlLinks.length ? htmlLinks[0] : null;
+};
+
+const getLinkIconMeta = (url) => {
+  if (!url) return null;
+  if (isYouTubeURL(url)) return { icon: faYoutube, color: '#FF0000' };
+  if (isDocsURL(url)) return { icon: getDocsIcon(url), color: '#4285F4' };
+  return { icon: faLink, color: '#3498db' };
 };
 
 // --------------------
@@ -520,7 +535,7 @@ const LinkPreviewCard = ({ url }) => {
     <TouchableOpacity style={styles.linkPreviewContainer} onPress={() => Linking.openURL(url)} activeOpacity={0.9}>
       {previewData.image && <Image source={{ uri: previewData.image }} style={styles.linkPreviewImage} resizeMode="cover" />}
       <View style={styles.linkPreviewTextContainer}>
-        <Text style={styles.linkPreviewTitle} numberOfLines={1}>
+        <Text style={styles.linkPreviewTitle} numberOfLines={2}>
           {previewData.title}
         </Text>
         {previewData.description ? (
@@ -652,21 +667,30 @@ const SenderName = ({ senderId, currentUserId, guildId }) => {
 
 const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false }) => {
   const [quoted, setQuoted] = useState(null);
+  const [primaryLink, setPrimaryLink] = useState(null);
 
   useEffect(() => {
     if (replyTo && guildId && chatId) {
       database()
         .ref(`guilds/${guildId}/chats/${chatId}/messages/${replyTo}`)
         .once('value')
-        .then((snap) => snap.exists() && setQuoted(snap.val()));
+        .then((snap) => {
+          if (snap.exists()) {
+            const value = snap.val();
+            setQuoted(value);
+            setPrimaryLink(findPrimaryLink(value));
+          }
+        });
     }
   }, [replyTo, guildId, chatId]);
 
   if (!quoted) return null;
 
   const hasImage = quoted.imageUrls?.length > 0;
-  const hasLink = quoted.text && /https?:\/\//.test(quoted.text);
-  const displayText = quoted.text?.replace(/https?:\/\/[^\s]+/g, '').trim() || (hasImage ? 'Фото' : 'Медіа');
+  const hasLink = !!primaryLink || (quoted.text && /https?:\/\//.test(quoted.text));
+  const cleanedText = quoted.text?.replace(/https?:\/\/[^\s]+/g, '').trim() || '';
+  const displayText = cleanedText || primaryLink || (hasImage ? 'Фото' : 'Медіа');
+  const linkIconMeta = getLinkIconMeta(primaryLink);
 
   return (
     <View style={[styles.quotedContainer, minimal && styles.quotedMinimal]}>
@@ -675,7 +699,14 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false }) => {
         <Text style={styles.quotedTitle}>Відповідь</Text>
         <View style={styles.quotedBody}>
           {hasImage && <Image source={{ uri: quoted.imageUrls[0] }} style={styles.quotedImageThumb} />}
-          {hasLink && <FontAwesomeIcon icon={faPaperclip} size={14} color="#aaa" />}
+          {hasLink && (
+            <FontAwesomeIcon
+              icon={linkIconMeta?.icon || faPaperclip}
+              size={14}
+              color={linkIconMeta?.color || '#aaa'}
+              style={{ marginRight: 4 }}
+            />
+          )}
           <Text style={styles.quotedText} numberOfLines={1}>
             {displayText}
           </Text>
@@ -806,9 +837,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [isLinkModalVisible, setIsLinkModalVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
 
-  const flatListRef = useRef(null);
+  const sectionListRef = useRef(null);
   const processedRead = useRef(new Set());
   const insets = useSafeAreaInsets();
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -977,7 +1009,9 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
-      const visibleMessages = viewableItems.flatMap((item) => item.item?.messages || []);
+      const visibleMessages = viewableItems
+        .map((vi) => vi.item)
+        .filter((m) => m && m.id);
       markAsRead(visibleMessages);
     },
     [markAsRead]
@@ -1102,13 +1136,15 @@ const ChatWindow = ({ route, navigation }) => {
     if (!message?.id || !guildId || !chatId) return;
     try {
       const localeCode = locale?.code || 'uk';
+      const sourceText = (message.text || message.html || '').trim();
+      if (!sourceText) return;
       const translationRef = database().ref(
         `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translate/${localeCode}`
       );
       const snap = await translationRef.once('value');
       let translated = snap.val();
       if (!translated) {
-        translated = await translateMessage(message.text, localeCode);
+        translated = await translateMessage(sourceText, localeCode);
         await translationRef.set(translated);
       }
       setTranslatedText(translated);
@@ -1119,7 +1155,36 @@ const ChatWindow = ({ route, navigation }) => {
   };
 
   const pinnedMessages = messages.flatMap((g) => g.messages).filter((m) => m.pinned?.pinnedFor?.[userId]);
-  const reversedMessages = [...messages].reverse();
+  const sections = React.useMemo(
+    () =>
+      messages.map((group) => ({
+        title: group.date,
+        data: group.messages
+      })),
+    [messages]
+  );
+
+  const highlightAndFocus = useCallback((messageId) => {
+    setHighlightedMessageId(messageId);
+    setTimeout(() => setHighlightedMessageId(null), 2000);
+  }, []);
+
+  const scrollToMessage = useCallback(
+    (messageId) => {
+      if (!sectionListRef.current) return;
+      const sectionIndex = sections.findIndex((s) => s.data.some((m) => m.id === messageId));
+      if (sectionIndex === -1) return;
+      const itemIndex = sections[sectionIndex].data.findIndex((m) => m.id === messageId);
+      sectionListRef.current.scrollToLocation({
+        sectionIndex,
+        itemIndex,
+        viewPosition: 0.5,
+        animated: true
+      });
+      highlightAndFocus(messageId);
+    },
+    [sections, highlightAndFocus]
+  );
 
   const keyboardOffset = insets.bottom;
 
@@ -1139,12 +1204,26 @@ const ChatWindow = ({ route, navigation }) => {
               <View style={styles.pinnedContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {pinnedMessages.map((msg) => (
-                    <TouchableOpacity key={msg.id} style={styles.pinnedItem}>
+                    <TouchableOpacity key={msg.id} style={styles.pinnedItem} onPress={() => scrollToMessage(msg.id)}>
                       <View style={styles.pinnedBar} />
-                      <Text style={styles.pinnedLabel}>Закріплено</Text>
-                      <Text style={styles.pinnedText} numberOfLines={1}>
-                        {msg.text || 'Медіа'}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pinnedLabel}>Закріплено</Text>
+                        <View style={styles.pinnedContentRow}>
+                          {(() => {
+                            const primaryLink = findPrimaryLink(msg);
+                            const linkMeta = getLinkIconMeta(primaryLink);
+                            if (!linkMeta) return null;
+                            return (
+                              <View style={styles.pinnedIconWrapper}>
+                                <FontAwesomeIcon icon={linkMeta.icon} size={14} color={linkMeta.color} />
+                              </View>
+                            );
+                          })()}
+                          <Text style={styles.pinnedText} numberOfLines={2}>
+                            {msg.text?.trim() || findPrimaryLink(msg) || 'Медіа'}
+                          </Text>
+                        </View>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -1152,161 +1231,167 @@ const ChatWindow = ({ route, navigation }) => {
             )}
 
             {/* Список сообщений */}
-            <FlatList
-              ref={flatListRef}
-              data={reversedMessages}
-              inverted={true}
-              keyExtractor={(item) => item.date}
+            <SectionList
+              ref={sectionListRef}
+              sections={sections}
+              inverted
+              keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <View>
-                  <View style={styles.dateBadgeContainer}>
-                    <Text style={styles.dateBadge}>{item.date}</Text>
-                  </View>
-                  {item.messages
-                    .filter((m) => !m.deletedFor?.[userId])
-                    .map((msg, idx) => {
-                      const isMe = msg.senderId === userId;
-                      const showAvatar =
-                        chatType === 'group' && !isMe && (idx === 0 || item.messages[idx - 1].senderId !== msg.senderId);
-
-                      // Додаткові лінки з msg.html (для випадку "anchor text" без URL у msg.text)
-                      const textParts = splitMessageIntoParts(msg.text || '');
-                      const urlsInText = textParts.filter((p) => p.type === 'link').map((p) => p.value);
-                      const urlsInHtml = extractUrlsFromHtml(msg.html || '');
-                      const extraUrls = urlsInHtml.filter((u) => !urlsInText.includes(u));
-
-                      return (
-                        <View key={msg.id} style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
-                          {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
-                          {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
-                          <Menu>
-                            <MenuTrigger
-                              triggerOnLongPress
-                              onPress={() => setSelectedMessageId(msg.id)}
-                              customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
-                            >
-                              <View
-                                style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}
-                              >
-                                {chatType === 'group' && !isMe && <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />}
-
-                                {msg.replyTo && <QuotedMessage replyTo={msg.replyTo} guildId={guildId} chatId={chatId} minimal />}
-
-                                {msg.imageUrls?.length > 0 && (
-                                  <View style={styles.imageGrid}>
-                                    {msg.imageUrls.map((uri, i) => (
-                                      <TouchableOpacity
-                                        key={i}
-                                        onPress={() => {
-                                          setFullSizeImageUri(uri);
-                                          setFullSizeImageModalVisible(true);
-                                        }}
-                                      >
-                                        <Image source={{ uri }} style={styles.gridImage} />
-                                      </TouchableOpacity>
-                                    ))}
-                                  </View>
-                                )}
-
-                                {/* Рендер тексту + URL превʼю як було */}
-                                {textParts.map((part, i) =>
-                                  part.type === 'link' ? <LinkPreviewCard key={i} url={part.value} /> : <FormattedText key={i} text={part.value} />
-                                )}
-
-                                {/* Додаткові превʼю-лінки з html */}
-                                {extraUrls.map((u) => (
-                                  <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
-                                ))}
-
-                                <View style={styles.metaContainer}>
-                                  {msg.pinned?.isPinned && <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />}
-                                  {msg.edited && <Text style={styles.editedLabel}>ред.</Text>}
-                                  <Text style={styles.timestamp}>{format(new Date(msg.timestamp), 'HH:mm')}</Text>
-                                  {isMe && (
-                                    <FontAwesomeIcon
-                                      icon={msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId) ? faCheckDouble : faCheck}
-                                      size={11}
-                                      color="#4cd137"
-                                      style={{ marginLeft: 4 }}
-                                    />
-                                  )}
-                                </View>
-                              </View>
-                            </MenuTrigger>
-
-                            <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
-                              {renderGroupReadReceiptOption(msg)}
-                              {renderReadReceiptOption(msg)}
-                              <MenuOption onSelect={() => handleReply(msg)} style={styles.menuItem}>
-                                <FontAwesomeIcon icon={faReply} color="#ddd" />
-                                <Text style={styles.menuText}>Відповісти</Text>
-                              </MenuOption>
-                              <MenuOption onSelect={() => Clipboard.setString(msg.text || '')} style={styles.menuItem}>
-                                <FontAwesomeIcon icon={faCopy} color="#ddd" />
-                                <Text style={styles.menuText}>Копіювати</Text>
-                              </MenuOption>
-                              {isMe && (
-                                <>
-                                <MenuOption
-                                  onSelect={() => {
-                                    setEditMessage(msg);
-                                    setEditMessageText(msg.text || '');
-                                    // щоб не було "паралельного" введення в WebView
-                                      composerRef.current?.clear?.();
-                                      setNewMessage('');
-                                      setNewMessageHtml('');
-                                    }}
-                                    style={styles.menuItem}
-                                  >
-                                    <FontAwesomeIcon icon={faPen} color="#ddd" />
-                                    <Text style={styles.menuText}>Редагувати</Text>
-                                  </MenuOption>
-                                <MenuOption
-                                  onSelect={() => {
-                                    setMessageToDelete(msg);
-                                    setSelectedMessageId(msg.id);
-                                    setDeleteModalVisible(true);
-                                  }}
-                                  style={styles.menuItem}
-                                >
-                                  <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
-                                    <Text style={[styles.menuText, { color: '#ff5b5b' }]}>Видалити</Text>
-                                  </MenuOption>
-                                </>
-                              )}
-                              <MenuOption
-                                onSelect={() => {
-                                  setSelectedMessageId(msg.id);
-                                  setMessageToPin(msg);
-                                  msg.pinned?.isPinned ? setUnpinModalVisible(true) : setPinModalVisible(true);
-                                }}
-                                style={styles.menuItem}
-                              >
-                                <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
-                                <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
-                              </MenuOption>
-                              <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
-                                <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
-                                <Text style={styles.menuText}>Перекласти</Text>
-                              </MenuOption>
-                            </MenuOptions>
-                            {readUsersPopupFor === msg.id && (
-                              <ReadUsersPopup
-                                message={msg}
-                                guildId={guildId}
-                                isCurrentUser={isMe}
-                                onClose={() => setReadUsersPopupFor(null)}
-                              />
-                            )}
-                          </Menu>
-                        </View>
-                      );
-                    })}
+              onViewableItemsChanged={handleViewableItemsChanged}
+              stickySectionHeadersEnabled={false}
+              contentContainerStyle={{ paddingVertical: 10 }}
+              renderSectionHeader={({ section }) => (
+                <View style={styles.dateBadgeContainer}>
+                  <Text style={styles.dateBadge}>{section.title}</Text>
                 </View>
               )}
-              onViewableItemsChanged={handleViewableItemsChanged}
-              contentContainerStyle={{ paddingVertical: 10 }}
+              renderItem={({ item: msg, index, section }) => {
+                if (msg.deletedFor?.[userId]) return null;
+
+                const isMe = msg.senderId === userId;
+                const prevMsg = section.data[index - 1];
+                const showAvatar =
+                  chatType === 'group' && !isMe && (!prevMsg || prevMsg.senderId !== msg.senderId);
+
+                const textParts = splitMessageIntoParts(msg.text || '');
+                const urlsInText = textParts.filter((p) => p.type === 'link').map((p) => p.value);
+                const urlsInHtml = extractUrlsFromHtml(msg.html || '');
+                const extraUrls = urlsInHtml.filter((u) => !urlsInText.includes(u));
+
+                return (
+                  <View key={msg.id} style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
+                    {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
+                    {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
+                    <Menu>
+                      <MenuTrigger
+                        triggerOnLongPress
+                        onPress={() => setSelectedMessageId(msg.id)}
+                        customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
+                      >
+                        <View
+                          style={[
+                            styles.bubble,
+                            isMe ? styles.bubbleMe : styles.bubbleThem,
+                            highlightedMessageId === msg.id && styles.highlightedBubble
+                          ]}
+                        >
+                          {chatType === 'group' && !isMe && (
+                            <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />
+                          )}
+
+                          {msg.replyTo && (
+                            <TouchableOpacity activeOpacity={0.8} onPress={() => scrollToMessage(msg.replyTo)}>
+                              <QuotedMessage replyTo={msg.replyTo} guildId={guildId} chatId={chatId} minimal />
+                            </TouchableOpacity>
+                          )}
+
+                          {msg.imageUrls?.length > 0 && (
+                            <View style={styles.imageGrid}>
+                              {msg.imageUrls.map((uri, i) => (
+                                <TouchableOpacity
+                                  key={i}
+                                  onPress={() => {
+                                    setFullSizeImageUri(uri);
+                                    setFullSizeImageModalVisible(true);
+                                  }}
+                                >
+                                  <Image source={{ uri }} style={styles.gridImage} />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          )}
+
+                          {textParts.map((part, i) =>
+                            part.type === 'link' ? <LinkPreviewCard key={i} url={part.value} /> : <FormattedText key={i} text={part.value} />
+                          )}
+
+                          {extraUrls.map((u) => (
+                            <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
+                          ))}
+
+                          <View style={styles.metaContainer}>
+                            {msg.pinned?.isPinned && <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />}
+                            {msg.edited && <Text style={styles.editedLabel}>ред.</Text>}
+                            <Text style={styles.timestamp}>{format(new Date(msg.timestamp), 'HH:mm')}</Text>
+                            {isMe && (
+                              <FontAwesomeIcon
+                                icon={msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId) ? faCheckDouble : faCheck}
+                                size={11}
+                                color="#4cd137"
+                                style={{ marginLeft: 4 }}
+                              />
+                            )}
+                          </View>
+                        </View>
+                      </MenuTrigger>
+
+                      <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
+                        {renderGroupReadReceiptOption(msg)}
+                        {renderReadReceiptOption(msg)}
+                        <MenuOption onSelect={() => handleReply(msg)} style={styles.menuItem}>
+                          <FontAwesomeIcon icon={faReply} color="#ddd" />
+                          <Text style={styles.menuText}>Відповісти</Text>
+                        </MenuOption>
+                        <MenuOption onSelect={() => Clipboard.setString(msg.text || '')} style={styles.menuItem}>
+                          <FontAwesomeIcon icon={faCopy} color="#ddd" />
+                          <Text style={styles.menuText}>Копіювати</Text>
+                        </MenuOption>
+                        {isMe && (
+                          <>
+                            <MenuOption
+                              onSelect={() => {
+                                setEditMessage(msg);
+                                setEditMessageText(msg.text || '');
+                                composerRef.current?.clear?.();
+                                setNewMessage('');
+                                setNewMessageHtml('');
+                              }}
+                              style={styles.menuItem}
+                            >
+                              <FontAwesomeIcon icon={faPen} color="#ddd" />
+                              <Text style={styles.menuText}>Редагувати</Text>
+                            </MenuOption>
+                            <MenuOption
+                              onSelect={() => {
+                                setMessageToDelete(msg);
+                                setSelectedMessageId(msg.id);
+                                setDeleteModalVisible(true);
+                              }}
+                              style={styles.menuItem}
+                            >
+                              <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
+                              <Text style={[styles.menuText, { color: '#ff5b5b' }]}>Видалити</Text>
+                            </MenuOption>
+                          </>
+                        )}
+                        <MenuOption
+                          onSelect={() => {
+                            setSelectedMessageId(msg.id);
+                            setMessageToPin(msg);
+                            msg.pinned?.isPinned ? setUnpinModalVisible(true) : setPinModalVisible(true);
+                          }}
+                          style={styles.menuItem}
+                        >
+                          <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
+                          <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
+                        </MenuOption>
+                        <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
+                          <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
+                          <Text style={styles.menuText}>Перекласти</Text>
+                        </MenuOption>
+                      </MenuOptions>
+                      {readUsersPopupFor === msg.id && (
+                        <ReadUsersPopup
+                          message={msg}
+                          guildId={guildId}
+                          isCurrentUser={isMe}
+                          onClose={() => setReadUsersPopupFor(null)}
+                        />
+                      )}
+                    </Menu>
+                  </View>
+                );
+              }}
             />
 
             {/* Панель ответа */}
@@ -1598,10 +1683,20 @@ const ChatWindow = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   pinnedContainer: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 10, borderBottomWidth: 1, borderColor: '#333' },
-  pinnedItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
-  pinnedBar: { width: 4, height: 30, backgroundColor: '#121212', borderRadius: 2, marginRight: 10 },
-  pinnedLabel: { color: '#121212', fontSize: 11, fontWeight: 'bold' },
-  pinnedText: { color: '#ccc', fontSize: 13 },
+  pinnedItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20, maxWidth: screenWidth * 0.82 },
+  pinnedContentRow: { flexDirection: 'row', alignItems: 'center' },
+  pinnedBar: { width: 4, height: 40, backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
+  pinnedLabel: { color: '#fff', fontSize: 11, fontWeight: 'bold', marginBottom: 2 },
+  pinnedText: { color: '#ccc', fontSize: 13, flex: 1 },
+  pinnedIconWrapper: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(52,152,219,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6
+  },
   dateBadgeContainer: { alignItems: 'center', marginVertical: 15 },
   dateBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, color: '#aaa', fontSize: 12 },
   messageRow: { flexDirection: 'row', paddingHorizontal: 10, marginBottom: 4 },
@@ -1610,6 +1705,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: screenWidth * 0.75, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
   bubbleMe: { backgroundColor: 'rgba(52, 152, 219, 0.25)', borderBottomRightRadius: 4, borderWidth: 1, borderColor: 'rgba(52, 152, 219, 0.3)' },
   bubbleThem: { backgroundColor: 'rgba(255,255,255,0.08)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  highlightedBubble: { borderColor: '#ffd166', borderWidth: 1.2, shadowColor: '#ffd166', shadowOpacity: 0.4, shadowRadius: 6 },
   senderName: { color: '#3498db', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
   messageText: { color: '#fff', fontSize: 16, lineHeight: 22 },
   metaContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
@@ -1617,8 +1713,15 @@ const styles = StyleSheet.create({
   editedLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontStyle: 'italic', marginRight: 4 },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   gridImage: { width: 80, height: 80, borderRadius: 8, marginRight: 4, marginBottom: 4 },
-  linkPreviewContainer: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, marginTop: 6, overflow: 'hidden' },
-  linkPreviewImage: { width: '100%', height: 120 },
+  linkPreviewContainer: {
+    backgroundColor: '#1c1f24',
+    borderRadius: 10,
+    marginTop: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)'
+  },
+  linkPreviewImage: { width: '100%', height: 140, backgroundColor: '#0f1115' },
   linkPreviewTextContainer: { padding: 10 },
   linkPreviewTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   linkPreviewDescription: { color: '#aaa', fontSize: 12, marginTop: 2 },
