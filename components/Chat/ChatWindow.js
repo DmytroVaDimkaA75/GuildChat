@@ -1,5 +1,6 @@
-// ChatWindow.js (повністю перероблений під Rich-композер у WebView, без маркувань у полі вводу)
+// ChatWindow.js (оновлено: pinned як у старій версії + кращий вигляд reply у повідомленні)
 // ВАЖЛИВО: для роботи потрібно встановити: expo install react-native-webview
+// (і якщо у тебе Expo) expo install expo-clipboard
 
 import { faYoutube } from '@fortawesome/free-brands-svg-icons';
 import {
@@ -31,6 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import { de, es, fr, ru, uk } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -47,7 +49,6 @@ import {
   TouchableOpacity,
   View,
   StatusBar,
-  Clipboard,
   Share,
   TouchableWithoutFeedback
 } from 'react-native';
@@ -94,7 +95,6 @@ const extractUrlsFromHtml = (html = '') => {
   while ((match = regex.exec(html)) !== null) {
     out.push(match[1]);
   }
-  // унікальні
   return Array.from(new Set(out));
 };
 
@@ -104,7 +104,7 @@ const extractUrlsFromHtml = (html = '') => {
 // - html: innerHTML
 // - text: innerText
 // - marked: сумісний рядок з маркерами (** _ __ ~~ ||) для вашого FormattedText
-// - selectionActive: чи є виділення всередині редактора (для показу панелі форматування як раніше)
+// - selectionActive: чи є виділення всередині редактора
 // --------------------
 const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   { placeholder = 'Повідомлення...', minHeight = 40, maxHeight = 100, onChange },
@@ -133,7 +133,6 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   );
 
   const editorHTML = React.useMemo(() => {
-    // NOTE: placeholder реалізовано через :empty:before
     const safePlaceholder = String(placeholder).replace(/"/g, '&quot;');
 
     return `
@@ -185,34 +184,27 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 
     function nodeToMarked(node) {
       if (!node) return '';
-      // Text node
       if (node.nodeType === 3) return node.nodeValue || '';
-      // Element node
       if (node.nodeType !== 1) return '';
 
       const tag = (node.tagName || '').toLowerCase();
-
       if (tag === 'br') return '\\n';
 
       let inner = '';
       const children = node.childNodes ? Array.from(node.childNodes) : [];
       for (const ch of children) inner += nodeToMarked(ch);
 
-      // block-ish
       if (tag === 'div' || tag === 'p') return inner + '\\n';
 
-      // styles
       if (tag === 'b' || tag === 'strong') return '**' + inner + '**';
       if (tag === 'i' || tag === 'em') return '_' + inner + '_';
       if (tag === 'u') return '__' + inner + '__';
       if (tag === 's' || tag === 'del' || tag === 'strike') return '~~' + inner + '~~';
 
-      // spoiler
       if (tag === 'span' && node.classList && node.classList.contains('spoiler')) {
         return '||' + inner + '||';
       }
 
-      // link: у "marked" повертаємо тільки видимий текст (href беремо з html при рендері превʼю)
       if (tag === 'a') {
         return inner;
       }
@@ -265,7 +257,6 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) {
-        // якщо нема селекшна — вставимо сам url як текст (і так спрацює ваш urlRegex)
         editor.appendChild(document.createTextNode(u));
         notifyChange();
         return;
@@ -273,7 +264,6 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 
       const range = sel.getRangeAt(0);
 
-      // Якщо селекшн пустий — вставляємо URL як лінк (видимий текст = URL)
       if (range.collapsed) {
         const a = document.createElement('a');
         a.href = u;
@@ -287,7 +277,6 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         return;
       }
 
-      // Якщо є виділення — робимо лінк на виділений текст (видимий текст лишається як є)
       try {
         document.execCommand('createLink', false, u);
       } catch(e) {}
@@ -309,12 +298,9 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
     editor.addEventListener('paste', () => setTimeout(notifyChange, 0));
 
     document.addEventListener('selectionchange', () => {
-      // щоб не спамити надто часто, просто викликаємо notifyChange
-      // (він і так легкий)
       notifyChange();
     });
 
-    // spoiler reveal in editor
     editor.addEventListener('click', (e) => {
       const sp = e.target && e.target.closest ? e.target.closest('.spoiler') : null;
       if (sp) {
@@ -389,7 +375,6 @@ const parseFormattedText = (text) => {
   const parts = [];
   let lastIndex = 0;
 
-  // FIX: strikethrough має бути ~~text~~ (бо кнопка вставляє "~~")
   const regex = /(\*\*(.*?)\*\*|__(.*?)__|_([^_]+)_|~~(.*?)~~|\|\|(.*?)\|\|)/g;
 
   let match;
@@ -398,7 +383,7 @@ const parseFormattedText = (text) => {
     if (match.index > lastIndex) {
       parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
     }
-        const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
+    const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
     let type = 'normal';
 
     if (match[2]) type = 'bold';
@@ -410,11 +395,11 @@ const parseFormattedText = (text) => {
     parts.push({ type, content: parseFormattedText(matchedContent) });
     lastIndex = match.index + match[0].length;
   }
-  
+
   if (lastIndex < text.length) {
     parts.push({ type: 'normal', content: text.slice(lastIndex) });
   }
-  
+
   return parts;
 };
 
@@ -456,7 +441,7 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
 
 const FormattedText = ({ text }) => {
   const parts = parseFormattedText(text || '');
-    return <>{renderFormattedParts(parts)}</>;
+  return <>{renderFormattedParts(parts)}</>;
 };
 
 const splitMessageIntoParts = (text = '') => {
@@ -676,7 +661,8 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false }) => {
         <View style={styles.quotedBody}>
           {hasImage && <Image source={{ uri: quoted.imageUrls[0] }} style={styles.quotedImageThumb} />}
           {hasLink && <FontAwesomeIcon icon={faPaperclip} size={14} color="#aaa" />}
-          <Text style={styles.quotedText} numberOfLines={1}>
+          {/* ✅ цитата максимум 3 рядки */}
+          <Text style={styles.quotedText} numberOfLines={3}>
             {displayText}
           </Text>
         </View>
@@ -760,13 +746,11 @@ const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
   const [messages, setMessages] = useState([]);
 
-  // NEW: новий композер дає marked(text) + html
   const [newMessage, setNewMessage] = useState('');
   const [newMessageHtml, setNewMessageHtml] = useState('');
   const [composerSelectionActive, setComposerSelectionActive] = useState(false);
   const composerRef = useRef(null);
 
-  // Старі стани для edit mode (залишаємо як було)
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
 
@@ -802,7 +786,6 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
 
-  // NEW: modal вставки лінка для WebView-композера
   const [isLinkModalVisible, setIsLinkModalVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
 
@@ -984,7 +967,6 @@ const ChatWindow = ({ route, navigation }) => {
   );
 
   const handleFormatText = (marker) => {
-    // Використовується тільки для edit mode (TextInput), як було
     const { start, end } = selection;
     const text = editMessage ? editMessageText : newMessage;
     if (start === end) return;
@@ -1046,8 +1028,8 @@ const ChatWindow = ({ route, navigation }) => {
     const ref = database().ref(`guilds/${guildId}/chats/${chatId}/messages`).push();
     await ref.set({
       senderId: userId,
-      text: newMessage, // сумісний рядок з маркерами
-      html: newMessageHtml || null, // заготовка на майбутній рендер rich-html
+      text: newMessage,
+      html: newMessageHtml || null,
       timestamp: Date.now(),
       status: 'sent',
       replyTo: replyToMessage?.id || null
@@ -1058,7 +1040,6 @@ const ChatWindow = ({ route, navigation }) => {
     setReplyToMessage(null);
     setComposerSelectionActive(false);
 
-    // очистити редактор
     composerRef.current?.clear?.();
   };
 
@@ -1123,6 +1104,9 @@ const ChatWindow = ({ route, navigation }) => {
 
   const keyboardOffset = insets.bottom;
 
+  // ✅ pinned item ширина як у “старому” стилі — завжди буде горизонтальний скрол навіть для 2 коротких
+  const PINNED_ITEM_WIDTH = screenWidth - 20;
+
   return (
     <MenuProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#121212' }} edges={['right', 'left']}>
@@ -1134,24 +1118,35 @@ const ChatWindow = ({ route, navigation }) => {
           keyboardVerticalOffset={keyboardOffset}
         >
           <View style={{ flex: 1 }}>
-            {/* Закрепленные сообщения */}
+            {/* ✅ Закріплені повідомлення (як у старій версії: обрізання і завжди гортання) */}
             {pinnedMessages.length > 0 && (
               <View style={styles.pinnedContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {pinnedMessages.map((msg) => (
-                    <TouchableOpacity key={msg.id} style={styles.pinnedItem}>
+                <FlatList
+                  data={pinnedMessages}
+                  horizontal
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  snapToInterval={PINNED_ITEM_WIDTH}
+                  snapToAlignment="start"
+                  disableIntervalMomentum
+                  contentContainerStyle={{ paddingRight: 10 }}
+                  renderItem={({ item: msg }) => (
+                    <TouchableOpacity style={[styles.pinnedItem, { width: PINNED_ITEM_WIDTH }]} activeOpacity={0.9}>
                       <View style={styles.pinnedBar} />
-                      <Text style={styles.pinnedLabel}>Закріплено</Text>
-                      <Text style={styles.pinnedText} numberOfLines={1}>
-                        {msg.text || 'Медіа'}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pinnedLabel}>Закріплено</Text>
+                        <Text style={styles.pinnedText} numberOfLines={1} ellipsizeMode="tail">
+                          {msg.text || 'Медіа'}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                  )}
+                />
               </View>
             )}
 
-            {/* Список сообщений */}
+            {/* Список повідомлень */}
             <FlatList
               ref={flatListRef}
               data={reversedMessages}
@@ -1163,6 +1158,7 @@ const ChatWindow = ({ route, navigation }) => {
                   <View style={styles.dateBadgeContainer}>
                     <Text style={styles.dateBadge}>{item.date}</Text>
                   </View>
+
                   {item.messages
                     .filter((m) => !m.deletedFor?.[userId])
                     .map((msg, idx) => {
@@ -1170,7 +1166,6 @@ const ChatWindow = ({ route, navigation }) => {
                       const showAvatar =
                         chatType === 'group' && !isMe && (idx === 0 || item.messages[idx - 1].senderId !== msg.senderId);
 
-                      // Додаткові лінки з msg.html (для випадку "anchor text" без URL у msg.text)
                       const textParts = splitMessageIntoParts(msg.text || '');
                       const urlsInText = textParts.filter((p) => p.type === 'link').map((p) => p.value);
                       const urlsInHtml = extractUrlsFromHtml(msg.html || '');
@@ -1180,6 +1175,7 @@ const ChatWindow = ({ route, navigation }) => {
                         <View key={msg.id} style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
                           {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
                           {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
+
                           <Menu>
                             <MenuTrigger
                               triggerOnLongPress
@@ -1187,11 +1183,19 @@ const ChatWindow = ({ route, navigation }) => {
                               customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
                             >
                               <View
-                                style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}
+                                style={[
+                                  styles.bubble,
+                                  msg.replyTo && styles.bubbleReply, // ✅ reply bubble = 75% ширини екрану
+                                  isMe ? styles.bubbleMe : styles.bubbleThem
+                                ]}
                               >
-                                {chatType === 'group' && !isMe && <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />}
+                                {chatType === 'group' && !isMe && (
+                                  <SenderName senderId={msg.senderId} currentUserId={userId} guildId={guildId} />
+                                )}
 
-                                {msg.replyTo && <QuotedMessage replyTo={msg.replyTo} guildId={guildId} chatId={chatId} minimal />}
+                                {msg.replyTo && (
+                                  <QuotedMessage replyTo={msg.replyTo} guildId={guildId} chatId={chatId} minimal />
+                                )}
 
                                 {msg.imageUrls?.length > 0 && (
                                   <View style={styles.imageGrid}>
@@ -1209,23 +1213,31 @@ const ChatWindow = ({ route, navigation }) => {
                                   </View>
                                 )}
 
-                                {/* Рендер тексту + URL превʼю як було */}
                                 {textParts.map((part, i) =>
-                                  part.type === 'link' ? <LinkPreviewCard key={i} url={part.value} /> : <FormattedText key={i} text={part.value} />
+                                  part.type === 'link' ? (
+                                    <LinkPreviewCard key={i} url={part.value} />
+                                  ) : (
+                                    <FormattedText key={i} text={part.value} />
+                                  )
                                 )}
 
-                                {/* Додаткові превʼю-лінки з html */}
                                 {extraUrls.map((u) => (
                                   <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
                                 ))}
 
                                 <View style={styles.metaContainer}>
-                                  {msg.pinned?.isPinned && <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />}
+                                  {msg.pinned?.isPinned && (
+                                    <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />
+                                  )}
                                   {msg.edited && <Text style={styles.editedLabel}>ред.</Text>}
                                   <Text style={styles.timestamp}>{format(new Date(msg.timestamp), 'HH:mm')}</Text>
                                   {isMe && (
                                     <FontAwesomeIcon
-                                      icon={msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId) ? faCheckDouble : faCheck}
+                                      icon={
+                                        msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId)
+                                          ? faCheckDouble
+                                          : faCheck
+                                      }
                                       size={11}
                                       color="#4cd137"
                                       style={{ marginLeft: 4 }}
@@ -1238,21 +1250,23 @@ const ChatWindow = ({ route, navigation }) => {
                             <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
                               {renderGroupReadReceiptOption(msg)}
                               {renderReadReceiptOption(msg)}
+
                               <MenuOption onSelect={() => handleReply(msg)} style={styles.menuItem}>
                                 <FontAwesomeIcon icon={faReply} color="#ddd" />
                                 <Text style={styles.menuText}>Відповісти</Text>
                               </MenuOption>
-                              <MenuOption onSelect={() => Clipboard.setString(msg.text || '')} style={styles.menuItem}>
+
+                              <MenuOption onSelect={() => Clipboard.setStringAsync(msg.text || '')} style={styles.menuItem}>
                                 <FontAwesomeIcon icon={faCopy} color="#ddd" />
                                 <Text style={styles.menuText}>Копіювати</Text>
                               </MenuOption>
+
                               {isMe && (
                                 <>
-                                <MenuOption
-                                  onSelect={() => {
-                                    setEditMessage(msg);
-                                    setEditMessageText(msg.text || '');
-                                    // щоб не було "паралельного" введення в WebView
+                                  <MenuOption
+                                    onSelect={() => {
+                                      setEditMessage(msg);
+                                      setEditMessageText(msg.text || '');
                                       composerRef.current?.clear?.();
                                       setNewMessage('');
                                       setNewMessageHtml('');
@@ -1262,19 +1276,21 @@ const ChatWindow = ({ route, navigation }) => {
                                     <FontAwesomeIcon icon={faPen} color="#ddd" />
                                     <Text style={styles.menuText}>Редагувати</Text>
                                   </MenuOption>
-                                <MenuOption
-                                  onSelect={() => {
-                                    setMessageToDelete(msg);
-                                    setSelectedMessageId(msg.id);
-                                    setDeleteModalVisible(true);
-                                  }}
-                                  style={styles.menuItem}
-                                >
-                                  <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
+
+                                  <MenuOption
+                                    onSelect={() => {
+                                      setMessageToDelete(msg);
+                                      setSelectedMessageId(msg.id);
+                                      setDeleteModalVisible(true);
+                                    }}
+                                    style={styles.menuItem}
+                                  >
+                                    <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
                                     <Text style={[styles.menuText, { color: '#ff5b5b' }]}>Видалити</Text>
                                   </MenuOption>
                                 </>
                               )}
+
                               <MenuOption
                                 onSelect={() => {
                                   setSelectedMessageId(msg.id);
@@ -1286,11 +1302,13 @@ const ChatWindow = ({ route, navigation }) => {
                                 <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
                                 <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
                               </MenuOption>
+
                               <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
                                 <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
                                 <Text style={styles.menuText}>Перекласти</Text>
                               </MenuOption>
                             </MenuOptions>
+
                             {readUsersPopupFor === msg.id && (
                               <ReadUsersPopup
                                 message={msg}
@@ -1309,7 +1327,7 @@ const ChatWindow = ({ route, navigation }) => {
               contentContainerStyle={{ paddingVertical: 10 }}
             />
 
-            {/* Панель ответа */}
+            {/* Панель відповіді */}
             {replyToMessage && (
               <View style={styles.replyBar}>
                 <View style={styles.replyBarLine} />
@@ -1325,9 +1343,8 @@ const ChatWindow = ({ route, navigation }) => {
               </View>
             )}
 
-            {/* Зона ввода */}
+            {/* Зона вводу */}
             <View style={styles.inputArea}>
-              {/* EDIT MODE: старі інструменти форматування по селекшну (як було) */}
               {editMessage && selection.start !== selection.end && (
                 <View style={styles.formatTools}>
                   <TouchableOpacity onPress={() => handleFormatText('**')}>
@@ -1348,7 +1365,6 @@ const ChatWindow = ({ route, navigation }) => {
                 </View>
               )}
 
-              {/* NEW MESSAGE: панель форматування під WebView (показуємо як і раніше тільки коли є селекшн) */}
               {!editMessage && composerSelectionActive && (
                 <View style={styles.formatTools}>
                   <TouchableOpacity onPress={() => composerRef.current?.cmd?.('bold')}>
@@ -1377,7 +1393,6 @@ const ChatWindow = ({ route, navigation }) => {
                   <FontAwesomeIcon icon={faPaperclip} size={22} color="#888" />
                 </TouchableOpacity>
 
-                {/* EDIT MODE: старий TextInput */}
                 {editMessage ? (
                   <TextInput
                     style={[
@@ -1394,7 +1409,6 @@ const ChatWindow = ({ route, navigation }) => {
                     textAlignVertical="top"
                   />
                 ) : (
-                  // NEW MESSAGE: WebView rich input (живе форматування)
                   <View style={{ flex: 1 }}>
                     <RichTextWebInput
                       ref={composerRef}
@@ -1410,13 +1424,15 @@ const ChatWindow = ({ route, navigation }) => {
                   </View>
                 )}
 
-                <TouchableOpacity style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]} onPress={handleSend}>
+                <TouchableOpacity
+                  style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]}
+                  onPress={handleSend}
+                >
                   <FontAwesomeIcon icon={editMessage ? faCheck : faPaperPlane} size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Нижний отступ для iPhone X+ (SafeAreaBottom) */}
             <View style={{ height: insets.bottom, backgroundColor: '#1c1c1e' }} />
           </View>
         </KeyboardAvoidingView>
@@ -1450,8 +1466,12 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        {/* NEW: modal вставки лінка */}
-        <Modal visible={isLinkModalVisible} transparent animationType="fade" onRequestClose={() => setIsLinkModalVisible(false)}>
+        <Modal
+          visible={isLinkModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsLinkModalVisible(false)}
+        >
           <View style={styles.modalOverlay}>
             <View style={styles.glassCard}>
               <Text style={styles.modalTitle}>Вставити лінк</Text>
@@ -1507,7 +1527,9 @@ const ChatWindow = ({ route, navigation }) => {
               <TouchableOpacity
                 style={styles.actionBtn}
                 onPress={() => {
-                  database().ref(`guilds/${guildId}/chats/${chatId}/messages/${messageToDelete.id}/deletedFor/${userId}`).set(true);
+                  database()
+                    .ref(`guilds/${guildId}/chats/${chatId}/messages/${messageToDelete.id}/deletedFor/${userId}`)
+                    .set(true);
                   setDeleteModalVisible(false);
                 }}
               >
@@ -1558,7 +1580,11 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} onClose={() => setFullSizeImageModalVisible(false)} />
+        <ImageViewerModal
+          visible={fullSizeImageModalVisible}
+          uri={fullSizeImageUri}
+          onClose={() => setFullSizeImageModalVisible(false)}
+        />
 
         <Modal
           animationType="slide"
@@ -1584,7 +1610,7 @@ const ChatWindow = ({ route, navigation }) => {
           open={isDatePickerVisible}
           date={new Date()}
           mode="datetime"
-          onConfirm={(date) => {
+          onConfirm={() => {
             setIsDatePickerVisible(false);
           }}
           onCancel={() => setIsDatePickerVisible(false)}
@@ -1597,45 +1623,107 @@ const ChatWindow = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
-  pinnedContainer: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 10, borderBottomWidth: 1, borderColor: '#333' },
-  pinnedItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
-  pinnedBar: { width: 4, height: 30, backgroundColor: '#121212', borderRadius: 2, marginRight: 10 },
-  pinnedLabel: { color: '#121212', fontSize: 11, fontWeight: 'bold' },
+
+  // ✅ pinned
+  pinnedContainer: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderColor: '#333'
+  },
+  pinnedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  // ✅ зафіксовано як ти просив
+  pinnedBar: { width: 4, height: 30, backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
+  pinnedLabel: { color: '#3498db', fontSize: 11, fontWeight: 'bold' },
   pinnedText: { color: '#ccc', fontSize: 13 },
+
   dateBadgeContainer: { alignItems: 'center', marginVertical: 15 },
-  dateBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, color: '#aaa', fontSize: 12 },
+  dateBadge: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    color: '#aaa',
+    fontSize: 12
+  },
+
   messageRow: { flexDirection: 'row', paddingHorizontal: 10, marginBottom: 4 },
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
-  bubble: { maxWidth: screenWidth * 0.75, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
-  bubbleMe: { backgroundColor: 'rgba(52, 152, 219, 0.25)', borderBottomRightRadius: 4, borderWidth: 1, borderColor: 'rgba(52, 152, 219, 0.3)' },
-  bubbleThem: { backgroundColor: 'rgba(255,255,255,0.08)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+
+  bubble: {
+    maxWidth: screenWidth * 0.75,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginBottom: 2
+  },
+  // ✅ reply-повідомлення: 75% ширини екрану (фіксовано, щоб не стискалось)
+  bubbleReply: {
+    width: screenWidth * 0.75
+  },
+
+  bubbleMe: {
+    backgroundColor: 'rgba(52, 152, 219, 0.25)',
+    borderBottomRightRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 152, 219, 0.3)'
+  },
+  bubbleThem: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)'
+  },
+
   senderName: { color: '#3498db', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
   messageText: { color: '#fff', fontSize: 16, lineHeight: 22 },
+
   metaContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
   timestamp: { color: 'rgba(255,255,255,0.4)', fontSize: 10, marginRight: 4 },
   editedLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontStyle: 'italic', marginRight: 4 },
+
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   gridImage: { width: 80, height: 80, borderRadius: 8, marginRight: 4, marginBottom: 4 },
+
   linkPreviewContainer: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, marginTop: 6, overflow: 'hidden' },
   linkPreviewImage: { width: '100%', height: 120 },
   linkPreviewTextContainer: { padding: 10 },
   linkPreviewTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   linkPreviewDescription: { color: '#aaa', fontSize: 12, marginTop: 2 },
   mediaIconBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 8 },
+
+  // ✅ quote (всередині повідомлення)
   quotedContainer: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 6, marginBottom: 6 },
   quotedMinimal: { padding: 4 },
   quotedLine: { width: 3, backgroundColor: '#3498db', borderRadius: 2, marginRight: 8 },
+  // ✅ важливо: цього стилю не було — через це стискалась цитата
+  quotedContent: { flex: 1 },
   quotedTitle: { color: '#3498db', fontSize: 11, fontWeight: '700' },
-  quotedText: { color: '#ccc', fontSize: 13 },
   quotedBody: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   quotedImageThumb: { width: 24, height: 24, borderRadius: 4, marginRight: 6 },
+  // ✅ щоб не “ломало” слова і нормальна ширина, 3 рядки задаються в компоненті
+  quotedText: {
+    color: '#ccc',
+    fontSize: 13,
+    flex: 1,
+    flexShrink: 1,
+    ...(Platform.OS === 'android' ? { textBreakStrategy: 'simple' } : null)
+  },
+
   interlocutorAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
+
   inputArea: { padding: 10, backgroundColor: '#1c1c1e', borderTopWidth: 1, borderColor: '#333' },
   replyBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#252525', padding: 10, borderBottomWidth: 1, borderColor: '#333' },
   replyBarLine: { width: 4, height: '100%', backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
   replyBarTitle: { color: '#3498db', fontWeight: 'bold', fontSize: 12 },
   replyBarText: { color: '#aaa', fontSize: 13, flex: 1 },
+
   formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 12, marginBottom: 8 },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 25, paddingHorizontal: 12, paddingVertical: 4 },
   input: {
@@ -1650,19 +1738,23 @@ const styles = StyleSheet.create({
   attachBtn: { padding: 8 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
   sendBtnActive: { backgroundColor: '#3498db' },
+
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
   readUserRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   readUserName: { color: '#fff', fontSize: 13, marginRight: 6 },
   readUserAvatar: { width: 20, height: 20, borderRadius: 10 },
   extraCount: { color: '#aaa', marginLeft: 4 },
+
   popupOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', paddingHorizontal: 40 },
   readUsersPopup: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
   readUsersPopupPersonal: { alignSelf: 'flex-end' },
   readUsersPopupInterlocutor: { alignSelf: 'flex-start' },
+
   menuSeparator: { height: 1, backgroundColor: '#333', marginVertical: 6 },
   contextMenu: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   menuText: { color: '#eee', marginLeft: 12, fontSize: 15 },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   glassCard: { backgroundColor: '#1e1e1e', borderRadius: 20, padding: 20, width: '85%', borderWidth: 1, borderColor: '#333' },
   modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
@@ -1670,17 +1762,21 @@ const styles = StyleSheet.create({
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
   modalBtnCancel: { flex: 1, padding: 14, backgroundColor: '#333', borderRadius: 12, alignItems: 'center', marginRight: 10 },
   modalBtnPrimary: { flex: 1, padding: 14, backgroundColor: '#3498db', borderRadius: 12, alignItems: 'center' },
+
   actionBtn: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: 1, borderColor: '#333' },
   translatedText: { fontSize: 16, color: '#fff', lineHeight: 22 },
   uploadThumb: { width: 70, height: 70, borderRadius: 10, marginRight: 10 },
+
   spoilerWrapper: { justifyContent: 'center' },
   spoilerContainer: { backgroundColor: '#333', borderRadius: 4, paddingHorizontal: 4, justifyContent: 'center' },
   spoilerHidden: { backgroundColor: '#444', minWidth: 40, alignItems: 'center' },
   spoilerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   headerTitleText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   headerSubText: { color: '#aaa', fontSize: 12 },
+
   imageViewerContainer: { flex: 1, backgroundColor: '#000' },
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   imageViewerBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
