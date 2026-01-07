@@ -506,6 +506,19 @@ const buildTextStyle = (activeStyles = []) => {
   return style;
 };
 
+const buildMentionTextStyle = (activeStyles = []) => {
+  const style = buildTextStyle(activeStyles);
+  const decoration = style.textDecorationLine;
+
+  if (!decoration) {
+    style.textDecorationLine = 'underline';
+  } else if (!decoration.includes('underline')) {
+    style.textDecorationLine = decoration.includes('line-through') ? 'underline line-through' : `${decoration} underline`;
+  }
+
+  return style;
+};
+
 const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
   parts.map((part, index) => {
     const key = `${keyPrefix}-${index}`;
@@ -517,7 +530,7 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
 
     if (part.type === 'mention') {
       return (
-        <Text key={key} style={[styles.mentionText, buildTextStyle(activeStyles)]}>
+        <Text key={key} style={[styles.mentionText, buildMentionTextStyle(activeStyles)]}>
           {part.content}
         </Text>
       );
