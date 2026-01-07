@@ -444,6 +444,25 @@ const Spoiler = ({ children }) => {
   );
 };
 
+const parseMentions = (text) => {
+  if (!text) return [];
+  const parts = [];
+  const regex = /@([a-z0-9_.-]+)/gi;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'mention', content: match[0] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: text.slice(lastIndex) });
+  return parts;
+};
+
 const parseFormattedText = (text) => {
   const parts = [];
   let lastIndex = 0;
@@ -453,7 +472,7 @@ const parseFormattedText = (text) => {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
+      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index)) });
     }
     const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
     let type = 'normal';
@@ -468,7 +487,7 @@ const parseFormattedText = (text) => {
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < text.length) parts.push({ type: 'normal', content: text.slice(lastIndex) });
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex)) });
   return parts;
 };
 
@@ -494,6 +513,14 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
     if (part.type === 'spoiler') {
       const contentParts = Array.isArray(part.content) ? part.content : [{ type: 'normal', content: part.content }];
       return <Spoiler key={key}>{renderFormattedParts(contentParts, activeStyles, key)}</Spoiler>;
+    }
+
+    if (part.type === 'mention') {
+      return (
+        <Text key={key} style={[styles.mentionText, buildTextStyle(activeStyles)]}>
+          {part.content}
+        </Text>
+      );
     }
 
     const newActiveStyles = part.type === 'normal' ? activeStyles : [...activeStyles, part.type];
@@ -2202,6 +2229,7 @@ const styles = StyleSheet.create({
   mentionAvatar: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   mentionAvatarFallback: { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' },
   mentionName: { color: '#fff', fontSize: 14 },
+  mentionText: { color: '#3498db', textDecorationLine: 'underline' },
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
