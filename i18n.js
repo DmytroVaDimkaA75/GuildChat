@@ -51,7 +51,13 @@ const ukTranslation = {
     noGuildsMessage: "Користувач не знаходиться в жодній гільдії",
     selectGuildTitle: "Виберіть гільдію:",
     close: "Закрити",
-    ok: "OK"
+    ok: "OK",
+    guildSyncTitle: "Оновлення складу гільдії",
+    guildSyncAddedLabel: "Нові учасники",
+    guildSyncRemovedLabel: "Вийшли з гільдії",
+    guildSyncNone: "немає",
+    guildSyncConfirm: "Оновити",
+    guildSyncCancel: "Пропустити"
   },
   chatStack: {
     chatScreenTitle: "Альтанка",
@@ -319,7 +325,13 @@ const ruTranslation = {
     noGuildsMessage: "Пользователь не состоит ни в одной гильдии",
     selectGuildTitle: "Выберите гильдию:",
     close: "Закрыть",
-    ok: "OK"
+    ok: "OK",
+    guildSyncTitle: "Обновление состава гильдии",
+    guildSyncAddedLabel: "Новые участники",
+    guildSyncRemovedLabel: "Покинули гильдию",
+    guildSyncNone: "нет",
+    guildSyncConfirm: "Обновить",
+    guildSyncCancel: "Пропустить"
   },
   chatStack: {
     chatScreenTitle: "Беседка",
@@ -587,7 +599,13 @@ const beTranslation = {
     noGuildsMessage: "Карыстальнік не ўваходзіць у ніякую гільдыю",
     selectGuildTitle: "Абярыце гільдыю:",
     close: "Закрыць",
-    ok: "OK"
+    ok: "OK",
+    guildSyncTitle: "Абнаўленне складу гільдыі",
+    guildSyncAddedLabel: "Новыя ўдзельнікі",
+    guildSyncRemovedLabel: "Пакінулі гільдыю",
+    guildSyncNone: "няма",
+    guildSyncConfirm: "Абнавіць",
+    guildSyncCancel: "Прапусціць"
   },
   chatStack: {
     chatScreenTitle: "Альтанка",
@@ -855,7 +873,13 @@ const deTranslation = {
     noGuildsMessage: "Der Benutzer ist in keiner Gilde",
     selectGuildTitle: "Wählen Sie eine Gilde:",
     close: "Schließen",
-    ok: "OK"
+    ok: "OK",
+    guildSyncTitle: "Gildenmitglieder aktualisieren",
+    guildSyncAddedLabel: "Neue Mitglieder",
+    guildSyncRemovedLabel: "Gilde verlassen",
+    guildSyncNone: "keine",
+    guildSyncConfirm: "Aktualisieren",
+    guildSyncCancel: "Überspringen"
   },
   chatStack: {
     chatScreenTitle: "Aultanka",
@@ -1121,7 +1145,13 @@ const enOverrides = {
     noGuildsTitle: "No guilds",
     noGuildsMessage: "The user is not in any guild",
     selectGuildTitle: "Choose a guild:",
-    close: "Close"
+    close: "Close",
+    guildSyncTitle: "Guild roster update",
+    guildSyncAddedLabel: "New members",
+    guildSyncRemovedLabel: "Left the guild",
+    guildSyncNone: "none",
+    guildSyncConfirm: "Update",
+    guildSyncCancel: "Skip"
   },
   chatStack: {
     chatScreenTitle: "Chat",
@@ -1247,7 +1277,13 @@ const plOverrides = {
     noGuildsTitle: "Brak gildii",
     noGuildsMessage: "Użytkownik nie należy do żadnej gildii",
     selectGuildTitle: "Wybierz gildię:",
-    close: "Zamknij"
+    close: "Zamknij",
+    guildSyncTitle: "Aktualizacja składu gildii",
+    guildSyncAddedLabel: "Nowi członkowie",
+    guildSyncRemovedLabel: "Odeszli z gildii",
+    guildSyncNone: "brak",
+    guildSyncConfirm: "Aktualizuj",
+    guildSyncCancel: "Pomiń"
   },
   chatStack: {
     chatScreenTitle: "Czat",

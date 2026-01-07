@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database';
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
+import CryptoJS from "react-native-crypto-js";
 import {
   Alert,
   FlatList,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { GuildContext } from "../GuildContext";
+import { parseGuildData } from "../guildParser";
 import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
 const UserSettingsScreen = ({ fetch }) => {
@@ -22,11 +24,149 @@ const UserSettingsScreen = ({ fetch }) => {
   const [guilds, setGuilds] = useState([]);
   const { setGuildId } = useContext(GuildContext);
 
+  const getGuildActivityUrl = (guildId) => {
+    if (!guildId) return null;
+    const [worldCode, ...guildIdParts] = guildId.split("_");
+    if (!worldCode || guildIdParts.length === 0) return null;
+    const rawGuildId = guildIdParts.join("_");
+    return `https://foe.scoredb.io/${worldCode}/Guild/${rawGuildId}/Activity`;
+  };
+
+  const extractUserIdFromLink = (linkUrl) => {
+    if (!linkUrl) return null;
+    return linkUrl.split("/").pop() || null;
+  };
+
+  const normalizeImageUrl = (imageUrl) => (imageUrl ? `https://foe.scoredb.io${imageUrl}` : null);
+
+  const applyGuildMemberSync = async (guildId, addedMembers, removedMembers) => {
+    const addPromises = addedMembers.map(async (member) => {
+      const userId = member.userId;
+      const imageUrl = normalizeImageUrl(member.imageUrl);
+      const userRef = database().ref(`users/${userId}`);
+      const snapshot = await userRef.once('value');
+      const guildRoleData = {
+        [guildId]: {
+          imageUrl,
+          role: "member",
+        },
+      };
+
+      if (snapshot.exists()) {
+        await userRef.update({
+          userName: member.name,
+          ...guildRoleData,
+        });
+      } else {
+        const encryptedUserId = CryptoJS.AES.encrypt(
+          userId,
+          "your-encryption-key"
+        ).toString();
+        await userRef.set({
+          userName: member.name,
+          password: encryptedUserId,
+          ...guildRoleData,
+        });
+      }
+
+      const userInGuildRef = database().ref(`guilds/${guildId}/guildUsers/${userId}`);
+      await userInGuildRef.set({
+        userName: member.name,
+        imageUrl,
+      });
+    });
+
+    const removePromises = removedMembers.map(async (member) => {
+      const userId = member.userId;
+      await database().ref(`guilds/${guildId}/guildUsers/${userId}`).remove();
+      await database().ref(`users/${userId}/${guildId}`).remove();
+    });
+
+    await Promise.all([...addPromises, ...removePromises]);
+  };
+
+  const checkGuildMembersOnLogin = async (guildId, role) => {
+    if (role !== "guildLeader") return;
+    const url = getGuildActivityUrl(guildId);
+    if (!url) return;
+
+    try {
+      const result = await parseGuildData(url);
+      if (!result.success || !Array.isArray(result.data) || result.data.length === 0) return;
+
+      const parsedMembers = result.data
+        .map((member) => ({
+          ...member,
+          userId: extractUserIdFromLink(member.linkUrl),
+        }))
+        .filter((member) => member.userId);
+
+      const parsedById = new Map(parsedMembers.map((member) => [member.userId, member]));
+      const existingSnapshot = await database().ref(`guilds/${guildId}/guildUsers`).once('value');
+      const existingMembers = existingSnapshot.val() || {};
+      const existingIds = Object.keys(existingMembers);
+
+      const addedIds = parsedMembers
+        .map((member) => member.userId)
+        .filter((userId) => !existingMembers[userId]);
+      const removedIds = existingIds.filter((userId) => !parsedById.has(userId));
+
+      if (addedIds.length === 0 && removedIds.length === 0) return;
+
+      const addedMembers = addedIds.map((userId) => parsedById.get(userId));
+      const removedMembers = removedIds.map((userId) => ({
+        userId,
+        userName: existingMembers[userId]?.userName || userId,
+      }));
+
+      const formatNames = (items, fallbackKey, nameKey) => {
+        if (items.length === 0) return t(fallbackKey);
+        return items.map((item) => item[nameKey]).join(", ");
+      };
+
+      const message = [
+        `${t("userSettings.guildSyncAddedLabel")} ${addedMembers.length}: ${formatNames(
+          addedMembers,
+          "userSettings.guildSyncNone",
+          "name"
+        )}`,
+        `${t("userSettings.guildSyncRemovedLabel")} ${removedMembers.length}: ${formatNames(
+          removedMembers,
+          "userSettings.guildSyncNone",
+          "userName"
+        )}`,
+      ].join("\n");
+
+      Alert.alert(
+        t("userSettings.guildSyncTitle"),
+        message,
+        [
+          { text: t("userSettings.guildSyncCancel"), style: "cancel" },
+          {
+            text: t("userSettings.guildSyncConfirm"),
+            onPress: async () => {
+              try {
+                await applyGuildMemberSync(guildId, addedMembers, removedMembers);
+              } catch (error) {
+                console.error("Помилка при оновленні складу гільдії:", error);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Помилка при перевірці складу гільдії:", error);
+    }
+  };
+
   const selectGuild = async (guild) => {
     try {
       await AsyncStorage.setItem("guildId", guild.guildId);
       setGuildId(guild.guildId);
-      fetch();
+      if (typeof fetch === "function") {
+        fetch();
+      }
+      await checkGuildMembersOnLogin(guild.guildId, guild.role);
     } catch (error) {
       console.error("Помилка при виборі гільдії:", error);
     }
