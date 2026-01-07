@@ -153,6 +153,12 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       cmd: (c) => inject(`window.__cmd && window.__cmd(${JSON.stringify(c)})`),
       spoiler: () => inject(`window.__wrapSpoiler && window.__wrapSpoiler()`),
       link: (url) => inject(`window.__createLink && window.__createLink(${JSON.stringify(url)})`),
+      replaceRange: (start, end, text) =>
+        inject(
+          `window.__replaceRange && window.__replaceRange(${Number(start) || 0}, ${Number(end) || 0}, ${JSON.stringify(
+            text || ''
+          )})`
+        ),
       clear: () => {
         setHeight(minHeight);
         inject(`window.__clear && window.__clear()`);
@@ -249,6 +255,17 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       return editor.contains(node);
     }
 
+    function getCaretIndex() {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return 0;
+      const range = sel.getRangeAt(0);
+      if (!editor.contains(range.endContainer)) return 0;
+      const preRange = range.cloneRange();
+      preRange.selectNodeContents(editor);
+      preRange.setEnd(range.endContainer, range.endOffset);
+      return preRange.toString().length;
+    }
+
     function notifyChange() {
       const html = editor.innerHTML || '';
       const text = editor.innerText || '';
@@ -257,8 +274,9 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 
       const h = Math.max(${minHeight}, Math.min(${maxHeight}, (editor.scrollHeight || ${minHeight})));
       const selActive = selectionActiveInEditor();
+      const caretIndex = getCaretIndex();
 
-      post('change', { html, text, marked, height: h, selActive });
+      post('change', { html, text, marked, height: h, selActive, caretIndex });
     }
 
     window.__cmd = (c) => {
@@ -308,6 +326,43 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       notifyChange();
     };
 
+    window.__replaceRange = (start, end, text) => {
+      const value = String(text || '');
+      const s = Math.max(0, Number(start) || 0);
+      const e = Math.max(s, Number(end) || 0);
+
+      const range = document.createRange();
+      let charIndex = 0;
+      let foundStart = false;
+      const iterator = document.createNodeIterator(editor, NodeFilter.SHOW_TEXT);
+      let node;
+
+      while ((node = iterator.nextNode())) {
+        const nextIndex = charIndex + (node.nodeValue || '').length;
+        if (!foundStart && s <= nextIndex) {
+          range.setStart(node, s - charIndex);
+          foundStart = true;
+        }
+        if (foundStart && e <= nextIndex) {
+          range.setEnd(node, e - charIndex);
+          break;
+        }
+        charIndex = nextIndex;
+      }
+
+      if (!foundStart) {
+        editor.appendChild(document.createTextNode(value));
+        notifyChange();
+        return;
+      }
+
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      try { document.execCommand('insertText', false, value); } catch(e) {}
+      notifyChange();
+    };
+
     window.__clear = () => {
       editor.innerHTML = '';
       notifyChange();
@@ -351,7 +406,8 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
               html: data.html || '',
               text: data.text || '',
               marked: data.marked || '',
-              selectionActive: !!data.selActive
+              selectionActive: !!data.selActive,
+              caretIndex: Number.isFinite(Number(data.caretIndex)) ? Number(data.caretIndex) : 0
             });
         }
       } catch (e) {}
@@ -376,20 +432,35 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 });
 
 // --- Спойлер ---
-const Spoiler = ({ content }) => {
+const Spoiler = ({ children }) => {
   const [visible, setVisible] = useState(false);
   return (
-    <TouchableOpacity onPress={() => setVisible(!visible)} activeOpacity={0.9} style={styles.spoilerWrapper}>
-      <View style={[styles.spoilerContainer, !visible && styles.spoilerHidden]}>
-        <Text style={[styles.messageText, !visible && { opacity: 0 }]}>{content}</Text>
-        {!visible && (
-          <View style={styles.spoilerOverlay}>
-            <FontAwesomeIcon icon={faEyeSlash} size={14} color="#ccc" />
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+    <Text
+      onPress={() => setVisible((prev) => !prev)}
+      style={[styles.spoilerText, !visible && styles.spoilerHiddenText]}
+    >
+      {children}
+    </Text>
   );
+};
+
+const parseMentions = (text) => {
+  if (!text) return [];
+  const parts = [];
+  const regex = /@([a-z0-9_.-]+)/gi;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'mention', content: match[0] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: text.slice(lastIndex) });
+  return parts;
 };
 
 const parseFormattedText = (text) => {
@@ -401,7 +472,7 @@ const parseFormattedText = (text) => {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
+      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index)) });
     }
     const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
     let type = 'normal';
@@ -416,7 +487,7 @@ const parseFormattedText = (text) => {
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < text.length) parts.push({ type: 'normal', content: text.slice(lastIndex) });
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex)) });
   return parts;
 };
 
@@ -441,7 +512,15 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
 
     if (part.type === 'spoiler') {
       const contentParts = Array.isArray(part.content) ? part.content : [{ type: 'normal', content: part.content }];
-      return <Spoiler key={key} content={renderFormattedParts(contentParts, activeStyles, key)} />;
+      return <Spoiler key={key}>{renderFormattedParts(contentParts, activeStyles, key)}</Spoiler>;
+    }
+
+    if (part.type === 'mention') {
+      return (
+        <Text key={key} style={[styles.mentionText, buildTextStyle(activeStyles)]}>
+          {part.content}
+        </Text>
+      );
     }
 
     const newActiveStyles = part.type === 'normal' ? activeStyles : [...activeStyles, part.type];
@@ -449,7 +528,7 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
     const children = Array.isArray(part.content) ? renderFormattedParts(part.content, newActiveStyles, key) : part.content;
 
     return (
-      <Text key={key} style={[styles.messageText, textStyle]}>
+      <Text key={key} style={textStyle}>
         {children}
       </Text>
     );
@@ -457,22 +536,7 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
 
 const FormattedText = ({ text }) => {
   const parts = parseFormattedText(text || '');
-  return <>{renderFormattedParts(parts)}</>;
-};
-
-const splitMessageIntoParts = (text = '') => {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = urlRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
-    parts.push({ type: 'link', value: match[0] });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) parts.push({ type: 'text', value: text.slice(lastIndex) });
-  return parts;
+  return <Text style={styles.messageText}>{renderFormattedParts(parts)}</Text>;
 };
 
 // ---- кеш для метаданих лінків (щоб не робити зайвих запитів) ----
@@ -884,8 +948,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [chatType, setChatType] = useState('private');
 
   const [newMessage, setNewMessage] = useState('');
+  const [newMessagePlain, setNewMessagePlain] = useState('');
   const [newMessageHtml, setNewMessageHtml] = useState('');
   const [composerSelectionActive, setComposerSelectionActive] = useState(false);
+  const [composerCaretIndex, setComposerCaretIndex] = useState(0);
   const composerRef = useRef(null);
 
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -924,6 +990,10 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [isLinkModalVisible, setIsLinkModalVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+
+  const [guildMembers, setGuildMembers] = useState([]);
+  const [mentionStartIndex, setMentionStartIndex] = useState(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
 
   // highlight
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
@@ -1002,6 +1072,62 @@ const ChatWindow = ({ route, navigation }) => {
 
     return () => chatRef.off('value', listener);
   }, [chatId, guildId, userId, navigation]);
+
+  useEffect(() => {
+    if (!guildId) return;
+    const ref = database().ref(`guilds/${guildId}/guildUsers`);
+    const listener = ref.on('value', (snap) => {
+      const data = snap.val() || {};
+      const list = Object.entries(data)
+        .map(([id, user]) => ({
+          id,
+          userName: user?.userName || '',
+          imageUrl: user?.imageUrl || ''
+        }))
+        .filter((user) => user.userName);
+      setGuildMembers(list);
+    });
+    return () => ref.off('value', listener);
+  }, [guildId]);
+
+  useEffect(() => {
+    if (!newMessagePlain) {
+      setMentionStartIndex(null);
+      setMentionSuggestions([]);
+      return;
+    }
+
+    const caret = Number.isFinite(composerCaretIndex) ? composerCaretIndex : 0;
+    const textBeforeCaret = newMessagePlain.slice(0, caret);
+    const atIndex = textBeforeCaret.lastIndexOf('@');
+    if (atIndex === -1) {
+      setMentionStartIndex(null);
+      setMentionSuggestions([]);
+      return;
+    }
+
+    const charBefore = atIndex > 0 ? textBeforeCaret[atIndex - 1] : '';
+    if (charBefore && !/\s/.test(charBefore)) {
+      setMentionStartIndex(null);
+      setMentionSuggestions([]);
+      return;
+    }
+
+    const query = textBeforeCaret.slice(atIndex + 1);
+    if (/\s/.test(query)) {
+      setMentionStartIndex(null);
+      setMentionSuggestions([]);
+      return;
+    }
+
+    const normalizedQuery = query.toLowerCase();
+    const filtered = guildMembers.filter((member) =>
+      member.userName.toLowerCase().startsWith(normalizedQuery)
+    );
+
+    setMentionStartIndex(atIndex);
+    setMentionSuggestions(filtered);
+  }, [newMessagePlain, composerCaretIndex, guildMembers]);
 
   useEffect(() => {
     if (!chatId || !guildId) return;
@@ -1276,10 +1402,19 @@ const ChatWindow = ({ route, navigation }) => {
     });
 
     setNewMessage('');
+    setNewMessagePlain('');
     setNewMessageHtml('');
     setReplyToMessage(null);
     setComposerSelectionActive(false);
     composerRef.current?.clear?.();
+  };
+
+  const handleSelectMention = (member) => {
+    if (mentionStartIndex === null || !member?.userName) return;
+    const mentionText = `@${member.userName} `;
+    composerRef.current?.replaceRange?.(mentionStartIndex, composerCaretIndex, mentionText);
+    setMentionStartIndex(null);
+    setMentionSuggestions([]);
   };
 
   const resolveSelectedMessage = (fallback) => {
@@ -1453,10 +1588,11 @@ const ChatWindow = ({ route, navigation }) => {
                 const prevMsg = getPrevVisualMsgSameDate(index, item.dateLabel);
                 const showAvatar = chatType === 'group' && !isMe && (!prevMsg || prevMsg.senderId !== msg.senderId);
 
-                const textParts = splitMessageIntoParts(msg.text || '');
-                const urlsInText = textParts.filter((p) => p.type === 'link').map((p) => p.value);
+                const messageText = msg.text || '';
+                const urlsInText = extractUrlsFromText(messageText);
                 const urlsInHtml = extractUrlsFromHtml(msg.html || '');
-                const extraUrls = urlsInHtml.filter((u) => !urlsInText.includes(u));
+                const allUrls = [...urlsInText, ...urlsInHtml].filter(Boolean);
+                const uniqueUrls = Array.from(new Set(allUrls));
 
                 const isHighlighted = highlightedMessageId === msg.id;
 
@@ -1513,15 +1649,9 @@ const ChatWindow = ({ route, navigation }) => {
                             </View>
                           )}
 
-                          {textParts.map((part, i) =>
-                            part.type === 'link' ? (
-                              <LinkPreviewCard key={i} url={part.value} />
-                            ) : (
-                              <FormattedText key={i} text={part.value} />
-                            )
-                          )}
+                          {!!messageText && <FormattedText text={messageText} />}
 
-                          {extraUrls.map((u) => (
+                          {uniqueUrls.map((u) => (
                             <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
                           ))}
 
@@ -1697,6 +1827,29 @@ const ChatWindow = ({ route, navigation }) => {
                 </View>
               )}
 
+              {!editMessage && mentionStartIndex !== null && mentionSuggestions.length > 0 && (
+                <View style={styles.mentionList}>
+                  <ScrollView>
+                    {mentionSuggestions.map((member) => (
+                      <TouchableOpacity
+                        key={member.id}
+                        style={styles.mentionItem}
+                        onPress={() => handleSelectMention(member)}
+                      >
+                        {member.imageUrl ? (
+                          <Image source={{ uri: member.imageUrl }} style={styles.mentionAvatar} />
+                        ) : (
+                          <View style={[styles.mentionAvatar, styles.mentionAvatarFallback]}>
+                            <Text style={{ color: '#fff' }}>{member.userName[0]?.toUpperCase() || '?'}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.mentionName}>@{member.userName}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
               <View style={styles.inputContainer}>
                 <TouchableOpacity style={styles.attachBtn} onPress={pickImage}>
                   <FontAwesomeIcon icon={faPaperclip} size={22} color="#888" />
@@ -1724,10 +1877,12 @@ const ChatWindow = ({ route, navigation }) => {
                       placeholder="Повідомлення..."
                       minHeight={MIN_INPUT_HEIGHT}
                       maxHeight={MAX_INPUT_HEIGHT}
-                      onChange={({ html, marked, selectionActive }) => {
+                      onChange={({ html, marked, selectionActive, caretIndex, text }) => {
                         setNewMessage(marked);
                         setNewMessageHtml(html);
+                        setNewMessagePlain(text || '');
                         setComposerSelectionActive(!!selectionActive);
+                        setComposerCaretIndex(Number.isFinite(caretIndex) ? caretIndex : 0);
                       }}
                     />
                   </View>
@@ -2058,10 +2213,23 @@ const styles = StyleSheet.create({
   translatedText: { fontSize: 16, color: '#fff', lineHeight: 22 },
   uploadThumb: { width: 70, height: 70, borderRadius: 10, marginRight: 10 },
 
-  spoilerWrapper: { justifyContent: 'center' },
-  spoilerContainer: { backgroundColor: '#333', borderRadius: 4, paddingHorizontal: 4, justifyContent: 'center' },
-  spoilerHidden: { backgroundColor: '#444', minWidth: 40, alignItems: 'center' },
-  spoilerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  spoilerText: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 4, paddingHorizontal: 2 },
+  spoilerHiddenText: { color: 'transparent' },
+
+  mentionList: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+    maxHeight: 180,
+    marginBottom: 8,
+    paddingVertical: 6
+  },
+  mentionItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  mentionAvatar: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
+  mentionAvatarFallback: { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' },
+  mentionName: { color: '#fff', fontSize: 14 },
+  mentionText: { color: '#3498db', textDecorationLine: 'underline' },
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
