@@ -1,4 +1,4 @@
-// ChatWindow.js (оновлено: scroll-to-message + highlight для quoted/pinned)
+// ChatWindow.js (оновлено: crash-fix + коректні превʼю pinned/quoted + pin/unpin логіка)
 // ВАЖЛИВО: expo install react-native-webview
 
 import { faYoutube } from '@fortawesome/free-brands-svg-icons';
@@ -69,18 +69,19 @@ const INPUT_MAX_LINES = 5;
 const MIN_INPUT_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING;
 const MAX_INPUT_HEIGHT = INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_VERTICAL_PADDING;
 
-const isYouTubeURL = (url) => url.includes('youtube.com') || url.includes('youtu.be');
-const isDocsURL = (url) => url.includes('docs.google.com');
+const isYouTubeURL = (url) => (url || '').includes('youtube.com') || (url || '').includes('youtu.be');
+const isDocsURL = (url) => (url || '').includes('docs.google.com');
 
 const getDocsIcon = (url) => {
+  if (!url) return null;
   if (url.includes('/document/')) return faFileAlt;
   if (url.includes('/spreadsheets/')) return faTableCellsLarge;
   if (url.includes('/presentation/')) return faChartSimple;
-  return null;
+  return faLink;
 };
 
 const normalizeUrl = (u) => {
-  const url = (u || '').trim();
+  const url = String(u || '').trim();
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
   return `https://${url}`;
@@ -93,6 +94,43 @@ const extractUrlsFromHtml = (html = '') => {
   let match;
   while ((match = regex.exec(html)) !== null) out.push(match[1]);
   return Array.from(new Set(out));
+};
+
+const extractUrlsFromText = (text = '') => {
+  if (!text) return [];
+  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi;
+  const found = String(text).match(regex) || [];
+  // нормалізуємо (щоб youtu.be без схеми став валідним)
+  return Array.from(new Set(found.map((u) => normalizeUrl(u))));
+};
+
+const stripUrls = (text = '') => {
+  if (!text) return '';
+  return String(text).replace(/(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi, '').trim();
+};
+
+const getHostLabel = (url = '') => {
+  try {
+    const u = new URL(normalizeUrl(url));
+    return u.host || url;
+  } catch (e) {
+    return url;
+  }
+};
+
+// --- захист від битих timestamp (щоб не ловити "Invalid time value") ---
+const safeDate = (ts) => {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return new Date();
+  return new Date(n);
+};
+
+const safeFormat = (ts, fmt, locale) => {
+  try {
+    return format(safeDate(ts), fmt, locale ? { locale } : undefined);
+  } catch (e) {
+    return '';
+  }
 };
 
 // --------------------
@@ -437,6 +475,65 @@ const splitMessageIntoParts = (text = '') => {
   return parts;
 };
 
+// ---- кеш для метаданих лінків (щоб не робити зайвих запитів) ----
+const __linkMetaCache = new Map();
+
+const useLinkMeta = (url) => {
+  const [meta, setMeta] = useState(() => {
+    const key = String(url || '');
+    return __linkMetaCache.get(key) || null;
+  });
+
+  useEffect(() => {
+    const u = String(url || '');
+    if (!u) return;
+
+    const cached = __linkMetaCache.get(u);
+    if (cached) {
+      setMeta(cached);
+      return;
+    }
+
+    let alive = true;
+
+    const run = async () => {
+      try {
+        const res = await fetch(u);
+        const html = await res.text();
+
+        if (!alive) return;
+
+        const title = html.match(/<title>(.*?)<\/title>/i)?.[1] || '';
+        const ogTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1] || '';
+        const ogDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i)?.[1] || '';
+        const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1] || '';
+
+        const data = {
+          title: (ogTitle || title || '').trim(),
+          description: (ogDesc || '').trim(),
+          image: (ogImage || '').trim()
+        };
+
+        __linkMetaCache.set(u, data);
+        setMeta(data);
+      } catch (e) {
+        if (!alive) return;
+        const fallback = { title: '', description: '', image: '' };
+        __linkMetaCache.set(u, fallback);
+        setMeta(fallback);
+      }
+    };
+
+    run();
+
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  return meta;
+};
+
 const LinkPreviewCard = ({ url }) => {
   const [previewData, setPreviewData] = useState(null);
 
@@ -454,9 +551,9 @@ const LinkPreviewCard = ({ url }) => {
         const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1];
 
         setPreviewData({
-          title: ogTitle || title,
-          description: isYouTubeURL(url) ? '' : ogDesc || '',
-          image: isYouTubeURL(url) ? null : ogImage
+          title: (ogTitle || title || url).trim(),
+          description: isYouTubeURL(url) ? '' : (ogDesc || '').trim(),
+          image: isYouTubeURL(url) ? null : ogImage || null
         });
       } catch (e) {
         if (isMounted) setPreviewData({ title: url, description: '', image: null });
@@ -475,9 +572,12 @@ const LinkPreviewCard = ({ url }) => {
       </Text>
     );
 
+  const badgeIcon = isYouTubeURL(url) ? faYoutube : isDocsURL(url) ? getDocsIcon(url) : faLink;
+
   return (
     <TouchableOpacity style={styles.linkPreviewContainer} onPress={() => Linking.openURL(url)} activeOpacity={0.9}>
       {previewData.image && <Image source={{ uri: previewData.image }} style={styles.linkPreviewImage} resizeMode="cover" />}
+
       <View style={styles.linkPreviewTextContainer}>
         <Text style={styles.linkPreviewTitle} numberOfLines={1}>
           {previewData.title}
@@ -488,16 +588,11 @@ const LinkPreviewCard = ({ url }) => {
           </Text>
         ) : null}
       </View>
-      {isYouTubeURL(url) && (
-        <View style={styles.mediaIconBadge}>
-          <FontAwesomeIcon icon={faYoutube} size={14} color="#FFF" />
-        </View>
-      )}
-      {isDocsURL(url) && (
-        <View style={[styles.mediaIconBadge, { backgroundColor: '#4285F4' }]}>
-          <FontAwesomeIcon icon={getDocsIcon(url)} size={14} color="#FFF" />
-        </View>
-      )}
+
+      {/* ✅ монохромна іконка */}
+      <View style={styles.mediaIconBadgeMono}>
+        <FontAwesomeIcon icon={badgeIcon} size={14} color="#FFF" />
+      </View>
     </TouchableOpacity>
   );
 };
@@ -609,7 +704,75 @@ const SenderName = ({ senderId, currentUserId, guildId }) => {
   return <Text style={styles.senderName}>{name}</Text>;
 };
 
-// --- Quoted (тепер клікабельний) ---
+// --------- Компактне превʼю повідомлення (для pinned/quoted) ---------
+const CompactMessagePreview = ({ message, lines = 1 }) => {
+  const text = String(message?.text || '');
+  const html = String(message?.html || '');
+  const hasImage = Array.isArray(message?.imageUrls) && message.imageUrls.length > 0;
+
+  const urls = useMemo(() => {
+    const a = extractUrlsFromText(text);
+    const b = extractUrlsFromHtml(html);
+    const out = [...a, ...b].filter(Boolean);
+    return Array.from(new Set(out));
+  }, [text, html]);
+
+  const firstUrl = urls[0] || '';
+  const meta = useLinkMeta(firstUrl);
+  const cleaned = stripUrls(text);
+
+  const linkTypeIcon = isYouTubeURL(firstUrl) ? faYoutube : isDocsURL(firstUrl) ? getDocsIcon(firstUrl) : faLink;
+
+  const titleForLink = (() => {
+    if (cleaned) return cleaned;
+    const t = (meta?.title || '').trim();
+    if (t) return t;
+    return getHostLabel(firstUrl);
+  })();
+
+  // ✅ якщо є фото — показуємо мініатюру завжди (а не просто "Фото")
+  if (hasImage) {
+    const thumb = message.imageUrls[0];
+    const label = cleaned || (firstUrl ? titleForLink : 'Фото');
+    return (
+      <View style={styles.compactPreviewRow}>
+        <Image source={{ uri: thumb }} style={styles.compactThumb} />
+        <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
+          {label}
+        </Text>
+      </View>
+    );
+  }
+
+  // ✅ якщо є лінк — показуємо монохромну іконку + заголовок (НЕ "Посилання", НЕ "youtu.be")
+  if (firstUrl) {
+    return (
+      <View style={styles.compactPreviewRow}>
+        <FontAwesomeIcon icon={linkTypeIcon} size={14} color="#cfcfcf" style={{ marginRight: 8 }} />
+        <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
+          {titleForLink}
+        </Text>
+      </View>
+    );
+  }
+
+  // ✅ чистий текст — без іконки
+  if (cleaned) {
+    return (
+      <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
+        {cleaned}
+      </Text>
+    );
+  }
+
+  return (
+    <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
+      Медіа
+    </Text>
+  );
+};
+
+// --- Quoted (клікабельний) ---
 const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) => {
   const [quoted, setQuoted] = useState(null);
 
@@ -624,10 +787,6 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) =
 
   if (!quoted) return null;
 
-  const hasImage = quoted.imageUrls?.length > 0;
-  const hasLink = quoted.text && /https?:\/\//.test(quoted.text);
-  const displayText = quoted.text?.replace(/https?:\/\/[^\s]+/g, '').trim() || (hasImage ? 'Фото' : 'Медіа');
-
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -639,14 +798,9 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) =
         <Text style={styles.quotedTitle} numberOfLines={1}>
           Відповідь
         </Text>
-        <View style={styles.quotedBody}>
-          {hasImage && <Image source={{ uri: quoted.imageUrls[0] }} style={styles.quotedImageThumb} />}
-          {hasLink && <FontAwesomeIcon icon={faPaperclip} size={14} color="#aaa" style={{ marginRight: 6 }} />}
-          {/* 3 рядки максимум */}
-          <Text style={styles.quotedText} numberOfLines={3} ellipsizeMode="tail">
-            {displayText}
-          </Text>
-        </View>
+
+        {/* ✅ без "скріпки", без "Посилання", показуємо нормальне превʼю */}
+        <CompactMessagePreview message={quoted} lines={2} />
       </View>
     </TouchableOpacity>
   );
@@ -688,7 +842,10 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
             <FontAwesomeIcon icon={faXmark} size={24} color="#fff" />
           </TouchableOpacity>
           <View style={{ flexDirection: 'row' }}>
-            <TouchableOpacity onPress={() => setScale((prev) => (prev > 1 ? 1 : 2))} style={[styles.imageViewerBtn, { marginRight: 10 }]}>
+            <TouchableOpacity
+              onPress={() => setScale((prev) => (prev > 1 ? 1 : 2))}
+              style={[styles.imageViewerBtn, { marginRight: 10 }]}
+            >
               <FontAwesomeIcon icon={scale > 1 ? faMagnifyingGlassMinus : faMagnifyingGlassPlus} size={22} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleShare} style={styles.imageViewerBtn}>
@@ -723,7 +880,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 
 const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
-  const [groups, setGroups] = useState([]); // групи по датах (для pinned та іншого)
+  const [groups, setGroups] = useState([]); // групи по датах
   const [chatType, setChatType] = useState('private');
 
   const [newMessage, setNewMessage] = useState('');
@@ -855,7 +1012,7 @@ const ChatWindow = ({ route, navigation }) => {
       const list = Object.entries(raw).map(([id, msg]) => ({ id, ...msg }));
 
       const grouped = list.reduce((acc, msg) => {
-        const dateKey = format(new Date(msg.timestamp), 'd MMMM', { locale });
+        const dateKey = safeFormat(msg.timestamp, 'd MMMM', locale) || '—';
         if (!acc[dateKey]) acc[dateKey] = [];
         acc[dateKey].push(msg);
         return acc;
@@ -864,9 +1021,9 @@ const ChatWindow = ({ route, navigation }) => {
       const sortedGroups = Object.keys(grouped)
         .map((date) => ({
           date,
-          messages: grouped[date].sort((a, b) => a.timestamp - b.timestamp)
+          messages: grouped[date].sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
         }))
-        .sort((a, b) => a.messages[0].timestamp - b.messages[0].timestamp);
+        .sort((a, b) => Number(a.messages?.[0]?.timestamp || 0) - Number(b.messages?.[0]?.timestamp || 0));
 
       setGroups(sortedGroups);
     });
@@ -874,8 +1031,12 @@ const ChatWindow = ({ route, navigation }) => {
     return () => msgRef.off('value', listener);
   }, [chatId, guildId, locale]);
 
+  // ✅ pinned тільки якщо pinnedFor[userId] === true
   const pinnedMessages = useMemo(() => {
-    return groups.flatMap((g) => g.messages).filter((m) => m.pinned?.pinnedFor?.[userId]);
+    const all = groups.flatMap((g) => g.messages);
+    const pinned = all.filter((m) => !!m?.pinned?.pinnedFor?.[userId]);
+    // ✅ сорт: найсвіжіші -> найстаріші
+    return pinned.sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
   }, [groups, userId]);
 
   // --- FLAT DATA: щоб можна було точно scrollToMessage(id) ---
@@ -884,7 +1045,7 @@ const ChatWindow = ({ route, navigation }) => {
     const groupsDesc = [...groups].reverse(); // newest date first
 
     groupsDesc.forEach((g) => {
-      const msgsDesc = [...g.messages].sort((a, b) => b.timestamp - a.timestamp); // newest first
+      const msgsDesc = [...g.messages].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)); // newest first
       msgsDesc.forEach((m) => {
         data.push({
           type: 'msg',
@@ -959,16 +1120,23 @@ const ChatWindow = ({ route, navigation }) => {
     } catch (e) {}
   }, []);
 
+  // ✅ CRASH-FIX: правильний Set.has(...)
   const markAsRead = useCallback(
     (msgs) => {
       if (!userId || !guildId || !chatId) return;
+
       msgs.forEach((msg) => {
         if (!msg?.id) return;
-        if (msg.senderId === userId || processedRead.current.has(msg.id)) return;
+        if (msg.senderId === userId) return;
+
+        // ✅ було: processedRead.current.has.has(msg.id)  -> це валило додаток
+        if (processedRead.current.has(msg.id)) return;
+
         if (!msg.readBy || !msg.readBy[userId]) {
           database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/readBy/${userId}`).set(Date.now());
-          processedRead.current.add(msg.id);
         }
+
+        processedRead.current.add(msg.id);
       });
     },
     [userId, guildId, chatId]
@@ -987,15 +1155,15 @@ const ChatWindow = ({ route, navigation }) => {
 
   const formatReadTime = (timestamp) => {
     if (!timestamp) return '';
-    const date = new Date(timestamp);
+    const date = safeDate(timestamp);
     const now = new Date();
     const yesterday = new Date();
     yesterday.setDate(now.getDate() - 1);
-    const timeString = format(date, 'HH:mm', { locale });
+    const timeString = safeFormat(timestamp, 'HH:mm', locale);
 
     if (date.toDateString() === now.toDateString()) return `сьогодні, ${timeString}`;
     if (date.toDateString() === yesterday.toDateString()) return `учора, ${timeString}`;
-    return `${format(date, 'dd MMM', { locale })}, ${timeString}`;
+    return `${safeFormat(timestamp, 'dd MMM', locale)}, ${timeString}`;
   };
 
   const renderReadReceiptOption = (message) => {
@@ -1117,7 +1285,6 @@ const ChatWindow = ({ route, navigation }) => {
   const resolveSelectedMessage = (fallback) => {
     if (fallback) return fallback;
     if (!selectedMessageId) return null;
-    // пробігаємо по групах
     const all = groups.flatMap((g) => g.messages);
     return all.find((m) => m.id === selectedMessageId) || null;
   };
@@ -1127,15 +1294,19 @@ const ChatWindow = ({ route, navigation }) => {
     if (!msg) return;
 
     const pinnedRef = database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/pinned`);
+
     if (forAll) {
       const membersSnap = await database().ref(`guilds/${guildId}/chats/${chatId}/members`).once('value');
       const members = membersSnap.val() || {};
       const pinnedFor = {};
       Object.keys(members).forEach((id) => (pinnedFor[id] = true));
-      await pinnedRef.set({ isPinned: true, pinnedFor });
+      // ✅ forAll: true
+      await pinnedRef.set({ forAll: true, pinnedFor });
     } else {
-      await pinnedRef.update({ isPinned: true, [`pinnedFor/${userId}`]: true });
+      // ✅ тільки для мене (НЕ ставимо глобальний isPinned)
+      await pinnedRef.update({ forAll: false, [`pinnedFor/${userId}`]: true });
     }
+
     setPinModalVisible(false);
     setMessageToPin(null);
     setSelectedMessageId(null);
@@ -1144,9 +1315,30 @@ const ChatWindow = ({ route, navigation }) => {
   const handleUnpin = async (forAll, targetMessage = null) => {
     const msg = resolveSelectedMessage(targetMessage);
     if (!msg) return;
-    const ref = database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/pinned`);
-    if (forAll) await ref.remove();
-    else await ref.child(`pinnedFor/${userId}`).remove();
+
+    const pinnedRef = database().ref(`guilds/${guildId}/chats/${chatId}/messages/${msg.id}/pinned`);
+
+    if (forAll) {
+      await pinnedRef.remove();
+    } else {
+      await pinnedRef.child(`pinnedFor/${userId}`).remove();
+
+      // ✅ якщо це було "forAll", після видалення для себе — вже НЕ forAll
+      const snap = await pinnedRef.once('value');
+      const val = snap.val() || {};
+      const pinnedFor = val.pinnedFor || {};
+      const keys = Object.keys(pinnedFor);
+
+      if (val.forAll) {
+        await pinnedRef.child('forAll').set(false);
+      }
+
+      // ✅ якщо більше ні для кого не закріплено — прибираємо вузол повністю
+      if (keys.length === 0) {
+        await pinnedRef.remove();
+      }
+    }
+
     setUnpinModalVisible(false);
     setMessageToPin(null);
     setSelectedMessageId(null);
@@ -1170,17 +1362,13 @@ const ChatWindow = ({ route, navigation }) => {
     } catch (error) {}
   };
 
-  // avatar-logic: беремо "попереднє" повідомлення в ВІЗУАЛЬНОМУ порядку.
-  // оскільки list inverted, "попереднє" (старіше) знаходиться ДАЛІ у flatData => index+1...
+  // avatar-logic: "попереднє" повідомлення в ВІЗУАЛЬНОМУ порядку.
   const getPrevVisualMsgSameDate = useCallback(
     (index, dateLabel) => {
       for (let i = index + 1; i < flatData.length; i++) {
         const it = flatData[i];
         if (!it) continue;
-        if (it.type === 'date') {
-          // якщо дійшли до хедера — значить попереднього в цій даті нема
-          return null;
-        }
+        if (it.type === 'date') return null;
         if (it.type === 'msg' && it.dateLabel === dateLabel) return it.msg;
       }
       return null;
@@ -1201,7 +1389,7 @@ const ChatWindow = ({ route, navigation }) => {
           keyboardVerticalOffset={keyboardOffset}
         >
           <View style={{ flex: 1 }}>
-            {/* Закріплені: свайп -> скрол чату до видимого pinned + підсвітка */}
+            {/* ✅ Закріплені: свайп -> скрол чату до видимого pinned + підсвітка */}
             {pinnedMessages.length > 0 && (
               <View style={styles.pinnedContainer}>
                 <ScrollView
@@ -1223,10 +1411,14 @@ const ChatWindow = ({ route, navigation }) => {
                     >
                       <View style={styles.pinnedItemInner}>
                         <View style={styles.pinnedBar} />
-                        <Text style={styles.pinnedLabel}>Закріплено</Text>
-                        <Text style={styles.pinnedText} numberOfLines={1} ellipsizeMode="tail">
-                          {msg.text || 'Медіа'}
-                        </Text>
+
+                        {/* ✅ "Закріплено" і текст — різні рядки */}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pinnedLabel}>Закріплено</Text>
+
+                          {/* ✅ превʼю без "Посилання", без "youtu.be" як fallback (беремо title), з thumbnail для фото */}
+                          <CompactMessagePreview message={msg} lines={1} />
+                        </View>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -1259,10 +1451,7 @@ const ChatWindow = ({ route, navigation }) => {
                 const isMe = msg.senderId === userId;
 
                 const prevMsg = getPrevVisualMsgSameDate(index, item.dateLabel);
-                const showAvatar =
-                  chatType === 'group' &&
-                  !isMe &&
-                  (!prevMsg || prevMsg.senderId !== msg.senderId);
+                const showAvatar = chatType === 'group' && !isMe && (!prevMsg || prevMsg.senderId !== msg.senderId);
 
                 const textParts = splitMessageIntoParts(msg.text || '');
                 const urlsInText = textParts.filter((p) => p.type === 'link').map((p) => p.value);
@@ -1270,6 +1459,9 @@ const ChatWindow = ({ route, navigation }) => {
                 const extraUrls = urlsInHtml.filter((u) => !urlsInText.includes(u));
 
                 const isHighlighted = highlightedMessageId === msg.id;
+
+                const isPinnedForMe = !!msg?.pinned?.pinnedFor?.[userId];
+                const isPinnedForAll = !!msg?.pinned?.forAll;
 
                 return (
                   <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
@@ -1334,14 +1526,19 @@ const ChatWindow = ({ route, navigation }) => {
                           ))}
 
                           <View style={styles.metaContainer}>
-                            {msg.pinned?.isPinned && (
+                            {/* ✅ показуємо "пін" лише якщо pinned для МЕНЕ */}
+                            {isPinnedForMe && (
                               <FontAwesomeIcon icon={faThumbtack} size={10} color="#888" style={{ marginRight: 4 }} />
                             )}
                             {msg.edited && <Text style={styles.editedLabel}>ред.</Text>}
-                            <Text style={styles.timestamp}>{format(new Date(msg.timestamp), 'HH:mm')}</Text>
+                            <Text style={styles.timestamp}>{safeFormat(msg.timestamp, 'HH:mm')}</Text>
                             {isMe && (
                               <FontAwesomeIcon
-                                icon={msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId) ? faCheckDouble : faCheck}
+                                icon={
+                                  msg.readBy && Object.keys(msg.readBy).some((id) => id !== userId)
+                                    ? faCheckDouble
+                                    : faCheck
+                                }
                                 size={11}
                                 color="#4cd137"
                                 style={{ marginLeft: 4 }}
@@ -1399,12 +1596,24 @@ const ChatWindow = ({ route, navigation }) => {
                           onSelect={() => {
                             setSelectedMessageId(msg.id);
                             setMessageToPin(msg);
-                            msg.pinned?.isPinned ? setUnpinModalVisible(true) : setPinModalVisible(true);
+
+                            // ✅ якщо вже pinned для мене:
+                            // - якщо forAll => питаємо (для себе / для всіх)
+                            // - якщо тільки для мене => відкріпляємо без перепитування
+                            if (isPinnedForMe) {
+                              if (isPinnedForAll) {
+                                setUnpinModalVisible(true);
+                              } else {
+                                handleUnpin(false, msg);
+                              }
+                            } else {
+                              setPinModalVisible(true);
+                            }
                           }}
                           style={styles.menuItem}
                         >
                           <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
-                          <Text style={styles.menuText}>{msg.pinned?.isPinned ? 'Відкріпити' : 'Закріпити'}</Text>
+                          <Text style={styles.menuText}>{isPinnedForMe ? 'Відкріпити' : 'Закріпити'}</Text>
                         </MenuOption>
 
                         <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
@@ -1434,7 +1643,7 @@ const ChatWindow = ({ route, navigation }) => {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.replyBarTitle}>Відповідь:</Text>
                   <Text style={styles.replyBarText} numberOfLines={1}>
-                    {replyToMessage.text || 'Медіа'}
+                    {stripUrls(replyToMessage.text || '') || 'Медіа'}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setReplyToMessage(null)}>
@@ -1524,7 +1733,10 @@ const ChatWindow = ({ route, navigation }) => {
                   </View>
                 )}
 
-                <TouchableOpacity style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]} onPress={handleSend}>
+                <TouchableOpacity
+                  style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]}
+                  onPress={handleSend}
+                >
                   <FontAwesomeIcon icon={editMessage ? faCheck : faPaperPlane} size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
@@ -1636,14 +1848,16 @@ const ChatWindow = ({ route, navigation }) => {
           <View style={styles.modalOverlay}>
             <View style={styles.glassCard}>
               <Text style={styles.modalTitle}>Закріпити повідомлення</Text>
+
               <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(false, messageToPin)}>
                 <Text style={{ color: '#fff' }}>Тільки для мене</Text>
               </TouchableOpacity>
-              {chatType === 'group' && (
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(true, messageToPin)}>
-                  <Text style={{ color: '#fff' }}>Для всіх</Text>
-                </TouchableOpacity>
-              )}
+
+              {/* ✅ тепер "Для всіх" доступно і в private, і в group */}
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handlePin(true, messageToPin)}>
+                <Text style={{ color: '#fff' }}>Для всіх</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.actionBtn} onPress={() => setPinModalVisible(false)}>
                 <Text style={{ color: '#aaa' }}>Скасувати</Text>
               </TouchableOpacity>
@@ -1654,15 +1868,16 @@ const ChatWindow = ({ route, navigation }) => {
         <Modal visible={unpinModalVisible} transparent>
           <View style={styles.modalOverlay}>
             <View style={styles.glassCard}>
-              <Text style={styles.modalTitle}>Відкріпити повідомлення?</Text>
+              <Text style={styles.modalTitle}>Відкріпити?</Text>
+
               <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(false, messageToPin)}>
                 <Text style={{ color: '#fff' }}>Тільки в мене</Text>
               </TouchableOpacity>
-              {chatType === 'group' && (
-                <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(true, messageToPin)}>
-                  <Text style={{ color: '#ff5b5b' }}>Для всіх</Text>
-                </TouchableOpacity>
-              )}
+
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleUnpin(true, messageToPin)}>
+                <Text style={{ color: '#ff5b5b' }}>Для всіх</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.actionBtn} onPress={() => setUnpinModalVisible(false)}>
                 <Text style={{ color: '#aaa' }}>Скасувати</Text>
               </TouchableOpacity>
@@ -1717,13 +1932,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   pinnedItemPage: { width: screenWidth, paddingHorizontal: 10 },
+
+  // ✅ робимо контейнер рядком: бар + контент-колонка
   pinnedItemInner: { flexDirection: 'row', alignItems: 'center', width: '100%' },
 
   // зафіксовано як ти просив:
   pinnedBar: { width: 4, height: 30, backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
-  pinnedLabel: { color: '#3498db', fontSize: 11, fontWeight: 'bold', marginRight: 10 },
-
-  pinnedText: { color: '#ccc', fontSize: 13, flex: 1 },
+  pinnedLabel: { color: '#3498db', fontSize: 11, fontWeight: 'bold' },
 
   dateBadgeContainer: { alignItems: 'center', marginVertical: 15 },
   dateBadge: {
@@ -1741,8 +1956,18 @@ const styles = StyleSheet.create({
 
   bubble: { maxWidth: screenWidth * 0.75, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
   bubbleReply: { width: screenWidth * 0.75 },
-  bubbleMe: { backgroundColor: 'rgba(52, 152, 219, 0.25)', borderBottomRightRadius: 4, borderWidth: 1, borderColor: 'rgba(52, 152, 219, 0.3)' },
-  bubbleThem: { backgroundColor: 'rgba(255,255,255,0.08)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  bubbleMe: {
+    backgroundColor: 'rgba(52, 152, 219, 0.25)',
+    borderBottomRightRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 152, 219, 0.3)'
+  },
+  bubbleThem: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)'
+  },
 
   // підсвітка знайденого/цільового повідомлення
   bubbleHighlighted: {
@@ -1765,16 +1990,22 @@ const styles = StyleSheet.create({
   linkPreviewTextContainer: { padding: 10 },
   linkPreviewTitle: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   linkPreviewDescription: { color: '#aaa', fontSize: 12, marginTop: 2 },
-  mediaIconBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', padding: 6, borderRadius: 8 },
+
+  // ✅ монохромний бейдж
+  mediaIconBadgeMono: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 6,
+    borderRadius: 8
+  },
 
   quotedContainer: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 6, marginBottom: 6 },
   quotedMinimal: { padding: 4 },
   quotedLine: { width: 3, backgroundColor: '#3498db', borderRadius: 2, marginRight: 8 },
   quotedContent: { flex: 1 },
-  quotedTitle: { color: '#3498db', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  quotedBody: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  quotedText: { color: '#ccc', fontSize: 13, flex: 1, flexShrink: 1 },
-  quotedImageThumb: { width: 24, height: 24, borderRadius: 4, marginRight: 6 },
+  quotedTitle: { color: '#3498db', fontSize: 11, fontWeight: '700', marginBottom: 4 },
 
   interlocutorAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
 
@@ -1841,7 +2072,12 @@ const styles = StyleSheet.create({
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   imageViewerBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
   imageScrollView: { flexGrow: 1, justifyContent: 'center' },
-  fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 }
+  fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 },
+
+  // --- compact preview (pinned/quoted) ---
+  compactPreviewRow: { flexDirection: 'row', alignItems: 'center' },
+  compactThumb: { width: 26, height: 26, borderRadius: 6, marginRight: 8, backgroundColor: '#444' },
+  compactPreviewText: { color: '#ccc', fontSize: 13, flex: 1 }
 });
 
 export default ChatWindow;
