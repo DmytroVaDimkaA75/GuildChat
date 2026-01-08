@@ -9,6 +9,17 @@ import AlarmClockIcon from '../ico/alarm-clock.svg'; // Іконка будил�
 import BedIcon from '../ico/bed.svg'; // Іконка ліжка
 
 const TOTAL_MINUTES = 24 * 60;
+const THEME = {
+  background: '#121212',
+  surface: '#1c1c1c',
+  ring: '#242424',
+  dial: '#151515',
+  tickMajor: '#4b4b4b',
+  tickMinor: '#2f2f2f',
+  textPrimary: '#f5f5f5',
+  textSecondary: '#b0b0b0',
+  accent: '#3498db',
+};
 
 /** Перетворює кут у формат HH:MM. 
  * -90° (-Math.PI/2) => 00:00, 360° => 24:00
@@ -164,7 +175,15 @@ const SleepSchedule = () => {
       const tx2 = cx + outerTick * Math.cos(angle);
       const ty2 = cy + outerTick * Math.sin(angle);
       ticks.push(
-        <Line key={`min-tick-${i}`} x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="#ccc" strokeWidth={1} />
+        <Line
+          key={`min-tick-${i}`}
+          x1={tx1}
+          y1={ty1}
+          x2={tx2}
+          y2={ty2}
+          stroke={THEME.tickMinor}
+          strokeWidth={1}
+        />
       );
     }
     return ticks;
@@ -184,7 +203,15 @@ const SleepSchedule = () => {
       const tx2 = cx + outerTick * Math.cos(angle);
       const ty2 = cy + outerTick * Math.sin(angle);
       ticks.push(
-        <Line key={`hour-tick-${hour}`} x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="#666" strokeWidth={2} />
+        <Line
+          key={`hour-tick-${hour}`}
+          x1={tx1}
+          y1={ty1}
+          x2={tx2}
+          y2={ty2}
+          stroke={THEME.tickMajor}
+          strokeWidth={2}
+        />
       );
     }
     return ticks;
@@ -203,7 +230,7 @@ const SleepSchedule = () => {
           key={`major-${hour}`}
           x={tx}
           y={ty}
-          fill="#444"
+          fill={THEME.textSecondary}
           fontSize={14}
           fontWeight="bold"
           textAnchor="middle"
@@ -256,16 +283,16 @@ const SleepSchedule = () => {
     <View style={styles.container}>
       <Svg width={redDiameter} height={redDiameter}>
         {/* Зовнішнє коло (фон) */}
-        <Circle cx={cx} cy={cy} r={redDiameter / 2} fill="#f0f0f0" />
+        <Circle cx={cx} cy={cy} r={redDiameter / 2} fill={THEME.surface} />
 
         {/* Кільцева дуга (фон шкали) */}
-        <Path d={ringPath} fill="#e0e0e0" fillRule="evenodd" />
+        <Path d={ringPath} fill={THEME.ring} fillRule="evenodd" />
 
         {/* Синя дуга (шкали) */}
-        <Path d={d} fill="#3498db" />
+        <Path d={d} fill={THEME.accent} />
 
         {/* Маленьке коло (фон розмітки) */}
-        <Circle cx={cx} cy={cy} r={smallDiameter / 2} fill="#ffffff" />
+        <Circle cx={cx} cy={cy} r={smallDiameter / 2} fill={THEME.dial} />
         {renderMinuteTicks()}
         {renderHourlyTicks()}
         {renderMajorMarks()}
@@ -275,12 +302,12 @@ const SleepSchedule = () => {
         */}
         <G transform={`translate(${cx-50}, ${cy - 30})`}>
           <G>
-            <AlarmClockIcon width={24} height={24} fill="#BDBDBD" />
+            <AlarmClockIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
           <SvgText
             x={30}
             y={23}
-            fill="#000"
+            fill={THEME.textPrimary}
             fontSize="32"
             fontWeight="bold"
             textAnchor="start"
@@ -294,12 +321,12 @@ const SleepSchedule = () => {
         */}
         <G transform={`translate(${cx - 50}, ${cy+5})`}>
           <G>
-            <BedIcon width={24} height={24} fill="#BDBDBD" />
+            <BedIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
           <SvgText
             x={30}
             y={23}
-            fill="#000"
+            fill={THEME.textPrimary}
             fontSize="32"
             fontWeight="bold"
             textAnchor="start"
@@ -310,7 +337,7 @@ const SleepSchedule = () => {
 
         {/* Група "start" (ручка з AlarmClockIcon) */}
         <G transform={`translate(${greenX1}, ${greenY1})`} {...greenStartPanResponder.panHandlers}>
-          <Circle cx={0} cy={0} r={startRadiusControl} fill="#3498db" />
+          <Circle cx={0} cy={0} r={startRadiusControl} fill={THEME.accent} />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - startIconOffset}, ${ICON_POSITION_SHIFT_Y - startIconOffset})`}>
             <AlarmClockIcon
               width={startIconSize}
@@ -322,7 +349,7 @@ const SleepSchedule = () => {
 
         {/* Група "end" (ручка з BedIcon) */}
         <G transform={`translate(${greenX2}, ${greenY2})`} {...greenEndPanResponder.panHandlers}>
-          <Circle cx={0} cy={0} r={endRadiusControl} fill="#3498db" />
+          <Circle cx={0} cy={0} r={endRadiusControl} fill={THEME.accent} />
           <G transform={`translate(${ICON_POSITION_SHIFT_X - endIconOffset}, ${ICON_POSITION_SHIFT_Y - endIconOffset})`}>
             <BedIcon
               width={endIconSize}
@@ -360,7 +387,7 @@ const SleepSchedule = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: THEME.background,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
@@ -376,7 +403,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: THEME.surface,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     marginHorizontal: 1.5,
@@ -385,15 +412,15 @@ const styles = StyleSheet.create({
   },
   dayButtonActive: {
     backgroundColor: 'rgba(52,152,219,0.15)',
-    borderColor: '#3498db',
+    borderColor: THEME.accent,
   },
   dayButtonText: {
-    color: '#E0E0E0',
+    color: THEME.textSecondary,
     fontWeight: '700',
     fontSize: 15,
   },
   dayButtonTextActive: {
-    color: '#fff',
+    color: THEME.textPrimary,
   },
 });
 
