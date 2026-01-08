@@ -1,14 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database'; // ИЗМЕНЕНО
-import { useNavigation, useRoute } from '@react-navigation/native';
-import React, { useRef, useState } from 'react';
-import { Dimensions, PanResponder, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, PanResponder, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
-import { v4 as uuidv4 } from 'uuid';
 import AlarmClockIcon from '../ico/alarm-clock.svg'; // Іконка будильника
 import BedIcon from '../ico/bed.svg'; // Іконка ліжка
 
 const TOTAL_MINUTES = 24 * 60;
+const ROLLING_ANCHOR_AT = 1767484800;
 const THEME = {
   background: '#121212',
   surface: '#1c1c1c',
@@ -32,6 +32,31 @@ const formatTimeFromAngle = (angle) => {
   const hh = Math.floor(totalMins / 60);
   const mm = totalMins % 60;
   return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+};
+
+const angleToMinutes = (angle) => {
+  let adjusted = angle + Math.PI / 2;
+  if (adjusted < 0) adjusted += 2 * Math.PI;
+  const fraction = adjusted / (2 * Math.PI);
+  return Math.round(fraction * TOTAL_MINUTES);
+};
+
+const timeToAngle = (time) => {
+  const [hours, minutes] = time.split(':').map((value) => Number(value));
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return null;
+  const totalMinutes = Math.min(hours * 60 + minutes, TOTAL_MINUTES);
+  const fraction = totalMinutes / TOTAL_MINUTES;
+  return fraction * 2 * Math.PI - Math.PI / 2;
+};
+
+const normalizeTimeInput = (value) => {
+  const cleaned = value.replace(/[^\d:]/g, '');
+  if (cleaned.length <= 2) return cleaned;
+  if (!cleaned.includes(':')) {
+    return `${cleaned.slice(0, 2)}:${cleaned.slice(2, 4)}`;
+  }
+  return cleaned;
 };
 
 /** Перетворює кут у UTC ISO string (тільки час, дата довільна) */
@@ -66,7 +91,6 @@ const monthNames = [
 const SleepSchedule = () => {
   const { width } = Dimensions.get('window');
   const navigation = useNavigation();
-  const route = useRoute();
 
   // Основні розміри
   const redDiameter = width;
@@ -265,6 +289,8 @@ const SleepSchedule = () => {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDates, setSelectedDates] = useState([]);
+  const [activeHandle, setActiveHandle] = useState('start');
+  const [timeInputValue, setTimeInputValue] = useState(formatTimeFromAngle(greenStartAngle));
 
   const toggleDay = (idx) => {
     setSelectedDays((prev) =>
@@ -321,19 +347,111 @@ const SleepSchedule = () => {
     );
   };
 
+  useEffect(() => {
+    if (isGreenStartActive) {
+      setActiveHandle('start');
+    } else if (isGreenEndActive) {
+      setActiveHandle('end');
+    }
+  }, [isGreenStartActive, isGreenEndActive]);
+
+  useEffect(() => {
+    if (activeHandle === 'start') {
+      setTimeInputValue(formatTimeFromAngle(greenStartAngle));
+      return;
+    }
+    setTimeInputValue(formatTimeFromAngle(greenEndAngle));
+  }, [activeHandle, greenStartAngle, greenEndAngle]);
+
+  const handleTimeInputChange = (value) => {
+    const normalized = normalizeTimeInput(value);
+    setTimeInputValue(normalized);
+    if (normalized.length < 4) return;
+    const angle = timeToAngle(normalized);
+    if (angle === null) return;
+    if (activeHandle === 'start') {
+      setGreenStartAngle(angle);
+    } else {
+      setGreenEndAngle(angle);
+    }
+  };
+
+  const buildWeeklySchedule = (startMinutes, endMinutes) => {
+    const weekly = {};
+    const addSlot = (dayIndex, slot) => {
+      const key = String(dayIndex);
+      if (!weekly[key]) weekly[key] = [];
+      weekly[key].push(slot);
+    };
+    selectedDays.forEach((dayIndex) => {
+      if (endMinutes > startMinutes) {
+        addSlot(dayIndex, { startMinutes, endMinutes });
+        return;
+      }
+      addSlot(dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
+      addSlot((dayIndex + 1) % 7, { startMinutes: 0, endMinutes });
+    });
+    return weekly;
+  };
+
+  const buildRollingWeeksSchedule = (startMinutes, endMinutes) => {
+    const rollingWeeks = { anchorAt: ROLLING_ANCHOR_AT, weeks: {} };
+    const anchorDate = new Date(ROLLING_ANCHOR_AT * 1000);
+    const addSlot = (weekIndex, dayIndex, slot) => {
+      const weekKey = String(weekIndex);
+      const dayKey = String(dayIndex);
+      if (!rollingWeeks.weeks[weekKey]) {
+        rollingWeeks.weeks[weekKey] = { days: {} };
+      }
+      if (!rollingWeeks.weeks[weekKey].days[dayKey]) {
+        rollingWeeks.weeks[weekKey].days[dayKey] = [];
+      }
+      rollingWeeks.weeks[weekKey].days[dayKey].push(slot);
+    };
+    selectedDates.forEach((dateKey) => {
+      const [year, month, day] = dateKey.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      const diffDays = Math.floor((date - anchorDate) / (24 * 60 * 60 * 1000));
+      const weekIndex = Math.floor(diffDays / 7);
+      const dayIndex = ((diffDays % 7) + 7) % 7;
+      if (endMinutes > startMinutes) {
+        addSlot(weekIndex, dayIndex, { startMinutes, endMinutes });
+        return;
+      }
+      addSlot(weekIndex, dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
+      if (dayIndex === 6) {
+        addSlot(weekIndex + 1, 0, { startMinutes: 0, endMinutes });
+      } else {
+        addSlot(weekIndex, dayIndex + 1, { startMinutes: 0, endMinutes });
+      }
+    });
+    return rollingWeeks;
+  };
+
   // ИЗМЕНЕНО: Збереження часу в Firebase
   const handleSave = async () => {
     try {
       const userId = await AsyncStorage.getItem('userId');
       if (!userId) return;
-      const uuid = uuidv4();
+      const startMinutes = angleToMinutes(greenStartAngle);
+      const endMinutes = angleToMinutes(greenEndAngle);
+      const calendarMode = viewMode === 'week' ? 'weekly' : 'rollingWeeks';
+      const activitySchedule = {
+        mode: calendarMode,
+        [calendarMode]:
+          calendarMode === 'weekly'
+            ? buildWeeklySchedule(startMinutes, endMinutes)
+            : buildRollingWeeksSchedule(startMinutes, endMinutes),
+      };
       await database()
-        .ref(`users/${userId}/setting/shedule/${uuid}`)
+        .ref(`users/${userId}/setting/schedule`)
         .set({
+          mode: calendarMode,
+          activitySchedule,
           timeStart: angleToUtcTime(greenStartAngle),
           timeEnd: angleToUtcTime(greenEndAngle),
-          // days: selectedDays, // поки не зберігаємо
         });
+      navigation.navigate('AddSchedule');
       // Можна додати повідомлення про успіх
     } catch (e) {
       // Можна додати повідомлення про помилку
@@ -344,11 +462,16 @@ const SleepSchedule = () => {
   // Передаємо handleSave у route.params для доступу з хедера
   React.useEffect(() => {
     navigation.setParams?.({ handleSave });
-  }, [greenStartAngle, greenEndAngle]);
+  }, [greenStartAngle, greenEndAngle, selectedDays, selectedDates, viewMode]);
+
+  const timeInputLabel = useMemo(() => (
+    activeHandle === 'start' ? 'Початок' : 'Кінець'
+  ), [activeHandle]);
 
   return (
     <View style={styles.container}>
-      <Svg width={redDiameter} height={redDiameter}>
+      <View style={styles.dialWrapper}>
+        <Svg width={redDiameter} height={redDiameter}>
         {/* Зовнішнє коло (фон) */}
         <Circle cx={cx} cy={cy} r={redDiameter / 2} fill={THEME.background} />
 
@@ -367,7 +490,7 @@ const SleepSchedule = () => {
         {/* 
           1) Іконка будильника + час (greenStartAngle) -- початок активності
         */}
-        <G transform={`translate(${cx-50}, ${cy - 30})`}>
+        <G transform={`translate(${cx-50}, ${cy - 30})`} onPress={() => setActiveHandle('start')}>
           <G>
             <AlarmClockIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
@@ -386,7 +509,7 @@ const SleepSchedule = () => {
         {/* 
           2) Іконка ліжка + час (greenEndAngle) -- кінець активності
         */}
-        <G transform={`translate(${cx - 50}, ${cy+5})`}>
+        <G transform={`translate(${cx - 50}, ${cy+5})`} onPress={() => setActiveHandle('end')}>
           <G>
             <BedIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
@@ -425,7 +548,21 @@ const SleepSchedule = () => {
             />
           </G>
         </G>
-      </Svg>
+        </Svg>
+        <View style={styles.centerTimeInput}>
+          <Text style={styles.centerTimeLabel}>{timeInputLabel}</Text>
+          <TextInput
+            value={timeInputValue}
+            onChangeText={handleTimeInputChange}
+            placeholder="00:00"
+            placeholderTextColor="rgba(255,255,255,0.35)"
+            keyboardType="numeric"
+            maxLength={5}
+            style={styles.centerTimeField}
+            selectionColor={THEME.accent}
+          />
+        </View>
+      </View>
         <View style={styles.viewToggle}>
         <Text style={[styles.toggleLabel, viewMode === 'week' && styles.toggleLabelActive]}>
           Тиждень
@@ -507,7 +644,11 @@ const SleepSchedule = () => {
                 return (
                   <TouchableOpacity
                     key={`day-${index}-${dayIndex}`}
-                    style={[styles.monthDayCell, isSelected && styles.monthDayCellSelected]}
+                    style={[
+                      styles.monthDayCell,
+                      isSelected && styles.monthDayCellSelected,
+                      isPastDate && styles.monthDayCellDisabled,
+                    ]}
                     onPress={() => toggleDate(dateKey)}
                     activeOpacity={0.7}
                     disabled={isPastDate}
@@ -637,9 +778,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   monthDayCellSelected: {
-    backgroundColor: 'rgba(52,152,219,0.2)',
+    backgroundColor: 'rgba(52,152,219,0.15)',
+    borderColor: THEME.accent,
+  },
+  monthDayCellDisabled: {
+    opacity: 0.5,
   },
   monthDayText: {
     color: THEME.textPrimary,
@@ -654,6 +801,38 @@ const styles = StyleSheet.create({
   monthDayTextSelected: {
     color: THEME.textPrimary,
     fontWeight: '700',
+  },
+  dialWrapper: {
+    position: 'relative',
+  },
+  centerTimeInput: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 120,
+    transform: [{ translateX: -60 }, { translateY: -28 }],
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(21,21,21,0.92)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  centerTimeLabel: {
+    color: THEME.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  centerTimeField: {
+    color: THEME.textPrimary,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textAlign: 'center',
+    width: '100%',
+    paddingVertical: 2,
   },
 });
 
