@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database'; // ИЗМЕНЕНО
 import { useNavigation, useRoute } from '@react-navigation/native';
 import React, { useRef, useState } from 'react';
-import { Dimensions, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, PanResponder, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import { v4 as uuidv4 } from 'uuid';
 import AlarmClockIcon from '../ico/alarm-clock.svg'; // Іконка будильника
@@ -264,6 +264,7 @@ const SleepSchedule = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const [selectedDates, setSelectedDates] = useState([]);
 
   const toggleDay = (idx) => {
     setSelectedDays((prev) =>
@@ -298,12 +299,26 @@ const SleepSchedule = () => {
     return weeks;
   };
 
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const isPrevMonthDisabled = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1) < currentMonthStart;
+
   const handlePrevMonth = () => {
+    if (isPrevMonthDisabled) return;
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
 
   const handleNextMonth = () => {
     setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const toggleDate = (dateKey) => {
+    setSelectedDates((prev) =>
+      prev.includes(dateKey)
+        ? prev.filter((item) => item !== dateKey)
+        : [...prev, dateKey]
+    );
   };
 
   // ИЗМЕНЕНО: Збереження часу в Firebase
@@ -411,28 +426,22 @@ const SleepSchedule = () => {
           </G>
         </G>
       </Svg>
-      <View style={styles.viewToggle}>
-        <TouchableOpacity
-          style={[styles.toggleButton, viewMode === 'week' && styles.toggleButtonActive]}
-          onPress={() => setViewMode('week')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.toggleButtonText, viewMode === 'week' && styles.toggleButtonTextActive]}>
-            Тиждень
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleButton, viewMode === 'month' && styles.toggleButtonActive]}
-          onPress={() => setViewMode('month')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.toggleButtonText, viewMode === 'month' && styles.toggleButtonTextActive]}>
-            Місяць
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.viewToggle}>
+        <Text style={[styles.toggleLabel, viewMode === 'week' && styles.toggleLabelActive]}>
+          Тиждень
+        </Text>
+        <Switch
+          value={viewMode === 'month'}
+          onValueChange={(value) => setViewMode(value ? 'month' : 'week')}
+          trackColor={{ false: 'rgba(255,255,255,0.15)', true: 'rgba(52,152,219,0.35)' }}
+          thumbColor={viewMode === 'month' ? THEME.accent : '#d0d0d0'}
+        />
+        <Text style={[styles.toggleLabel, viewMode === 'month' && styles.toggleLabelActive]}>
+          Місяць
+        </Text>
       </View>
-      {viewMode === 'week' ? (
-        <View style={styles.daysRow}>
+        {viewMode === 'week' ? (
+          <View style={styles.daysRow}>
           {daysOfWeek.map((day, idx) => (
             <TouchableOpacity
               key={day}
@@ -452,11 +461,16 @@ const SleepSchedule = () => {
             </TouchableOpacity>
           ))}
         </View>
-      ) : (
-        <View style={styles.monthWrapper}>
+        ) : (
+          <View style={styles.monthWrapper}>
           <View style={styles.monthHeader}>
-            <TouchableOpacity onPress={handlePrevMonth} style={styles.monthArrow} activeOpacity={0.7}>
-              <Text style={styles.monthArrowText}>‹</Text>
+            <TouchableOpacity
+              onPress={handlePrevMonth}
+              style={[styles.monthArrow, isPrevMonthDisabled && styles.monthArrowDisabled]}
+              activeOpacity={0.7}
+              disabled={isPrevMonthDisabled}
+            >
+              <Text style={[styles.monthArrowText, isPrevMonthDisabled && styles.monthArrowTextDisabled]}>‹</Text>
             </TouchableOpacity>
             <Text style={styles.monthTitle}>
               {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
@@ -474,17 +488,46 @@ const SleepSchedule = () => {
           </View>
           {getMonthDays().map((week, index) => (
             <View key={`week-${index}`} style={styles.monthWeekRow}>
-              {week.map((day, dayIndex) => (
-                <View key={`day-${index}-${dayIndex}`} style={styles.monthDayCell}>
-                  <Text style={[styles.monthDayText, !day && styles.monthDayTextMuted]}>
-                    {day ?? ''}
-                  </Text>
-                </View>
-              ))}
+              {week.map((day, dayIndex) => {
+                if (!day) {
+                  return (
+                    <View key={`day-${index}-${dayIndex}`} style={styles.monthDayCell}>
+                      <Text style={[styles.monthDayText, styles.monthDayTextMuted]}>
+                        {''}
+                      </Text>
+                    </View>
+                  );
+                }
+
+                const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isPastDate = date < todayStart;
+                const isSelected = selectedDates.includes(dateKey);
+
+                return (
+                  <TouchableOpacity
+                    key={`day-${index}-${dayIndex}`}
+                    style={[styles.monthDayCell, isSelected && styles.monthDayCellSelected]}
+                    onPress={() => toggleDate(dateKey)}
+                    activeOpacity={0.7}
+                    disabled={isPastDate}
+                  >
+                    <Text
+                      style={[
+                        styles.monthDayText,
+                        isPastDate && styles.monthDayTextDisabled,
+                        isSelected && styles.monthDayTextSelected,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ))}
-        </View>
-      )}
+          </View>
+        )}
     </View>
   );
 };
@@ -495,33 +538,22 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.background,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 16,
   },
   viewToggle: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 10,
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  toggleButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: THEME.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  toggleButtonActive: {
-    backgroundColor: 'rgba(52,152,219,0.15)',
-    borderColor: THEME.accent,
-  },
-  toggleButtonText: {
+  toggleLabel: {
     color: THEME.textSecondary,
     fontWeight: '700',
     fontSize: 14,
   },
-  toggleButtonTextActive: {
+  toggleLabelActive: {
     color: THEME.textPrimary,
   },
   daysRow: {
@@ -557,8 +589,8 @@ const styles = StyleSheet.create({
     width: '92%',
     backgroundColor: THEME.surface,
     borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
     marginBottom: 12,
@@ -567,20 +599,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   monthTitle: {
     color: THEME.textPrimary,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 14,
   },
   monthArrow: {
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+  monthArrowDisabled: {
+    opacity: 0.4,
+  },
   monthArrowText: {
     color: THEME.textSecondary,
-    fontSize: 24,
+    fontSize: 20,
+  },
+  monthArrowTextDisabled: {
+    color: 'rgba(255,255,255,0.35)',
   },
   monthWeekRow: {
     flexDirection: 'row',
@@ -591,20 +629,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: THEME.textSecondary,
     fontWeight: '600',
-    fontSize: 12,
-    paddingVertical: 4,
+    fontSize: 11,
+    paddingVertical: 2,
   },
   monthDayCell: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  monthDayCellSelected: {
+    backgroundColor: 'rgba(52,152,219,0.2)',
   },
   monthDayText: {
     color: THEME.textPrimary,
-    fontSize: 14,
+    fontSize: 12,
   },
   monthDayTextMuted: {
     color: 'transparent',
+  },
+  monthDayTextDisabled: {
+    color: 'rgba(255,255,255,0.3)',
+  },
+  monthDayTextSelected: {
+    color: THEME.textPrimary,
+    fontWeight: '700',
   },
 });
 
