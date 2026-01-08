@@ -48,6 +48,20 @@ const angleToUtcTime = (angle) => {
 };
 
 const daysOfWeek = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+const monthNames = [
+  'Січень',
+  'Лютий',
+  'Березень',
+  'Квітень',
+  'Травень',
+  'Червень',
+  'Липень',
+  'Серпень',
+  'Вересень',
+  'Жовтень',
+  'Листопад',
+  'Грудень',
+];
 
 const SleepSchedule = () => {
   const { width } = Dimensions.get('window');
@@ -245,6 +259,11 @@ const SleepSchedule = () => {
 
   // Стан для вибраних днів тижня
   const [selectedDays, setSelectedDays] = useState([1,2,3,4,5]); // за замовчуванням робочі дні
+  const [viewMode, setViewMode] = useState('week');
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const toggleDay = (idx) => {
     setSelectedDays((prev) =>
@@ -252,6 +271,39 @@ const SleepSchedule = () => {
         ? prev.filter((d) => d !== idx)
         : [...prev, idx]
     );
+  };
+
+  const getMonthDays = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+    const cells = [];
+
+    for (let i = 0; i < firstDayIndex; i += 1) {
+      cells.push(null);
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      cells.push(day);
+    }
+
+    while (cells.length % 7 !== 0) {
+      cells.push(null);
+    }
+
+    const weeks = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
+  };
+
+  const handlePrevMonth = () => {
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
   // ИЗМЕНЕНО: Збереження часу в Firebase
@@ -283,7 +335,7 @@ const SleepSchedule = () => {
     <View style={styles.container}>
       <Svg width={redDiameter} height={redDiameter}>
         {/* Зовнішнє коло (фон) */}
-        <Circle cx={cx} cy={cy} r={redDiameter / 2} fill={THEME.surface} />
+        <Circle cx={cx} cy={cy} r={redDiameter / 2} fill={THEME.background} />
 
         {/* Кільцева дуга (фон шкали) */}
         <Path d={ringPath} fill={THEME.ring} fillRule="evenodd" />
@@ -359,27 +411,80 @@ const SleepSchedule = () => {
           </G>
         </G>
       </Svg>
-      {/* Дні тижня під діаграмою, середній розмір */}
-      <View style={styles.daysRow}>
-        {daysOfWeek.map((day, idx) => (
-          <TouchableOpacity
-            key={day}
-            style={[
-              styles.dayButton,
-              selectedDays.includes(idx) && styles.dayButtonActive
-            ]}
-            onPress={() => toggleDay(idx)}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.dayButtonText,
-              selectedDays.includes(idx) && styles.dayButtonTextActive
-            ]}>
-              {day}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.viewToggle}>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'week' && styles.toggleButtonActive]}
+          onPress={() => setViewMode('week')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.toggleButtonText, viewMode === 'week' && styles.toggleButtonTextActive]}>
+            Тиждень
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'month' && styles.toggleButtonActive]}
+          onPress={() => setViewMode('month')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.toggleButtonText, viewMode === 'month' && styles.toggleButtonTextActive]}>
+            Місяць
+          </Text>
+        </TouchableOpacity>
       </View>
+      {viewMode === 'week' ? (
+        <View style={styles.daysRow}>
+          {daysOfWeek.map((day, idx) => (
+            <TouchableOpacity
+              key={day}
+              style={[
+                styles.dayButton,
+                selectedDays.includes(idx) && styles.dayButtonActive
+              ]}
+              onPress={() => toggleDay(idx)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.dayButtonText,
+                selectedDays.includes(idx) && styles.dayButtonTextActive
+              ]}>
+                {day}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.monthWrapper}>
+          <View style={styles.monthHeader}>
+            <TouchableOpacity onPress={handlePrevMonth} style={styles.monthArrow} activeOpacity={0.7}>
+              <Text style={styles.monthArrowText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.monthTitle}>
+              {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+            </Text>
+            <TouchableOpacity onPress={handleNextMonth} style={styles.monthArrow} activeOpacity={0.7}>
+              <Text style={styles.monthArrowText}>›</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.monthWeekRow}>
+            {daysOfWeek.map((day) => (
+              <Text key={day} style={styles.monthWeekday}>
+                {day}
+              </Text>
+            ))}
+          </View>
+          {getMonthDays().map((week, index) => (
+            <View key={`week-${index}`} style={styles.monthWeekRow}>
+              {week.map((day, dayIndex) => (
+                <View key={`day-${index}-${dayIndex}`} style={styles.monthDayCell}>
+                  <Text style={[styles.monthDayText, !day && styles.monthDayTextMuted]}>
+                    {day ?? ''}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 };
@@ -389,13 +494,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: THEME.background,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  toggleButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: THEME.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  toggleButtonActive: {
+    backgroundColor: 'rgba(52,152,219,0.15)',
+    borderColor: THEME.accent,
+  },
+  toggleButtonText: {
+    color: THEME.textSecondary,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  toggleButtonTextActive: {
+    color: THEME.textPrimary,
   },
   daysRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 16,
     marginBottom: 12,
     gap: 3,
   },
@@ -421,6 +552,59 @@ const styles = StyleSheet.create({
   },
   dayButtonTextActive: {
     color: THEME.textPrimary,
+  },
+  monthWrapper: {
+    width: '92%',
+    backgroundColor: THEME.surface,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 12,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  monthTitle: {
+    color: THEME.textPrimary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  monthArrow: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  monthArrowText: {
+    color: THEME.textSecondary,
+    fontSize: 24,
+  },
+  monthWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  monthWeekday: {
+    flex: 1,
+    textAlign: 'center',
+    color: THEME.textSecondary,
+    fontWeight: '600',
+    fontSize: 12,
+    paddingVertical: 4,
+  },
+  monthDayCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  monthDayText: {
+    color: THEME.textPrimary,
+    fontSize: 14,
+  },
+  monthDayTextMuted: {
+    color: 'transparent',
   },
 });
 
