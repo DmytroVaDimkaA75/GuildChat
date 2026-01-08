@@ -447,7 +447,7 @@ const Spoiler = ({ children }) => {
 const parseMentions = (text) => {
   if (!text) return [];
   const parts = [];
-  const regex = /@([a-z0-9_.-]+)/gi;
+  const regex = /@([a-z0-9_.-]+(?:\s+[a-z0-9_.-]+)*)/gi;
   let lastIndex = 0;
   let match;
 
