@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database'; // ИЗМЕНЕНО
 import { useNavigation } from '@react-navigation/native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, PanResponder, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import AlarmClockIcon from '../ico/alarm-clock.svg'; // Іконка будильника
@@ -289,8 +289,8 @@ const SleepSchedule = () => {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDates, setSelectedDates] = useState([]);
-  const [activeHandle, setActiveHandle] = useState('start');
-  const [timeInputValue, setTimeInputValue] = useState(formatTimeFromAngle(greenStartAngle));
+  const [startTimeInput, setStartTimeInput] = useState(formatTimeFromAngle(greenStartAngle));
+  const [endTimeInput, setEndTimeInput] = useState(formatTimeFromAngle(greenEndAngle));
 
   const toggleDay = (idx) => {
     setSelectedDays((prev) =>
@@ -348,32 +348,29 @@ const SleepSchedule = () => {
   };
 
   useEffect(() => {
-    if (isGreenStartActive) {
-      setActiveHandle('start');
-    } else if (isGreenEndActive) {
-      setActiveHandle('end');
-    }
-  }, [isGreenStartActive, isGreenEndActive]);
+    setStartTimeInput(formatTimeFromAngle(greenStartAngle));
+  }, [greenStartAngle]);
 
   useEffect(() => {
-    if (activeHandle === 'start') {
-      setTimeInputValue(formatTimeFromAngle(greenStartAngle));
-      return;
-    }
-    setTimeInputValue(formatTimeFromAngle(greenEndAngle));
-  }, [activeHandle, greenStartAngle, greenEndAngle]);
+    setEndTimeInput(formatTimeFromAngle(greenEndAngle));
+  }, [greenEndAngle]);
 
-  const handleTimeInputChange = (value) => {
+  const handleStartTimeChange = (value) => {
     const normalized = normalizeTimeInput(value);
-    setTimeInputValue(normalized);
+    setStartTimeInput(normalized);
     if (normalized.length < 4) return;
     const angle = timeToAngle(normalized);
     if (angle === null) return;
-    if (activeHandle === 'start') {
-      setGreenStartAngle(angle);
-    } else {
-      setGreenEndAngle(angle);
-    }
+    setGreenStartAngle(angle);
+  };
+
+  const handleEndTimeChange = (value) => {
+    const normalized = normalizeTimeInput(value);
+    setEndTimeInput(normalized);
+    if (normalized.length < 4) return;
+    const angle = timeToAngle(normalized);
+    if (angle === null) return;
+    setGreenEndAngle(angle);
   };
 
   const buildWeeklySchedule = (startMinutes, endMinutes) => {
@@ -464,10 +461,6 @@ const SleepSchedule = () => {
     navigation.setParams?.({ handleSave });
   }, [greenStartAngle, greenEndAngle, selectedDays, selectedDates, viewMode]);
 
-  const timeInputLabel = useMemo(() => (
-    activeHandle === 'start' ? 'Початок' : 'Кінець'
-  ), [activeHandle]);
-
   return (
     <View style={styles.container}>
       <View style={styles.dialWrapper}>
@@ -494,16 +487,6 @@ const SleepSchedule = () => {
           <G>
             <AlarmClockIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
-          <SvgText
-            x={30}
-            y={23}
-            fill={THEME.textPrimary}
-            fontSize="32"
-            fontWeight="bold"
-            textAnchor="start"
-          >
-            {formatTimeFromAngle(greenStartAngle)}
-          </SvgText>
         </G>
 
         {/* 
@@ -513,16 +496,6 @@ const SleepSchedule = () => {
           <G>
             <BedIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
-          <SvgText
-            x={30}
-            y={23}
-            fill={THEME.textPrimary}
-            fontSize="32"
-            fontWeight="bold"
-            textAnchor="start"
-          >
-            {formatTimeFromAngle(greenEndAngle)}
-          </SvgText>
         </G>
 
         {/* Група "start" (ручка з AlarmClockIcon) */}
@@ -549,16 +522,31 @@ const SleepSchedule = () => {
           </G>
         </G>
         </Svg>
-        <View style={styles.centerTimeInput}>
-          <Text style={styles.centerTimeLabel}>{timeInputLabel}</Text>
+        <View pointerEvents="box-none" style={styles.timeInputsOverlay}>
           <TextInput
-            value={timeInputValue}
-            onChangeText={handleTimeInputChange}
+            value={startTimeInput}
+            onChangeText={handleStartTimeChange}
             placeholder="00:00"
             placeholderTextColor="rgba(255,255,255,0.35)"
             keyboardType="numeric"
             maxLength={5}
-            style={styles.centerTimeField}
+            style={[
+              styles.timeInputField,
+              { left: cx - 20, top: cy - 30 },
+            ]}
+            selectionColor={THEME.accent}
+          />
+          <TextInput
+            value={endTimeInput}
+            onChangeText={handleEndTimeChange}
+            placeholder="00:00"
+            placeholderTextColor="rgba(255,255,255,0.35)"
+            keyboardType="numeric"
+            maxLength={5}
+            style={[
+              styles.timeInputField,
+              { left: cx - 20, top: cy + 5 },
+            ]}
             selectionColor={THEME.accent}
           />
         </View>
@@ -805,34 +793,18 @@ const styles = StyleSheet.create({
   dialWrapper: {
     position: 'relative',
   },
-  centerTimeInput: {
+  timeInputsOverlay: {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: 120,
-    transform: [{ translateX: -60 }, { translateY: -28 }],
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(21,21,21,0.92)',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    inset: 0,
   },
-  centerTimeLabel: {
-    color: THEME.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  centerTimeField: {
+  timeInputField: {
+    position: 'absolute',
     color: THEME.textPrimary,
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: '700',
-    letterSpacing: 1,
-    textAlign: 'center',
-    width: '100%',
-    paddingVertical: 2,
+    textAlign: 'left',
+    width: 90,
+    paddingVertical: 0,
   },
 });
 
