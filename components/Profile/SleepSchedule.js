@@ -385,8 +385,19 @@ const SleepSchedule = () => {
         addSlot(dayIndex, { startMinutes, endMinutes });
         return;
       }
-      addSlot(dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
-      addSlot((dayIndex + 1) % 7, { startMinutes: 0, endMinutes });
+      const rangeId = `weekly-${dayIndex}-${startMinutes}-${endMinutes}`;
+      addSlot(dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+      });
+      addSlot((dayIndex + 1) % 7, {
+        startMinutes: 0,
+        endMinutes,
+        rangeId,
+        part: 'tail',
+      });
     });
     return weekly;
   };
@@ -415,11 +426,27 @@ const SleepSchedule = () => {
         addSlot(weekIndex, dayIndex, { startMinutes, endMinutes });
         return;
       }
-      addSlot(weekIndex, dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
+      const rangeId = `rolling-${weekIndex}-${dayIndex}-${startMinutes}-${endMinutes}`;
+      addSlot(weekIndex, dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+      });
       if (dayIndex === 6) {
-        addSlot(weekIndex + 1, 0, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex + 1, 0, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+        });
       } else {
-        addSlot(weekIndex, dayIndex + 1, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex, dayIndex + 1, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+        });
       }
     });
     return rollingWeeks;
