@@ -483,7 +483,7 @@ const SleepSchedule = () => {
         {/* 
           1) Іконка будильника + час (greenStartAngle) -- початок активності
         */}
-        <G transform={`translate(${cx-50}, ${cy - 30})`}>
+        <G transform={`translate(${cx-50}, ${cy - 30})`} onPress={() => setActiveHandle('start')}>
           <G>
             <AlarmClockIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
@@ -492,7 +492,7 @@ const SleepSchedule = () => {
         {/* 
           2) Іконка ліжка + час (greenEndAngle) -- кінець активності
         */}
-        <G transform={`translate(${cx - 50}, ${cy+5})`}>
+        <G transform={`translate(${cx - 50}, ${cy+5})`} onPress={() => setActiveHandle('end')}>
           <G>
             <BedIcon width={24} height={24} fill={THEME.textSecondary} />
           </G>
