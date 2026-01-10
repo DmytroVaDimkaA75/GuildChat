@@ -263,18 +263,7 @@ function AdmintStack() {
         component={AdminMain}
         options={({ navigation }) => ({
           title: t("adminStack.adminScreenTitle"),
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                }
-              }}
-              style={{ marginLeft: 15 }}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-          ),
+          headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
           headerStyle: {
             backgroundColor: '#517da2',
             elevation: 0,
@@ -378,18 +367,7 @@ function ProfileStack() {
         component={ProfileMain}
         options={({ navigation }) => ({
           title: t("profileStack.profileMainTitle"), // переклад для "Налаштування профілю"
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                }
-              }}
-              style={{ marginLeft: 15 }}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-          ),
+          headerLeft: () => <DrawerToggleButton tintColor="#fff" />,
           headerStyle: {
             backgroundColor: '#517da2',
             elevation: 0,
@@ -942,4 +920,3 @@ export default function App() {
     </GuildProvider>
   );
 }
-
