@@ -22,6 +22,11 @@ class GbgWidgetBridgeModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun setMapSvg(svg: String) {
+    GbgWidgetPrefs.setMapSvg(reactContext, svg)
+  }
+
+  @ReactMethod
   fun refreshAll() {
     val context = reactContext.applicationContext
     val mgr = AppWidgetManager.getInstance(context)
