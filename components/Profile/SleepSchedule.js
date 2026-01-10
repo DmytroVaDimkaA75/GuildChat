@@ -59,18 +59,7 @@ const normalizeTimeInput = (value) => {
   return cleaned;
 };
 
-/** Перетворює кут у UTC ISO string (тільки час, дата довільна) */
-const angleToUtcTime = (angle) => {
-  let adjusted = angle + Math.PI / 2;
-  if (adjusted < 0) adjusted += 2 * Math.PI;
-  const fraction = adjusted / (2 * Math.PI);
-  const totalMins = Math.round(fraction * TOTAL_MINUTES);
-  const hh = Math.floor(totalMins / 60);
-  const mm = totalMins % 60;
-  // Створюємо дату з цим часом в UTC (дата довільна, наприклад 1970-01-01)
-  const date = new Date(Date.UTC(1970, 0, 1, hh, mm, 0));
-  return date.toISOString(); // повертає у форматі '1970-01-01THH:MM:00.000Z'
-};
+const createRangeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const daysOfWeek = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 const monthNames = [
@@ -373,7 +362,7 @@ const SleepSchedule = () => {
     setGreenEndAngle(angle);
   };
 
-  const buildWeeklySchedule = (startMinutes, endMinutes) => {
+  const buildWeeklySchedule = (startMinutes, endMinutes, scheduleId) => {
     const weekly = {};
     const addSlot = (dayIndex, slot) => {
       const key = String(dayIndex);
@@ -381,17 +370,36 @@ const SleepSchedule = () => {
       weekly[key].push(slot);
     };
     selectedDays.forEach((dayIndex) => {
+      const rangeId = createRangeId();
       if (endMinutes > startMinutes) {
-        addSlot(dayIndex, { startMinutes, endMinutes });
+        addSlot(dayIndex, {
+          startMinutes,
+          endMinutes,
+          rangeId,
+          part: 'full',
+          scheduleId,
+        });
         return;
       }
-      addSlot(dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
-      addSlot((dayIndex + 1) % 7, { startMinutes: 0, endMinutes });
+      addSlot(dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+        scheduleId,
+      });
+      addSlot((dayIndex + 1) % 7, {
+        startMinutes: 0,
+        endMinutes,
+        rangeId,
+        part: 'tail',
+        scheduleId,
+      });
     });
     return weekly;
   };
 
-  const buildRollingWeeksSchedule = (startMinutes, endMinutes) => {
+  const buildRollingWeeksSchedule = (startMinutes, endMinutes, scheduleId) => {
     const rollingWeeks = { anchorAt: ROLLING_ANCHOR_AT, weeks: {} };
     const anchorDate = new Date(ROLLING_ANCHOR_AT * 1000);
     const addSlot = (weekIndex, dayIndex, slot) => {
@@ -406,20 +414,45 @@ const SleepSchedule = () => {
       rollingWeeks.weeks[weekKey].days[dayKey].push(slot);
     };
     selectedDates.forEach((dateKey) => {
+      const rangeId = createRangeId();
       const [year, month, day] = dateKey.split('-').map(Number);
       const date = new Date(year, month - 1, day);
       const diffDays = Math.floor((date - anchorDate) / (24 * 60 * 60 * 1000));
       const weekIndex = Math.floor(diffDays / 7);
       const dayIndex = ((diffDays % 7) + 7) % 7;
       if (endMinutes > startMinutes) {
-        addSlot(weekIndex, dayIndex, { startMinutes, endMinutes });
+        addSlot(weekIndex, dayIndex, {
+          startMinutes,
+          endMinutes,
+          rangeId,
+          part: 'full',
+          scheduleId,
+        });
         return;
       }
-      addSlot(weekIndex, dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
+      addSlot(weekIndex, dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+        scheduleId,
+      });
       if (dayIndex === 6) {
-        addSlot(weekIndex + 1, 0, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex + 1, 0, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+          scheduleId,
+        });
       } else {
-        addSlot(weekIndex, dayIndex + 1, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex, dayIndex + 1, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+          scheduleId,
+        });
       }
     });
     return rollingWeeks;
@@ -432,22 +465,16 @@ const SleepSchedule = () => {
       if (!userId) return;
       const startMinutes = angleToMinutes(greenStartAngle);
       const endMinutes = angleToMinutes(greenEndAngle);
+      const scheduleRef = database()
+        .ref(`users/${userId}/setting/schedules`)
+        .push();
+      const scheduleId = scheduleRef.key;
       const calendarMode = viewMode === 'week' ? 'weekly' : 'rollingWeeks';
-      const activitySchedule = {
-        mode: calendarMode,
-        [calendarMode]:
-          calendarMode === 'weekly'
-            ? buildWeeklySchedule(startMinutes, endMinutes)
-            : buildRollingWeeksSchedule(startMinutes, endMinutes),
-      };
-      await database()
-        .ref(`users/${userId}/setting/schedule`)
-        .set({
-          mode: calendarMode,
-          activitySchedule,
-          timeStart: angleToUtcTime(greenStartAngle),
-          timeEnd: angleToUtcTime(greenEndAngle),
-        });
+      const schedulePayload =
+        calendarMode === 'weekly'
+          ? { weekly: buildWeeklySchedule(startMinutes, endMinutes, scheduleId) }
+          : { rollingWeeks: buildRollingWeeksSchedule(startMinutes, endMinutes, scheduleId) };
+      await scheduleRef.set(schedulePayload);
       navigation.navigate('AddSchedule');
       // Можна додати повідомлення про успіх
     } catch (e) {
