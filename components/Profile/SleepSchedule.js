@@ -59,6 +59,8 @@ const normalizeTimeInput = (value) => {
   return cleaned;
 };
 
+const createRangeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 /** Перетворює кут у UTC ISO string (тільки час, дата довільна) */
 const angleToUtcTime = (angle) => {
   let adjusted = angle + Math.PI / 2;
@@ -381,12 +383,23 @@ const SleepSchedule = () => {
       weekly[key].push(slot);
     };
     selectedDays.forEach((dayIndex) => {
+      const rangeId = createRangeId();
       if (endMinutes > startMinutes) {
-        addSlot(dayIndex, { startMinutes, endMinutes });
+        addSlot(dayIndex, { startMinutes, endMinutes, rangeId, part: 'full' });
         return;
       }
-      addSlot(dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
-      addSlot((dayIndex + 1) % 7, { startMinutes: 0, endMinutes });
+      addSlot(dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+      });
+      addSlot((dayIndex + 1) % 7, {
+        startMinutes: 0,
+        endMinutes,
+        rangeId,
+        part: 'tail',
+      });
     });
     return weekly;
   };
@@ -406,20 +419,36 @@ const SleepSchedule = () => {
       rollingWeeks.weeks[weekKey].days[dayKey].push(slot);
     };
     selectedDates.forEach((dateKey) => {
+      const rangeId = createRangeId();
       const [year, month, day] = dateKey.split('-').map(Number);
       const date = new Date(year, month - 1, day);
       const diffDays = Math.floor((date - anchorDate) / (24 * 60 * 60 * 1000));
       const weekIndex = Math.floor(diffDays / 7);
       const dayIndex = ((diffDays % 7) + 7) % 7;
       if (endMinutes > startMinutes) {
-        addSlot(weekIndex, dayIndex, { startMinutes, endMinutes });
+        addSlot(weekIndex, dayIndex, { startMinutes, endMinutes, rangeId, part: 'full' });
         return;
       }
-      addSlot(weekIndex, dayIndex, { startMinutes, endMinutes: TOTAL_MINUTES });
+      addSlot(weekIndex, dayIndex, {
+        startMinutes,
+        endMinutes: TOTAL_MINUTES,
+        rangeId,
+        part: 'head',
+      });
       if (dayIndex === 6) {
-        addSlot(weekIndex + 1, 0, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex + 1, 0, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+        });
       } else {
-        addSlot(weekIndex, dayIndex + 1, { startMinutes: 0, endMinutes });
+        addSlot(weekIndex, dayIndex + 1, {
+          startMinutes: 0,
+          endMinutes,
+          rangeId,
+          part: 'tail',
+        });
       }
     });
     return rollingWeeks;
@@ -440,14 +469,17 @@ const SleepSchedule = () => {
             ? buildWeeklySchedule(startMinutes, endMinutes)
             : buildRollingWeeksSchedule(startMinutes, endMinutes),
       };
-      await database()
-        .ref(`users/${userId}/setting/schedule`)
-        .set({
-          mode: calendarMode,
-          activitySchedule,
-          timeStart: angleToUtcTime(greenStartAngle),
-          timeEnd: angleToUtcTime(greenEndAngle),
-        });
+      const scheduleRef = database()
+        .ref(`users/${userId}/setting/schedules`)
+        .push();
+      const scheduleId = scheduleRef.key;
+      await scheduleRef.set({
+        id: scheduleId,
+        mode: calendarMode,
+        activitySchedule,
+        timeStart: angleToUtcTime(greenStartAngle),
+        timeEnd: angleToUtcTime(greenEndAngle),
+      });
       navigation.navigate('AddSchedule');
       // Можна додати повідомлення про успіх
     } catch (e) {
