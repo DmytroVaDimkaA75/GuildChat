@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database'; // ИЗМЕНЕНО
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, PanResponder, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
@@ -77,9 +77,33 @@ const monthNames = [
   'Грудень',
 ];
 
+const resolveTimeRange = (slots) => {
+  if (!slots.length) return null;
+  const primary = slots.find((slot) => slot.part === 'full') || slots[0];
+  if (!primary) return null;
+  if (primary.part === 'full') {
+    return { start: primary.startMinutes, end: primary.endMinutes };
+  }
+  if (primary.part === 'head') {
+    const tail = slots.find(
+      (slot) => slot.rangeId === primary.rangeId && slot.part === 'tail'
+    );
+    return { start: primary.startMinutes, end: tail?.endMinutes ?? primary.endMinutes };
+  }
+  if (primary.part === 'tail') {
+    const head = slots.find(
+      (slot) => slot.rangeId === primary.rangeId && slot.part === 'head'
+    );
+    return { start: head?.startMinutes ?? primary.startMinutes, end: primary.endMinutes };
+  }
+  return null;
+};
+
 const SleepSchedule = () => {
   const { width } = Dimensions.get('window');
   const navigation = useNavigation();
+  const route = useRoute();
+  const scheduleIdParam = route.params?.scheduleId ?? null;
 
   // Основні розміри
   const redDiameter = width;
@@ -458,6 +482,84 @@ const SleepSchedule = () => {
     return rollingWeeks;
   };
 
+  useEffect(() => {
+    let scheduleRef;
+    let isActive = true;
+
+    const loadSchedule = async () => {
+      if (!scheduleIdParam) return;
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        if (!userId) return;
+        scheduleRef = database()
+          .ref(`users/${userId}/setting/schedules/${scheduleIdParam}`);
+        scheduleRef.once('value', (snapshot) => {
+          if (!isActive || !snapshot.exists()) return;
+          const scheduleData = snapshot.val();
+          if (scheduleData?.weekly) {
+            const dayKeys = Object.keys(scheduleData.weekly)
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value))
+              .sort((a, b) => a - b);
+            const slots = dayKeys.flatMap((dayKey) => scheduleData.weekly[dayKey] || []);
+            const range = resolveTimeRange(slots);
+            if (range) {
+              const startAngle = (range.start / TOTAL_MINUTES) * 2 * Math.PI - Math.PI / 2;
+              const endAngle = (range.end / TOTAL_MINUTES) * 2 * Math.PI - Math.PI / 2;
+              setGreenStartAngle(startAngle);
+              setGreenEndAngle(endAngle);
+            }
+            setSelectedDays(dayKeys);
+            setViewMode('week');
+            return;
+          }
+          if (scheduleData?.rollingWeeks?.weeks) {
+            const weeksEntries = Object.entries(scheduleData.rollingWeeks.weeks);
+            const slots = weeksEntries.flatMap(([, week]) =>
+              Object.values(week.days || {}).flatMap((daySlots) => daySlots || [])
+            );
+            const range = resolveTimeRange(slots);
+            if (range) {
+              const startAngle = (range.start / TOTAL_MINUTES) * 2 * Math.PI - Math.PI / 2;
+              const endAngle = (range.end / TOTAL_MINUTES) * 2 * Math.PI - Math.PI / 2;
+              setGreenStartAngle(startAngle);
+              setGreenEndAngle(endAngle);
+            }
+            const anchorDate = new Date(ROLLING_ANCHOR_AT * 1000);
+            const dateKeys = new Set();
+            weeksEntries.forEach(([weekKey, week]) => {
+              Object.entries(week.days || {}).forEach(([dayKey, daySlots]) => {
+                const hasPrimarySlot = (daySlots || []).some((slot) => slot.part !== 'tail');
+                if (!hasPrimarySlot) return;
+                const diffDays = Number(weekKey) * 7 + Number(dayKey);
+                const date = new Date(anchorDate);
+                date.setDate(anchorDate.getDate() + diffDays);
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                dateKeys.add(dateKey);
+              });
+            });
+            const dateList = Array.from(dateKeys).sort();
+            setSelectedDates(dateList);
+            if (dateList.length) {
+              const [year, month] = dateList[0].split('-').map(Number);
+              setCurrentMonth(new Date(year, month - 1, 1));
+            }
+            setViewMode('month');
+          }
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadSchedule();
+
+    return () => {
+      isActive = false;
+      if (scheduleRef) scheduleRef.off();
+    };
+  }, [scheduleIdParam]);
+
   // ИЗМЕНЕНО: Збереження часу в Firebase
   const handleSave = async () => {
     try {
@@ -465,10 +567,10 @@ const SleepSchedule = () => {
       if (!userId) return;
       const startMinutes = angleToMinutes(greenStartAngle);
       const endMinutes = angleToMinutes(greenEndAngle);
-      const scheduleRef = database()
-        .ref(`users/${userId}/setting/schedules`)
-        .push();
-      const scheduleId = scheduleRef.key;
+      const scheduleRef = scheduleIdParam
+        ? database().ref(`users/${userId}/setting/schedules/${scheduleIdParam}`)
+        : database().ref(`users/${userId}/setting/schedules`).push();
+      const scheduleId = scheduleIdParam || scheduleRef.key;
       const calendarMode = viewMode === 'week' ? 'weekly' : 'rollingWeeks';
       const schedulePayload =
         calendarMode === 'weekly'
@@ -486,7 +588,7 @@ const SleepSchedule = () => {
   // Передаємо handleSave у route.params для доступу з хедера
   React.useEffect(() => {
     navigation.setParams?.({ handleSave });
-  }, [greenStartAngle, greenEndAngle, selectedDays, selectedDates, viewMode]);
+  }, [greenStartAngle, greenEndAngle, selectedDays, selectedDates, viewMode, scheduleIdParam]);
 
   return (
     <View style={styles.container}>
