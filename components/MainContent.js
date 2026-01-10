@@ -142,9 +142,9 @@ function AdmintStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="AdminScreen" component={AdminMain} options={({ navigation }) => ({
+      <Stack.Screen name="AdminScreen" component={AdminMain} options={() => ({
         title: t("adminStack.adminScreenTitle"),
-        headerLeft: () => (<TouchableOpacity onPress={() => { if (navigation.canGoBack()) { navigation.goBack(); } }} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>),
+        headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
         // Переопределяем цвет только если нужно выделить админку, но в рамках темной темы лучше surface
         headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
         headerShadowVisible: false,
@@ -168,7 +168,7 @@ function ProfileStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="ProfileMain" component={ProfileMain} options={({ navigation }) => ({ title: t("profileStack.profileMainTitle"), headerLeft: () => (<TouchableOpacity onPress={() => { if (navigation.canGoBack()) { navigation.goBack(); } }} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 }, headerShadowVisible: false, })} />
+      <Stack.Screen name="ProfileMain" component={ProfileMain} options={() => ({ title: t("profileStack.profileMainTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 }, headerShadowVisible: false, })} />
       <Stack.Screen name="ProfileData" component={ProfileData} options={({ navigation }) => ({ title: t("profileStack.profileDataTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
       <Stack.Screen name="MyGB" component={MyGB} options={({ navigation }) => ({ title: t("profileStack.myGBTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => navigation.navigate('AddGBComponent')} style={{ marginRight: 15 }}><Ionicons name="add" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
       <Stack.Screen name="AddGBComponent" component={AddGBComponent} options={{ title: t("profileStack.addGBComponentTitle"), }} />
