@@ -67,10 +67,15 @@ const buildScheduleSummary = (scheduleId, scheduleData) => {
     const timeLabel = range
       ? `${formatMinutes(range.start)}–${formatMinutes(range.end)}`
       : 'Час не задано';
-    const dayCount = weeks.reduce(
-      (total, week) => total + Object.keys(week.days || {}).length,
-      0
-    );
+    const rangeIds = new Set();
+    weeks.forEach((week) => {
+      Object.values(week.days || {}).forEach((daySlots) => {
+        (daySlots || []).forEach((slot) => {
+          if (slot?.rangeId) rangeIds.add(slot.rangeId);
+        });
+      });
+    });
+    const dayCount = rangeIds.size;
     const countLabel = dayCount ? `обрано днів: ${dayCount}` : null;
     return {
       id: scheduleId,
