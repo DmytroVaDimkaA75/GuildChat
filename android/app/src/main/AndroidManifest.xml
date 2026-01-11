@@ -23,6 +23,9 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
+    <service
+      android:name="com.vadimkaa75.guildchat.widgets.GbgWidgetRefreshService"
+      android:exported="false" />
     <receiver
   android:name="com.vadimkaa75.guildchat.widgets.GBGTop5SectorsWidgetProvider"
   android:exported="false">
