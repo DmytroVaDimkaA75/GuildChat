@@ -24,8 +24,6 @@ import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
-import { writeFullMapToCache, writeNext5ToCache, readWidgetCacheDump } from "./widgetCache";
-
 const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
 
@@ -292,9 +290,9 @@ const GVG = () => {
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
 
-  // ✅ Debug cache modal
-  const [cacheVisible, setCacheVisible] = useState(false);
-  const [cacheDump, setCacheDump] = useState(null);
+  const [battlesVisible, setBattlesVisible] = useState(false);
+  const [battlesRows, setBattlesRows] = useState([]);
+  const [battlesLoading, setBattlesLoading] = useState(false);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
@@ -699,65 +697,30 @@ const GVG = () => {
     }
   };
 
-  // =============================
-  // ✅ ВАЖЛИВО: Автокеш для віджета
-  // =============================
-
-  const lastNext5JsonRef = useRef("");
-  const lastMapKeyRef = useRef("");
-  const lastMapColorsStaffJsonRef = useRef("");
-
-  useEffect(() => {
-    // Пишемо next5 в кеш, коли є sectorSchedule (реальні дані)
-    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
-
-    const next5 = (sectorSchedule || []).slice(0, 5).map((item) => ({
-      sectorId: item.name,
-      openTime: item.openTime || 0,
-      army: item.army || "",
-      bonusValue: Number.isFinite(item.bonusValue) ? item.bonusValue : 100,
-      bonusReadyAt: item.bonusReadyAt ? Number(item.bonusReadyAt) : 0,
-    }));
-
-    const json = JSON.stringify(next5);
-    if (json === lastNext5JsonRef.current) return;
-    lastNext5JsonRef.current = json;
-
-    (async () => {
-      try {
-        await writeNext5ToCache(next5);
-      } catch (e) {}
-    })();
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, sectorSchedule]);
-
-  useEffect(() => {
-    // Пишемо map_state + map_xml в кеш, коли є кольори/персонал/мапа
-    if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
-
-    const colorsStaffJson = JSON.stringify({ sectorColors, sectorStaff });
-    if (lastMapKeyRef.current === mapKey && lastMapColorsStaffJsonRef.current === colorsStaffJson) return;
-
-    lastMapKeyRef.current = mapKey;
-    lastMapColorsStaffJsonRef.current = colorsStaffJson;
-
-    (async () => {
-      try {
-        await writeFullMapToCache({ mapKey, sectorColors, sectorStaff });
-      } catch (e) {}
-    })();
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
-
-  // =============================
-  // ✅ Debug: показати кеш з кнопки "i"
-  // =============================
-
-  const openCacheDump = async () => {
+  const openBattles = async () => {
+    setBattlesVisible(true);
+    setBattlesLoading(true);
     try {
-      const dump = await readWidgetCacheDump();
-      setCacheDump(dump);
-      setCacheVisible(true);
-    } catch (e) {
-      Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.cacheReadFailed"));
+      const snapshot = await database().ref("guilds/ru11_10821/GBG/PlayerLeaderboard").once("value");
+      if (!snapshot.exists()) {
+        setBattlesRows([]);
+        return;
+      }
+      const data = snapshot.val() || {};
+      const rows = Object.entries(data).map(([playerId, entry]) => {
+        const negotiationsWon = Number(entry?.negotiationsWon) || 0;
+        const battlesWon = Number(entry?.battlesWon) || 0;
+        const attrition = Number(entry?.attrition) || 0;
+        const total = battlesWon + negotiationsWon * 2;
+        return { playerId, negotiationsWon, battlesWon, total, attrition };
+      });
+      rows.sort((a, b) => b.total - a.total);
+      setBattlesRows(rows);
+    } catch (error) {
+      Alert.alert("Помилка", "Не вдалося завантажити таблицю боїв.");
+      setBattlesRows([]);
+    } finally {
+      setBattlesLoading(false);
     }
   };
 
@@ -785,9 +748,8 @@ const GVG = () => {
         <View style={styles.listTitleRow}>
           <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
-          {/* ✅ DEBUG кнопка кешу */}
-          <TouchableOpacity style={styles.cacheBtn} onPress={openCacheDump}>
-            <Text style={styles.cacheBtnText}>{t("gbgScreen.cacheButton")}</Text>
+          <TouchableOpacity style={styles.cacheBtn} onPress={openBattles}>
+            <Text style={styles.cacheBtnText}>Бої</Text>
           </TouchableOpacity>
         </View>
 
@@ -861,35 +823,44 @@ const GVG = () => {
         </TouchableOpacity>
       )}
 
-      {/* ✅ Modal: Widget cache dump */}
-      {cacheVisible && (
-        <View style={styles.cacheOverlay}>
+      {battlesVisible && (
+        <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.cacheModal}>
-            <Text style={styles.cacheTitle}>{t("gbgScreen.cache.title")}</Text>
+          <View style={styles.battlesModal}>
+            <Text style={styles.battlesTitle}>Бої</Text>
 
-            <ScrollView style={styles.cacheScroll}>
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.updatedAt")}</Text>
-              <Text style={styles.cacheValue}>{cacheDump?.updatedAt || "null"}</Text>
+            {battlesLoading ? (
+              <View style={styles.battlesLoader}>
+                <ActivityIndicator size="small" color="#A0D8FF" />
+                <Text style={styles.battlesLoaderText}>Завантаження...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.battlesScroll}>
+                <View style={styles.battlesHeaderRow}>
+                  <Text style={[styles.battlesHeaderCell, styles.battlesPlayerCell]}>Гравець</Text>
+                  <Text style={styles.battlesHeaderCell}>Перемовини</Text>
+                  <Text style={styles.battlesHeaderCell}>Бої</Text>
+                  <Text style={styles.battlesHeaderCell}>Сума</Text>
+                  <Text style={styles.battlesHeaderCell}>Атриб.</Text>
+                </View>
+                {battlesRows.length === 0 ? (
+                  <Text style={styles.battlesEmpty}>Немає даних.</Text>
+                ) : (
+                  battlesRows.map((row) => (
+                    <View key={row.playerId} style={styles.battlesRow}>
+                      <Text style={[styles.battlesCell, styles.battlesPlayerCell]}>{row.playerId}</Text>
+                      <Text style={styles.battlesCell}>{row.negotiationsWon}</Text>
+                      <Text style={styles.battlesCell}>{row.battlesWon}</Text>
+                      <Text style={styles.battlesCell}>{row.total}</Text>
+                      <Text style={styles.battlesCell}>{row.attrition}</Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
 
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.next5")}</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.next5 || null, null, 2)}</Text>
-
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapState")}</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.mapState || null, null, 2)}</Text>
-
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapXml")}</Text>
-              <Text style={styles.cacheValue}>
-                length: {cacheDump?.mapXml?.length || 0}
-                {"\n\n"}
-                head:
-                {"\n"}
-                {cacheDump?.mapXml?.head || ""}
-              </Text>
-            </ScrollView>
-
-            <TouchableOpacity style={styles.cacheClose} onPress={() => setCacheVisible(false)}>
-              <Text style={styles.cacheCloseText}>{t("gbgScreen.cache.close")}</Text>
+            <TouchableOpacity style={styles.battlesClose} onPress={() => setBattlesVisible(false)}>
+              <Text style={styles.battlesCloseText}>Закрити</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -966,14 +937,20 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
 
-  cacheOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  cacheModal: { width: "90%", maxHeight: HALF_HEIGHT * 1.5, backgroundColor: "rgba(30, 30, 30, 0.92)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cacheTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
-  cacheScroll: { maxHeight: HALF_HEIGHT * 1.2 },
-  cacheLabel: { marginTop: 12, color: "#A0D8FF", fontWeight: "800" },
-  cacheValue: { marginTop: 6, color: "#E0E0E0", fontFamily: "monospace", fontSize: 12 },
-  cacheClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
-  cacheCloseText: { color: "#fff", fontWeight: "800" },
+  battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
+  battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.5, backgroundColor: "rgba(30, 30, 30, 0.92)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
+  battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
+  battlesHeaderRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" },
+  battlesRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  battlesHeaderCell: { flex: 1, color: "#A0D8FF", fontWeight: "800", fontSize: 12, textAlign: "center" },
+  battlesCell: { flex: 1, color: "#E0E0E0", fontSize: 12, textAlign: "center" },
+  battlesPlayerCell: { flex: 2, textAlign: "left" },
+  battlesEmpty: { marginTop: 12, color: "#A0A0A0", textAlign: "center" },
+  battlesLoader: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 16 },
+  battlesLoaderText: { marginLeft: 8, color: "#A0D8FF", fontWeight: "600" },
+  battlesClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
+  battlesCloseText: { color: "#fff", fontWeight: "800" },
 });
 
 export default GVG;
