@@ -17,6 +17,7 @@ import kotlin.math.max
 class GBGMapWidgetProvider : AppWidgetProvider() {
 
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+    GbgWidgetRefreshScheduler.ensureScheduled(context)
     for (appWidgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.widget_gbg_map)
       render(context, views)

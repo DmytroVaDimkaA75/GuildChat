@@ -6,6 +6,12 @@ import { name as appName } from "./app.json";
 import { processWidgetRemoteMessage } from "./components/GBG/widgetCache";
 import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRefresh";
 
+AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
+  try {
+    await refreshGbgWidgetCacheFromFirebase({ reason: "periodic-worker" });
+  } catch (e) {}
+});
+
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
     // 1) Якщо сервер прислав готові дані для віджетів
