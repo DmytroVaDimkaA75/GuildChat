@@ -118,9 +118,21 @@ const ukTranslation = {
     myGBTitle: "Мої Величні Споруди",
     addGBComponentTitle: "Додайте ВС до свого списку",
     gbNewExpressTitle: "Експрес прокачка1",
-    addScheduleTitle: "Дані профілю",
+    addScheduleTitle: "Графіки активності",
     sleepScheduleTitle: "Дані профілю",
     languageSelectorTitle: "Мова"
+  },
+  addSchedule: {
+    header: "Ввімкнення сповіщень",
+    description: "Ви будете отримувати сповіщення в час, заначений в графіках",
+    suggestedTitle: "Запропоновані умови",
+    activityTime: "Час активності",
+    emptyText: "Збережених графіків активності поки немає.",
+    weeklyTitle: "Щотижневий графік",
+    datesTitle: "Графік за датами",
+    noTimeSet: "Час не задано",
+    selectedDaysCount: "обрано днів: {{count}}",
+    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
   },
   customDrawer: {
     addWorld: "Додати світ",
@@ -386,9 +398,21 @@ const ruTranslation = {
     myGBTitle: "Мои Великие Сооружения",
     addGBComponentTitle: "Добавьте ВС в свой список",
     gbNewExpressTitle: "Экспресс прокачка1",
-    addScheduleTitle: "Данные профиля",
+    addScheduleTitle: "Графики активности",
     sleepScheduleTitle: "Данные профиля",
     languageSelectorTitle: "Язык"
+  },
+  addSchedule: {
+    header: "Включение уведомлений",
+    description: "Вы будете получать уведомления во время, указанное в графиках",
+    suggestedTitle: "Предложенные условия",
+    activityTime: "Время активности",
+    emptyText: "Сохранённых графиков активности пока нет.",
+    weeklyTitle: "Еженедельный график",
+    datesTitle: "График по датам",
+    noTimeSet: "Время не задано",
+    selectedDaysCount: "выбрано дней: {{count}}",
+    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
   },
   customDrawer: {
     addWorld: "Добавить мир",
@@ -654,9 +678,21 @@ const beTranslation = {
     myGBTitle: "Мае Вялікія Спорудкі",
     addGBComponentTitle: "Дадайце ВС да свайго спісу",
     gbNewExpressTitle: "Экспрэс прокачка1",
-    addScheduleTitle: "Дадзеныя профілю",
+    addScheduleTitle: "Графікі актыўнасці",
     sleepScheduleTitle: "Дадзеныя профілю",
     languageSelectorTitle: "Мова"
+  },
+  addSchedule: {
+    header: "Уключэнне апавяшчэнняў",
+    description: "Вы будзеце атрымліваць апавяшчэнні ў час, пазначаны ў графіках",
+    suggestedTitle: "Прапанаваныя ўмовы",
+    activityTime: "Час актыўнасці",
+    emptyText: "Захаваных графікаў актыўнасці пакуль няма.",
+    weeklyTitle: "Штотыднёвы графік",
+    datesTitle: "Графік па датах",
+    noTimeSet: "Час не зададзены",
+    selectedDaysCount: "абрана дзён: {{count}}",
+    daysShort: ["Пн", "Аў", "Ср", "Чц", "Пт", "Сб", "Нд"]
   },
   customDrawer: {
     addWorld: "Дадаць свет",
@@ -922,9 +958,21 @@ const deTranslation = {
     myGBTitle: "Meine Großartigen Bauwerke",
     addGBComponentTitle: "Fügen Sie GS zu Ihrer Liste hinzu",
     gbNewExpressTitle: "Express-Aufwertung1",
-    addScheduleTitle: "Profildaten",
+    addScheduleTitle: "Aktivitätszeitpläne",
     sleepScheduleTitle: "Profildaten",
     languageSelectorTitle: "Sprache"
+  },
+  addSchedule: {
+    header: "Benachrichtigungen aktivieren",
+    description: "Du erhältst Benachrichtigungen zu den in den Zeitplänen angegebenen Zeiten",
+    suggestedTitle: "Vorgeschlagene Bedingungen",
+    activityTime: "Aktivitätszeit",
+    emptyText: "Es sind noch keine Aktivitätszeitpläne gespeichert.",
+    weeklyTitle: "Wöchentlicher Zeitplan",
+    datesTitle: "Zeitplan nach Daten",
+    noTimeSet: "Zeit nicht festgelegt",
+    selectedDaysCount: "ausgewählte Tage: {{count}}",
+    daysShort: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
   },
   customDrawer: {
     addWorld: "Welt hinzufügen",
@@ -1188,9 +1236,21 @@ const enOverrides = {
     myGBTitle: "My Great Buildings",
     addGBComponentTitle: "Add a GB to your list",
     gbNewExpressTitle: "Express leveling",
-    addScheduleTitle: "Profile data",
+    addScheduleTitle: "Activity schedules",
     sleepScheduleTitle: "Profile data",
     languageSelectorTitle: "Language"
+  },
+  addSchedule: {
+    header: "Enable notifications",
+    description: "You will receive notifications at the times specified in the schedules",
+    suggestedTitle: "Suggested conditions",
+    activityTime: "Activity time",
+    emptyText: "No activity schedules saved yet.",
+    weeklyTitle: "Weekly schedule",
+    datesTitle: "Schedule by dates",
+    noTimeSet: "Time not set",
+    selectedDaysCount: "selected days: {{count}}",
+    daysShort: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   },
   customDrawer: {
     addWorld: "Add world",

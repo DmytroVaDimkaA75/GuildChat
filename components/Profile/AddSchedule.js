@@ -4,8 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
-const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 const TOTAL_MINUTES = 24 * 60;
 
 const formatMinutes = (value) => {
@@ -38,7 +38,7 @@ const resolveTimeRange = (slots) => {
   return null;
 };
 
-const buildScheduleSummary = (scheduleId, scheduleData) => {
+const buildScheduleSummary = (scheduleId, scheduleData, t, daysShort) => {
   if (!scheduleData) return null;
   if (scheduleData.weekly) {
     const dayKeys = Object.keys(scheduleData.weekly)
@@ -50,11 +50,13 @@ const buildScheduleSummary = (scheduleId, scheduleData) => {
     const range = resolveTimeRange(slots);
     const timeLabel = range
       ? `${formatMinutes(range.start)}–${formatMinutes(range.end)}`
-      : 'Час не задано';
-    const daysLabel = dayKeys.length ? dayKeys.map((day) => DAYS_SHORT[day]).join(', ') : null;
+      : t('addSchedule.noTimeSet');
+    const daysLabel = dayKeys.length
+      ? dayKeys.map((day) => daysShort[day]).join(', ')
+      : null;
     return {
       id: scheduleId,
-      title: 'Щотижневий графік',
+      title: t('addSchedule.weeklyTitle'),
       subtitle: daysLabel ? `${timeLabel} · ${daysLabel}` : timeLabel,
     };
   }
@@ -66,7 +68,7 @@ const buildScheduleSummary = (scheduleId, scheduleData) => {
     const range = resolveTimeRange(slots);
     const timeLabel = range
       ? `${formatMinutes(range.start)}–${formatMinutes(range.end)}`
-      : 'Час не задано';
+      : t('addSchedule.noTimeSet');
     const rangeIds = new Set();
     weeks.forEach((week) => {
       Object.values(week.days || {}).forEach((daySlots) => {
@@ -76,10 +78,10 @@ const buildScheduleSummary = (scheduleId, scheduleData) => {
       });
     });
     const dayCount = rangeIds.size;
-    const countLabel = dayCount ? `обрано днів: ${dayCount}` : null;
+    const countLabel = dayCount ? t('addSchedule.selectedDaysCount', { count: dayCount }) : null;
     return {
       id: scheduleId,
-      title: 'Графік за датами',
+      title: t('addSchedule.datesTitle'),
       subtitle: countLabel ? `${timeLabel} · ${countLabel}` : timeLabel,
     };
   }
@@ -89,6 +91,9 @@ const buildScheduleSummary = (scheduleId, scheduleData) => {
 const AddSchedule = () => {
   const [schedules, setSchedules] = useState([]);
   const navigation = useNavigation();
+  const { t } = useTranslation();
+  const daysShort = t('addSchedule.daysShort', { returnObjects: true });
+  const daysShortList = Array.isArray(daysShort) ? daysShort : [];
 
   const handleSleepSchedule = () => {
     navigation.navigate('SleepSchedule');
@@ -116,7 +121,7 @@ const AddSchedule = () => {
           const data = snapshot.val();
           const parsed = Object.entries(data)
             .map(([scheduleId, scheduleData]) =>
-              buildScheduleSummary(scheduleId, scheduleData)
+              buildScheduleSummary(scheduleId, scheduleData, t, daysShortList)
             )
             .filter(Boolean);
           setSchedules(parsed);
@@ -139,13 +144,11 @@ const AddSchedule = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Автоматичне ввімкнення</Text>
-      <Text style={styles.description}>
-        Режим буде автоматично ввімкнено, якщо хоча б одна з умов нижче виконується.
-      </Text>
+      <Text style={styles.header}>{t('addSchedule.header')}</Text>
+      <Text style={styles.description}>{t('addSchedule.description')}</Text>
 
       <View style={styles.suggestedConditionsContainer}>
-        <Text style={styles.suggestedTitle}>Запропоновані умови</Text>
+        <Text style={styles.suggestedTitle}>{t('addSchedule.suggestedTitle')}</Text>
         {schedules.length ? (
           schedules.map((schedule) => (
             <TouchableOpacity
@@ -161,20 +164,11 @@ const AddSchedule = () => {
             </TouchableOpacity>
           ))
         ) : (
-          <Text style={styles.emptyText}>Збережених графіків активності поки немає.</Text>
+          <Text style={styles.emptyText}>{t('addSchedule.emptyText')}</Text>
         )}
         <TouchableOpacity style={styles.suggestedItem} onPress={handleSleepSchedule}>
-          <Text style={styles.suggestedText}>Час активності</Text>
+          <Text style={styles.suggestedText}>{t('addSchedule.activityTime')}</Text>
           <MaterialIcons name="add" size={24} color="#3498db" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.buttonsContainer}>
-        <TouchableOpacity style={styles.buttonSecondary}>
-          <Text style={styles.buttonTextSecondary}>Скасувати</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonPrimary}>
-          <Text style={styles.buttonTextPrimary}>Готово</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -265,42 +259,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#E0E0E0',
-  },
-  buttonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 24,
-  },
-  buttonPrimary: {
-    backgroundColor: '#3498db',
-    paddingVertical: 12,
-    borderRadius: 12,
-    width: '48%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  buttonSecondary: {
-    backgroundColor: '#1e1e1e',
-    paddingVertical: 12,
-    borderRadius: 12,
-    width: '48%',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  buttonTextPrimary: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  buttonTextSecondary: {
-    color: '#E0E0E0',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });
 
