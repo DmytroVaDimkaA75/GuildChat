@@ -20,8 +20,7 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)
     if (intent.action == ACTION_REFRESH) {
-      val serviceIntent = Intent(context, GbgWidgetRefreshService::class.java)
-      context.startService(serviceIntent)
+      GbgWidgetRefreshScheduler.enqueueImmediate(context)
     }
   }
 
