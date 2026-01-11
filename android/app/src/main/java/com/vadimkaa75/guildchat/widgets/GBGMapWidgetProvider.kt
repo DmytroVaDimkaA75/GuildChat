@@ -54,10 +54,12 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
 
       return try {
         val svg = SVG.getFromString(svgRaw)
-        val width = max(1, svg.documentWidth.toInt())
-        val height = max(1, svg.documentHeight.toInt())
+        val scale = 2f
+        val width = max(1, (svg.documentWidth * scale).toInt())
+        val height = max(1, (svg.documentHeight * scale).toInt())
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        canvas.scale(scale, scale)
         svg.renderToCanvas(canvas)
         bitmap
       } catch (_: Throwable) {
