@@ -7,6 +7,7 @@ object GbgWidgetPrefs {
 
   private const val KEY_NEXT5 = "next5_json"
   private const val KEY_MAP_META = "map_meta_json"
+  private const val KEY_MAP_SVG = "map_svg_xml"
   private const val KEY_UPDATED_AT = "updated_at"
 
   fun setNext5(context: Context, json: String) {
@@ -25,6 +26,14 @@ object GbgWidgetPrefs {
       .apply()
   }
 
+  fun setMapSvg(context: Context, svg: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(KEY_MAP_SVG, svg)
+      .putLong(KEY_UPDATED_AT, System.currentTimeMillis())
+      .apply()
+  }
+
   fun getNext5(context: Context): String =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       .getString(KEY_NEXT5, "[]") ?: "[]"
@@ -32,6 +41,10 @@ object GbgWidgetPrefs {
   fun getMapMeta(context: Context): String =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       .getString(KEY_MAP_META, "{}") ?: "{}"
+
+  fun getMapSvg(context: Context): String =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .getString(KEY_MAP_SVG, "") ?: ""
 
   fun getUpdatedAt(context: Context): Long =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
