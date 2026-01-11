@@ -6,15 +6,32 @@
   android:padding="12dp"
   android:background="@android:color/black">
 
-  <TextView
-    android:id="@+id/widgetTitle"
+  <RelativeLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:text="ПБГ • Мапа"
-    android:textSize="16sp"
-    android:textStyle="bold"
-    android:textColor="@android:color/white"
-    android:paddingBottom="8dp"/>
+    android:paddingBottom="8dp">
+
+    <TextView
+      android:id="@+id/widgetTitle"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_alignParentStart="true"
+      android:layout_centerVertical="true"
+      android:text="ПБГ • Мапа"
+      android:textSize="16sp"
+      android:textStyle="bold"
+      android:textColor="@android:color/white"/>
+
+    <ImageView
+      android:id="@+id/widgetRefreshButton"
+      android:layout_width="22dp"
+      android:layout_height="22dp"
+      android:layout_alignParentEnd="true"
+      android:layout_centerVertical="true"
+      android:contentDescription="Оновити"
+      android:src="@android:drawable/ic_popup_sync"
+      android:tint="@android:color/white"/>
+  </RelativeLayout>
 
   <FrameLayout
     android:layout_width="match_parent"

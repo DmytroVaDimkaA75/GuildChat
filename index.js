@@ -1,10 +1,23 @@
 import messaging from "@react-native-firebase/messaging";
-import { AppRegistry } from "react-native";
+import { AppRegistry, NativeModules } from "react-native";
 import App from "./App";
 import { name as appName } from "./app.json";
 
 import { processWidgetRemoteMessage } from "./components/GBG/widgetCache";
 import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRefresh";
+
+AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
+  try {
+    const bridge = NativeModules?.GbgWidgetBridge;
+    let guildId = null;
+    if (bridge && typeof bridge.getGuildId === "function") {
+      try {
+        guildId = await bridge.getGuildId();
+      } catch (e) {}
+    }
+    await refreshGbgWidgetCacheFromFirebase({ guildId, reason: "periodic-worker" });
+  } catch (e) {}
+});
 
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {

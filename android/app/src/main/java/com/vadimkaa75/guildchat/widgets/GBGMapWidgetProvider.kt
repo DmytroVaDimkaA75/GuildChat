@@ -3,20 +3,29 @@ package com.vadimkaa75.guildchat.widgets
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.widget.RemoteViews
 import com.vadimkaa75.guildchat.R
 import com.caverock.androidsvg.SVG
 import android.view.View
+import android.app.PendingIntent
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
 class GBGMapWidgetProvider : AppWidgetProvider() {
+  override fun onReceive(context: Context, intent: Intent) {
+    super.onReceive(context, intent)
+    if (intent.action == ACTION_REFRESH) {
+      GbgWidgetRefreshScheduler.enqueueImmediate(context)
+    }
+  }
 
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+    GbgWidgetRefreshScheduler.ensureScheduled(context)
     for (appWidgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.widget_gbg_map)
       render(context, views)
@@ -25,8 +34,11 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
   }
 
   companion object {
+    private const val ACTION_REFRESH = "com.vadimkaa75.guildchat.widgets.ACTION_REFRESH"
+
     fun render(context: Context, views: RemoteViews) {
       views.setTextViewText(R.id.widgetTitle, "ПБГ • Мапа")
+      views.setOnClickPendingIntent(R.id.widgetRefreshButton, buildRefreshPendingIntent(context))
 
       val updatedAt = GbgWidgetPrefs.getUpdatedAt(context)
       val timeStr = if (updatedAt > 0) {
@@ -65,6 +77,14 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
       } catch (_: Throwable) {
         null
       }
+    }
+
+    private fun buildRefreshPendingIntent(context: Context): PendingIntent {
+      val intent = Intent(context, GBGMapWidgetProvider::class.java).apply {
+        action = ACTION_REFRESH
+      }
+      val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      return PendingIntent.getBroadcast(context, 0, intent, flags)
     }
   }
 }

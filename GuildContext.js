@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { NativeModules } from "react-native";
 
 export const GuildContext = createContext();
 
@@ -21,6 +22,14 @@ export const GuildProvider = ({ children }) => {
         setIsLoaded(true);
       });
   }, []);
+
+  useEffect(() => {
+    if (!guildId) return;
+    const bridge = NativeModules?.GbgWidgetBridge;
+    if (bridge && typeof bridge.setGuildId === "function") {
+      bridge.setGuildId(String(guildId));
+    }
+  }, [guildId]);
 
   if (!isLoaded) {
     // Можна повернути спіннер або просто null, щоб не рендерити дітей

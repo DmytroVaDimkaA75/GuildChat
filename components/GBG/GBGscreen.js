@@ -24,7 +24,7 @@ import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
-import { writeFullMapToCache, writeNext5ToCache, readWidgetCacheDump } from "./widgetCache";
+import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
 const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
@@ -292,9 +292,12 @@ const GVG = () => {
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
 
-  // ✅ Debug cache modal
-  const [cacheVisible, setCacheVisible] = useState(false);
-  const [cacheDump, setCacheDump] = useState(null);
+  const [battlesVisible, setBattlesVisible] = useState(false);
+  const [battlesRows, setBattlesRows] = useState([]);
+  const [battlesLoading, setBattlesLoading] = useState(false);
+  const [battlesGuildId, setBattlesGuildId] = useState(null);
+  const [battlesUserId, setBattlesUserId] = useState(null);
+  const [battlesRaw, setBattlesRaw] = useState(null);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
@@ -747,18 +750,100 @@ const GVG = () => {
     })();
   }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
 
-  // =============================
-  // ✅ Debug: показати кеш з кнопки "i"
-  // =============================
-
-  const openCacheDump = async () => {
+  const openBattlesModal = async () => {
+    setBattlesVisible(true);
+    setBattlesRows([]);
+    setBattlesLoading(true);
     try {
-      const dump = await readWidgetCacheDump();
-      setCacheDump(dump);
-      setCacheVisible(true);
+      const storedGuildId = guildId || (await AsyncStorage.getItem("guildId"));
+      const storedUserId = await AsyncStorage.getItem("userId");
+      if (!storedGuildId || !storedUserId) {
+        Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.guildNotFound"));
+        setBattlesLoading(false);
+        return;
+      }
+      setBattlesGuildId(storedGuildId);
+      setBattlesUserId(storedUserId);
+
+      const snapshot = await database().ref(`guilds/${storedGuildId}/GBG/PlayerLeaderboard`).once("value");
+      const raw = snapshot.exists() ? snapshot.val() || {} : {};
+      setBattlesRaw(raw);
+
+      const [usersSnap, storedSnap] = await Promise.all([
+        database().ref(`guilds/${storedGuildId}/guildUsers`).once("value"),
+        database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/PlayerLeaderboard`).once("value"),
+      ]);
+      const usersRaw = usersSnap.exists() ? usersSnap.val() || {} : {};
+      const storedRaw = storedSnap.exists() ? storedSnap.val() || {} : {};
+
+      const rows = Object.entries(raw).map(([playerId, entry]) => {
+        const negotiationsWon = Number(entry?.negotiationsWon) || 0;
+        const battlesWon = Number(entry?.battlesWon) || 0;
+        const attrition = Number(entry?.attrition) || 0;
+        const total = battlesWon + negotiationsWon * 2;
+
+        const storedEntry = storedRaw?.[playerId] || {};
+        const storedNegotiations = Number(storedEntry?.negotiationsWon) || 0;
+        const storedBattles = Number(storedEntry?.battlesWon) || 0;
+        const storedAttrition = Number(storedEntry?.attrition) || 0;
+        const storedTotal = storedBattles + storedNegotiations * 2;
+
+        const diffNegotiations = negotiationsWon - storedNegotiations;
+        const diffBattles = battlesWon - storedBattles;
+        const diffTotal = total - storedTotal;
+        const diffAttrition = attrition - storedAttrition;
+        const hasDiff = diffNegotiations !== 0 || diffBattles !== 0 || diffTotal !== 0 || diffAttrition !== 0;
+
+        const userName = usersRaw?.[playerId]?.userName ? String(usersRaw[playerId].userName) : playerId;
+
+        return {
+          playerId,
+          userName,
+          negotiationsWon,
+          battlesWon,
+          total,
+          attrition,
+          diffNegotiations,
+          diffBattles,
+          diffTotal,
+          diffAttrition,
+          hasDiff,
+        };
+      });
+      rows.sort((a, b) => b.total - a.total);
+      setBattlesRows(rows);
+      setBattlesVisible(true);
     } catch (e) {
-      Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.cacheReadFailed"));
+      Alert.alert(t("gbgScreen.errors.title"), "Не вдалося завантажити таблицю боїв.");
+    } finally {
+      setBattlesLoading(false);
     }
+  };
+
+  const handleBattlesClose = async () => {
+    try {
+      if (battlesGuildId && battlesUserId && battlesRaw) {
+        await database()
+          .ref(`guilds/${battlesGuildId}/guildUsers/${battlesUserId}/PlayerLeaderboard`)
+          .set(battlesRaw);
+      }
+    } catch (e) {
+      Alert.alert(t("gbgScreen.errors.title"), "Не вдалося зберегти копію таблиці.");
+    } finally {
+      setBattlesVisible(false);
+    }
+  };
+
+  const formatName = (name) => {
+    const raw = String(name || "");
+    if (raw.length <= 14) return raw;
+    return `${raw.slice(0, 11)}…`;
+  };
+
+  const formatDiff = (value) => {
+    if (!value) return null;
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value}`;
   };
 
   // ===== Loader =====
@@ -785,9 +870,8 @@ const GVG = () => {
         <View style={styles.listTitleRow}>
           <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
-          {/* ✅ DEBUG кнопка кешу */}
-          <TouchableOpacity style={styles.cacheBtn} onPress={openCacheDump}>
-            <Text style={styles.cacheBtnText}>{t("gbgScreen.cacheButton")}</Text>
+          <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
+            <Text style={styles.battlesBtnText}>Бої</Text>
           </TouchableOpacity>
         </View>
 
@@ -861,35 +945,49 @@ const GVG = () => {
         </TouchableOpacity>
       )}
 
-      {/* ✅ Modal: Widget cache dump */}
-      {cacheVisible && (
-        <View style={styles.cacheOverlay}>
+      {battlesVisible && (
+        <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.cacheModal}>
-            <Text style={styles.cacheTitle}>{t("gbgScreen.cache.title")}</Text>
-
-            <ScrollView style={styles.cacheScroll}>
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.updatedAt")}</Text>
-              <Text style={styles.cacheValue}>{cacheDump?.updatedAt || "null"}</Text>
-
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.next5")}</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.next5 || null, null, 2)}</Text>
-
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapState")}</Text>
-              <Text style={styles.cacheValue}>{JSON.stringify(cacheDump?.mapState || null, null, 2)}</Text>
-
-              <Text style={styles.cacheLabel}>{t("gbgScreen.cache.mapXml")}</Text>
-              <Text style={styles.cacheValue}>
-                length: {cacheDump?.mapXml?.length || 0}
-                {"\n\n"}
-                head:
-                {"\n"}
-                {cacheDump?.mapXml?.head || ""}
-              </Text>
-            </ScrollView>
-
-            <TouchableOpacity style={styles.cacheClose} onPress={() => setCacheVisible(false)}>
-              <Text style={styles.cacheCloseText}>{t("gbgScreen.cache.close")}</Text>
+          <View style={styles.battlesModal}>
+            <Text style={styles.battlesTitle}>Бої</Text>
+            {battlesLoading ? (
+              <ActivityIndicator size="large" color="#3498db" />
+            ) : (
+              <ScrollView style={styles.battlesScroll}>
+                <View style={styles.battlesHeaderRow}>
+                  <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
+                  <Text style={styles.battlesHeaderCell}>Перег</Text>
+                  <Text style={styles.battlesHeaderCell}>Бої</Text>
+                  <Text style={styles.battlesHeaderCell}>Разом</Text>
+                  <Text style={styles.battlesHeaderCell}>Втрати</Text>
+                </View>
+                {battlesRows.map((row) => (
+                  <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
+                    <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
+                      {formatName(row.userName)}
+                    </Text>
+                    <View style={styles.battlesCellStack}>
+                      <Text style={styles.battlesCell}>{row.negotiationsWon}</Text>
+                      {formatDiff(row.diffNegotiations) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffNegotiations)}</Text>}
+                    </View>
+                    <View style={styles.battlesCellStack}>
+                      <Text style={styles.battlesCell}>{row.battlesWon}</Text>
+                      {formatDiff(row.diffBattles) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffBattles)}</Text>}
+                    </View>
+                    <View style={styles.battlesCellStack}>
+                      <Text style={styles.battlesCell}>{row.total}</Text>
+                      {formatDiff(row.diffTotal) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffTotal)}</Text>}
+                    </View>
+                    <View style={styles.battlesCellStack}>
+                      <Text style={styles.battlesCell}>{row.attrition}</Text>
+                      {formatDiff(row.diffAttrition) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffAttrition)}</Text>}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.battlesClose} onPress={handleBattlesClose}>
+              <Text style={styles.battlesCloseText}>Закрити</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -910,8 +1008,8 @@ const styles = StyleSheet.create({
   listTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 15 },
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
 
-  cacheBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cacheBtnText: { color: "#E0E0E0", fontWeight: "700" },
+  battlesBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesBtnText: { color: "#E0E0E0", fontWeight: "700" },
 
   sectorList: { width: "100%" },
   sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
@@ -966,14 +1064,20 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
 
-  cacheOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  cacheModal: { width: "90%", maxHeight: HALF_HEIGHT * 1.5, backgroundColor: "rgba(30, 30, 30, 0.92)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cacheTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
-  cacheScroll: { maxHeight: HALF_HEIGHT * 1.2 },
-  cacheLabel: { marginTop: 12, color: "#A0D8FF", fontWeight: "800" },
-  cacheValue: { marginTop: 6, color: "#E0E0E0", fontFamily: "monospace", fontSize: 12 },
-  cacheClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
-  cacheCloseText: { color: "#fff", fontWeight: "800" },
+  battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
+  battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
+  battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
+  battlesHeaderRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)", paddingBottom: 6, marginBottom: 6 },
+  battlesRow: { flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
+  battlesRowHighlight: { backgroundColor: "rgba(46, 204, 113, 0.08)" },
+  battlesHeaderCell: { flex: 1, color: "#A0D8FF", fontWeight: "800", fontSize: 12, textAlign: "center" },
+  battlesCell: { flex: 1, color: "#E0E0E0", fontSize: 12, textAlign: "center" },
+  battlesCellStack: { flex: 1, alignItems: "center" },
+  battlesDiffText: { color: "#2ecc71", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  battlesIdCell: { flex: 1.6, textAlign: "left" },
+  battlesClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
+  battlesCloseText: { color: "#fff", fontWeight: "800" },
 });
 
 export default GVG;
