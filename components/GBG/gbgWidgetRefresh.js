@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
 import database from '@react-native-firebase/database';
 
 import { VOLCANIC_ARCHIPELAGO_DATA } from './volcanicData';
@@ -215,9 +216,25 @@ const getShortGuildIdFromGuildId = (guildId) => {
  * @param {string} args.reason
  * @param {string} args.sectorId
  */
+const resolveGuildId = async (guildId) => {
+  if (guildId) return guildId;
+  const stored = await AsyncStorage.getItem('guildId');
+  if (stored) return stored;
+
+  const bridge = NativeModules?.GbgWidgetBridge;
+  if (bridge && typeof bridge.getGuildId === 'function') {
+    try {
+      const nativeId = await bridge.getGuildId();
+      if (nativeId) return String(nativeId);
+    } catch (e) {}
+  }
+
+  return null;
+};
+
 export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', sectorId = '' } = {}) => {
   // 1) Визначаємо guildId
-  const gid = guildId || (await AsyncStorage.getItem('guildId'));
+  const gid = await resolveGuildId(guildId);
   if (!gid) return;
 
   // 2) mapKey
