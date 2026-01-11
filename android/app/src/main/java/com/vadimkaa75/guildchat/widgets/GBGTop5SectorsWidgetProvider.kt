@@ -13,6 +13,7 @@ import org.json.JSONObject
 class GBGTop5SectorsWidgetProvider : AppWidgetProvider() {
 
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+    GbgWidgetRefreshScheduler.ensureScheduled(context)
     for (appWidgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.widget_gbg_top5_sectors)
       render(context, views)
