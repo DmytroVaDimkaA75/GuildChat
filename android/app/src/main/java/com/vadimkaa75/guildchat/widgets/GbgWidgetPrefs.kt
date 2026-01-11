@@ -9,6 +9,7 @@ object GbgWidgetPrefs {
   private const val KEY_MAP_META = "map_meta_json"
   private const val KEY_MAP_SVG = "map_svg_xml"
   private const val KEY_UPDATED_AT = "updated_at"
+  private const val KEY_GUILD_ID = "guild_id"
 
   fun setNext5(context: Context, json: String) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -49,4 +50,15 @@ object GbgWidgetPrefs {
   fun getUpdatedAt(context: Context): Long =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       .getLong(KEY_UPDATED_AT, 0L)
+
+  fun setGuildId(context: Context, guildId: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(KEY_GUILD_ID, guildId)
+      .apply()
+  }
+
+  fun getGuildId(context: Context): String? =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .getString(KEY_GUILD_ID, null)
 }

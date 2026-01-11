@@ -1,5 +1,5 @@
 import messaging from "@react-native-firebase/messaging";
-import { AppRegistry } from "react-native";
+import { AppRegistry, NativeModules } from "react-native";
 import App from "./App";
 import { name as appName } from "./app.json";
 
@@ -8,7 +8,14 @@ import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRef
 
 AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
   try {
-    await refreshGbgWidgetCacheFromFirebase({ reason: "periodic-worker" });
+    const bridge = NativeModules?.GbgWidgetBridge;
+    let guildId = null;
+    if (bridge && typeof bridge.getGuildId === "function") {
+      try {
+        guildId = await bridge.getGuildId();
+      } catch (e) {}
+    }
+    await refreshGbgWidgetCacheFromFirebase({ guildId, reason: "periodic-worker" });
   } catch (e) {}
 });
 

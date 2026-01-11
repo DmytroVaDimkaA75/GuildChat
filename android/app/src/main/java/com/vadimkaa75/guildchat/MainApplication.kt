@@ -17,6 +17,7 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
 import com.vadimkaa75.guildchat.widgets.GbgWidgetBridgePackage
+import com.vadimkaa75.guildchat.widgets.GbgWidgetRefreshScheduler
 
 class MainApplication : Application(), ReactApplication {
 
@@ -48,6 +49,7 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    GbgWidgetRefreshScheduler.ensureScheduled(this)
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

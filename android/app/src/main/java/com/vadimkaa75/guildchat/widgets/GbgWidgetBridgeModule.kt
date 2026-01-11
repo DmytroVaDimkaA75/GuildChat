@@ -5,6 +5,7 @@ import android.content.ComponentName
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.Promise
 
 class GbgWidgetBridgeModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -24,6 +25,16 @@ class GbgWidgetBridgeModule(private val reactContext: ReactApplicationContext) :
   @ReactMethod
   fun setMapSvg(svg: String) {
     GbgWidgetPrefs.setMapSvg(reactContext, svg)
+  }
+
+  @ReactMethod
+  fun setGuildId(guildId: String) {
+    GbgWidgetPrefs.setGuildId(reactContext, guildId)
+  }
+
+  @ReactMethod
+  fun getGuildId(promise: Promise) {
+    promise.resolve(GbgWidgetPrefs.getGuildId(reactContext))
   }
 
   @ReactMethod
