@@ -83,6 +83,9 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
     if (bridge && typeof bridge.setMapMeta === "function") {
       await bridge.setMapMeta(JSON.stringify(meta));
     }
+    if (bridge && typeof bridge.setMapSvg === "function") {
+      await bridge.setMapSvg(xml);
+    }
   } catch (e) {}
 
   await requestWidgetRefresh();
