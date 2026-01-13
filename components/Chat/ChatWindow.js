@@ -63,6 +63,7 @@ import moment from 'moment-timezone';
 import translateMessage from '../../translateMessage';
 import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
+import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -113,6 +114,12 @@ const stripUrls = (text = '') => {
   if (!text) return '';
   return String(text).replace(/(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi, '').trim();
 };
+
+const stripHtml = (html = '') =>
+  String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const getHostLabel = (url = '') => {
   try {
@@ -1588,6 +1595,11 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleTranslate = async (message) => {
     if (!message?.id || !guildId || !chatId) return;
+    const sourceText = (message.text || '').trim() || stripHtml(message.html);
+    if (!sourceText) {
+      Alert.alert('Помилка', 'Немає тексту для перекладу.');
+      return;
+    }
     try {
       const localeCode = locale?.code || 'uk';
       const translationRef = database().ref(
@@ -1596,7 +1608,7 @@ const ChatWindow = ({ route, navigation }) => {
       const snap = await translationRef.once('value');
       let translated = snap.val();
       if (!translated) {
-        translated = await translateMessage(message.text, localeCode);
+        translated = await translateMessage(sourceText, localeCode);
         await translationRef.set(translated);
       }
       setTranslatedText(translated);
@@ -1854,7 +1866,7 @@ const ChatWindow = ({ route, navigation }) => {
                         </MenuOption>
 
                         <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
-                          <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
+                          <TransleteIcon width={16} height={16} fill="#ddd" />
                           <Text style={styles.menuText}>Перекласти</Text>
                         </MenuOption>
                       </MenuOptions>
