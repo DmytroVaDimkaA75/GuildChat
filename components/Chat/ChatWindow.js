@@ -33,6 +33,7 @@ import { de, es, fr, ru, uk } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -58,7 +59,12 @@ import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
 import DatePicker from 'react-native-date-picker';
+import moment from 'moment-timezone';
 import translateMessage from '../../translateMessage';
+import CalendarclockIcon from '../ico/calendarclock.svg';
+import ClockIcon from '../ico/clock.svg';
+import TransleteIcon from '../ico/translete.svg';
+import UsercheckIcon from '../ico/usercheck.svg';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
@@ -109,6 +115,12 @@ const stripUrls = (text = '') => {
   return String(text).replace(/(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi, '').trim();
 };
 
+const stripHtml = (html = '') =>
+  String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const getHostLabel = (url = '') => {
   try {
     const u = new URL(normalizeUrl(url));
@@ -116,6 +128,54 @@ const getHostLabel = (url = '') => {
   } catch (e) {
     return url;
   }
+};
+
+const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSelected }) => {
+  if (!visible) return null;
+  return (
+    <TouchableOpacity activeOpacity={1} style={styles.sendOptionsOverlay} onPress={onClose}>
+      <View style={styles.sendOptionsPopup}>
+        <TouchableOpacity
+          style={styles.sendOptionButton}
+          onPress={() => {
+            onSendLater();
+            onClose();
+          }}
+        >
+          <View style={styles.sendOptionContent}>
+            <CalendarclockIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+            <Text style={styles.sendOptionText}>Надіслати пізніше</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.sendOptionButton}
+          onPress={() => {
+            onSendLater();
+            onClose();
+          }}
+        >
+          <View style={styles.sendOptionContent}>
+            <ClockIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+            <Text style={styles.sendOptionText}>Тимчасове повідомлення</Text>
+          </View>
+        </TouchableOpacity>
+        {chatType === 'group' && (
+          <TouchableOpacity
+            style={styles.sendOptionButton}
+            onPress={() => {
+              onSendToSelected();
+              onClose();
+            }}
+          >
+            <View style={styles.sendOptionContent}>
+              <UsercheckIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+              <Text style={styles.sendOptionText}>Надіслати обраним</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
 };
 
 // --- захист від битих timestamp (щоб не ловити "Invalid time value") ---
@@ -972,7 +1032,8 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [userId, setUserId] = useState(null);
   const [guildId, setGuildId] = useState(null);
-  const [locale] = useState(uk);
+  const [locale, setLocale] = useState(uk);
+  const [localeCode, setLocaleCode] = useState('uk');
 
   const [selectedImageUris, setSelectedImageUris] = useState([]);
   const [imageCaption, setImageCaption] = useState('');
@@ -1000,6 +1061,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [translatedText, setTranslatedText] = useState('');
 
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const [sendOptionsPopupVisible, setSendOptionsPopupVisible] = useState(false);
 
   const [isLinkModalVisible, setIsLinkModalVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -1030,6 +1092,17 @@ const ChatWindow = ({ route, navigation }) => {
       setGuildId(gid);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    const ref = database().ref(`users/${userId}/setting/language`);
+    const listener = ref.on('value', (snap) => {
+      const code = snap.val() || 'uk';
+      setLocaleCode(code);
+      setLocale(locales[code] || uk);
+    });
+    return () => ref.off('value', listener);
+  }, [userId]);
 
   useEffect(() => {
     if (!chatId || !guildId || !userId) return;
@@ -1391,6 +1464,46 @@ const ChatWindow = ({ route, navigation }) => {
     setCaptionModalVisible(false);
   };
 
+  const handleScheduleSend = (date) => {
+    setIsDatePickerVisible(false);
+    if (!newMessage.trim()) {
+      Alert.alert('Помилка', 'Спочатку введіть текст повідомлення.');
+      return;
+    }
+    const scheduledKyivTime = moment.tz(date, 'Europe/Kiev');
+    const nowInKyiv = moment.tz('Europe/Kiev');
+    if (scheduledKyivTime.isBefore(nowInKyiv)) {
+      Alert.alert('Невірний час', 'Не можна запланувати відправку на час, що вже минув.');
+      return;
+    }
+    const utcTimestamp = scheduledKyivTime.valueOf();
+    const scheduledMessageData = {
+      text: newMessage,
+      html: newMessageHtml || null,
+      senderId: userId,
+      guildId,
+      chatId,
+      sendAt: utcTimestamp,
+      status: 'pending',
+      replyTo: replyToMessage?.id || null
+    };
+    database()
+      .ref('scheduledMessages')
+      .push(scheduledMessageData)
+      .then(() => {
+        setNewMessage('');
+        setNewMessagePlain('');
+        setNewMessageHtml('');
+        setReplyToMessage(null);
+        setComposerSelectionActive(false);
+        composerRef.current?.clear?.();
+        Alert.alert('Заплановано', `Ваше повідомлення буде відправлено ${scheduledKyivTime.format('DD.MM.YYYY о HH:mm')}`);
+      })
+      .catch((error) => {
+        Alert.alert('Помилка планування', error.message);
+      });
+  };
+
   const handleSend = async () => {
     if (!newMessage.trim() && !editMessage) return;
 
@@ -1494,20 +1607,26 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleTranslate = async (message) => {
     if (!message?.id || !guildId || !chatId) return;
+    const sourceText = (message.text || '').trim() || stripHtml(message.html);
+    if (!sourceText) {
+      Alert.alert('Помилка', 'Немає тексту для перекладу.');
+      return;
+    }
     try {
-      const localeCode = locale?.code || 'uk';
       const translationRef = database().ref(
         `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translate/${localeCode}`
       );
       const snap = await translationRef.once('value');
       let translated = snap.val();
-      if (!translated) {
-        translated = await translateMessage(message.text, localeCode);
+      if (!translated || !String(translated).trim()) {
+        translated = await translateMessage(sourceText, localeCode);
         await translationRef.set(translated);
       }
       setTranslatedText(translated);
       setTranslationModalVisible(true);
-    } catch (error) {}
+    } catch (error) {
+      Alert.alert('Помилка', 'Не вдалося перекласти повідомлення.');
+    }
   };
 
   // avatar-logic: "попереднє" повідомлення в ВІЗУАЛЬНОМУ порядку.
@@ -1760,7 +1879,7 @@ const ChatWindow = ({ route, navigation }) => {
                         </MenuOption>
 
                         <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
-                          <FontAwesomeIcon icon={faShareNodes} color="#ddd" />
+                          <TransleteIcon width={16} height={16} fill="#ddd" />
                           <Text style={styles.menuText}>Перекласти</Text>
                         </MenuOption>
                       </MenuOptions>
@@ -1904,10 +2023,19 @@ const ChatWindow = ({ route, navigation }) => {
                 <TouchableOpacity
                   style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]}
                   onPress={handleSend}
+                  onLongPress={() => setSendOptionsPopupVisible(true)}
                 >
                   <FontAwesomeIcon icon={editMessage ? faCheck : faPaperPlane} size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
+
+              <SendOptionsPopup
+                visible={sendOptionsPopupVisible}
+                chatType={chatType}
+                onClose={() => setSendOptionsPopupVisible(false)}
+                onSendLater={() => setIsDatePickerVisible(true)}
+                onSendToSelected={() => Alert.alert('Функція', 'Надіслати обраним')}
+              />
             </View>
 
             <View style={{ height: insets.bottom, backgroundColor: '#1c1c1e' }} />
@@ -2079,8 +2207,12 @@ const ChatWindow = ({ route, navigation }) => {
           open={isDatePickerVisible}
           date={new Date()}
           mode="datetime"
-          onConfirm={() => setIsDatePickerVisible(false)}
+          onConfirm={handleScheduleSend}
           onCancel={() => setIsDatePickerVisible(false)}
+          title="Запланувати відправку"
+          confirmText="Підтвердити"
+          cancelText="Скасувати"
+          minimumDate={new Date()}
           theme="dark"
         />
       </SafeAreaView>
@@ -2205,6 +2337,27 @@ const styles = StyleSheet.create({
   extraCount: { color: '#aaa', marginLeft: 4 },
 
   popupOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', paddingHorizontal: 40 },
+  sendOptionsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
+  sendOptionsPopup: {
+    position: 'absolute',
+    bottom: 70,
+    right: 20,
+    width: 240,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4
+  },
+  sendOptionButton: { paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8 },
+  sendOptionContent: { flexDirection: 'row', alignItems: 'center' },
+  sendOptionText: { fontSize: 15, color: '#f5f5f5' },
   readUsersPopup: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
   readUsersPopupPersonal: { alignSelf: 'flex-end' },
   readUsersPopupInterlocutor: { alignSelf: 'flex-start' },
