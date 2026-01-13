@@ -1032,7 +1032,8 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [userId, setUserId] = useState(null);
   const [guildId, setGuildId] = useState(null);
-  const [locale] = useState(uk);
+  const [locale, setLocale] = useState(uk);
+  const [localeCode, setLocaleCode] = useState('uk');
 
   const [selectedImageUris, setSelectedImageUris] = useState([]);
   const [imageCaption, setImageCaption] = useState('');
@@ -1091,6 +1092,17 @@ const ChatWindow = ({ route, navigation }) => {
       setGuildId(gid);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    const ref = database().ref(`users/${userId}/setting/language`);
+    const listener = ref.on('value', (snap) => {
+      const code = snap.val() || 'uk';
+      setLocaleCode(code);
+      setLocale(locales[code] || uk);
+    });
+    return () => ref.off('value', listener);
+  }, [userId]);
 
   useEffect(() => {
     if (!chatId || !guildId || !userId) return;
@@ -1601,19 +1613,20 @@ const ChatWindow = ({ route, navigation }) => {
       return;
     }
     try {
-      const localeCode = locale?.code || 'uk';
       const translationRef = database().ref(
         `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translate/${localeCode}`
       );
       const snap = await translationRef.once('value');
       let translated = snap.val();
-      if (!translated) {
+      if (!translated || !String(translated).trim()) {
         translated = await translateMessage(sourceText, localeCode);
         await translationRef.set(translated);
       }
       setTranslatedText(translated);
       setTranslationModalVisible(true);
-    } catch (error) {}
+    } catch (error) {
+      Alert.alert('Помилка', 'Не вдалося перекласти повідомлення.');
+    }
   };
 
   // avatar-logic: "попереднє" повідомлення в ВІЗУАЛЬНОМУ порядку.
