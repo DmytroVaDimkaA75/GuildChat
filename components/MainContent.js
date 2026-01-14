@@ -714,6 +714,22 @@ export default function MainContent() {
         });
         console.log('Notification channel created:', channelId);
 
+        const gbgChannelId = await notifee.createChannel({
+          id: 'gbg_sector',
+          name: 'GBG Sector Channel',
+          importance: AndroidImportance.HIGH,
+          sound: 'alert',
+        });
+        console.log('GBG notification channel created:', gbgChannelId);
+
+        const chatChannelId = await notifee.createChannel({
+          id: 'chat_messages',
+          name: 'Chat Messages Channel',
+          importance: AndroidImportance.HIGH,
+          sound: 'smeh_minonovhasms',
+        });
+        console.log('Chat notification channel created:', chatChannelId);
+
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
           console.log("Your FCM Token is:", fcmToken);
@@ -730,11 +746,19 @@ export default function MainContent() {
         const { title, body } = resolveNotificationContent(remoteMessage);
         if (!title && !body) return;
 
+        const messageType = remoteMessage?.data?.type;
+        const displayChannelId =
+          messageType === 'gbg_sector_open'
+            ? 'gbg_sector'
+            : messageType === 'chat_message'
+              ? 'chat_messages'
+              : 'default';
+
         await notifee.displayNotification({
           title,
           body,
           android: {
-            channelId: 'default',
+            channelId: displayChannelId,
             importance: AndroidImportance.HIGH,
             pressAction: {
               id: 'default',
