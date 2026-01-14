@@ -219,10 +219,10 @@ exports.sendChatNotification = onValueCreated(
 
     if (tokens.length > 0) {
       const payload = {
-        data: { chatId, guildId, title: senderName, body: messageText },
+        data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message" },
         android: {
           priority: "high",
-          notification: { title: senderName, body: messageText, sound: "default", channel_id: "default" },
+          notification: { title: senderName, body: messageText, sound: "smeh_minonovhasms", channel_id: "chat_messages" },
         },
         apns: {
           payload: { aps: { alert: { title: senderName, body: messageText }, sound: "default", "content-available": 1 } },
@@ -481,10 +481,16 @@ async function sendPushAndMarkSent(taskId, task, db) {
     const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
 
     const payload = {
-      data: { screen: "GBG", sectorId: String(sectorId), title: titleText, body: messageText },
+      data: {
+        screen: "GBG",
+        sectorId: String(sectorId),
+        title: titleText,
+        body: messageText,
+        type: "gbg_sector_open",
+      },
       android: {
         priority: "high",
-        notification: { title: titleText, body: messageText, sound: "default", channel_id: "default" },
+        notification: { title: titleText, body: messageText, sound: "alert", channel_id: "gbg_sector" },
       },
       apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
     };
