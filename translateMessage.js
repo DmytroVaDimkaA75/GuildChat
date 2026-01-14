@@ -1,5 +1,10 @@
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateTraceId = () => {
+  const randomPart = Math.random().toString(16).slice(2);
+  const timePart = Date.now().toString(16);
+  return `${timePart}-${randomPart}`.slice(0, 36);
+};
 
 const translateMessage = async (text, locale) => {
 const key = "3d21dac4f6434896ab3ad41f8fd0c4c3";  // Ваш ключ
@@ -15,7 +20,7 @@ headers: {
 'Ocp-Apim-Subscription-Key': key,
 'Ocp-Apim-Subscription-Region': location,
 'Content-Type': 'application/json',
-'X-ClientTraceId': uuidv4().toString()
+'X-ClientTraceId': generateTraceId()
 },
 params: {
 'api-version': '3.0',
