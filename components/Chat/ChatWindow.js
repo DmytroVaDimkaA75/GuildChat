@@ -1625,7 +1625,13 @@ const ChatWindow = ({ route, navigation }) => {
       setTranslatedText(translated);
       setTranslationModalVisible(true);
     } catch (error) {
-      Alert.alert('Помилка', 'Не вдалося перекласти повідомлення.');
+      const apiMessage =
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Невідома помилка';
+      console.error('Помилка перекладу:', apiMessage, error?.response?.data || error);
+      Alert.alert('Помилка', `Не вдалося перекласти повідомлення. Причина: ${apiMessage}`);
     }
   };
 
