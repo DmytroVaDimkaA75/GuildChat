@@ -24,7 +24,9 @@ import {
   faShareNodes,
   faMagnifyingGlassPlus,
   faMagnifyingGlassMinus,
-  faLink
+  faLink,
+  faVolumeHigh,
+  faVolumeXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1069,6 +1071,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [guildMembers, setGuildMembers] = useState([]);
   const [mentionStartIndex, setMentionStartIndex] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [isChatMember, setIsChatMember] = useState(false);
+  const [memberSoundEnabled, setMemberSoundEnabled] = useState(true);
 
   // highlight
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
@@ -1093,6 +1097,15 @@ const ChatWindow = ({ route, navigation }) => {
     })();
   }, []);
 
+  const handleToggleMemberSound = useCallback(async () => {
+    if (!guildId || !chatId || !userId || !isChatMember) return;
+    const nextValue = !memberSoundEnabled;
+    setMemberSoundEnabled(nextValue);
+    await database()
+      .ref(`guilds/${guildId}/chats/${chatId}/members/${userId}`)
+      .set(nextValue);
+  }, [guildId, chatId, userId, isChatMember, memberSoundEnabled]);
+
   useEffect(() => {
     if (!userId) return undefined;
     const ref = database().ref(`users/${userId}/setting/language`);
@@ -1112,6 +1125,13 @@ const ChatWindow = ({ route, navigation }) => {
       const data = snap.val();
       if (!data) return;
       setChatType(data.type || 'private');
+
+      const members = data.members || {};
+      const hasMembership = Object.prototype.hasOwnProperty.call(members, userId);
+      const rawValue = members[userId];
+      const memberSoundValue = typeof rawValue === 'boolean' ? rawValue : true;
+      setIsChatMember(hasMembership);
+      setMemberSoundEnabled(memberSoundValue);
 
       if (data.type === 'private') {
         const otherId = Object.keys(data.members || {}).find((id) => id !== userId);
@@ -1136,7 +1156,17 @@ const ChatWindow = ({ route, navigation }) => {
                         <Text style={styles.headerSubText}>У мережі</Text>
                       </View>
                     </View>
-                  )
+                  ),
+                  headerRight: () =>
+                    hasMembership ? (
+                      <TouchableOpacity style={styles.headerRightButton} onPress={handleToggleMemberSound}>
+                        <FontAwesomeIcon
+                          icon={memberSoundValue ? faVolumeHigh : faVolumeXmark}
+                          size={18}
+                          color="#fff"
+                        />
+                      </TouchableOpacity>
+                    ) : null
                 });
               }
             });
@@ -1151,13 +1181,23 @@ const ChatWindow = ({ route, navigation }) => {
                 <Text style={styles.headerSubText}>{Object.keys(data.members || {}).length} учасників</Text>
               </View>
             </View>
-          )
+          ),
+          headerRight: () =>
+            hasMembership ? (
+              <TouchableOpacity style={styles.headerRightButton} onPress={handleToggleMemberSound}>
+                <FontAwesomeIcon
+                  icon={memberSoundValue ? faVolumeHigh : faVolumeXmark}
+                  size={18}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            ) : null
         });
       }
     });
 
     return () => chatRef.off('value', listener);
-  }, [chatId, guildId, userId, navigation]);
+  }, [chatId, guildId, userId, navigation, handleToggleMemberSound]);
 
   useEffect(() => {
     if (!guildId) return;
@@ -2407,6 +2447,7 @@ const styles = StyleSheet.create({
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   headerTitleText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   headerSubText: { color: '#aaa', fontSize: 12 },
+  headerRightButton: { paddingHorizontal: 16, paddingVertical: 8 },
 
   imageViewerContainer: { flex: 1, backgroundColor: '#000' },
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
