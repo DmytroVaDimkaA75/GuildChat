@@ -47,7 +47,7 @@ const isTimeWithinSchedules = (schedules, date) => {
     date.getMinutes() +
     date.getSeconds() / 60 +
     date.getMilliseconds() / 60000;
-  const dayIndex = date.getDay();
+  const dayIndex = (date.getDay() + 6) % 7;
 
   return Object.values(schedules).some((schedule) => {
     if (schedule?.weekly) {
@@ -294,23 +294,13 @@ exports.sendChatNotification = onValueCreated(
     const soundTokens = recipients.filter(Boolean).filter((r) => r.shouldPlaySound).map((r) => r.token);
     const silentTokens = recipients.filter(Boolean).filter((r) => !r.shouldPlaySound).map((r) => r.token);
 
-    const basePayload = {
-      data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message" },
-      android: {
-        priority: "high",
-      },
-      apns: {
-        payload: { aps: { alert: { title: senderName, body: messageText }, "content-available": 1 } },
-      },
-    };
-
     try {
       if (soundTokens.length > 0) {
         await admin.messaging().sendEachForMulticast({
           tokens: soundTokens,
-          ...basePayload,
+          data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message", soundEnabled: "true" },
           android: {
-            ...basePayload.android,
+            priority: "high",
             notification: {
               title: senderName,
               body: messageText,
@@ -332,13 +322,13 @@ exports.sendChatNotification = onValueCreated(
       if (silentTokens.length > 0) {
         await admin.messaging().sendEachForMulticast({
           tokens: silentTokens,
-          ...basePayload,
+          data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message", soundEnabled: "false" },
           android: {
-            ...basePayload.android,
+            priority: "high",
             notification: {
               title: senderName,
               body: messageText,
-              channel_id: "chat_messages",
+              channel_id: "chat_messages_silent",
             },
           },
         });
@@ -605,29 +595,20 @@ async function sendPushAndMarkSent(taskId, task, db) {
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
 
-  const basePayload = {
-    data: {
-      screen: "GBG",
-      sectorId: String(sectorId),
-      title: titleText,
-      body: messageText,
-      type: "gbg_sector_open",
-    },
-    android: {
-      priority: "high",
-    },
-    apns: {
-      payload: { aps: { alert: { title: titleText, body: messageText }, "content-available": 1 } },
-    },
-  };
-
   try {
     if (soundTokens.length > 0) {
       await admin.messaging().sendEachForMulticast({
         tokens: soundTokens,
-        ...basePayload,
+        data: {
+          screen: "GBG",
+          sectorId: String(sectorId),
+          title: titleText,
+          body: messageText,
+          type: "gbg_sector_open",
+          soundEnabled: "true",
+        },
         android: {
-          ...basePayload.android,
+          priority: "high",
           notification: { title: titleText, body: messageText, sound: "alert", channel_id: "gbg_sector" },
         },
         apns: {
@@ -639,10 +620,17 @@ async function sendPushAndMarkSent(taskId, task, db) {
     if (silentTokens.length > 0) {
       await admin.messaging().sendEachForMulticast({
         tokens: silentTokens,
-        ...basePayload,
+        data: {
+          screen: "GBG",
+          sectorId: String(sectorId),
+          title: titleText,
+          body: messageText,
+          type: "gbg_sector_open",
+          soundEnabled: "false",
+        },
         android: {
-          ...basePayload.android,
-          notification: { title: titleText, body: messageText, channel_id: "gbg_sector" },
+          priority: "high",
+          notification: { title: titleText, body: messageText, channel_id: "gbg_sector_silent" },
         },
       });
       logger.log(`[PUSH SENT] ${sectorId} sent to ${silentTokens.length} users (silent).`);
@@ -687,20 +675,14 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   const titleText = "🆘 Потрібна допомога!";
   const messageText = "Терміново потрібна допомога на полях битв!";
 
-  const basePayload = {
-    data: { screen: "GBG", title: titleText, body: messageText },
-    android: { priority: "high" },
-    apns: { payload: { aps: { alert: { title: titleText, body: messageText }, "content-available": 1 } } },
-  };
-
   try {
     if (soundTokens.length > 0) {
       await admin.messaging().sendEachForMulticast({
         tokens: soundTokens,
-        ...basePayload,
+        data: { screen: "GBG", title: titleText, body: messageText, type: "gbg_help", soundEnabled: "true" },
         android: {
-          ...basePayload.android,
-          notification: { title: titleText, body: messageText, sound: "default", channel_id: "default" },
+          priority: "high",
+          notification: { title: titleText, body: messageText, sound: "default", channel_id: "default_sound" },
         },
         apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
       });
@@ -708,9 +690,9 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
     if (silentTokens.length > 0) {
       await admin.messaging().sendEachForMulticast({
         tokens: silentTokens,
-        ...basePayload,
+        data: { screen: "GBG", title: titleText, body: messageText, type: "gbg_help", soundEnabled: "false" },
         android: {
-          ...basePayload.android,
+          priority: "high",
           notification: { title: titleText, body: messageText, channel_id: "default" },
         },
       });
