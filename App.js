@@ -7,7 +7,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GuildContext, GuildProvider } from "./GuildContext";
 import i18n from "./i18n";
@@ -70,6 +70,33 @@ const AppContent = () => {
       }
     };
     initLanguage();
+  }, []);
+
+  useEffect(() => {
+    const syncUserTimeZone = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("userId");
+        if (!userId) return;
+        const timeZone = Localization.getTimeZone();
+        if (!timeZone) return;
+        await database().ref(`/users/${userId}/setting/timeZone`).set(timeZone);
+        console.log("✅ Таймзону оновлено:", timeZone);
+      } catch (error) {
+        console.error("❌ Помилка оновлення таймзони:", error);
+      }
+    };
+
+    syncUserTimeZone();
+
+    const subscription = AppState.addEventListener("change", nextState => {
+      if (nextState === "active") {
+        syncUserTimeZone();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
