@@ -35,7 +35,7 @@ import GBGuarant from './GB/GBGuarant';
 import GBNewExpress from './GB/GBNewExpress';
 import GBScreen from "./GB/GBScreen";
 import MyGB from './GB/MyGB';
-import NewGBChat from './GB/NewGBChat';
+import NewGBChat from "./GB/NewGBChat";
 import GBGScreen from './GBG/GBGscreen';
 import AddSchedule from './Profile/AddSchedule';
 import LanguageSelector from './Profile/LanguageSelector';
@@ -82,17 +82,62 @@ const defaultHeaderOptions = {
 };
 
 // --- STACKS ---
-// Логика стеков не тронута, только применены новые styles через defaultHeaderOptions
 
 function ChatStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="ChatScreen" component={ChatScreen} options={({ navigation }) => ({ title: t("chatStack.chatScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, headerRight: () => (<TouchableOpacity onPress={() => navigation.navigate('GuildMembersList')} style={{ marginRight: 15 }}><Ionicons name="add" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
+      <Stack.Screen
+        name="ChatScreen"
+        component={ChatScreen}
+        options={({ navigation }) => ({
+          title: t("chatStack.chatScreenTitle"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('GuildMembersList')} style={{ marginRight: 15 }}>
+              <Ionicons name="add" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <Stack.Screen name="GuildMembersList" component={GuildMembersList} options={{ title: t("chatStack.guildMembersListTitle") }} />
-      <Stack.Screen name="CreateGroupScreen" component={CreateGroupScreen} options={({ navigation, route }) => ({ title: "Нова група", headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => { if (route.params?.handleCreateGroup) { route.params.handleCreateGroup(); } }} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
+      <Stack.Screen
+        name="CreateGroupScreen"
+        component={CreateGroupScreen}
+        options={({ navigation, route }) => ({
+          title: "Нова група",
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.handleCreateGroup) {
+                  route.params.handleCreateGroup();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <Stack.Screen name="NewGroupChat" component={NewGroupChat} options={{ title: t("chatStack.newGroupChatTitle") }} />
-      <Stack.Screen name="ChatWindow" component={ChatWindow} options={({ navigation }) => ({ title: t("chatStack.chatWindowTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.navigate('ChatScreen')}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} style={{ marginLeft: 10 }} /></TouchableOpacity>), })} />
+      <Stack.Screen
+        name="ChatWindow"
+        component={ChatWindow}
+        options={({ navigation }) => ({
+          title: t("chatStack.chatWindowTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('ChatScreen')}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} style={{ marginLeft: 10 }} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
     </Stack.Navigator>
   );
 }
@@ -100,6 +145,7 @@ function ChatStack() {
 function GBStack() {
   const { t } = useTranslation();
   const [showAddButton, setShowAddButton] = React.useState(false);
+
   React.useEffect(() => {
     const fetchRole = async () => {
       try {
@@ -108,14 +154,38 @@ function GBStack() {
         if (!userId || !guildId) return;
         const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
         const snap = await userRoleRef.once('value');
-        if (snap.exists() && snap.val() === 'guildLeader') { setShowAddButton(true); } else { setShowAddButton(false); }
-      } catch (e) { setShowAddButton(false); }
+        if (snap.exists() && snap.val() === 'guildLeader') {
+          setShowAddButton(true);
+        } else {
+          setShowAddButton(false);
+        }
+      } catch (e) {
+        setShowAddButton(false);
+      }
     };
     fetchRole();
   }, []);
+
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="GBScreen" component={GBScreen} options={({ navigation }) => { const opts = { title: t("gbStack.gbScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, }; if (showAddButton) { opts.headerRight = () => (<TouchableOpacity onPress={() => navigation.navigate('NewGBChat')} style={{ marginRight: 15 }}><Ionicons name="add" size={24} color={COLORS.textPrimary} /></TouchableOpacity>); } return opts; }} />
+      <Stack.Screen
+        name="GBScreen"
+        component={GBScreen}
+        options={({ navigation }) => {
+          const opts = {
+            title: t("gbStack.gbScreenTitle"),
+            headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          };
+          if (showAddButton) {
+            opts.headerRight = () => (
+              <TouchableOpacity onPress={() => navigation.navigate('NewGBChat')} style={{ marginRight: 15 }}>
+                <Ionicons name="add" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            );
+          }
+          return opts;
+        }}
+      />
       <Stack.Screen name="NewGBChat" component={NewGBChat} options={{ title: t("gbStack.newGBChatTitle") }} />
       <Stack.Screen name="GBChatWindow" component={GBChatWindow} options={{ title: t("gbStack.gbChatWindowTitle") }} />
       <Stack.Screen name="GBExpress" component={GBExpress} options={{ title: t("gbStack.gbExpressTitle") }} />
@@ -126,14 +196,43 @@ function GBStack() {
 
 function QuantStack() {
   const { t } = useTranslation();
-  return (<Stack.Navigator screenOptions={defaultHeaderOptions}><Stack.Screen name="QuantScreen" component={MapComponent} options={{ title: t("quantStack.quantScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, }} /></Stack.Navigator>);
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="QuantScreen"
+        component={MapComponent}
+        options={{ title: t("quantStack.quantScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} /> }}
+      />
+    </Stack.Navigator>
+  );
 }
 
 function GBGStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="GBGScreen" component={GBGScreen} options={({ navigation, route }) => ({ title: t("gbgStack.gbgScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, headerRight: () => (<TouchableOpacity onPress={() => { if (route.params?.onOpenOpponents) { route.params.onOpenOpponents(); } else { console.log('onOpenOpponents callback is not set yet'); } }} style={{ marginRight: 15 }}><Ionicons name="information" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
+      <Stack.Screen
+        name="GBGScreen"
+        component={GBGScreen}
+        options={({ navigation, route }) => ({
+          title: t("gbgStack.gbgScreenTitle"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onOpenOpponents) {
+                  route.params.onOpenOpponents();
+                } else {
+                  console.log('onOpenOpponents callback is not set yet');
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="information" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
     </Stack.Navigator>
   );
 }
@@ -142,13 +241,16 @@ function AdmintStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="AdminScreen" component={AdminMain} options={() => ({
-        title: t("adminStack.adminScreenTitle"),
-        headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
-        // Переопределяем цвет только если нужно выделить админку, но в рамках темной темы лучше surface
-        headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
-        headerShadowVisible: false,
-      })} />
+      <Stack.Screen
+        name="AdminScreen"
+        component={AdminMain}
+        options={() => ({
+          title: t("adminStack.adminScreenTitle"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
+          headerShadowVisible: false,
+        })}
+      />
     </Stack.Navigator>
   );
 }
@@ -157,9 +259,73 @@ function CultureStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="CulturalSettlements" component={CulturalSettlements} options={({ navigation }) => ({ title: 'Вибір поселення', headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="CulturalPlanner" component={CulturalPlanner} options={({ navigation, route }) => { const { start } = route.params; const removeAndBack = async () => { const userId = await AsyncStorage.getItem('userId'); const guildId = await AsyncStorage.getItem('guildId'); await database().ref(`guilds/${guildId}/guildUsers/${userId}/culturalSettlements`).remove(); navigation.navigate('CulturalSettlements'); }; return { title: 'План поселення', headerLeft: () => (<TouchableOpacity onPress={() => { if (start) removeAndBack(); else navigation.goBack(); }} style={{ marginLeft: 10 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => { if (start) removeAndBack(); else { Alert.alert('Підтвердження', 'Ви дійсно хочете закінчити планування культурного поселення і видалити весь прогрес?', [{ text: 'Ні' }, { text: 'Так', onPress: () => removeAndBack() }]); } }} style={{ marginRight: 10 }}><Ionicons name="close" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), }; }} />
-      <Stack.Screen name="Planning" component={Planning} options={({ navigation }) => ({ title: 'Планування', headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
+      <Stack.Screen
+        name="CulturalSettlements"
+        component={CulturalSettlements}
+        options={({ navigation }) => ({
+          title: 'Вибір поселення',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="CulturalPlanner"
+        component={CulturalPlanner}
+        options={({ navigation, route }) => {
+          const { start } = route.params;
+          const removeAndBack = async () => {
+            const userId = await AsyncStorage.getItem('userId');
+            const guildId = await AsyncStorage.getItem('guildId');
+            await database().ref(`guilds/${guildId}/guildUsers/${userId}/culturalSettlements`).remove();
+            navigation.navigate('CulturalSettlements');
+          };
+          return {
+            title: 'План поселення',
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => {
+                  if (start) removeAndBack();
+                  else navigation.goBack();
+                }}
+                style={{ marginLeft: 10 }}
+              >
+                <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            ),
+            headerRight: () => (
+              <TouchableOpacity
+                onPress={() => {
+                  if (start) removeAndBack();
+                  else {
+                    Alert.alert('Підтвердження', 'Ви дійсно хочете закінчити планування культурного поселення і видалити весь прогрес?', [
+                      { text: 'Ні' },
+                      { text: 'Так', onPress: () => removeAndBack() },
+                    ]);
+                  }
+                }}
+                style={{ marginRight: 10 }}
+              >
+                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            ),
+          };
+        }}
+      />
+      <Stack.Screen
+        name="Planning"
+        component={Planning}
+        options={({ navigation }) => ({
+          title: 'Планування',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
     </Stack.Navigator>
   );
 }
@@ -168,15 +334,148 @@ function ProfileStack() {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen name="ProfileMain" component={ProfileMain} options={() => ({ title: t("profileStack.profileMainTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />, headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 }, headerShadowVisible: false, })} />
-      <Stack.Screen name="ProfileData" component={ProfileData} options={({ navigation }) => ({ title: t("profileStack.profileDataTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="MyGB" component={MyGB} options={({ navigation }) => ({ title: t("profileStack.myGBTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => navigation.navigate('AddGBComponent')} style={{ marginRight: 15 }}><Ionicons name="add" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="AddGBComponent" component={AddGBComponent} options={{ title: t("profileStack.addGBComponentTitle"), }} />
-      <Stack.Screen name="GBNewExpress" component={GBNewExpress} options={({ navigation }) => ({ title: t("profileStack.gbNewExpressTitle"), headerTintColor: COLORS.textPrimary, headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="GBGuarant" component={GBGuarant} options={({ navigation }) => ({ headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="AddSchedule" component={AddSchedule} options={({ navigation }) => ({ title: t("profileStack.addScheduleTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.navigate('ProfileMain')} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="SleepSchedule" component={SleepSchedule} options={({ navigation, route }) => ({ title: t("profileStack.sleepScheduleTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => (<TouchableOpacity onPress={() => { if (route.params?.handleSave) { route.params.handleSave(); } }} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), })} />
-      <Stack.Screen name="LanguageSelector" component={LanguageSelector} options={({ navigation, route }) => ({ title: t("profileStack.languageSelectorTitle"), headerLeft: () => (<TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}><Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} /></TouchableOpacity>), headerRight: () => { const selectedLanguage = route.params?.selectedLanguage ?? i18n.language; return (<TouchableOpacity onPress={async () => { if (route.params?.saveLanguage) { await route.params.saveLanguage(selectedLanguage); } }} style={{ marginRight: 15 }}><Ionicons name="checkmark" size={24} color={COLORS.textPrimary} /></TouchableOpacity>); }, })} />
+      <Stack.Screen
+        name="ProfileMain"
+        component={ProfileMain}
+        options={() => ({
+          title: t("profileStack.profileMainTitle"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
+          headerShadowVisible: false,
+        })}
+      />
+      <Stack.Screen
+        name="ProfileData"
+        component={ProfileData}
+        options={({ navigation }) => ({
+          title: t("profileStack.profileDataTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}>
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="MyGB"
+        component={MyGB}
+        options={({ navigation }) => ({
+          title: t("profileStack.myGBTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('AddGBComponent')} style={{ marginRight: 15 }}>
+              <Ionicons name="add" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="AddGBComponent" component={AddGBComponent} options={{ title: t("profileStack.addGBComponentTitle") }} />
+      <Stack.Screen
+        name="GBNewExpress"
+        component={GBNewExpress}
+        options={({ navigation }) => ({
+          title: t("profileStack.gbNewExpressTitle"),
+          headerTintColor: COLORS.textPrimary,
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}>
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="GBGuarant"
+        component={GBGuarant}
+        options={({ navigation }) => ({
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="AddSchedule"
+        component={AddSchedule}
+        options={({ navigation }) => ({
+          title: t("profileStack.addScheduleTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('ProfileMain')} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => console.log('Підтверджено')} style={{ marginRight: 15 }}>
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="SleepSchedule"
+        component={SleepSchedule}
+        options={({ navigation, route }) => ({
+          title: t("profileStack.sleepScheduleTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.handleSave) {
+                  route.params.handleSave();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="LanguageSelector"
+        component={LanguageSelector}
+        options={({ navigation, route }) => ({
+          title: t("profileStack.languageSelectorTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => {
+            const selectedLanguage = route.params?.selectedLanguage ?? i18n.language;
+            return (
+              <TouchableOpacity
+                onPress={async () => {
+                  if (route.params?.saveLanguage) {
+                    await route.params.saveLanguage(selectedLanguage);
+                  }
+                }}
+                style={{ marginRight: 15 }}
+              >
+                <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            );
+          },
+        })}
+      />
     </Stack.Navigator>
   );
 }
@@ -191,7 +490,7 @@ function CustomDrawerContent(props) {
   const [tempData, setTempData] = useState({});
   const [isWorldSelectVisible, setIsWorldSelectVisible] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState('');
-  
+
   // Анимации
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const rotation = useRef(new Animated.Value(0)).current;
@@ -243,7 +542,6 @@ function CustomDrawerContent(props) {
   }, [selectedGuildId, guildId, t]);
 
   useEffect(() => {
-    // Высота элемента списка миров (примерно 50px)
     Animated.timing(animatedHeight, {
       toValue: isWorldSelectVisible ? (Object.keys(tempData).length * 56 + 56) : 0,
       duration: 300,
@@ -281,56 +579,54 @@ function CustomDrawerContent(props) {
   });
 
   return (
-    <DrawerContentScrollView {...props} style={styles.drawerContent} contentContainerStyle={{paddingTop: 0}}>
+    <DrawerContentScrollView {...props} style={styles.drawerContent} contentContainerStyle={{ paddingTop: 0 }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      
+
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.profileRow}>
-            <View style={styles.avatarContainer}>
-                {guildImageUrl ? (
-                    <Image source={{ uri: guildImageUrl }} style={styles.avatar} />
-                ) : (
-                   <View style={styles.avatarPlaceholder}>
-                     <Profile width="24" height="24" fill={COLORS.textSecondary} />
-                   </View>
-                )}
-            </View>
-            <View style={styles.userInfo}>
-                <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
-                <TouchableOpacity style={styles.worldBadge} onPress={handleChevronPress} activeOpacity={0.7}>
-                    <Text style={styles.worldText} numberOfLines={1}>{guildName}</Text>
-                    <Animated.View style={{ transform: [{ rotate: rotationInterpolate }] }}>
-                        <MaterialIcons name="keyboard-arrow-down" size={20} color={COLORS.primary} />
-                    </Animated.View>
-                </TouchableOpacity>
-            </View>
+          <View style={styles.avatarContainer}>
+            {guildImageUrl ? (
+              <Image source={{ uri: guildImageUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Profile width="24" height="24" fill={COLORS.textSecondary} />
+              </View>
+            )}
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
+            <TouchableOpacity style={styles.worldBadge} onPress={handleChevronPress} activeOpacity={0.7}>
+              <Text style={styles.worldText} numberOfLines={1}>{guildName}</Text>
+              <Animated.View style={{ transform: [{ rotate: rotationInterpolate }] }}>
+                <MaterialIcons name="keyboard-arrow-down" size={20} color={COLORS.primary} />
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       {/* WORLD SELECTOR (DROPDOWN) */}
       <Animated.View style={[styles.worldSelectContainer, { height: animatedHeight }]}>
-          <View style={styles.worldsInner}>
-            {Object.keys(tempData).map(key => (
-              <TouchableOpacity key={key} style={styles.worldItem} onPress={() => handleGuildPress(key)}>
-                {tempData[key].imageUrl ? 
-                  <Image source={{ uri: tempData[key].imageUrl }} style={styles.smallAvatar} /> : 
-                  <View style={styles.smallAvatarPlaceholder} />
-                }
-                <Text style={styles.worldItemText}>{tempData[key].guildName}</Text>
-              </TouchableOpacity>
-            ))}
-             <View style={styles.worldItem}>
-                <View style={styles.addWorldIcon}>
-                  <MaterialIcons name="add" size={20} color="#FFF" />
-                </View>
-                <Text style={[styles.worldItemText, {color: COLORS.primary}]}>{t("customDrawer.addWorld")}</Text>
+        <View style={styles.worldsInner}>
+          {Object.keys(tempData).map(key => (
+            <TouchableOpacity key={key} style={styles.worldItem} onPress={() => handleGuildPress(key)}>
+              {tempData[key].imageUrl ?
+                <Image source={{ uri: tempData[key].imageUrl }} style={styles.smallAvatar} /> :
+                <View style={styles.smallAvatarPlaceholder} />
+              }
+              <Text style={styles.worldItemText}>{tempData[key].guildName}</Text>
+            </TouchableOpacity>
+          ))}
+          <View style={styles.worldItem}>
+            <View style={styles.addWorldIcon}>
+              <MaterialIcons name="add" size={20} color="#FFF" />
             </View>
+            <Text style={[styles.worldItemText, { color: COLORS.primary }]}>{t("customDrawer.addWorld")}</Text>
           </View>
+        </View>
       </Animated.View>
 
-      {/* SEPARATOR */}
-      {/* <View style={styles.separator} /> */}
       <Text style={styles.sectionTitle}>{"ОСНОВНЕ"}</Text>
 
       {/* MENU ITEMS */}
@@ -340,13 +636,12 @@ function CustomDrawerContent(props) {
           const { drawerLabel, drawerIconComponent } = props.descriptors[route.key].options;
           const isServiceItem = route.name === 'servise';
 
-          // Определяем цвет
           const iconColor = focused ? COLORS.primary : COLORS.textSecondary;
           const textColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
           const bgColor = focused ? COLORS.surface : 'transparent';
 
           if (!drawerLabel) {
-              return null;
+            return null;
           }
 
           return (
@@ -357,8 +652,7 @@ function CustomDrawerContent(props) {
                 activeOpacity={0.8}
               >
                 <View style={styles.iconWrapper}>
-                    {/* Рендерим SVG компонент переданный через options */}
-                    {drawerIconComponent && drawerIconComponent({ color: iconColor })}
+                  {drawerIconComponent && drawerIconComponent({ color: iconColor })}
                 </View>
                 <Text style={[styles.menuItemText, { color: textColor, fontWeight: focused ? '600' : '500' }]}>
                   {drawerLabel}
@@ -371,10 +665,9 @@ function CustomDrawerContent(props) {
         })}
       </View>
 
-       <View style={styles.footer}>
-            <Text style={styles.footerText}>СУРМА UA</Text>
-        </View>
-
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>СУРМА UA</Text>
+      </View>
     </DrawerContentScrollView>
   );
 }
@@ -386,7 +679,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 50, // More space for status bar
+    paddingTop: 50,
     paddingBottom: 20,
     backgroundColor: COLORS.background,
   },
@@ -410,7 +703,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   avatarPlaceholder: {
-     width: '100%',
+    width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -446,7 +739,6 @@ const styles = StyleSheet.create({
     marginRight: 6,
     maxWidth: 130,
   },
-  // World Dropdown
   worldSelectContainer: {
     overflow: 'hidden',
     marginBottom: 10,
@@ -488,7 +780,6 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontWeight: '500',
   },
-  // Menu
   sectionTitle: {
     color: '#555',
     fontSize: 12,
@@ -574,15 +865,15 @@ function AppNavigator() {
   }, [guildId]);
 
   // Функция-хелпер для передачи SVG компонента с нужным цветом
-const renderIcon = (IconComponent) => ({ color }) => (
-  <IconComponent 
-      width={24} 
-      height={24} 
-      fill={color} 
-      color={color} 
+  const renderIcon = (IconComponent) => ({ color }) => (
+    <IconComponent
+      width={24}
+      height={24}
+      fill={color}
+      color={color}
       style={{ color: color }}
-  />
-);
+    />
+  );
 
   return (
     <NavigationContainer key={guildId}>
@@ -593,88 +884,47 @@ const renderIcon = (IconComponent) => ({ color }) => (
           drawerActiveTintColor: COLORS.primary,
           drawerInactiveTintColor: COLORS.textSecondary,
           drawerType: 'front',
-          overlayColor: 'rgba(0,0,0,0.85)', // Затемнение фона
-          headerShown: false, // Хедеры управляются внутри стеков
+          overlayColor: 'rgba(0,0,0,0.85)',
+          headerShown: false,
           drawerStyle: {
-             backgroundColor: COLORS.background,
-             width: 320,
+            backgroundColor: COLORS.background,
+            width: 320,
           }
         }}
       >
-        {/* <Drawer.Screen
-            name="GB"
-            component={GBStack}
-            options={{
-                drawerLabel: t("drawer.gbLabel"),
-                // Передаем компонент SVG в options, чтобы CustomDrawerContent мог его отрендерить
-                drawerIconComponent: renderIcon(GB)
-            }}
-        /> */}
         <Drawer.Screen
-            name="ChatList"
-            component={ChatStack}
-            options={{
-                drawerLabel: t("drawer.chatLabel"),
-                drawerIconComponent: renderIcon(Chat)
-            }}
-        />
-        {/* <Drawer.Screen
-            name="Quanty"
-            component={QuantStack}
-            options={{
-                drawerLabel: t("drawer.quantLabel"),
-                drawerIconComponent: renderIcon(Quant)
-            }}
-        /> */}
-        <Drawer.Screen
-            name="GBG"
-            component={GBGStack}
-            options={{
-                drawerLabel: t("drawer.pbgLabel"),
-                drawerIconComponent: renderIcon(GVG)
-            }}
-        />
-        {/* <Drawer.Screen
-            name="Culture"
-            component={CultureStack}
-            options={{
-                drawerLabel: t("drawer.culture"),
-                drawerIconComponent: renderIcon(Profile) // Был Culture, но в импортах его не было, заменил на Profile или добавь Boat
-            }}
+          name="ChatList"
+          component={ChatStack}
+          options={{
+            drawerLabel: t("drawer.chatLabel"),
+            drawerIconComponent: renderIcon(Chat)
+          }}
         />
         <Drawer.Screen
-            name="azbook"
-            component={QuantStack}
-            options={{
-                drawerLabel: t("drawer.azbookLabel"),
-                drawerIconComponent: renderIcon(Azbook)
-            }}
+          name="GBG"
+          component={GBGStack}
+          options={{
+            drawerLabel: t("drawer.pbgLabel"),
+            drawerIconComponent: renderIcon(GVG)
+          }}
         />
         <Drawer.Screen
-            name="servise"
-            component={QuantStack}
-            options={{
-                drawerLabel: t("drawer.serviseLabel"),
-                drawerIconComponent: renderIcon(Servise)
-            }}
-        /> */}
-        <Drawer.Screen
-            name="profile"
-            component={ProfileStack}
-            options={{ 
-                drawerLabel: t("drawer.profileLabel"), 
-                drawerIconComponent: renderIcon(Profile) 
-            }} 
+          name="profile"
+          component={ProfileStack}
+          options={{
+            drawerLabel: t("drawer.profileLabel"),
+            drawerIconComponent: renderIcon(Profile)
+          }}
         />
         {showAdmin && (
-            <Drawer.Screen 
-                name="admin" 
-                component={AdmintStack} 
-                options={{ 
-                    drawerLabel: t("drawer.adminLabel"), 
-                    drawerIconComponent: renderIcon(Admin) 
-                }} 
-            />
+          <Drawer.Screen
+            name="admin"
+            component={AdmintStack}
+            options={{
+              drawerLabel: t("drawer.adminLabel"),
+              drawerIconComponent: renderIcon(Admin)
+            }}
+          />
         )}
       </Drawer.Navigator>
     </NavigationContainer>
@@ -688,7 +938,6 @@ export default function MainContent() {
       const notificationTitle = remoteMessage?.notification?.title;
       const notificationBody = remoteMessage?.notification?.body;
 
-      // Підтримка data-only повідомлень
       const dataTitle = remoteMessage?.data?.title;
       const dataBody = remoteMessage?.data?.body;
 
@@ -706,7 +955,7 @@ export default function MainContent() {
 
       if (enabled) {
         console.log('Authorization status:', authStatus);
-        
+
         const channelId = await notifee.createChannel({
           id: 'default',
           name: 'Default Channel',
@@ -722,6 +971,15 @@ export default function MainContent() {
         });
         console.log('GBG notification channel created:', gbgChannelId);
 
+        // ✅ NEW: silent GBG channel
+        const gbgSilentChannelId = await notifee.createChannel({
+          id: 'gbg_sector_silent',
+          name: 'GBG Sector Silent',
+          importance: AndroidImportance.HIGH,
+          // sound НЕ вказуємо
+        });
+        console.log('GBG silent channel created:', gbgSilentChannelId);
+
         const chatChannelId = await notifee.createChannel({
           id: 'chat_messages',
           name: 'Chat Messages Channel',
@@ -729,6 +987,15 @@ export default function MainContent() {
           sound: 'smeh_minonovhasms',
         });
         console.log('Chat notification channel created:', chatChannelId);
+
+        // ✅ NEW: silent chat channel
+        const chatSilentChannelId = await notifee.createChannel({
+          id: 'chat_messages_silent',
+          name: 'Chat Messages Silent',
+          importance: AndroidImportance.HIGH,
+          // sound НЕ вказуємо
+        });
+        console.log('Chat silent channel created:', chatSilentChannelId);
 
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
@@ -747,11 +1014,15 @@ export default function MainContent() {
         if (!title && !body) return;
 
         const messageType = remoteMessage?.data?.type;
+
+        // ✅ NEW: server decides sound: data.sound = "1"|"0"
+        const soundFlag = remoteMessage?.data?.sound === '1';
+
         const displayChannelId =
           messageType === 'gbg_sector_open'
-            ? 'gbg_sector'
+            ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
             : messageType === 'chat_message'
-              ? 'chat_messages'
+              ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
               : 'default';
 
         await notifee.displayNotification({
@@ -766,12 +1037,12 @@ export default function MainContent() {
           },
         });
       });
-      
+
       messaging().onNotificationOpenedApp(remoteMessage => {
         console.log('Notification caused app to open from background state:', remoteMessage.notification);
       });
 
-       messaging()
+      messaging()
         .getInitialNotification()
         .then(remoteMessage => {
           if (remoteMessage) {
