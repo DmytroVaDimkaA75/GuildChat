@@ -711,6 +711,8 @@ export default function MainContent() {
           id: 'default',
           name: 'Default Channel',
           importance: AndroidImportance.HIGH,
+          sound: null,
+          vibration: false,
         });
         console.log('Notification channel created:', channelId);
 
