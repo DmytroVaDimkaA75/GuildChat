@@ -39,7 +39,7 @@ const ChatScreen = () => {
       if (chatsData) {
         Object.keys(chatsData).forEach(chatId => {
           const chat = chatsData[chatId];
-          if (chat.members && chat.members[userId]) {
+          if (chat.members && Object.prototype.hasOwnProperty.call(chat.members, userId)) {
             userChats.push({ id: chatId, ...chat });
           }
         });
