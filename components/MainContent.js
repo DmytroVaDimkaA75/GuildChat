@@ -714,6 +714,23 @@ export default function MainContent() {
         });
         console.log('Notification channel created:', channelId);
 
+        const defaultSoundChannelId = await notifee.createChannel({
+          id: 'default_sound',
+          name: 'Default Sound Channel',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+        });
+        console.log('Default sound channel created:', defaultSoundChannelId);
+
+        const defaultSilentChannelId = await notifee.createChannel({
+          id: 'default_silent',
+          name: 'Default Silent Channel',
+          importance: AndroidImportance.LOW,
+          sound: null,
+          vibration: false,
+        });
+        console.log('Default silent channel created:', defaultSilentChannelId);
+
         const gbgChannelId = await notifee.createChannel({
           id: 'gbg_sector',
           name: 'GBG Sector Channel',
@@ -722,6 +739,15 @@ export default function MainContent() {
         });
         console.log('GBG notification channel created:', gbgChannelId);
 
+        const gbgSilentChannelId = await notifee.createChannel({
+          id: 'gbg_sector_silent',
+          name: 'GBG Sector Silent Channel',
+          importance: AndroidImportance.LOW,
+          sound: null,
+          vibration: false,
+        });
+        console.log('GBG silent channel created:', gbgSilentChannelId);
+
         const chatChannelId = await notifee.createChannel({
           id: 'chat_messages',
           name: 'Chat Messages Channel',
@@ -729,6 +755,15 @@ export default function MainContent() {
           sound: 'smeh_minonovhasms',
         });
         console.log('Chat notification channel created:', chatChannelId);
+
+        const chatSilentChannelId = await notifee.createChannel({
+          id: 'chat_messages_silent',
+          name: 'Chat Messages Silent Channel',
+          importance: AndroidImportance.LOW,
+          sound: null,
+          vibration: false,
+        });
+        console.log('Chat silent channel created:', chatSilentChannelId);
 
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
@@ -747,12 +782,23 @@ export default function MainContent() {
         if (!title && !body) return;
 
         const messageType = remoteMessage?.data?.type;
+        const soundEnabled = remoteMessage?.data?.soundEnabled !== 'false';
         const displayChannelId =
           messageType === 'gbg_sector_open'
-            ? 'gbg_sector'
+            ? soundEnabled
+              ? 'gbg_sector'
+              : 'gbg_sector_silent'
             : messageType === 'chat_message'
-              ? 'chat_messages'
-              : 'default';
+              ? soundEnabled
+                ? 'chat_messages'
+                : 'chat_messages_silent'
+              : messageType === 'gbg_help'
+                ? soundEnabled
+                  ? 'default_sound'
+                  : 'default_silent'
+                : soundEnabled
+                  ? 'default_sound'
+                  : 'default_silent';
 
         await notifee.displayNotification({
           title,

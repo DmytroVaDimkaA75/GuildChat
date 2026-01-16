@@ -6,6 +6,66 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+const isMinutesWithinSlot = (minutes, slot) => {
+  const start = Number(slot?.startMinutes);
+  const end = Number(slot?.endMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+  return minutes >= start && minutes <= end;
+};
+
+const getWeeklySlotsForDay = (weekly, dayIndex) => {
+  if (!weekly) return [];
+  if (Array.isArray(weekly)) {
+    return Array.isArray(weekly[dayIndex]) ? weekly[dayIndex] : [];
+  }
+  if (typeof weekly === "object") {
+    const daySlots = weekly[String(dayIndex)];
+    return Array.isArray(daySlots) ? daySlots : [];
+  }
+  return [];
+};
+
+const getRollingWeekSlotsForDay = (rollingWeeks, date) => {
+  if (!rollingWeeks?.weeks) return [];
+  const anchorAtSeconds = Number(rollingWeeks.anchorAt);
+  if (!Number.isFinite(anchorAtSeconds)) return [];
+  const anchorDate = new Date(anchorAtSeconds * 1000);
+  const currentMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.floor((currentMidnight - anchorDate) / (24 * 60 * 60 * 1000));
+  const weekIndex = Math.floor(diffDays / 7);
+  const dayIndex = ((diffDays % 7) + 7) % 7;
+  const week = rollingWeeks.weeks[String(weekIndex)];
+  if (!week?.days) return [];
+  const daySlots = week.days[String(dayIndex)];
+  return Array.isArray(daySlots) ? daySlots : [];
+};
+
+const isTimeWithinSchedules = (schedules, date) => {
+  if (!schedules || typeof schedules !== "object") return false;
+  const minutes =
+    date.getHours() * 60 +
+    date.getMinutes() +
+    date.getSeconds() / 60 +
+    date.getMilliseconds() / 60000;
+  const dayIndex = (date.getDay() + 6) % 7;
+
+  return Object.values(schedules).some((schedule) => {
+    if (schedule?.weekly) {
+      const weeklySlots = getWeeklySlotsForDay(schedule.weekly, dayIndex);
+      if (weeklySlots.some((slot) => isMinutesWithinSlot(minutes, slot))) {
+        return true;
+      }
+    }
+    if (schedule?.rollingWeeks) {
+      const rollingSlots = getRollingWeekSlotsForDay(schedule.rollingWeeks, date);
+      if (rollingSlots.some((slot) => isMinutesWithinSlot(minutes, slot))) {
+        return true;
+      }
+    }
+    return false;
+  });
+};
+
 /**
  * =====================================================================
  * ✅ Widget refresh helpers (data-only, без показу нотифікацій)
@@ -211,28 +271,70 @@ exports.sendChatNotification = onValueCreated(
     const senderProfile = await admin.database().ref(`/users/${senderId}`).once("value");
     const senderName = senderProfile.val()?.userName || "Новое сообщение";
 
-    const tokensPromises = members
-      .filter((m) => m !== senderId)
-      .map((m) => admin.database().ref(`/users/${m}/fcmToken`).once("value"));
-    const tokensSnapshots = await Promise.all(tokensPromises);
-    const tokens = tokensSnapshots.map((snap) => snap.val()).filter(Boolean);
+    const now = new Date();
+    const recipientIds = members.filter((memberId) => memberId !== senderId);
+    const recipients = await Promise.all(
+      recipientIds.map(async (memberId) => {
+        const [tokenSnap, schedulesSnap] = await Promise.all([
+          admin.database().ref(`/users/${memberId}/fcmToken`).once("value"),
+          admin.database().ref(`/users/${memberId}/setting/schedules`).once("value"),
+        ]);
+        const token = tokenSnap.exists() ? tokenSnap.val() : null;
+        if (!token) return null;
+        const schedules = schedulesSnap.exists() ? schedulesSnap.val() : null;
+        const isWithinSchedule = isTimeWithinSchedules(schedules, now);
+        const chatSoundEnabled = chatData.members?.[memberId] === true;
+        return {
+          token,
+          shouldPlaySound: isWithinSchedule && chatSoundEnabled,
+        };
+      })
+    );
 
-    if (tokens.length > 0) {
-      const payload = {
-        data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message" },
-        android: {
-          priority: "high",
-          notification: { title: senderName, body: messageText, sound: "smeh_minonovhasms", channel_id: "chat_messages" },
-        },
-        apns: {
-          payload: { aps: { alert: { title: senderName, body: messageText }, sound: "default", "content-available": 1 } },
-        },
-      };
-      try {
-        await admin.messaging().sendEachForMulticast({ tokens, ...payload });
-      } catch (e) {
-        logger.error(e);
+    const soundTokens = recipients.filter(Boolean).filter((r) => r.shouldPlaySound).map((r) => r.token);
+    const silentTokens = recipients.filter(Boolean).filter((r) => !r.shouldPlaySound).map((r) => r.token);
+
+    try {
+      if (soundTokens.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+          tokens: soundTokens,
+          data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message", soundEnabled: "true" },
+          android: {
+            priority: "high",
+            notification: {
+              title: senderName,
+              body: messageText,
+              sound: "smeh_minonovhasms",
+              channel_id: "chat_messages",
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                alert: { title: senderName, body: messageText },
+                sound: "default",
+                "content-available": 1,
+              },
+            },
+          },
+        });
       }
+      if (silentTokens.length > 0) {
+        await admin.messaging().sendEachForMulticast({
+          tokens: silentTokens,
+          data: { chatId, guildId, title: senderName, body: messageText, type: "chat_message", soundEnabled: "false" },
+          android: {
+            priority: "high",
+            notification: {
+              title: senderName,
+              body: messageText,
+              channel_id: "chat_messages_silent",
+            },
+          },
+        });
+      }
+    } catch (e) {
+      logger.error(e);
     }
     return null;
   }
@@ -468,39 +570,73 @@ async function sendPushAndMarkSent(taskId, task, db) {
   }
 
   const memberIds = Object.keys(membersSnap.val());
-  const tokensPromises = memberIds.map((uid) => db.ref(`/users/${uid}/fcmToken`).once("value"));
-  const tokensSnaps = await Promise.all(tokensPromises);
-  const tokens = tokensSnaps.map((s) => s.val()).filter(Boolean);
+  const now = new Date();
+  const recipients = await Promise.all(
+    memberIds.map(async (uid) => {
+      const [tokenSnap, schedulesSnap] = await Promise.all([
+        db.ref(`/users/${uid}/fcmToken`).once("value"),
+        db.ref(`/users/${uid}/setting/schedules`).once("value"),
+      ]);
+      const token = tokenSnap.exists() ? tokenSnap.val() : null;
+      if (!token) return null;
+      const schedules = schedulesSnap.exists() ? schedulesSnap.val() : null;
+      const isWithinSchedule = isTimeWithinSchedules(schedules, now);
+      return { token, shouldPlaySound: isWithinSchedule };
+    })
+  );
 
-  if (tokens.length > 0) {
-    const isAttack = army === "attack";
-    const icon = isAttack ? "⚔️" : "🛡️";
-    const actionText = isAttack ? "Атака!" : "Захист!";
+  const soundTokens = recipients.filter(Boolean).filter((r) => r.shouldPlaySound).map((r) => r.token);
+  const silentTokens = recipients.filter(Boolean).filter((r) => !r.shouldPlaySound).map((r) => r.token);
 
-    const titleText = `${icon} Поле битви`;
-    const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
+  const isAttack = army === "attack";
+  const icon = isAttack ? "⚔️" : "🛡️";
+  const actionText = isAttack ? "Атака!" : "Захист!";
 
-    const payload = {
-      data: {
-        screen: "GBG",
-        sectorId: String(sectorId),
-        title: titleText,
-        body: messageText,
-        type: "gbg_sector_open",
-      },
-      android: {
-        priority: "high",
-        notification: { title: titleText, body: messageText, sound: "alert", channel_id: "gbg_sector" },
-      },
-      apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
-    };
+  const titleText = `${icon} Поле битви`;
+  const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
 
-    try {
-      await admin.messaging().sendEachForMulticast({ tokens, ...payload });
-      logger.log(`[PUSH SENT] ${sectorId} sent to ${tokens.length} users.`);
-    } catch (e) {
-      logger.error(e);
+  try {
+    if (soundTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: soundTokens,
+        data: {
+          screen: "GBG",
+          sectorId: String(sectorId),
+          title: titleText,
+          body: messageText,
+          type: "gbg_sector_open",
+          soundEnabled: "true",
+        },
+        android: {
+          priority: "high",
+          notification: { title: titleText, body: messageText, sound: "alert", channel_id: "gbg_sector" },
+        },
+        apns: {
+          payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } },
+        },
+      });
+      logger.log(`[PUSH SENT] ${sectorId} sent to ${soundTokens.length} users (sound).`);
     }
+    if (silentTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: silentTokens,
+        data: {
+          screen: "GBG",
+          sectorId: String(sectorId),
+          title: titleText,
+          body: messageText,
+          type: "gbg_sector_open",
+          soundEnabled: "false",
+        },
+        android: {
+          priority: "high",
+          notification: { title: titleText, body: messageText, channel_id: "gbg_sector_silent" },
+        },
+      });
+      logger.log(`[PUSH SENT] ${sectorId} sent to ${silentTokens.length} users (silent).`);
+    }
+  } catch (e) {
+    logger.error(e);
   }
 
   return db.ref(`gbgNotificationQueue/${taskId}`).update({
@@ -518,27 +654,51 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   if (!membersSnap.exists()) return { success: false };
 
   const memberIds = Object.keys(membersSnap.val());
-  const tokensPromises = memberIds.map((uid) => db.ref(`/users/${uid}/fcmToken`).once("value"));
-  const tokensSnaps = await Promise.all(tokensPromises);
-  const tokens = tokensSnaps.map((s) => s.val()).filter(Boolean);
+  const now = new Date();
+  const recipients = await Promise.all(
+    memberIds.map(async (uid) => {
+      const [tokenSnap, schedulesSnap] = await Promise.all([
+        db.ref(`/users/${uid}/fcmToken`).once("value"),
+        db.ref(`/users/${uid}/setting/schedules`).once("value"),
+      ]);
+      const token = tokenSnap.exists() ? tokenSnap.val() : null;
+      if (!token) return null;
+      const schedules = schedulesSnap.exists() ? schedulesSnap.val() : null;
+      const isWithinSchedule = isTimeWithinSchedules(schedules, now);
+      return { token, shouldPlaySound: isWithinSchedule };
+    })
+  );
 
-  if (tokens.length > 0) {
-    const titleText = "🆘 Потрібна допомога!";
-    const messageText = "Терміново потрібна допомога на полях битв!";
+  const soundTokens = recipients.filter(Boolean).filter((r) => r.shouldPlaySound).map((r) => r.token);
+  const silentTokens = recipients.filter(Boolean).filter((r) => !r.shouldPlaySound).map((r) => r.token);
 
-    const payload = {
-      data: { screen: "GBG", title: titleText, body: messageText },
-      android: {
-        priority: "high",
-        notification: { title: titleText, body: messageText, sound: "default", channel_id: "default" },
-      },
-      apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
-    };
-    try {
-      await admin.messaging().sendEachForMulticast({ tokens, ...payload });
-    } catch (e) {
-      logger.error(e);
+  const titleText = "🆘 Потрібна допомога!";
+  const messageText = "Терміново потрібна допомога на полях битв!";
+
+  try {
+    if (soundTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: soundTokens,
+        data: { screen: "GBG", title: titleText, body: messageText, type: "gbg_help", soundEnabled: "true" },
+        android: {
+          priority: "high",
+          notification: { title: titleText, body: messageText, sound: "default", channel_id: "default_sound" },
+        },
+        apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
+      });
     }
+    if (silentTokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: silentTokens,
+        data: { screen: "GBG", title: titleText, body: messageText, type: "gbg_help", soundEnabled: "false" },
+        android: {
+          priority: "high",
+          notification: { title: titleText, body: messageText, channel_id: "default_silent" },
+        },
+      });
+    }
+  } catch (e) {
+    logger.error(e);
   }
   return { success: true };
 });
