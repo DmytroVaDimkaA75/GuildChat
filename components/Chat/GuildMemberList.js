@@ -64,8 +64,8 @@ const GuildMembersList = () => {
           if (
             chatData.type === 'private' &&
             chatData.members &&
-            chatData.members[userId] &&
-            chatData.members[member.id]
+            Object.prototype.hasOwnProperty.call(chatData.members, userId) &&
+            Object.prototype.hasOwnProperty.call(chatData.members, member.id)
           ) {
             chatId = childSnapshot.key;
             chatExists = true;

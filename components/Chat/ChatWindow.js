@@ -24,7 +24,9 @@ import {
   faShareNodes,
   faMagnifyingGlassPlus,
   faMagnifyingGlassMinus,
-  faLink
+  faLink,
+  faVolumeHigh,
+  faVolumeXmark
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1034,6 +1036,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [guildId, setGuildId] = useState(null);
   const [locale, setLocale] = useState(uk);
   const [localeCode, setLocaleCode] = useState('uk');
+  const [isChatMember, setIsChatMember] = useState(false);
+  const [isChatSoundEnabled, setIsChatSoundEnabled] = useState(true);
+  const isChatMemberRef = useRef(false);
+  const isChatSoundEnabledRef = useRef(true);
 
   const [selectedImageUris, setSelectedImageUris] = useState([]);
   const [imageCaption, setImageCaption] = useState('');
@@ -1078,6 +1084,13 @@ const ChatWindow = ({ route, navigation }) => {
   const processedRead = useRef(new Set());
   const insets = useSafeAreaInsets();
 
+  const handleToggleChatSound = useCallback(async () => {
+    if (!chatId || !guildId || !userId || !isChatMemberRef.current) return;
+    await database()
+      .ref(`guilds/${guildId}/chats/${chatId}/members/${userId}`)
+      .set(!isChatSoundEnabledRef.current);
+  }, [chatId, guildId, userId]);
+
   useEffect(() => {
     return () => {
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
@@ -1112,6 +1125,19 @@ const ChatWindow = ({ route, navigation }) => {
       const data = snap.val();
       if (!data) return;
       setChatType(data.type || 'private');
+      const members = data.members || {};
+      const hasMember = Object.prototype.hasOwnProperty.call(members, userId);
+      const soundEnabled = members?.[userId] === true;
+      isChatMemberRef.current = hasMember;
+      isChatSoundEnabledRef.current = soundEnabled;
+      setIsChatMember(hasMember);
+      setIsChatSoundEnabled(soundEnabled);
+      const headerRight = () =>
+        hasMember ? (
+          <TouchableOpacity onPress={handleToggleChatSound} style={styles.headerSoundButton}>
+            <FontAwesomeIcon icon={soundEnabled ? faVolumeHigh : faVolumeXmark} size={20} color="#fff" />
+          </TouchableOpacity>
+        ) : null;
 
       if (data.type === 'private') {
         const otherId = Object.keys(data.members || {}).find((id) => id !== userId);
@@ -1131,12 +1157,13 @@ const ChatWindow = ({ route, navigation }) => {
                           <Text style={{ color: '#fff' }}>?</Text>
                         </View>
                       )}
-                      <View>
-                        <Text style={styles.headerTitleText}>{user.userName}</Text>
-                        <Text style={styles.headerSubText}>У мережі</Text>
-                      </View>
+                    <View>
+                      <Text style={styles.headerTitleText}>{user.userName}</Text>
+                      <Text style={styles.headerSubText}>У мережі</Text>
                     </View>
-                  )
+                  </View>
+                  ),
+                  headerRight
                 });
               }
             });
@@ -1151,7 +1178,8 @@ const ChatWindow = ({ route, navigation }) => {
                 <Text style={styles.headerSubText}>{Object.keys(data.members || {}).length} учасників</Text>
               </View>
             </View>
-          )
+          ),
+          headerRight
         });
       }
     });
@@ -2407,6 +2435,7 @@ const styles = StyleSheet.create({
   headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   headerTitleText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   headerSubText: { color: '#aaa', fontSize: 12 },
+  headerSoundButton: { paddingHorizontal: 12, paddingVertical: 6 },
 
   imageViewerContainer: { flex: 1, backgroundColor: '#000' },
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
