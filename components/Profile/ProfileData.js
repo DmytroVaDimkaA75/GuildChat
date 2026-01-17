@@ -21,6 +21,27 @@ const MONTHS = [
   'Вересень', 'Жовтень', 'Листопад', 'Грудень'
 ];
 
+const TIME_ZONES = [
+  'UTC',
+  'Europe/Kyiv',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Warsaw',
+  'Europe/Istanbul',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Sao_Paulo',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Bangkok',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
 // Функція повертає кількість днів для вибраного місяця (індекс від 0 до 11)
 // Для лютого повертаємо 29 днів, адже 29 може бути коректною датою народження
 function getDaysArray(monthIndex) {
@@ -40,13 +61,18 @@ const ProfileData = () => {
   // day — число, month — індекс (0..11)
   const [day, setDay] = useState(null);
   const [month, setMonth] = useState(null);
+  const [timeZone, setTimeZone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  );
 
   // Керування відображенням модального вікна
   const [showDOBModal, setShowDOBModal] = useState(false);
+  const [showTimeZoneModal, setShowTimeZoneModal] = useState(false);
 
   // Тимчасові індекси для вибору (day: 0..N-1, month: 0..11)
   const [tempDayIndex, setTempDayIndex] = useState(0);
   const [tempMonthIndex, setTempMonthIndex] = useState(0);
+  const [tempTimeZoneIndex, setTempTimeZoneIndex] = useState(0);
 
   const navigation = useNavigation();
 
@@ -65,6 +91,9 @@ const ProfileData = () => {
             if (userData.day && userData.month !== undefined) {
               setDay(userData.day);
               setMonth(userData.month);
+            }
+            if (userData.setting?.timeZone) {
+              setTimeZone(userData.setting.timeZone);
             }
           }
         } else {
@@ -91,7 +120,8 @@ const ProfileData = () => {
         name, 
         city,
         day, 
-        month 
+        month,
+        'setting/timeZone': timeZone 
       });
       console.log('Дані профілю оновлено');
       navigation.goBack();
@@ -109,7 +139,7 @@ const ProfileData = () => {
         </TouchableOpacity>
       )
     });
-  }, [navigation, name, city, day, month]);
+  }, [navigation, name, city, day, month, timeZone]);
 
   // Форматування дати народження для відображення (наприклад, "23 Лютий")
   const formatDOB = () => {
@@ -128,6 +158,12 @@ const ProfileData = () => {
 
   // Отримуємо список днів для обраного місяця (за тимчасовим tempMonthIndex)
   const daysArray = getDaysArray(tempMonthIndex);
+
+  const openTimeZoneModal = () => {
+    const currentIndex = Math.max(0, TIME_ZONES.indexOf(timeZone));
+    setTempTimeZoneIndex(currentIndex);
+    setShowTimeZoneModal(true);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -154,6 +190,14 @@ const ProfileData = () => {
         <TouchableOpacity style={styles.row} onPress={openDOBModal}>
           <Text style={styles.dr}>Дата народження</Text>
           <Text style={styles.link}>{formatDOB()}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Часовий пояс</Text>
+        <TouchableOpacity style={styles.row} onPress={openTimeZoneModal}>
+          <Text style={styles.dr}>Поточний</Text>
+          <Text style={styles.link}>{timeZone || 'Вказати'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -197,6 +241,43 @@ const ProfileData = () => {
                       setDay(tempDayIndex + 1);
                       setMonth(tempMonthIndex);
                       setShowDOBModal(false);
+                    }}
+                  >
+                    <Text style={styles.modalButtonText}>Зберегти</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+
+      {showTimeZoneModal && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowTimeZoneModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowTimeZoneModal(false)}>
+            <View style={styles.modalBackground}>
+              <TouchableWithoutFeedback>
+                <View style={styles.modalContainer}>
+                  <Text style={styles.modalTitle}>Часовий пояс</Text>
+                  <View style={styles.wheelWrapper}>
+                    <View style={styles.wheelContainer}>
+                      <SimpleWheelPicker
+                        data={TIME_ZONES}
+                        selectedIndex={tempTimeZoneIndex}
+                        onValueChange={(_, idx) => setTempTimeZoneIndex(idx)}
+                      />
+                    </View>
+                    <View style={styles.selectionOverlay} pointerEvents="none" />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.modalButtonSave}
+                    onPress={() => {
+                      setTimeZone(TIME_ZONES[tempTimeZoneIndex]);
+                      setShowTimeZoneModal(false);
                     }}
                   >
                     <Text style={styles.modalButtonText}>Зберегти</Text>
