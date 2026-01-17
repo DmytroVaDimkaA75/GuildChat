@@ -97,16 +97,6 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
     onSelectChat(chat);
   };
 
-  const renderUnreadBadge = () => {
-    if (!chat.unreadCount) return null;
-
-    return (
-      <View style={styles.unreadBadge}>
-        <Text style={styles.unreadBadgeText}>{chat.unreadCount}</Text>
-      </View>
-    );
-  };
-
   const renderContent = () => {
     if (chat.type === 'private') {
       const otherMemberId = Object.keys(chat.members || {}).find(memberId => memberId !== userId);
@@ -124,7 +114,6 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
             <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
             <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
           </View>
-          {renderUnreadBadge()}
           <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
         </>
       );
@@ -155,64 +144,10 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
             <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
           </View>
         </View>
-        {renderUnreadBadge()}
         <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
       </>
     );
   };
-
-  return (
-    <Animated.View
-      style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
-      {...panResponder.panHandlers}
-    >
-      <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
-        {renderContent()}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-const ChatList = ({ chats, guildId, userId }) => {
-  const navigation = useNavigation();
-  const [usersMap, setUsersMap] = useState({});
-  const listOpacity = useRef(new Animated.Value(0)).current;
-  const { t } = useTranslation();
-
-  useEffect(() => {
-    Animated.timing(listOpacity, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  useEffect(() => {
-    if (!guildId) return;
-
-    const usersRef = database().ref(`guilds/${guildId}/guildUsers`);
-    const onUserChange = usersRef.on('value', snapshot => {
-      const data = snapshot.val();
-      setUsersMap(data || {});
-    });
-
-    return () => usersRef.off('value', onUserChange);
-  }, [guildId]);
-
-  const handleChatSelect = (chat) => {
-    navigation.navigate('ChatWindow', { chatId: chat.id });
-  };
-
-  const renderItem = ({ item, index }) => (
-    <ChatListItem
-      chat={item}
-      index={index}
-      guildId={guildId}
-      userId={userId}
-      usersMap={usersMap}
-      onSelectChat={handleChatSelect}
-    />
-  );
 
   return (
     <Animated.View
@@ -393,21 +328,6 @@ const styles = StyleSheet.create({
   subText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.5)',
-  },
-  unreadBadge: {
-    minWidth: 24,
-    height: 24,
-    paddingHorizontal: 6,
-    borderRadius: 12,
-    backgroundColor: '#FF4757',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  unreadBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
   emptyContainer: {
     alignItems: 'center',
