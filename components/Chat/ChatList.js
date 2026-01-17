@@ -14,6 +14,16 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   const opacity = useMemo(() => new Animated.Value(0), []);
   const swipeX = useRef(new Animated.Value(0)).current;
   const { t } = useTranslation();
+  const unreadCount = useMemo(() => {
+    if (Number.isFinite(chat.unreadCount)) {
+      return chat.unreadCount;
+    }
+
+    const messages = chat.messages ? Object.values(chat.messages) : [];
+    return messages.filter(
+      message => message?.senderId !== userId && (!message?.readBy || !message.readBy[userId])
+    ).length;
+  }, [chat.messages, chat.unreadCount, userId]);
 
   useEffect(() => {
     Animated.parallel([
@@ -96,6 +106,18 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   const handleChatSelect = () => {
     onSelectChat(chat);
   };
+
+
+  const renderUnreadBadge = () => {
+    if (!unreadCount) return null;
+
+    return (
+      <View style={styles.unreadBadge}>
+        <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+      </View>
+    );
+  };
+
 
   const renderContent = () => {
     if (chat.type === 'private') {
