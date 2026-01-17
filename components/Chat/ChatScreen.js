@@ -40,10 +40,30 @@ const ChatScreen = () => {
         Object.keys(chatsData).forEach(chatId => {
           const chat = chatsData[chatId];
           if (chat.members && Object.prototype.hasOwnProperty.call(chat.members, userId)) {
-            userChats.push({ id: chatId, ...chat });
+            const messages = chat.messages ? Object.values(chat.messages) : [];
+            const lastMessageTimestamp = messages.reduce((latest, message) => {
+              const timestamp = Number(message?.timestamp || 0);
+              return timestamp > latest ? timestamp : latest;
+            }, 0);
+            const hasUnread = messages.some(
+              message => message?.senderId !== userId && (!message?.readBy || !message.readBy[userId])
+            );
+            userChats.push({
+              id: chatId,
+              ...chat,
+              lastMessageTimestamp,
+              hasUnread,
+            });
           }
         });
       }
+
+      userChats.sort((firstChat, secondChat) => {
+        if (firstChat.hasUnread !== secondChat.hasUnread) {
+          return firstChat.hasUnread ? -1 : 1;
+        }
+        return (secondChat.lastMessageTimestamp || 0) - (firstChat.lastMessageTimestamp || 0);
+      });
 
       setChats(userChats);
     }, (error) => {
