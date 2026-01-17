@@ -215,6 +215,59 @@ const ChatList = ({ chats, guildId, userId }) => {
   );
 
   return (
+    <Animated.View
+      style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
+      {...panResponder.panHandlers}
+    >
+      <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
+        {renderContent()}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+const ChatList = ({ chats, guildId, userId }) => {
+  const navigation = useNavigation();
+  const [usersMap, setUsersMap] = useState({});
+  const listOpacity = useRef(new Animated.Value(0)).current;
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    Animated.timing(listOpacity, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  useEffect(() => {
+    if (!guildId) return;
+
+    const usersRef = database().ref(`guilds/${guildId}/guildUsers`);
+    const onUserChange = usersRef.on('value', snapshot => {
+      const data = snapshot.val();
+      setUsersMap(data || {});
+    });
+
+    return () => usersRef.off('value', onUserChange);
+  }, [guildId]);
+
+  const handleChatSelect = (chat) => {
+    navigation.navigate('ChatWindow', { chatId: chat.id });
+  };
+
+  const renderItem = ({ item, index }) => (
+    <ChatListItem
+      chat={item}
+      index={index}
+      guildId={guildId}
+      userId={userId}
+      usersMap={usersMap}
+      onSelectChat={handleChatSelect}
+    />
+  );
+
+  return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
