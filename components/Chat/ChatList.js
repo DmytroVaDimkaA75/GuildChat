@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Animated, Dimensions, StatusBar } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, FlatList, Image, PanResponder, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import database from '@react-native-firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -7,7 +7,159 @@ import { faChevronRight, faUserGroup, faCommentDots } from '@fortawesome/free-so
 import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+const SWIPE_DELETE_THRESHOLD = 120;
+
+const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) => {
+  const translateY = useMemo(() => new Animated.Value(50), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 400,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index, opacity, translateY]);
+
+  const resetSwipe = () => {
+    Animated.spring(swipeX, {
+      toValue: 0,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      t('deleteConfirmationTitle'),
+      t('deleteConfirmationMessage'),
+      [
+        {
+          text: t('cancel'),
+          style: 'cancel',
+          onPress: resetSwipe,
+        },
+        {
+          text: t('delete'),
+          style: 'destructive',
+          onPress: () => {
+            Animated.timing(swipeX, {
+              toValue: -width,
+              duration: 200,
+              useNativeDriver: true,
+            }).start(() => {
+              if (!guildId) return;
+              database()
+                .ref(`guilds/${guildId}/chats/${chat.id}`)
+                .remove()
+                .catch(error => console.error('Помилка видалення чату:', error));
+            });
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10,
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dx < 0) {
+            swipeX.setValue(gestureState.dx);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dx < -SWIPE_DELETE_THRESHOLD) {
+            confirmDelete();
+          } else {
+            resetSwipe();
+          }
+        },
+        onPanResponderTerminate: resetSwipe,
+      }),
+    [confirmDelete, resetSwipe, swipeX]
+  );
+
+  const handleChatSelect = () => {
+    onSelectChat(chat);
+  };
+
+  const renderContent = () => {
+    if (chat.type === 'private') {
+      const otherMemberId = Object.keys(chat.members || {}).find(memberId => memberId !== userId);
+      const otherUser = usersMap[otherMemberId];
+
+      if (!otherUser) return null;
+
+      return (
+        <>
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: otherUser.imageUrl }} style={styles.avatar} />
+            <View style={styles.onlineIndicator} />
+          </View>
+          <View style={styles.chatInfo}>
+            <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
+            <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
+          </View>
+          <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
+        </>
+      );
+    }
+
+    const words = chat.name.trim().split(' ');
+    let initials = words[0].substring(0, 1);
+    if (words.length > 1) {
+      initials += words[1].substring(0, 1);
+    }
+    initials = initials.toUpperCase();
+
+    return (
+      <>
+        {chat.groupAvatar ? (
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: chat.groupAvatar }} style={styles.avatar} />
+          </View>
+        ) : (
+          <View style={[styles.groupAvatar, { backgroundColor: chat.groupColor || '#121212' }]}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+        )}
+        <View style={styles.chatInfo}>
+          <Text style={styles.chatName} numberOfLines={1}>{chat.name}</Text>
+          <View style={styles.row}>
+            <FontAwesomeIcon icon={faUserGroup} size={10} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
+            <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
+          </View>
+        </View>
+        <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
+      </>
+    );
+  };
+
+  return (
+    <Animated.View
+      style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
+      {...panResponder.panHandlers}
+    >
+      <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
+        {renderContent()}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 const ChatList = ({ chats, guildId, userId }) => {
   const navigation = useNavigation();
@@ -39,83 +191,16 @@ const ChatList = ({ chats, guildId, userId }) => {
     navigation.navigate('ChatWindow', { chatId: chat.id });
   };
 
-  const renderItem = ({ item, index }) => {
-    const translateY = new Animated.Value(50);
-    const opacity = new Animated.Value(0);
-
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 400,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    if (item.type === 'private') {
-      const otherMemberId = Object.keys(item.members || {}).find(memberId => memberId !== userId);
-      const otherUser = usersMap[otherMemberId];
-
-      if (!otherUser) return null;
-
-      return (
-        <AnimatedTouchable
-          style={[styles.chatItem, { opacity, transform: [{ translateY }] }]}
-          onPress={() => handleChatSelect(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: otherUser.imageUrl }} style={styles.avatar} />
-            <View style={styles.onlineIndicator} />
-          </View>
-          <View style={styles.chatInfo}>
-            <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
-            <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
-          </View>
-          <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
-        </AnimatedTouchable>
-      );
-    } else {
-      const words = item.name.trim().split(' ');
-      let initials = words[0].substring(0, 1);
-      if (words.length > 1) {
-        initials += words[1].substring(0, 1);
-      }
-      initials = initials.toUpperCase();
-
-      return (
-        <AnimatedTouchable
-          style={[styles.chatItem, { opacity, transform: [{ translateY }] }]}
-          onPress={() => handleChatSelect(item)}
-          activeOpacity={0.7}
-        >
-          {item.groupAvatar ? (
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: item.groupAvatar }} style={styles.avatar} />
-            </View>
-          ) : (
-            <View style={[styles.groupAvatar, { backgroundColor: item.groupColor || '#121212' }]}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </View>
-          )}
-            <View style={styles.chatInfo}>
-              <Text style={styles.chatName} numberOfLines={1}>{item.name}</Text>
-              <View style={styles.row}>
-                <FontAwesomeIcon icon={faUserGroup} size={10} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
-                <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
-              </View>
-            </View>
-          <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
-        </AnimatedTouchable>
-      );
-    }
-  };
+  const renderItem = ({ item, index }) => (
+    <ChatListItem
+      chat={item}
+      index={index}
+      guildId={guildId}
+      userId={userId}
+      usersMap={usersMap}
+      onSelectChat={handleChatSelect}
+    />
+  );
 
   return (
     <View style={styles.mainContainer}>
@@ -166,9 +251,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
     marginBottom: 12,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -182,6 +264,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 4,
+  },
+  chatItemPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
   },
   avatarContainer: {
     position: 'relative',
