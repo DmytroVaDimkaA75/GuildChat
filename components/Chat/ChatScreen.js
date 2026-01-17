@@ -45,14 +45,16 @@ const ChatScreen = () => {
               const timestamp = Number(message?.timestamp || 0);
               return timestamp > latest ? timestamp : latest;
             }, 0);
-            const hasUnread = messages.some(
+            const unreadCount = messages.filter(
               message => message?.senderId !== userId && (!message?.readBy || !message.readBy[userId])
-            );
+            ).length;
+            const hasUnread = unreadCount > 0;
             userChats.push({
               id: chatId,
               ...chat,
               lastMessageTimestamp,
               hasUnread,
+              unreadCount,
             });
           }
         });
