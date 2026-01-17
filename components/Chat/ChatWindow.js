@@ -1038,6 +1038,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [localeCode, setLocaleCode] = useState('uk');
   const [isChatMember, setIsChatMember] = useState(false);
   const [isChatSoundEnabled, setIsChatSoundEnabled] = useState(true);
+  const isChatMemberRef = useRef(false);
+  const isChatSoundEnabledRef = useRef(true);
 
   const [selectedImageUris, setSelectedImageUris] = useState([]);
   const [imageCaption, setImageCaption] = useState('');
@@ -1083,11 +1085,11 @@ const ChatWindow = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
 
   const handleToggleChatSound = useCallback(async () => {
-    if (!chatId || !guildId || !userId || !isChatMember) return;
+    if (!chatId || !guildId || !userId || !isChatMemberRef.current) return;
     await database()
       .ref(`guilds/${guildId}/chats/${chatId}/members/${userId}`)
-      .set(!isChatSoundEnabled);
-  }, [chatId, guildId, userId, isChatMember, isChatSoundEnabled]);
+      .set(!isChatSoundEnabledRef.current);
+  }, [chatId, guildId, userId]);
 
   useEffect(() => {
     return () => {
@@ -1126,6 +1128,8 @@ const ChatWindow = ({ route, navigation }) => {
       const members = data.members || {};
       const hasMember = Object.prototype.hasOwnProperty.call(members, userId);
       const soundEnabled = members?.[userId] === true;
+      isChatMemberRef.current = hasMember;
+      isChatSoundEnabledRef.current = soundEnabled;
       setIsChatMember(hasMember);
       setIsChatSoundEnabled(soundEnabled);
       const headerRight = () =>
