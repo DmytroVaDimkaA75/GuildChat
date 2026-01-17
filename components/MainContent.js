@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext, GuildProvider } from '../GuildContext';
 import i18n from "../i18n";
 
-// Импорт компонентов (логика осталась прежней)
+// Импорт компонентов
 import AdminMain from './Admin/AdminMain';
 import ChatScreen from "./Chat/ChatScreen";
 import ChatWindow from './Chat/ChatWindow';
@@ -35,7 +35,7 @@ import GBGuarant from './GB/GBGuarant';
 import GBNewExpress from './GB/GBNewExpress';
 import GBScreen from "./GB/GBScreen";
 import MyGB from './GB/MyGB';
-import NewGBChat from "./GB/NewGBChat";
+import NewGBChat from './GB/NewGBChat';
 import GBGScreen from './GBG/GBGscreen';
 import AddSchedule from './Profile/AddSchedule';
 import LanguageSelector from './Profile/LanguageSelector';
@@ -65,23 +65,18 @@ const COLORS = {
   separator: "#2A2A2A"
 };
 
-// Обновленные стили заголовков для всех стеков
 const defaultHeaderOptions = {
   headerStyle: {
-    backgroundColor: COLORS.background, // Темный фон
-    elevation: 0, // Убираем тень на Android
-    shadowOpacity: 0, // Убираем тень на iOS
+    backgroundColor: COLORS.background,
+    elevation: 0,
+    shadowOpacity: 0,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.surfaceHighlight,
   },
-  headerTintColor: COLORS.textPrimary, // Белый текст
-  headerTitleStyle: {
-    fontWeight: '600',
-  },
+  headerTintColor: COLORS.textPrimary,
+  headerTitleStyle: { fontWeight: '600' },
   headerTitleAlign: 'center',
 };
-
-// --- STACKS ---
 
 function ChatStack() {
   const { t } = useTranslation();
@@ -142,71 +137,6 @@ function ChatStack() {
   );
 }
 
-function GBStack() {
-  const { t } = useTranslation();
-  const [showAddButton, setShowAddButton] = React.useState(false);
-
-  React.useEffect(() => {
-    const fetchRole = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        const guildId = await AsyncStorage.getItem('guildId');
-        if (!userId || !guildId) return;
-        const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
-        const snap = await userRoleRef.once('value');
-        if (snap.exists() && snap.val() === 'guildLeader') {
-          setShowAddButton(true);
-        } else {
-          setShowAddButton(false);
-        }
-      } catch (e) {
-        setShowAddButton(false);
-      }
-    };
-    fetchRole();
-  }, []);
-
-  return (
-    <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen
-        name="GBScreen"
-        component={GBScreen}
-        options={({ navigation }) => {
-          const opts = {
-            title: t("gbStack.gbScreenTitle"),
-            headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
-          };
-          if (showAddButton) {
-            opts.headerRight = () => (
-              <TouchableOpacity onPress={() => navigation.navigate('NewGBChat')} style={{ marginRight: 15 }}>
-                <Ionicons name="add" size={24} color={COLORS.textPrimary} />
-              </TouchableOpacity>
-            );
-          }
-          return opts;
-        }}
-      />
-      <Stack.Screen name="NewGBChat" component={NewGBChat} options={{ title: t("gbStack.newGBChatTitle") }} />
-      <Stack.Screen name="GBChatWindow" component={GBChatWindow} options={{ title: t("gbStack.gbChatWindowTitle") }} />
-      <Stack.Screen name="GBExpress" component={GBExpress} options={{ title: t("gbStack.gbExpressTitle") }} />
-      <Stack.Screen name="GBNewExpress" component={GBNewExpress} options={{ title: t("gbStack.gbNewExpressTitle") }} />
-    </Stack.Navigator>
-  );
-}
-
-function QuantStack() {
-  const { t } = useTranslation();
-  return (
-    <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen
-        name="QuantScreen"
-        component={MapComponent}
-        options={{ title: t("quantStack.quantScreenTitle"), headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} /> }}
-      />
-    </Stack.Navigator>
-  );
-}
-
 function GBGStack() {
   const { t } = useTranslation();
   return (
@@ -249,81 +179,6 @@ function AdmintStack() {
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
           headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
           headerShadowVisible: false,
-        })}
-      />
-    </Stack.Navigator>
-  );
-}
-
-function CultureStack() {
-  const { t } = useTranslation();
-  return (
-    <Stack.Navigator screenOptions={defaultHeaderOptions}>
-      <Stack.Screen
-        name="CulturalSettlements"
-        component={CulturalSettlements}
-        options={({ navigation }) => ({
-          title: 'Вибір поселення',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-          ),
-        })}
-      />
-      <Stack.Screen
-        name="CulturalPlanner"
-        component={CulturalPlanner}
-        options={({ navigation, route }) => {
-          const { start } = route.params;
-          const removeAndBack = async () => {
-            const userId = await AsyncStorage.getItem('userId');
-            const guildId = await AsyncStorage.getItem('guildId');
-            await database().ref(`guilds/${guildId}/guildUsers/${userId}/culturalSettlements`).remove();
-            navigation.navigate('CulturalSettlements');
-          };
-          return {
-            title: 'План поселення',
-            headerLeft: () => (
-              <TouchableOpacity
-                onPress={() => {
-                  if (start) removeAndBack();
-                  else navigation.goBack();
-                }}
-                style={{ marginLeft: 10 }}
-              >
-                <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-              </TouchableOpacity>
-            ),
-            headerRight: () => (
-              <TouchableOpacity
-                onPress={() => {
-                  if (start) removeAndBack();
-                  else {
-                    Alert.alert('Підтвердження', 'Ви дійсно хочете закінчити планування культурного поселення і видалити весь прогрес?', [
-                      { text: 'Ні' },
-                      { text: 'Так', onPress: () => removeAndBack() },
-                    ]);
-                  }
-                }}
-                style={{ marginRight: 10 }}
-              >
-                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
-              </TouchableOpacity>
-            ),
-          };
-        }}
-      />
-      <Stack.Screen
-        name="Planning"
-        component={Planning}
-        options={({ navigation }) => ({
-          title: 'Планування',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10 }}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-          ),
         })}
       />
     </Stack.Navigator>
@@ -491,7 +346,6 @@ function CustomDrawerContent(props) {
   const [isWorldSelectVisible, setIsWorldSelectVisible] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState('');
 
-  // Анимации
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const rotation = useRef(new Animated.Value(0)).current;
 
@@ -500,16 +354,21 @@ function CustomDrawerContent(props) {
       try {
         const userId = await AsyncStorage.getItem('userId');
         if (!guildId || !userId) return;
+
         const userBranchRef = database().ref(`users/${userId}`);
         const userBranchSnapshot = await userBranchRef.once('value');
+
         if (userBranchSnapshot.exists()) {
           const usersData = userBranchSnapshot.val();
           setUserName(usersData.userName || '');
+
           const guildRef = database().ref(`guilds/${guildId}`);
           const guildSnapshot = await guildRef.once('value');
+
           if (guildSnapshot.exists()) {
             const guildData = guildSnapshot.val();
             setGuildName(guildData.guildName || t("customDrawer.noName"));
+
             const guildUserRef = database().ref(`guilds/${guildId}/guildUsers/${userId}`);
             const guildUserSnapshot = await guildUserRef.once('value');
             if (guildUserSnapshot.exists()) {
@@ -517,6 +376,7 @@ function CustomDrawerContent(props) {
               setGuildImageUrl(guildUserData.imageUrl || '');
             }
           }
+
           const otherGuilds = {};
           for (let key in usersData) {
             if (key.includes('_') && key !== guildId) {
@@ -582,7 +442,6 @@ function CustomDrawerContent(props) {
     <DrawerContentScrollView {...props} style={styles.drawerContent} contentContainerStyle={{ paddingTop: 0 }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.profileRow}>
           <View style={styles.avatarContainer}>
@@ -594,6 +453,7 @@ function CustomDrawerContent(props) {
               </View>
             )}
           </View>
+
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
             <TouchableOpacity style={styles.worldBadge} onPress={handleChevronPress} activeOpacity={0.7}>
@@ -606,7 +466,6 @@ function CustomDrawerContent(props) {
         </View>
       </View>
 
-      {/* WORLD SELECTOR (DROPDOWN) */}
       <Animated.View style={[styles.worldSelectContainer, { height: animatedHeight }]}>
         <View style={styles.worldsInner}>
           {Object.keys(tempData).map(key => (
@@ -629,7 +488,6 @@ function CustomDrawerContent(props) {
 
       <Text style={styles.sectionTitle}>{"ОСНОВНЕ"}</Text>
 
-      {/* MENU ITEMS */}
       <View style={styles.menuContainer}>
         {props.state.routes.map((route, index) => {
           const focused = props.state.index === index;
@@ -640,9 +498,7 @@ function CustomDrawerContent(props) {
           const textColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
           const bgColor = focused ? COLORS.surface : 'transparent';
 
-          if (!drawerLabel) {
-            return null;
-          }
+          if (!drawerLabel) return null;
 
           return (
             <React.Fragment key={route.key}>
@@ -669,6 +525,215 @@ function CustomDrawerContent(props) {
         <Text style={styles.footerText}>СУРМА UA</Text>
       </View>
     </DrawerContentScrollView>
+  );
+}
+
+function AppNavigator() {
+  const { guildId } = useContext(GuildContext);
+  const { t } = useTranslation();
+  const [showAdmin, setShowAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchRole = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!userId || !guildId) return;
+        const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
+        const snap = await userRoleRef.once('value');
+        if (snap.exists() && snap.val() === 'guildLeader') setShowAdmin(true);
+        else setShowAdmin(false);
+      } catch (e) {
+        setShowAdmin(false);
+      }
+    };
+    fetchRole();
+  }, [guildId]);
+
+  const renderIcon = (IconComponent) => ({ color }) => (
+    <IconComponent width={24} height={24} fill={color} color={color} style={{ color: color }} />
+  );
+
+  return (
+    <NavigationContainer key={guildId}>
+      <Drawer.Navigator
+        drawerContent={props => <CustomDrawerContent {...props} />}
+        initialRouteName="GBG"
+        screenOptions={{
+          drawerActiveTintColor: COLORS.primary,
+          drawerInactiveTintColor: COLORS.textSecondary,
+          drawerType: 'front',
+          overlayColor: 'rgba(0,0,0,0.85)',
+          headerShown: false,
+          drawerStyle: { backgroundColor: COLORS.background, width: 320 }
+        }}
+      >
+        <Drawer.Screen
+          name="ChatList"
+          component={ChatStack}
+          options={{
+            drawerLabel: t("drawer.chatLabel"),
+            drawerIconComponent: renderIcon(Chat)
+          }}
+        />
+        <Drawer.Screen
+          name="GBG"
+          component={GBGStack}
+          options={{
+            drawerLabel: t("drawer.pbgLabel"),
+            drawerIconComponent: renderIcon(GVG)
+          }}
+        />
+        <Drawer.Screen
+          name="profile"
+          component={ProfileStack}
+          options={{
+            drawerLabel: t("drawer.profileLabel"),
+            drawerIconComponent: renderIcon(Profile)
+          }}
+        />
+        {showAdmin && (
+          <Drawer.Screen
+            name="admin"
+            component={AdmintStack}
+            options={{
+              drawerLabel: t("drawer.adminLabel"),
+              drawerIconComponent: renderIcon(Admin)
+            }}
+          />
+        )}
+      </Drawer.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function MainContent() {
+  useEffect(() => {
+    const resolveNotificationContent = (remoteMessage) => {
+      const notificationTitle = remoteMessage?.notification?.title;
+      const notificationBody = remoteMessage?.notification?.body;
+
+      const dataTitle = remoteMessage?.data?.title;
+      const dataBody = remoteMessage?.data?.body;
+
+      const title = notificationTitle || dataTitle || "";
+      const body = notificationBody || dataBody || "";
+
+      return { title, body };
+    };
+
+    const setupPushNotifications = async () => {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (enabled) {
+        console.log('Authorization status:', authStatus);
+
+        await notifee.createChannel({
+          id: 'default',
+          name: 'Default Channel',
+          importance: AndroidImportance.HIGH,
+        });
+
+        // ✅ Канал ПБГ зі звуком
+        await notifee.createChannel({
+          id: 'gbg_sector',
+          name: 'GBG Sector Channel',
+          importance: AndroidImportance.HIGH,
+          sound: 'alert',
+        });
+
+        // ✅ Канал ПБГ без звуку
+        await notifee.createChannel({
+          id: 'gbg_sector_silent',
+          name: 'GBG Sector Silent',
+          importance: AndroidImportance.HIGH,
+        });
+
+        // ✅ Канал чату зі звуком
+        await notifee.createChannel({
+          id: 'chat_messages',
+          name: 'Chat Messages Channel',
+          importance: AndroidImportance.HIGH,
+          sound: 'smeh_minonovhasms',
+        });
+
+        // ✅ Канал чату без звуку
+        await notifee.createChannel({
+          id: 'chat_messages_silent',
+          name: 'Chat Messages Silent',
+          importance: AndroidImportance.HIGH,
+        });
+
+        const fcmToken = await messaging().getToken();
+        if (fcmToken) {
+          console.log("Your FCM Token is:", fcmToken);
+        } else {
+          console.log("Failed to get FCM token");
+        }
+      } else {
+        console.log('User has declined push notification permissions.');
+      }
+
+      const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
+        console.log('FCM Message arrived in foreground!', JSON.stringify(remoteMessage));
+
+        const { title, body } = resolveNotificationContent(remoteMessage);
+
+        // ✅ data-only widget refresh не показуємо
+        if (remoteMessage?.data?.type === 'gbg_widget_refresh') return;
+
+        if (!title && !body) return;
+
+        const messageType = remoteMessage?.data?.type;
+
+        // ✅ sound flag приходить з сервера: "1" або "0"
+        const soundFlag = remoteMessage?.data?.sound === '1';
+
+        const displayChannelId =
+          messageType === 'gbg_sector_open'
+            ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
+            : messageType === 'chat_message'
+              ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
+              : 'default';
+
+        await notifee.displayNotification({
+          title,
+          body,
+          android: {
+            channelId: displayChannelId,
+            importance: AndroidImportance.HIGH,
+            pressAction: { id: 'default' },
+          },
+        });
+      });
+
+      messaging().onNotificationOpenedApp(remoteMessage => {
+        console.log('Notification caused app to open from background state:', remoteMessage.notification);
+      });
+
+      messaging()
+        .getInitialNotification()
+        .then(remoteMessage => {
+          if (remoteMessage) {
+            console.log('Notification caused app to open from quit state:', remoteMessage.notification);
+          }
+        });
+
+      return unsubscribeOnMessage;
+    };
+
+    setupPushNotifications();
+  }, []);
+
+  return (
+    <GuildProvider>
+      <MenuProvider>
+        <AppNavigator />
+      </MenuProvider>
+    </GuildProvider>
   );
 }
 
@@ -838,230 +903,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   }
 });
-
-function AppNavigator() {
-  const { guildId } = useContext(GuildContext);
-  const { t } = useTranslation();
-  const [showAdmin, setShowAdmin] = React.useState(false);
-
-  React.useEffect(() => {
-    const fetchRole = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        const guildId = await AsyncStorage.getItem('guildId');
-        if (!userId || !guildId) return;
-        const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
-        const snap = await userRoleRef.once('value');
-        if (snap.exists() && snap.val() === 'guildLeader') {
-          setShowAdmin(true);
-        } else {
-          setShowAdmin(false);
-        }
-      } catch (e) {
-        setShowAdmin(false);
-      }
-    };
-    fetchRole();
-  }, [guildId]);
-
-  // Функция-хелпер для передачи SVG компонента с нужным цветом
-  const renderIcon = (IconComponent) => ({ color }) => (
-    <IconComponent
-      width={24}
-      height={24}
-      fill={color}
-      color={color}
-      style={{ color: color }}
-    />
-  );
-
-  return (
-    <NavigationContainer key={guildId}>
-      <Drawer.Navigator
-        drawerContent={props => <CustomDrawerContent {...props} />}
-        initialRouteName="GBG"
-        screenOptions={{
-          drawerActiveTintColor: COLORS.primary,
-          drawerInactiveTintColor: COLORS.textSecondary,
-          drawerType: 'front',
-          overlayColor: 'rgba(0,0,0,0.85)',
-          headerShown: false,
-          drawerStyle: {
-            backgroundColor: COLORS.background,
-            width: 320,
-          }
-        }}
-      >
-        <Drawer.Screen
-          name="ChatList"
-          component={ChatStack}
-          options={{
-            drawerLabel: t("drawer.chatLabel"),
-            drawerIconComponent: renderIcon(Chat)
-          }}
-        />
-        <Drawer.Screen
-          name="GBG"
-          component={GBGStack}
-          options={{
-            drawerLabel: t("drawer.pbgLabel"),
-            drawerIconComponent: renderIcon(GVG)
-          }}
-        />
-        <Drawer.Screen
-          name="profile"
-          component={ProfileStack}
-          options={{
-            drawerLabel: t("drawer.profileLabel"),
-            drawerIconComponent: renderIcon(Profile)
-          }}
-        />
-        {showAdmin && (
-          <Drawer.Screen
-            name="admin"
-            component={AdmintStack}
-            options={{
-              drawerLabel: t("drawer.adminLabel"),
-              drawerIconComponent: renderIcon(Admin)
-            }}
-          />
-        )}
-      </Drawer.Navigator>
-    </NavigationContainer>
-  );
-}
-
-export default function MainContent() {
-
-  useEffect(() => {
-    const resolveNotificationContent = (remoteMessage) => {
-      const notificationTitle = remoteMessage?.notification?.title;
-      const notificationBody = remoteMessage?.notification?.body;
-
-      const dataTitle = remoteMessage?.data?.title;
-      const dataBody = remoteMessage?.data?.body;
-
-      const title = notificationTitle || dataTitle || "";
-      const body = notificationBody || dataBody || "";
-
-      return { title, body };
-    };
-
-    const setupPushNotifications = async () => {
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-      if (enabled) {
-        console.log('Authorization status:', authStatus);
-
-        const channelId = await notifee.createChannel({
-          id: 'default',
-          name: 'Default Channel',
-          importance: AndroidImportance.HIGH,
-        });
-        console.log('Notification channel created:', channelId);
-
-        const gbgChannelId = await notifee.createChannel({
-          id: 'gbg_sector',
-          name: 'GBG Sector Channel',
-          importance: AndroidImportance.HIGH,
-          sound: 'alert',
-        });
-        console.log('GBG notification channel created:', gbgChannelId);
-
-        // ✅ NEW: silent GBG channel
-        const gbgSilentChannelId = await notifee.createChannel({
-          id: 'gbg_sector_silent',
-          name: 'GBG Sector Silent',
-          importance: AndroidImportance.HIGH,
-          // sound НЕ вказуємо
-        });
-        console.log('GBG silent channel created:', gbgSilentChannelId);
-
-        const chatChannelId = await notifee.createChannel({
-          id: 'chat_messages',
-          name: 'Chat Messages Channel',
-          importance: AndroidImportance.HIGH,
-          sound: 'smeh_minonovhasms',
-        });
-        console.log('Chat notification channel created:', chatChannelId);
-
-        // ✅ NEW: silent chat channel
-        const chatSilentChannelId = await notifee.createChannel({
-          id: 'chat_messages_silent',
-          name: 'Chat Messages Silent',
-          importance: AndroidImportance.HIGH,
-          // sound НЕ вказуємо
-        });
-        console.log('Chat silent channel created:', chatSilentChannelId);
-
-        const fcmToken = await messaging().getToken();
-        if (fcmToken) {
-          console.log("Your FCM Token is:", fcmToken);
-        } else {
-          console.log("Failed to get FCM token");
-        }
-      } else {
-        console.log('User has declined push notification permissions.');
-      }
-
-      const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
-        console.log('FCM Message arrived in foreground!', JSON.stringify(remoteMessage));
-
-        const { title, body } = resolveNotificationContent(remoteMessage);
-        if (!title && !body) return;
-
-        const messageType = remoteMessage?.data?.type;
-
-        // ✅ NEW: server decides sound: data.sound = "1"|"0"
-        const soundFlag = remoteMessage?.data?.sound === '1';
-
-        const displayChannelId =
-          messageType === 'gbg_sector_open'
-            ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
-            : messageType === 'chat_message'
-              ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
-              : 'default';
-
-        await notifee.displayNotification({
-          title,
-          body,
-          android: {
-            channelId: displayChannelId,
-            importance: AndroidImportance.HIGH,
-            pressAction: {
-              id: 'default',
-            },
-          },
-        });
-      });
-
-      messaging().onNotificationOpenedApp(remoteMessage => {
-        console.log('Notification caused app to open from background state:', remoteMessage.notification);
-      });
-
-      messaging()
-        .getInitialNotification()
-        .then(remoteMessage => {
-          if (remoteMessage) {
-            console.log('Notification caused app to open from quit state:', remoteMessage.notification);
-          }
-        });
-
-      return unsubscribeOnMessage;
-    };
-
-    setupPushNotifications();
-
-  }, []);
-
-  return (
-    <GuildProvider>
-      <MenuProvider>
-        <AppNavigator />
-      </MenuProvider>
-    </GuildProvider>
-  );
-}

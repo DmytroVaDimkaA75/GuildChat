@@ -104,9 +104,11 @@ const sendWidgetRefreshToGuild = async ({ guildId, reason = "", sectorId = "" })
 
 /**
  * =====================================================================
- * ✅ Notification schedule helpers (weekly + rollingWeeks, new+legacy)
- * - sound: only if "now" is inside user's schedule
- * - timezone: stored per user, fallback UTC
+ * ✅ Schedule helpers (локальний час користувача)
+ * - Часова зона: users/{uid}/setting/timeZone
+ * - Розклад: users/{uid}/setting/schedules/{scheduleId}
+ * - Якщо активний час => sound
+ * - Якщо не активний => silent
  * =====================================================================
  */
 
@@ -202,7 +204,7 @@ const normalizeRollingWeeks = (rollingWeeksRaw) => {
   return { anchorAt, weeks: weeksOut };
 };
 
-// ---- Timezone helpers (no external deps) ----
+// Отримуємо локальні частини дати/часу у заданій TZ (без сторонніх бібліотек)
 const getLocalParts = (utcMs, timeZone) => {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone: timeZone || "UTC",
@@ -227,11 +229,11 @@ const getLocalParts = (utcMs, timeZone) => {
     day: Number(map.day),
     hour: Number(map.hour),
     minute: Number(map.minute),
-    weekdayShort: map.weekday, // "Mon","Tue",...
+    weekdayShort: map.weekday, // Mon Tue ...
   };
 };
 
-// Mon..Sun => 0..6 (Пн=0 ... Нд=6)
+// Mon..Sun => 0..6 (Пн=0 ... Нд=6) — як у твоєму UI
 const weekdayShortToMon0 = (w) => {
   const m = {
     Mon: 0,
@@ -254,8 +256,6 @@ const isMinuteInsideSlots = (minuteOfDay, slots) => {
     const a = Number(s?.startMinutes);
     const b = Number(s?.endMinutes);
     if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-
-    // інтервал цього дня (tail/head/full збережений вже в "день-слотах")
     if (m >= a && m < b) return true;
   }
   return false;
@@ -264,7 +264,7 @@ const isMinuteInsideSlots = (minuteOfDay, slots) => {
 const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
   if (!scheduleData) return true; // якщо розкладу нема — не блокуємо звук
 
-  const tz = timeZone || scheduleData.timeZone || "UTC";
+  const tz = timeZone || "UTC";
   const parts = getLocalParts(utcMs, tz);
   const dayIndex = weekdayShortToMon0(parts.weekdayShort);
   if (dayIndex === null) return true;
@@ -285,7 +285,7 @@ const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
     const weeks = rolling?.weeks || {};
     if (!Number.isFinite(anchorAt)) return true;
 
-    // diffDays рахуємо по "локальній даті" у tz
+    // diffDays рахуємо по локальній даті у tz
     const nowLocalMidUtc = localYmdToUtcMidnightMs(parts.year, parts.month, parts.day);
 
     const anchorParts = getLocalParts(anchorAt * 1000, tz);
@@ -305,12 +305,12 @@ const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
   return true;
 };
 
-// ---- user schedule fetch ----
-// Використовую: users/{uid}/setting/notificationScheduleId (або activeScheduleId) + users/{uid}/setting/timeZone
-// Якщо id не заданий — беремо перший schedule з users/{uid}/setting/schedules/*
+// Витягуємо TZ + розклад користувача
+// TZ: users/{uid}/setting/timeZone
+// scheduleId: users/{uid}/setting/notificationScheduleId (або activeScheduleId) (якщо немає — беремо перший)
 const getUserScheduleForNotifications = async (uid) => {
-  const userSnap = await admin.database().ref(`/users/${uid}/setting`).once("value");
-  const setting = userSnap.exists() ? (userSnap.val() || {}) : {};
+  const settingSnap = await admin.database().ref(`/users/${uid}/setting`).once("value");
+  const setting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
 
   const timeZone = setting.timeZone || "UTC";
   const preferredId = setting.notificationScheduleId || setting.activeScheduleId || null;
@@ -324,8 +324,7 @@ const getUserScheduleForNotifications = async (uid) => {
   let scheduleId = preferredId;
 
   if (!scheduleId || !schedules[scheduleId]) {
-    const firstKey = Object.keys(schedules)[0] || null;
-    scheduleId = firstKey;
+    scheduleId = Object.keys(schedules)[0] || null;
   }
 
   const schedule = scheduleId ? schedules[scheduleId] : null;
@@ -384,7 +383,6 @@ exports.onGbgOpponentsWrite = onValueWritten(
   async (event) => {
     const guildId = String(event.params.guildId || "");
 
-    // ✅ (опційно) фільтр
     if (guildId && !String(guildId).includes("10821")) {
       return null;
     }
@@ -402,7 +400,6 @@ exports.onGbgMapWrite = onValueWritten(
   async (event) => {
     const guildId = String(event.params.guildId || "");
 
-    // ✅ (опційно) фільтр
     if (guildId && !String(guildId).includes("10821")) {
       return null;
     }
@@ -440,35 +437,31 @@ exports.sendChatNotification = onValueCreated(
     const senderProfile = await admin.database().ref(`/users/${senderId}`).once("value");
     const senderName = senderProfile.val()?.userName || "Новое сообщение";
 
+    // ✅ Отримувачі (без відправника)
     const recipients = members.filter((m) => m !== senderId);
-
     if (!recipients.length) return null;
 
     const nowMs = Date.now();
 
-    // ✅ Для кожного отримувача:
-    // - chatData.members[uid] === true => може бути звук
-    // - якщо false => завжди тихо
-    // - якщо true => додатково перевіряємо графік
+    // ✅ Для кожного отримувача визначаємо: token + (members flag) + (schedule)
     const userInfos = await Promise.all(
       recipients.map(async (uid) => {
         const tokenSnap = await admin.database().ref(`/users/${uid}/fcmToken`).once("value");
         const token = tokenSnap.exists() ? tokenSnap.val() : null;
-
         if (!token) return { uid, token: null, sound: false };
 
+        // ✅ якщо members/{uid} === true -> звук може бути, інакше завжди тихо
         const chatSoundEnabled = chatData.members?.[uid] === true;
-        if (!chatSoundEnabled) {
-          return { uid, token, sound: false };
-        }
+        if (!chatSoundEnabled) return { uid, token, sound: false };
 
+        // ✅ якщо графік дозволяє -> зі звуком
         let soundBySchedule = true;
         try {
           const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
           soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
         } catch (e) {
           logger.error("[sendChatNotification] schedule check error:", e);
-          soundBySchedule = true; // не блокуємо через помилку
+          soundBySchedule = true;
         }
 
         return { uid, token, sound: !!soundBySchedule };
@@ -481,17 +474,10 @@ exports.sendChatNotification = onValueCreated(
     const titleText = senderName;
     const bodyText = messageText;
 
-    // 1) Зі звуком
+    // ✅ 1) Зі звуком
     if (soundTokens.length > 0) {
       const payloadSound = {
-        data: {
-          chatId,
-          guildId,
-          title: titleText,
-          body: bodyText,
-          type: "chat_message",
-          sound: "1",
-        },
+        data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "1" },
         android: {
           priority: "high",
           notification: {
@@ -502,13 +488,7 @@ exports.sendChatNotification = onValueCreated(
           },
         },
         apns: {
-          payload: {
-            aps: {
-              alert: { title: titleText, body: bodyText },
-              sound: "default",
-              "content-available": 1,
-            },
-          },
+          payload: { aps: { alert: { title: titleText, body: bodyText }, sound: "default", "content-available": 1 } },
         },
       };
 
@@ -519,34 +499,20 @@ exports.sendChatNotification = onValueCreated(
       }
     }
 
-    // 2) Тихо
+    // ✅ 2) Тихо (без звуку)
     if (silentTokens.length > 0) {
       const payloadSilent = {
-        data: {
-          chatId,
-          guildId,
-          title: titleText,
-          body: bodyText,
-          type: "chat_message",
-          sound: "0",
-        },
+        data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "0" },
         android: {
           priority: "high",
           notification: {
             title: titleText,
             body: bodyText,
             channel_id: "chat_messages_silent",
-            // sound НЕ вказуємо
           },
         },
         apns: {
-          payload: {
-            aps: {
-              alert: { title: titleText, body: bodyText },
-              "content-available": 1,
-              // sound НЕ вказуємо
-            },
-          },
+          payload: { aps: { alert: { title: titleText, body: bodyText }, "content-available": 1 } },
         },
       };
 
@@ -722,7 +688,7 @@ exports.syncGbgNotifications = onValueWritten(
       await db.ref().update(updates);
     }
 
-    // ✅ тихий refresh віджета (data-only)
+    // ✅ Тихий refresh віджета (data-only), НЕ ламає твою чергу пушів
     try {
       const sectorId = String(event.params.sectorId || "");
       await sendWidgetRefreshToGuild({ guildId, reason: "sector_write", sectorId });
@@ -790,13 +756,9 @@ async function sendPushAndMarkSent(taskId, task, db) {
   }
 
   const memberIds = Object.keys(membersSnap.val());
-  if (!memberIds.length) {
-    return db.ref(`gbgNotificationQueue/${taskId}`).remove();
-  }
-
   const nowMs = Date.now();
 
-  // ✅ Для кожного користувача: чи можна зі звуком по графіку
+  // ✅ Для кожного користувача визначаємо sound по графіку
   const userInfos = await Promise.all(
     memberIds.map(async (uid) => {
       const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
@@ -826,7 +788,7 @@ async function sendPushAndMarkSent(taskId, task, db) {
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
 
-  // 1) Зі звуком
+  // ✅ 1) Зі звуком
   if (soundTokens.length > 0) {
     const payloadSound = {
       data: {
@@ -854,7 +816,7 @@ async function sendPushAndMarkSent(taskId, task, db) {
     }
   }
 
-  // 2) Тихо (без звуку)
+  // ✅ 2) Тихо (без звуку)
   if (silentTokens.length > 0) {
     const payloadSilent = {
       data: {
@@ -869,9 +831,7 @@ async function sendPushAndMarkSent(taskId, task, db) {
         priority: "high",
         notification: { title: titleText, body: messageText, channel_id: "gbg_sector_silent" },
       },
-      apns: {
-        payload: { aps: { alert: { title: titleText, body: messageText }, "content-available": 1 } },
-      },
+      apns: { payload: { aps: { alert: { title: titleText, body: messageText }, "content-available": 1 } } },
     };
 
     try {
