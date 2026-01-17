@@ -830,6 +830,24 @@ const ReadUsersPopup = ({ message, guildId, isCurrentUser, onClose }) => {
   );
 };
 
+const UserInfoPopup = ({ visible, user, loading, onClose }) => {
+  if (!visible) return null;
+
+  const displayName = loading ? 'Завантаження…' : user?.userName || 'Невідомий користувач';
+  const displayCity = loading ? '' : user?.city ? `Місто: ${user.city}` : 'Місто не вказано';
+
+  return (
+    <Modal transparent animationType="fade" visible>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.popupOverlay}>
+        <View style={styles.userInfoPopup}>
+          <Text style={styles.userInfoName}>{displayName}</Text>
+          {!!displayCity && <Text style={styles.userInfoCity}>{displayCity}</Text>}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
 const SenderName = ({ senderId, currentUserId, guildId }) => {
   const [name, setName] = useState('');
   useEffect(() => {
@@ -1076,6 +1094,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [mentionStartIndex, setMentionStartIndex] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
 
+  const [userInfoPopupVisible, setUserInfoPopupVisible] = useState(false);
+  const [userInfoPopupUser, setUserInfoPopupUser] = useState(null);
+  const [userInfoPopupLoading, setUserInfoPopupLoading] = useState(false);
+
   // highlight
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const highlightTimerRef = useRef(null);
@@ -1090,6 +1112,24 @@ const ChatWindow = ({ route, navigation }) => {
       .ref(`guilds/${guildId}/chats/${chatId}/members/${userId}`)
       .set(!isChatSoundEnabledRef.current);
   }, [chatId, guildId, userId]);
+
+  const handleOpenUserInfo = useCallback(async (targetUserId) => {
+    if (!targetUserId) return;
+    setUserInfoPopupLoading(true);
+    setUserInfoPopupVisible(true);
+    try {
+      const snap = await database().ref(`users/${targetUserId}`).once('value');
+      const data = snap.val() || {};
+      setUserInfoPopupUser({
+        userName: data.userName || '',
+        city: data.city || ''
+      });
+    } catch (error) {
+      setUserInfoPopupUser({ userName: '', city: '' });
+    } finally {
+      setUserInfoPopupLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1149,7 +1189,11 @@ const ChatWindow = ({ route, navigation }) => {
               if (user) {
                 navigation.setOptions({
                   headerTitle: () => (
-                    <View style={styles.headerTitleContainer}>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => handleOpenUserInfo(otherId)}
+                      style={styles.headerTitleContainer}
+                    >
                       {user.imageUrl ? (
                         <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
                       ) : (
@@ -1157,11 +1201,11 @@ const ChatWindow = ({ route, navigation }) => {
                           <Text style={{ color: '#fff' }}>?</Text>
                         </View>
                       )}
-                    <View>
-                      <Text style={styles.headerTitleText}>{user.userName}</Text>
-                      <Text style={styles.headerSubText}>У мережі</Text>
-                    </View>
-                  </View>
+                      <View>
+                        <Text style={styles.headerTitleText}>{user.userName}</Text>
+                        <Text style={styles.headerSubText}>У мережі</Text>
+                      </View>
+                    </TouchableOpacity>
                   ),
                   headerRight
                 });
@@ -1185,7 +1229,7 @@ const ChatWindow = ({ route, navigation }) => {
     });
 
     return () => chatRef.off('value', listener);
-  }, [chatId, guildId, userId, navigation]);
+  }, [chatId, guildId, userId, navigation, handleOpenUserInfo]);
 
   useEffect(() => {
     if (!guildId) return;
@@ -1767,7 +1811,11 @@ const ChatWindow = ({ route, navigation }) => {
 
                 return (
                   <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
-                    {!isMe && showAvatar && <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />}
+                    {!isMe && showAvatar && (
+                      <TouchableOpacity activeOpacity={0.7} onPress={() => handleOpenUserInfo(msg.senderId)}>
+                        <InterlocutorAvatar senderId={msg.senderId} guildId={guildId} />
+                      </TouchableOpacity>
+                    )}
                     {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
 
                     <Menu>
@@ -2076,6 +2124,13 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </KeyboardAvoidingView>
 
+        <UserInfoPopup
+          visible={userInfoPopupVisible}
+          user={userInfoPopupUser}
+          loading={userInfoPopupLoading}
+          onClose={() => setUserInfoPopupVisible(false)}
+        />
+
         {/* --- Модалки --- */}
         <Modal visible={captionModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
@@ -2343,14 +2398,21 @@ const styles = StyleSheet.create({
 
   interlocutorAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
 
-  inputArea: { padding: 10, backgroundColor: '#1c1c1e', borderTopWidth: 1, borderColor: '#333' },
+  inputArea: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#1c1c1e', borderTopWidth: 1, borderColor: '#333' },
   replyBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#252525', padding: 10, borderBottomWidth: 1, borderColor: '#333' },
   replyBarLine: { width: 4, height: '100%', backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
   replyBarTitle: { color: '#3498db', fontWeight: 'bold', fontSize: 12 },
   replyBarText: { color: '#aaa', fontSize: 13, flex: 1 },
 
   formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 12, marginBottom: 8 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 25, paddingHorizontal: 12, paddingVertical: 4 },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 2
+  },
   input: {
     flex: 1,
     color: '#fff',
@@ -2361,7 +2423,15 @@ const styles = StyleSheet.create({
     paddingBottom: INPUT_VERTICAL_PADDING / 2
   },
   attachBtn: { padding: 8 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8
+  },
   sendBtnActive: { backgroundColor: '#3498db' },
 
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
@@ -2395,6 +2465,18 @@ const styles = StyleSheet.create({
   readUsersPopup: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
   readUsersPopupPersonal: { alignSelf: 'flex-end' },
   readUsersPopupInterlocutor: { alignSelf: 'flex-start' },
+
+  userInfoPopup: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#444',
+    width: 240
+  },
+  userInfoName: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
+  userInfoCity: { color: '#aaa', fontSize: 13 },
 
   menuSeparator: { height: 1, backgroundColor: '#333', marginVertical: 6 },
   contextMenu: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
