@@ -833,7 +833,7 @@ const ReadUsersPopup = ({ message, guildId, isCurrentUser, onClose }) => {
 const UserInfoPopup = ({ visible, user, loading, onClose }) => {
   if (!visible) return null;
 
-  const displayName = loading ? 'Завантаження…' : user?.userName || 'Невідомий користувач';
+  const displayName = loading ? 'Завантаження…' : user?.name || 'Невідомий користувач';
   const displayCity = loading ? '' : user?.city ? `Місто: ${user.city}` : 'Місто не вказано';
 
   return (
@@ -1121,11 +1121,11 @@ const ChatWindow = ({ route, navigation }) => {
       const snap = await database().ref(`users/${targetUserId}`).once('value');
       const data = snap.val() || {};
       setUserInfoPopupUser({
-        userName: data.userName || '',
+        name: data.name || '',
         city: data.city || ''
       });
     } catch (error) {
-      setUserInfoPopupUser({ userName: '', city: '' });
+      setUserInfoPopupUser({ name: '', city: '' });
     } finally {
       setUserInfoPopupLoading(false);
     }
