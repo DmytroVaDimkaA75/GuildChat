@@ -14,6 +14,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   const opacity = useMemo(() => new Animated.Value(0), []);
   const swipeX = useRef(new Animated.Value(0)).current;
   const { t } = useTranslation();
+
   const unreadCount = useMemo(() => {
     if (Number.isFinite(chat.unreadCount)) {
       return chat.unreadCount;
@@ -107,17 +108,27 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
     onSelectChat(chat);
   };
 
-
   const renderUnreadBadge = () => {
     if (!unreadCount) return null;
 
+    // ✅ Якщо повідомлень дуже багато — показуємо 99+
+    const displayCount = unreadCount > 99 ? '99+' : String(unreadCount);
+
     return (
       <View style={styles.unreadBadge}>
-        <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+        <Text style={styles.unreadBadgeText}>{displayCount}</Text>
       </View>
     );
   };
 
+  const renderRightSide = () => {
+    return (
+      <View style={styles.rightSide}>
+        {renderUnreadBadge()}
+        <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
+      </View>
+    );
+  };
 
   const renderContent = () => {
     if (chat.type === 'private') {
@@ -136,7 +147,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
             <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
             <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
           </View>
-          <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
+          {renderRightSide()}
         </>
       );
     }
@@ -166,7 +177,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
             <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
           </View>
         </View>
-        <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
+        {renderRightSide()}
       </>
     );
   };
@@ -351,6 +362,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.5)',
   },
+
+  // ✅ Права частина: бейдж + стрілка
+  rightSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // ✅ Бейдж непрочитаних
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: '#3498db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
