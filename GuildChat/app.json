@@ -9,7 +9,18 @@
     "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
 
     "plugins": [
-      ["expo-build-properties", { "android": { "newArchEnabled": true }, "ios": { "newArchEnabled": true } }]
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": true,
+            "minSdkVersion": 24,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34
+          },
+          "ios": { "newArchEnabled": true }
+        }
+      ]
     ],
 
     "ios": { "supportsTablet": true },
