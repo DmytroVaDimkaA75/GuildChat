@@ -17,6 +17,7 @@ import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext, GuildProvider } from '../GuildContext';
 import i18n from "../i18n";
+import { syncGuildMembers } from '../src/utils/guildSync';
 
 // Импорт компонентов
 import AdminMain from './Admin/AdminMain';
@@ -533,6 +534,20 @@ function AppNavigator() {
   const { t } = useTranslation();
   const [showAdmin, setShowAdmin] = React.useState(false);
 
+  const confirmDeletion = (members) =>
+    new Promise((resolve) => {
+      const names = members.map((member) => member.userName).join(', ');
+      Alert.alert(
+        'Підтвердження видалення',
+        `У гільдії знайдено користувачів, яких немає на сайті: ${names}. Видалити?`,
+        [
+          { text: 'Скасувати', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Видалити', style: 'destructive', onPress: () => resolve(true) },
+        ],
+        { cancelable: true }
+      );
+    });
+
   React.useEffect(() => {
     const fetchRole = async () => {
       try {
@@ -541,8 +556,15 @@ function AppNavigator() {
         if (!userId || !guildId) return;
         const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
         const snap = await userRoleRef.once('value');
-        if (snap.exists() && snap.val() === 'guildLeader') setShowAdmin(true);
-        else setShowAdmin(false);
+        if (snap.exists() && snap.val() === 'guildLeader') {
+          setShowAdmin(true);
+          await syncGuildMembers({
+            guildId,
+            confirmDeletion,
+          });
+        } else {
+          setShowAdmin(false);
+        }
       } catch (e) {
         setShowAdmin(false);
       }
