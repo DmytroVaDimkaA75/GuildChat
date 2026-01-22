@@ -2,9 +2,66 @@ const { onValueCreated, onValueWritten } = require("firebase-functions/v2/databa
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
+
+/**
+ * =====================================================================
+ * ✅ Telegram secrets
+ * =====================================================================
+ */
+const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
+const TELEGRAM_CHAT_ID = defineSecret("TELEGRAM_CHAT_ID");
+
+/**
+ * =====================================================================
+ * ✅ Telegram helper (send message to channel/group)
+ * - Uses Bot API: sendMessage
+ * - No external libs required on Node 18+
+ * =====================================================================
+ */
+const sendTelegramMessage = async ({ text, parseMode = "HTML" }) => {
+  const token = TELEGRAM_BOT_TOKEN.value();
+  const chatId = TELEGRAM_CHAT_ID.value();
+
+  if (!token || !chatId) {
+    logger.warn("[TG] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
+    return false;
+  }
+
+  try {
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const body = {
+      chat_id: String(chatId),
+      text: String(text || ""),
+      parse_mode: parseMode,
+      disable_web_page_preview: true,
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok || !json?.ok) {
+      logger.error("[TG] sendMessage failed:", {
+        status: res.status,
+        response: json,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (e) {
+    logger.error("[TG] sendMessage error:", e);
+    return false;
+  }
+};
 
 /**
  * =====================================================================
@@ -421,7 +478,7 @@ exports.sendChatNotification = onValueCreated(
     region: "europe-west1",
   },
   async (event) => {
-    const { guildId, chatId, messageId } = event.params;
+    const { guildId, chatId } = event.params;
     const messageData = event.data.val();
     if (!messageData) return null;
 
@@ -536,6 +593,7 @@ exports.sendScheduledMessages = onSchedule(
     const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
     const snapshot = await query.once("value");
     if (!snapshot.exists()) return null;
+
     const promises = [];
     snapshot.forEach((childSnapshot) => {
       const messageId = childSnapshot.key;
@@ -544,6 +602,7 @@ exports.sendScheduledMessages = onSchedule(
         promises.push(moveMessageToChat(messageId, messageData, db));
       }
     });
+
     await Promise.all(promises);
     return null;
   }
@@ -705,6 +764,8 @@ exports.processGbgNotificationQueue = onSchedule(
     schedule: "every 1 minutes",
     region: "europe-west1",
     timeZone: "Europe/Kiev",
+    // ✅ add secrets for runtime
+    secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
   },
   async (event) => {
     const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -787,6 +848,21 @@ async function sendPushAndMarkSent(taskId, task, db) {
 
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
+
+  // ✅ Telegram: duplicate the push into channel
+  // (самі пуші не блокуємо, якщо TG впаде)
+  try {
+    const tgText =
+      `<b>${titleText}</b>\n` +
+      `${messageText}\n` +
+      `<code>guildId:</code> ${String(guildId)}\n` +
+      `<code>sector:</code> ${String(sectorId)}\n` +
+      `<code>openTime:</code> ${String(openTime)}`;
+
+    await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
+  } catch (e) {
+    logger.error("[TG] error while sending:", e);
+  }
 
   // ✅ 1) Зі звуком
   if (soundTokens.length > 0) {
@@ -871,7 +947,9 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
         priority: "high",
         notification: { title: titleText, body: messageText, sound: "default", channel_id: "default" },
       },
-      apns: { payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } } },
+      apns: {
+        payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } },
+      },
     };
     try {
       await admin.messaging().sendEachForMulticast({ tokens, ...payload });
