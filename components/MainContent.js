@@ -548,6 +548,20 @@ function AppNavigator() {
       );
     });
 
+  const confirmAddition = (members) =>
+    new Promise((resolve) => {
+      const names = members.map((member) => member.userName).join(', ');
+      Alert.alert(
+        'Підтвердження додавання',
+        `На сайті знайдено нових користувачів: ${names}. Додати в базу?`,
+        [
+          { text: 'Скасувати', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Додати', onPress: () => resolve(true) },
+        ],
+        { cancelable: true }
+      );
+    });
+
   React.useEffect(() => {
     const fetchRole = async () => {
       try {
@@ -561,6 +575,7 @@ function AppNavigator() {
           await syncGuildMembers({
             guildId,
             confirmDeletion,
+            confirmAddition,
           });
         } else {
           setShowAdmin(false);

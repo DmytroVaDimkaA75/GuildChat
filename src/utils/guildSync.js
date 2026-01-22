@@ -1,3 +1,4 @@
+import CryptoJS from 'react-native-crypto-js';
 import database from '@react-native-firebase/database';
 import { parseGuildMembers } from '../../guildParser';
 
@@ -9,6 +10,10 @@ const buildMembersUrl = (guildId) => {
 };
 
 const normalizeUserName = (name) => (name || '').trim();
+const normalizeImageUrl = (url) => {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `https://foe.scoredb.io${url}`;
+};
 
 const collectMissingMembers = (guildUsers, siteMemberIds) =>
   Object.keys(guildUsers || {})
@@ -17,6 +22,17 @@ const collectMissingMembers = (guildUsers, siteMemberIds) =>
       userId,
       userName: normalizeUserName(guildUsers[userId]?.userName) || userId,
     }));
+
+const collectNewMembers = (guildUsers, siteMembers) => {
+  const existingIds = new Set(Object.keys(guildUsers || {}));
+  return (siteMembers || [])
+    .filter(member => member?.userId && !existingIds.has(member.userId))
+    .map(member => ({
+      userId: member.userId,
+      userName: normalizeUserName(member.name) || member.userId,
+      imageUrl: normalizeImageUrl(member.imageUrl),
+    }));
+};
 
 const buildChatRemovalUpdates = (guildId, chatsData, userId) => {
   const updates = {};
@@ -37,6 +53,7 @@ const buildChatRemovalUpdates = (guildId, chatsData, userId) => {
 export const syncGuildMembers = async ({
   guildId,
   confirmDeletion,
+  confirmAddition,
 }) => {
   const membersUrl = buildMembersUrl(guildId);
   if (!membersUrl) {
@@ -48,41 +65,83 @@ export const syncGuildMembers = async ({
     return { success: false, error: parseResult.error || 'Помилка парсингу.' };
   }
 
-  const siteMemberIds = new Set((parseResult.data || []).map(member => member.userId));
+  const siteMembers = parseResult.data || [];
+  const siteMemberIds = new Set(siteMembers.map(member => member.userId));
   const guildUsersSnap = await database()
     .ref(`/guilds/${guildId}/guildUsers`)
     .once('value');
   const guildUsers = guildUsersSnap.exists() ? guildUsersSnap.val() : {};
   const missingMembers = collectMissingMembers(guildUsers, siteMemberIds);
+  const newMembers = collectNewMembers(guildUsers, siteMembers);
 
-  if (missingMembers.length === 0) {
-    return { success: true, removed: [] };
+  let removedMembers = [];
+  let addedMembers = [];
+
+  if (missingMembers.length > 0) {
+    const confirmedDeletion = typeof confirmDeletion === 'function'
+      ? await confirmDeletion(missingMembers)
+      : false;
+
+    if (confirmedDeletion) {
+      const chatsSnap = await database()
+        .ref(`/guilds/${guildId}/chats`)
+        .once('value');
+      const chatsData = chatsSnap.exists() ? chatsSnap.val() : null;
+
+      await Promise.all(
+        missingMembers.map(async ({ userId }) => {
+          const updates = {
+            [`/users/${userId}/${guildId}`]: null,
+            [`/guilds/${guildId}/guildUsers/${userId}`]: null,
+            ...buildChatRemovalUpdates(guildId, chatsData, userId),
+          };
+
+          await database().ref().update(updates);
+        })
+      );
+      removedMembers = missingMembers;
+    }
   }
 
-  const confirmed = typeof confirmDeletion === 'function'
-    ? await confirmDeletion(missingMembers)
-    : false;
+  if (newMembers.length > 0) {
+    const confirmedAddition = typeof confirmAddition === 'function'
+      ? await confirmAddition(newMembers)
+      : false;
 
-  if (!confirmed) {
-    return { success: true, removed: [] };
+    if (confirmedAddition) {
+      await Promise.all(
+        newMembers.map(async ({ userId, userName, imageUrl }) => {
+          const userRef = database().ref(`users/${userId}`);
+          const snapshot = await userRef.once('value');
+          const guildData = {
+            [guildId]: {
+              imageUrl: imageUrl,
+              role: 'member',
+            },
+          };
+
+          if (snapshot.exists()) {
+            await userRef.update(guildData);
+          } else {
+            const encryptedUserId = CryptoJS.AES.encrypt(
+              userId,
+              'your-encryption-key'
+            ).toString();
+            await userRef.set({
+              userName,
+              password: encryptedUserId,
+              ...guildData,
+            });
+          }
+
+          await database()
+            .ref(`/guilds/${guildId}/guildUsers/${userId}`)
+            .set({ userName, imageUrl });
+        })
+      );
+      addedMembers = newMembers;
+    }
   }
 
-  const chatsSnap = await database()
-    .ref(`/guilds/${guildId}/chats`)
-    .once('value');
-  const chatsData = chatsSnap.exists() ? chatsSnap.val() : null;
-
-  await Promise.all(
-    missingMembers.map(async ({ userId }) => {
-      const updates = {
-        [`/users/${userId}/${guildId}`]: null,
-        [`/guilds/${guildId}/guildUsers/${userId}`]: null,
-        ...buildChatRemovalUpdates(guildId, chatsData, userId),
-      };
-
-      await database().ref().update(updates);
-    })
-  );
-
-  return { success: true, removed: missingMembers };
+  return { success: true, removed: removedMembers, added: addedMembers };
 };
