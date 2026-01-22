@@ -3,6 +3,7 @@
     "name": "GuildChat",
     "slug": "guildchat",
     "version": "1.0.0",
+    "icon": "./assets/foechat.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",

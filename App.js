@@ -7,7 +7,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GuildContext, GuildProvider } from "./GuildContext";
 import i18n from "./i18n";
@@ -194,6 +194,70 @@ const AppContent = () => {
       unsubscribeTokenRefresh();
     };
   }, []);
+
+  useEffect(() => {
+    let presenceRef;
+    let connectedRef;
+    let appStateSubscription;
+
+    const updatePresence = async (state) => {
+      if (!presenceRef) return;
+      await presenceRef.set({
+        state,
+        lastChanged: database.ServerValue.TIMESTAMP,
+      });
+    };
+
+    const setupPresence = async () => {
+      const userId = await AsyncStorage.getItem("userId");
+      if (!userId || !guildId) return;
+
+      presenceRef = database().ref(`guilds/${guildId}/guildUsers/${userId}/presence`);
+      connectedRef = database().ref(".info/connected");
+
+      connectedRef.on("value", async (snapshot) => {
+        if (snapshot.val() === true) {
+          presenceRef.onDisconnect().set({
+            state: "offline",
+            lastChanged: database.ServerValue.TIMESTAMP,
+          });
+
+          if (AppState.currentState === "active") {
+            await updatePresence("online");
+          } else {
+            await updatePresence("offline");
+          }
+        } else {
+          await updatePresence("offline");
+        }
+      });
+
+      appStateSubscription = AppState.addEventListener("change", (nextState) => {
+        if (nextState === "active") {
+          updatePresence("online");
+        } else {
+          updatePresence("offline");
+        }
+      });
+    };
+
+    setupPresence();
+
+    return () => {
+      if (presenceRef) {
+        presenceRef.set({
+          state: "offline",
+          lastChanged: database.ServerValue.TIMESTAMP,
+        });
+      }
+      if (connectedRef) {
+        connectedRef.off();
+      }
+      if (appStateSubscription) {
+        appStateSubscription.remove();
+      }
+    };
+  }, [guildId]);
 
   useEffect(() => {
     const checkAndLogWorldData = async () => {
