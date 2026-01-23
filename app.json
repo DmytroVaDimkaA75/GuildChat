@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/foechat.png",
         "backgroundColor": "#ffffff",
         "softwareKeyboardLayoutMode": "resize"
       },
