@@ -2,7 +2,7 @@
   "expo": {
     "name": "GuildChat",
     "slug": "guildchat",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "./assets/foechat.png",
     "splash": {
       "image": "./assets/splash.png",
@@ -12,11 +12,12 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/foechat.png",
-        "backgroundColor": "#ffffff",
-        "softwareKeyboardLayoutMode": "resize"
+        "backgroundColor": "#ffffff"        
       },
       "package": "com.vadimkaa75.guildchat",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 2,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
       "@react-native-firebase/app",
