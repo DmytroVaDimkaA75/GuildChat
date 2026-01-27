@@ -67,6 +67,7 @@ import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
+import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
@@ -1039,6 +1040,9 @@ const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
   const [chatType, setChatType] = useState('private');
+  const [headerUserId, setHeaderUserId] = useState(null);
+  const [headerUser, setHeaderUser] = useState(null);
+  const [groupHeader, setGroupHeader] = useState({ name: '', groupAvatar: null, memberCount: 0 });
 
   const [newMessage, setNewMessage] = useState('');
   const [newMessagePlain, setNewMessagePlain] = useState('');
@@ -1113,6 +1117,16 @@ const ChatWindow = ({ route, navigation }) => {
       .set(!isChatSoundEnabledRef.current);
   }, [chatId, guildId, userId]);
 
+  const renderHeaderRight = useCallback(
+    () =>
+      isChatMember ? (
+        <TouchableOpacity onPress={handleToggleChatSound} style={styles.headerSoundButton}>
+          <FontAwesomeIcon icon={isChatSoundEnabled ? faVolumeHigh : faVolumeXmark} size={20} color="#fff" />
+        </TouchableOpacity>
+      ) : null,
+    [handleToggleChatSound, isChatMember, isChatSoundEnabled]
+  );
+
   const handleOpenUserInfo = useCallback(async (targetUserId) => {
     if (!targetUserId) return;
     setUserInfoPopupLoading(true);
@@ -1172,64 +1186,91 @@ const ChatWindow = ({ route, navigation }) => {
       isChatSoundEnabledRef.current = soundEnabled;
       setIsChatMember(hasMember);
       setIsChatSoundEnabled(soundEnabled);
-      const headerRight = () =>
-        hasMember ? (
-          <TouchableOpacity onPress={handleToggleChatSound} style={styles.headerSoundButton}>
-            <FontAwesomeIcon icon={soundEnabled ? faVolumeHigh : faVolumeXmark} size={20} color="#fff" />
-          </TouchableOpacity>
-        ) : null;
-
       if (data.type === 'private') {
         const otherId = Object.keys(data.members || {}).find((id) => id !== userId);
         if (otherId) {
-          database()
-            .ref(`guilds/${guildId}/guildUsers/${otherId}`)
-            .once('value', (s) => {
-              const user = s.val();
-              if (user) {
-                navigation.setOptions({
-                  headerTitle: () => (
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      onPress={() => handleOpenUserInfo(otherId)}
-                      style={styles.headerTitleContainer}
-                    >
-                      {user.imageUrl ? (
-                        <Image source={{ uri: user.imageUrl }} style={styles.headerAvatar} />
-                      ) : (
-                        <View style={[styles.headerAvatar, { backgroundColor: '#555' }]}>
-                          <Text style={{ color: '#fff' }}>?</Text>
-                        </View>
-                      )}
-                      <View>
-                        <Text style={styles.headerTitleText}>{user.userName}</Text>
-                        <Text style={styles.headerSubText}>У мережі</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ),
-                  headerRight
-                });
-              }
-            });
+          setHeaderUserId(otherId);
         }
       } else {
-        navigation.setOptions({
-          headerTitle: () => (
-            <View style={styles.headerTitleContainer}>
-              {data.groupAvatar && <Image source={{ uri: data.groupAvatar }} style={styles.headerAvatar} />}
-              <View>
-                <Text style={styles.headerTitleText}>{data.name}</Text>
-                <Text style={styles.headerSubText}>{Object.keys(data.members || {}).length} учасників</Text>
-              </View>
-            </View>
-          ),
-          headerRight
+        setHeaderUserId(null);
+        setGroupHeader({
+          name: data.name || '',
+          groupAvatar: data.groupAvatar || null,
+          memberCount: Object.keys(data.members || {}).length
         });
       }
     });
 
     return () => chatRef.off('value', listener);
-  }, [chatId, guildId, userId, navigation, handleOpenUserInfo]);
+  }, [chatId, guildId, userId]);
+
+  useEffect(() => {
+    if (!guildId || !headerUserId) {
+      setHeaderUser(null);
+      return;
+    }
+
+    const userRef = database().ref(`guilds/${guildId}/guildUsers/${headerUserId}`);
+    const listener = userRef.on('value', (snap) => {
+      setHeaderUser(snap.val() || null);
+    });
+
+    return () => userRef.off('value', listener);
+  }, [guildId, headerUserId]);
+
+  useEffect(() => {
+    if (chatType === 'private') {
+      if (!headerUser || !headerUserId) return;
+      const presenceLabel = getPresenceStatusLabel(headerUser.presence, locale);
+      navigation.setOptions({
+        headerTitle: () => (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => handleOpenUserInfo(headerUserId)}
+            style={styles.headerTitleContainer}
+          >
+            {headerUser.imageUrl ? (
+              <Image source={{ uri: headerUser.imageUrl }} style={styles.headerAvatar} />
+            ) : (
+              <View style={[styles.headerAvatar, { backgroundColor: '#555' }]}>
+                <Text style={{ color: '#fff' }}>?</Text>
+              </View>
+            )}
+            <View>
+              <Text style={styles.headerTitleText}>{headerUser.userName}</Text>
+              <Text style={styles.headerSubText}>{presenceLabel}</Text>
+            </View>
+          </TouchableOpacity>
+        ),
+        headerRight: renderHeaderRight
+      });
+      return;
+    }
+
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={styles.headerTitleContainer}>
+          {groupHeader.groupAvatar && <Image source={{ uri: groupHeader.groupAvatar }} style={styles.headerAvatar} />}
+          <View>
+            <Text style={styles.headerTitleText}>{groupHeader.name}</Text>
+            <Text style={styles.headerSubText}>{groupHeader.memberCount} учасників</Text>
+          </View>
+        </View>
+      ),
+      headerRight: renderHeaderRight
+    });
+  }, [
+    chatType,
+    groupHeader.groupAvatar,
+    groupHeader.memberCount,
+    groupHeader.name,
+    handleOpenUserInfo,
+    headerUser,
+    headerUserId,
+    locale,
+    navigation,
+    renderHeaderRight
+  ]);
 
   useEffect(() => {
     if (!guildId) return;
