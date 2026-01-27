@@ -30,6 +30,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee from '@notifee/react-native';
 import { format } from 'date-fns';
 import { de, es, fr, ru, uk } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
@@ -1039,6 +1040,28 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
+
+  useEffect(() => {
+    if (!chatId) return;
+    const clearChatNotifications = async () => {
+      try {
+        const displayed = await notifee.getDisplayedNotifications();
+        const chatNotifications = displayed.filter(({ notification }) => {
+          const type = notification?.data?.type;
+          const notificationChatId = notification?.data?.chatId;
+          return type === 'chat_message' && String(notificationChatId) === String(chatId);
+        });
+
+        await Promise.all(
+          chatNotifications.map((item) => notifee.cancelDisplayedNotification(item.id))
+        );
+      } catch (error) {
+        console.log('❌ Помилка очищення пушів чату:', error?.message || String(error));
+      }
+    };
+
+    clearChatNotifications();
+  }, [chatId]);
   const [chatType, setChatType] = useState('private');
   const [headerUserId, setHeaderUserId] = useState(null);
   const [headerUser, setHeaderUser] = useState(null);
