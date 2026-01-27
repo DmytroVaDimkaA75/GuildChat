@@ -6,6 +6,7 @@ import Svg, { Path } from 'react-native-svg';
 
 // --- ИЗМЕНЕНО: Правильный импорт ---
 import database from '@react-native-firebase/database';
+import { getPresenceStatusLabel } from './presenceUtils';
 
 // --- УДАЛЕНЫ неверные импорты ---
 // import { get, getDatabase, ref } from 'firebase/database';
@@ -19,6 +20,9 @@ const GuildMembersList = () => {
   const navigation = useNavigation();
   
   useEffect(() => {
+    let guildRef;
+    let listener;
+
     const fetchGuildMembers = async () => {
       try {
         const guildId = await AsyncStorage.getItem('guildId');
@@ -29,36 +33,46 @@ const GuildMembersList = () => {
         }
 
         // --- ИЗМЕНЕНО: Синтаксис `ref` и `once` для @react-native-firebase ---
-        const guildRef = database().ref(`guilds/${guildId}/guildUsers`);
-        const snapshot = await guildRef.once('value');
+        guildRef = database().ref(`guilds/${guildId}/guildUsers`);
+        listener = guildRef.on('value', (snapshot) => {
+          if (snapshot.exists()) {
+            const guildMembersData = snapshot.val();
+            const guildMembers = [];
+            
+            Object.keys(guildMembersData).forEach((memberId) => {
+              if (memberId !== userId) {
+                const memberData = guildMembersData[memberId];
+                guildMembers.push({
+                  id: memberId,
+                  name: memberData.userName,
+                  avatarUrl: memberData.imageUrl,
+                  presence: memberData.presence || null,
+                });
+              }
+            });
 
-        if (snapshot.exists()) {
-          const guildMembersData = snapshot.val();
-          const guildMembers = [];
-          
-          Object.keys(guildMembersData).forEach((memberId) => {
-            if (memberId !== userId) {
-              const memberData = guildMembersData[memberId];
-              guildMembers.push({
-                id: memberId,
-                name: memberData.userName,
-                avatarUrl: memberData.imageUrl,
-              });
-            }
-          });
-
-          setMembers(guildMembers);
-        } else {
-          console.error('Дані не знайдено');
-        }
+            setMembers(guildMembers);
+          } else {
+            console.error('Дані не знайдено');
+          }
+          setLoading(false);
+        });
       } catch (error) {
         console.error('Помилка при отриманні членів гільдії: ', error);
-      } finally {
         setLoading(false);
+      } finally {
+        if (!guildRef) {
+          setLoading(false);
+        }
       }
     };
 
     fetchGuildMembers();
+    return () => {
+      if (guildRef && listener) {
+        guildRef.off('value', listener);
+      }
+    };
   }, []);
 
   const handleTap = (member) => {
@@ -91,7 +105,7 @@ const GuildMembersList = () => {
               <Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#007AFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           )}
-          <Text style={styles.memberStatus}>активність — недавно</Text>
+          <Text style={styles.memberStatus}>{getPresenceStatusLabel(item.presence)}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -100,7 +114,7 @@ const GuildMembersList = () => {
   if (loading) {
     return (
         <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#0000ff" />
+            <ActivityIndicator size="large" color="#4cd137" />
         </View>
     );
   }
@@ -119,6 +133,7 @@ const GuildMembersList = () => {
                 navigation.navigate('CreateGroupScreen', { selectedMembers });
               }}
               disabled={selectedMembers.length === 1} // Кнопка пасивна при одному вибраному користувачі
+              color="#4cd137"
             />
           </View>
         </View>
@@ -131,7 +146,8 @@ const GuildMembersList = () => {
       <View style={styles.selectAllContainer}>
         <Button 
           title={selectedMembers.length === members.length ? "Зняти всіх" : "Обрати всіх"} 
-          onPress={handleSelectAll} 
+          onPress={handleSelectAll}
+          color="#3498db"
         />
       </View>
     </View>
@@ -141,16 +157,21 @@ const GuildMembersList = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#121212',
   },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#121212',
   },
   memberContainer: {
     flexDirection: 'row',
     padding: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   avatar: {
     width: 40,
@@ -165,10 +186,11 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   memberStatus: {
     fontSize: 14,
-    color: 'gray',
+    color: 'rgba(255,255,255,0.6)',
   },
   checkmark: {
     position: 'absolute',
@@ -177,9 +199,9 @@ const styles = StyleSheet.create({
   },
   selectionInfo: {
     padding: 10,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#1c1c1e',
     borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   selectionRow: {
     flexDirection: 'row',
@@ -189,10 +211,12 @@ const styles = StyleSheet.create({
   selectionText: {
     fontSize: 16,
     flex: 1,
+    color: '#FFFFFF',
   },
   selectAllContainer: {
     padding: 10,
     alignItems: 'center',
+    backgroundColor: '#121212',
   },
 });
 
