@@ -134,6 +134,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
     if (chat.type === 'private') {
       const otherMemberId = Object.keys(chat.members || {}).find(memberId => memberId !== userId);
       const otherUser = usersMap[otherMemberId];
+      const isOnline = otherUser?.presence?.state === 'online';
 
       if (!otherUser) return null;
 
@@ -141,7 +142,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
         <>
           <View style={styles.avatarContainer}>
             <Image source={{ uri: otherUser.imageUrl }} style={styles.avatar} />
-            <View style={styles.onlineIndicator} />
+            {isOnline && <View style={styles.onlineIndicator} />}
           </View>
           <View style={styles.chatInfo}>
             <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>

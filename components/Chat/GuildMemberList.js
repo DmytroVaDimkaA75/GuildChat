@@ -3,6 +3,7 @@ import database from '@react-native-firebase/database';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getPresenceStatusLabel } from './presenceUtils';
 
 const GuildMembersList = () => {
   const [members, setMembers] = useState([]);
@@ -10,6 +11,9 @@ const GuildMembersList = () => {
   const navigation = useNavigation();
 
   useEffect(() => {
+    let guildRef;
+    let listener;
+
     const fetchGuildMembers = async () => {
       try {
         const guildId = await AsyncStorage.getItem('guildId');
@@ -19,33 +23,43 @@ const GuildMembersList = () => {
           throw new Error('guildId или userId не найдены');
         }
 
-        const guildRef = database().ref(`guilds/${guildId}/guildUsers`);
-        const snapshot = await guildRef.once('value');
-
-        if (snapshot.exists()) {
-          const guildMembers = [];
-          snapshot.forEach((childSnapshot) => {
-            if (childSnapshot.key !== userId) {
-              const memberData = childSnapshot.val();
-              guildMembers.push({
-                id: childSnapshot.key,
-                name: memberData.userName,
-                avatarUrl: memberData.imageUrl,
-              });
-            }
-          });
-          setMembers(guildMembers);
-        } else {
-          console.error('Данные не найдены');
-        }
+        guildRef = database().ref(`guilds/${guildId}/guildUsers`);
+        listener = guildRef.on('value', (snapshot) => {
+          if (snapshot.exists()) {
+            const guildMembers = [];
+            snapshot.forEach((childSnapshot) => {
+              if (childSnapshot.key !== userId) {
+                const memberData = childSnapshot.val();
+                guildMembers.push({
+                  id: childSnapshot.key,
+                  name: memberData.userName,
+                  avatarUrl: memberData.imageUrl,
+                  presence: memberData.presence || null,
+                });
+              }
+            });
+            setMembers(guildMembers);
+          } else {
+            console.error('Данные не найдены');
+          }
+          setLoading(false);
+        });
       } catch (error) {
         console.error('Ошибка при получении членов гильдии: ', error);
-      } finally {
         setLoading(false);
+      } finally {
+        if (!guildRef) {
+          setLoading(false);
+        }
       }
     };
 
     fetchGuildMembers();
+    return () => {
+      if (guildRef && listener) {
+        guildRef.off('value', listener);
+      }
+    };
   }, []);
 
   const handlePress = async (member) => {
@@ -103,18 +117,22 @@ const GuildMembersList = () => {
         <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
         <View style={styles.textContainer}>
           <Text style={styles.memberName}>{item.name}</Text>
-          <Text style={styles.memberStatus}>активность — недавно</Text>
+          <Text style={styles.memberStatus}>{getPresenceStatusLabel(item.presence)}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
   if (loading) {
-    return <ActivityIndicator size="large" color="#0000ff" />;
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#4cd137" />
+      </View>
+    );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <TouchableOpacity onPress={handleCreateGroupChat}>
         <Text style={styles.createGroupChatText}>Создать групповой чат</Text>
       </TouchableOpacity>
@@ -128,10 +146,23 @@ const GuildMembersList = () => {
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#121212',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212',
+  },
   memberContainer: {
     flexDirection: 'row',
     padding: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   avatar: {
     width: 40,
@@ -145,14 +176,15 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   memberStatus: {
     fontSize: 14,
-    color: 'gray',
+    color: 'rgba(255,255,255,0.6)',
   },
   createGroupChatText: {
     fontSize: 16,
-    color: '#007BFF',
+    color: '#4cd137',
     textAlign: 'center',
     padding: 15,
   },
