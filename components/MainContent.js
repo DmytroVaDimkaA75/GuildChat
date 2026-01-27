@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database';
 import messaging from '@react-native-firebase/messaging';
@@ -8,11 +8,11 @@ import {
   DrawerContentScrollView,
   DrawerToggleButton
 } from '@react-navigation/drawer';
-import { NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Animated, Easing, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext, GuildProvider } from '../GuildContext';
@@ -53,6 +53,7 @@ import Profile from "./ico/menu/user.svg";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
+const navigationRef = createNavigationContainerRef();
 
 // --- ДИЗАЙН СИСТЕМА ---
 const COLORS = {
@@ -529,7 +530,7 @@ function CustomDrawerContent(props) {
   );
 }
 
-function AppNavigator() {
+function AppNavigator({ onReady }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [showAdmin, setShowAdmin] = React.useState(false);
@@ -592,7 +593,7 @@ function AppNavigator() {
   );
 
   return (
-    <NavigationContainer key={guildId}>
+    <NavigationContainer key={guildId} ref={navigationRef} onReady={onReady}>
       <Drawer.Navigator
         drawerContent={props => <CustomDrawerContent {...props} />}
         initialRouteName="GBG"
@@ -645,6 +646,102 @@ function AppNavigator() {
 }
 
 export default function MainContent() {
+  const pendingNavigationRef = useRef(null);
+  const [navigationReady, setNavigationReady] = useState(false);
+
+  const runWhenNavigationReady = (action) => {
+    if (navigationRef.isReady()) {
+      action();
+      return;
+    }
+    pendingNavigationRef.current = action;
+  };
+
+  useEffect(() => {
+    if (navigationReady && pendingNavigationRef.current) {
+      const action = pendingNavigationRef.current;
+      pendingNavigationRef.current = null;
+      action();
+    }
+  }, [navigationReady]);
+
+  const clearSectorNotifications = async () => {
+    try {
+      const displayed = await notifee.getDisplayedNotifications();
+      const sectorNotifications = displayed.filter(({ notification }) => {
+        const channelId = notification?.android?.channelId;
+        const type = notification?.data?.type;
+        return (
+          type === 'gbg_sector_open' ||
+          channelId === 'gbg_sector' ||
+          channelId === 'gbg_sector_silent'
+        );
+      });
+
+      await Promise.all(
+        sectorNotifications.map((item) => notifee.cancelDisplayedNotification(item.id))
+      );
+    } catch (error) {
+      console.log('❌ Помилка очищення секторних пушів:', error?.message || String(error));
+    }
+  };
+
+  const clearChatNotifications = async (chatId) => {
+    if (!chatId) return;
+    try {
+      const displayed = await notifee.getDisplayedNotifications();
+      const chatNotifications = displayed.filter(({ notification }) => {
+        const type = notification?.data?.type;
+        const notificationChatId = notification?.data?.chatId;
+        return type === 'chat_message' && String(notificationChatId) === String(chatId);
+      });
+
+      await Promise.all(
+        chatNotifications.map((item) => notifee.cancelDisplayedNotification(item.id))
+      );
+    } catch (error) {
+      console.log('❌ Помилка очищення чат-пушів:', error?.message || String(error));
+    }
+  };
+
+  const handleNotificationTap = async (remoteMessage) => {
+    const data = remoteMessage?.data || {};
+    const messageType = data.type;
+
+    if (messageType === 'gbg_sector_open') {
+      await clearSectorNotifications();
+      runWhenNavigationReady(() => {
+        navigationRef.navigate('GBG', { screen: 'GBGScreen' });
+      });
+      return;
+    }
+
+    if (messageType === 'chat_message') {
+      const chatId = data.chatId;
+      if (chatId) {
+        await clearChatNotifications(chatId);
+        runWhenNavigationReady(() => {
+          navigationRef.navigate('ChatList', {
+            screen: 'ChatWindow',
+            params: { chatId },
+          });
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        clearSectorNotifications();
+      }
+    });
+
+    clearSectorNotifications();
+
+    return () => subscription.remove();
+  }, []);
+
   useEffect(() => {
     const resolveNotificationContent = (remoteMessage) => {
       const notificationTitle = remoteMessage?.notification?.title;
@@ -739,6 +836,7 @@ export default function MainContent() {
         await notifee.displayNotification({
           title,
           body,
+          data: remoteMessage?.data || {},
           android: {
             channelId: displayChannelId,
             importance: AndroidImportance.HIGH,
@@ -747,8 +845,9 @@ export default function MainContent() {
         });
       });
 
-      messaging().onNotificationOpenedApp(remoteMessage => {
+      const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
         console.log('Notification caused app to open from background state:', remoteMessage.notification);
+        handleNotificationTap(remoteMessage);
       });
 
       messaging()
@@ -756,19 +855,33 @@ export default function MainContent() {
         .then(remoteMessage => {
           if (remoteMessage) {
             console.log('Notification caused app to open from quit state:', remoteMessage.notification);
+            handleNotificationTap(remoteMessage);
           }
         });
 
-      return unsubscribeOnMessage;
+      const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
+        if (type === EventType.PRESS) {
+          handleNotificationTap({ data: detail?.notification?.data || {} });
+        }
+      });
+
+      return () => {
+        unsubscribeOnMessage();
+        unsubscribeOpenedApp();
+        unsubscribeNotifee();
+      };
     };
 
-    setupPushNotifications();
+    const cleanupPromise = setupPushNotifications();
+    return () => {
+      cleanupPromise?.then((cleanup) => cleanup?.());
+    };
   }, []);
 
   return (
     <GuildProvider>
       <MenuProvider>
-        <AppNavigator />
+        <AppNavigator onReady={() => setNavigationReady(true)} />
       </MenuProvider>
     </GuildProvider>
   );
