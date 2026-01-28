@@ -854,10 +854,7 @@ async function sendPushAndMarkSent(taskId, task, db) {
   try {
     const tgText =
       `<b>${titleText}</b>\n` +
-      `${messageText}\n` +
-      `<code>guildId:</code> ${String(guildId)}\n` +
-      `<code>sector:</code> ${String(sectorId)}\n` +
-      `<code>openTime:</code> ${String(openTime)}`;
+      `${messageText}\n`;
 
     await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
   } catch (e) {

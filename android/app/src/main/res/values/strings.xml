@@ -1,5 +1,5 @@
 <resources>
-  <string name="app_name">GuildChat</string>
+  <string name="app_name">FoEChat</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
   <string name="widget_sectorstop5widget_description" translatable="false">5 секторів, що відкриються найраніше</string>
