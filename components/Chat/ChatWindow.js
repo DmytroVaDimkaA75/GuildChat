@@ -25,6 +25,10 @@ import {
   faMagnifyingGlassPlus,
   faMagnifyingGlassMinus,
   faLink,
+  faMicrophone,
+  faPause,
+  faPlay,
+  faStop,
   faVolumeHigh,
   faVolumeXmark
 } from '@fortawesome/free-solid-svg-icons';
@@ -33,6 +37,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import notifee from '@notifee/react-native';
 import { format } from 'date-fns';
 import { de, es, fr, ru, uk } from 'date-fns/locale';
+import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -124,6 +129,13 @@ const stripHtml = (html = '') =>
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+const formatDuration = (durationMillis = 0) => {
+  const totalSeconds = Math.max(0, Math.round(durationMillis / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
 
 const getHostLabel = (url = '') => {
   try {
@@ -868,6 +880,7 @@ const CompactMessagePreview = ({ message, lines = 1 }) => {
   const text = String(message?.text || '');
   const html = String(message?.html || '');
   const hasImage = Array.isArray(message?.imageUrls) && message.imageUrls.length > 0;
+  const hasAudio = !!message?.audioUrl;
 
   const urls = useMemo(() => {
     const a = extractUrlsFromText(text);
@@ -898,6 +911,17 @@ const CompactMessagePreview = ({ message, lines = 1 }) => {
         <Image source={{ uri: thumb }} style={styles.compactThumb} />
         <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
           {label}
+        </Text>
+      </View>
+    );
+  }
+
+  if (hasAudio) {
+    return (
+      <View style={styles.compactPreviewRow}>
+        <FontAwesomeIcon icon={faMicrophone} size={14} color="#cfcfcf" style={{ marginRight: 8 }} />
+        <Text style={styles.compactPreviewText} numberOfLines={lines} ellipsizeMode="tail">
+          Голосове повідомлення
         </Text>
       </View>
     );
@@ -1089,6 +1113,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [selectedImageUris, setSelectedImageUris] = useState([]);
   const [imageCaption, setImageCaption] = useState('');
   const [captionModalVisible, setCaptionModalVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState(null);
 
   const [fullSizeImageUri, setFullSizeImageUri] = useState(null);
   const [fullSizeImageModalVisible, setFullSizeImageModalVisible] = useState(false);
@@ -1130,6 +1158,9 @@ const ChatWindow = ({ route, navigation }) => {
   const highlightTimerRef = useRef(null);
 
   const flatListRef = useRef(null);
+  const recordingRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const audioPlaybackRef = useRef(null);
   const processedRead = useRef(new Set());
   const insets = useSafeAreaInsets();
 
@@ -1173,6 +1204,25 @@ const ChatWindow = ({ route, navigation }) => {
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
   }, []);
+
+  const stopPlayback = useCallback(async () => {
+    if (audioPlaybackRef.current) {
+      await audioPlaybackRef.current.unloadAsync();
+      audioPlaybackRef.current = null;
+    }
+    setPlayingAudioId(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
+      }
+      stopPlayback().catch(() => {});
+    };
+  }, [stopPlayback]);
 
   useEffect(() => {
     (async () => {
@@ -1600,6 +1650,87 @@ const ChatWindow = ({ route, navigation }) => {
     setCaptionModalVisible(false);
   };
 
+  const handleStartRecording = async () => {
+    if (isRecording || isUploadingAudio) return;
+    if (!guildId || !chatId || !userId) {
+      Alert.alert('Помилка', 'Не вдалося визначити чат для запису.');
+      return;
+    }
+    const permission = await Audio.requestPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Доступ до мікрофона', 'Потрібен доступ до мікрофона для запису голосових повідомлень.');
+      return;
+    }
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false
+    });
+    const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    recordingRef.current = recording;
+    setIsRecording(true);
+    setRecordingDuration(0);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingDuration((prev) => prev + 1000);
+    }, 1000);
+  };
+
+  const handleStopRecording = async () => {
+    if (!isRecording || !recordingRef.current || !guildId || !chatId || !userId) return;
+    setIsRecording(false);
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    const recording = recordingRef.current;
+    recordingRef.current = null;
+    await recording.stopAndUnloadAsync();
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true
+    });
+    const uri = recording.getURI();
+    if (!uri) return;
+    const status = await recording.getStatusAsync();
+    const durationMillis = status?.durationMillis || recordingDuration;
+    const extension = uri.split('.').pop() || 'm4a';
+    setIsUploadingAudio(true);
+    try {
+      const audioRef = storage().ref(`voiceMessages/${chatId}/${uuid.v4()}.${extension}`);
+      await audioRef.putFile(uri);
+      const audioUrl = await audioRef.getDownloadURL();
+      const ref = database().ref(`guilds/${guildId}/chats/${chatId}/messages`).push();
+      await ref.set({
+        senderId: userId,
+        audioUrl,
+        audioDuration: durationMillis,
+        timestamp: Date.now(),
+        status: 'sent',
+        replyTo: replyToMessage?.id || null
+      });
+      setReplyToMessage(null);
+    } catch (error) {
+      Alert.alert('Помилка', 'Не вдалося надіслати голосове повідомлення.');
+    } finally {
+      setIsUploadingAudio(false);
+    }
+  };
+
+  const handleToggleAudioPlayback = async (message) => {
+    if (!message?.audioUrl) return;
+    if (playingAudioId === message.id) {
+      await audioPlaybackRef.current?.pauseAsync();
+      setPlayingAudioId(null);
+      return;
+    }
+    await stopPlayback();
+    const { sound } = await Audio.Sound.createAsync({ uri: message.audioUrl }, { shouldPlay: true });
+    audioPlaybackRef.current = sound;
+    setPlayingAudioId(message.id);
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.didJustFinish) {
+        stopPlayback().catch(() => {});
+      }
+    });
+  };
+
   const handleScheduleSend = (date) => {
     setIsDatePickerVisible(false);
     if (!newMessage.trim()) {
@@ -1927,6 +2058,26 @@ const ChatWindow = ({ route, navigation }) => {
                             </View>
                           )}
 
+                          {!!msg.audioUrl && (
+                            <TouchableOpacity
+                              style={styles.audioContainer}
+                              onPress={() => handleToggleAudioPlayback(msg)}
+                              activeOpacity={0.8}
+                            >
+                              <View style={styles.audioPlayButton}>
+                                <FontAwesomeIcon
+                                  icon={playingAudioId === msg.id ? faPause : faPlay}
+                                  size={14}
+                                  color="#fff"
+                                />
+                              </View>
+                              <View style={styles.audioInfo}>
+                                <Text style={styles.audioLabel}>Голосове повідомлення</Text>
+                                <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+
                           {!!messageText && <FormattedText text={messageText} />}
 
                           {uniqueUrls.map((u) => (
@@ -2062,6 +2213,12 @@ const ChatWindow = ({ route, navigation }) => {
 
             {/* Ввід */}
             <View style={styles.inputArea}>
+              {isRecording && (
+                <View style={styles.recordingBar}>
+                  <View style={styles.recordingDot} />
+                  <Text style={styles.recordingText}>Запис… {formatDuration(recordingDuration)}</Text>
+                </View>
+              )}
               {editMessage && selection.start !== selection.end && (
                 <View style={styles.formatTools}>
                   <TouchableOpacity onPress={() => handleFormatText('**')}>
@@ -2133,6 +2290,14 @@ const ChatWindow = ({ route, navigation }) => {
                   <FontAwesomeIcon icon={faPaperclip} size={22} color="#888" />
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={[styles.micBtn, isRecording && styles.micBtnActive]}
+                  onPress={isRecording ? handleStopRecording : handleStartRecording}
+                  disabled={isUploadingAudio}
+                >
+                  <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} size={18} color="#fff" />
+                </TouchableOpacity>
+
                 {editMessage ? (
                   <TextInput
                     style={[
@@ -2170,6 +2335,7 @@ const ChatWindow = ({ route, navigation }) => {
                   style={[styles.sendBtn, (newMessage.trim() || editMessage) && styles.sendBtnActive]}
                   onPress={handleSend}
                   onLongPress={() => setSendOptionsPopupVisible(true)}
+                  disabled={isRecording || isUploadingAudio}
                 >
                   <FontAwesomeIcon icon={editMessage ? faCheck : faPaperPlane} size={18} color="#fff" />
                 </TouchableOpacity>
@@ -2467,6 +2633,17 @@ const styles = StyleSheet.create({
   replyBarLine: { width: 4, height: '100%', backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
   replyBarTitle: { color: '#3498db', fontWeight: 'bold', fontSize: 12 },
   replyBarText: { color: '#aaa', fontSize: 13, flex: 1 },
+  recordingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    borderRadius: 10,
+    marginBottom: 6
+  },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff3b30', marginRight: 8 },
+  recordingText: { color: '#ffb4ae', fontSize: 13 },
 
   formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 12, marginBottom: 8 },
   inputContainer: {
@@ -2487,6 +2664,18 @@ const styles = StyleSheet.create({
     paddingBottom: INPUT_VERTICAL_PADDING / 2
   },
   attachBtn: { padding: 8 },
+  micBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3a3a3c',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6
+  },
+  micBtnActive: {
+    backgroundColor: '#ff3b30'
+  },
   sendBtn: {
     width: 36,
     height: 36,
@@ -2497,6 +2686,28 @@ const styles = StyleSheet.create({
     marginLeft: 8
   },
   sendBtnActive: { backgroundColor: '#3498db' },
+
+  audioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginTop: 4
+  },
+  audioPlayButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#3498db',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  audioInfo: { flex: 1 },
+  audioLabel: { color: '#fff', fontSize: 14, marginBottom: 2 },
+  audioDuration: { color: '#a8a8a8', fontSize: 12 },
 
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
   readUserRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },

@@ -17,7 +17,13 @@
       "package": "com.vadimkaa75.guildchat",
       "googleServicesFile": "./google-services.json",
       "versionCode": 2,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Дозвольте доступ до мікрофона для запису голосових повідомлень."
+      }
     },
     "plugins": [
       "@react-native-firebase/app",
