@@ -76,6 +76,7 @@ import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const AUDIO_WAVEFORM_BARS = [8, 14, 10, 18, 12, 20, 9, 16, 11, 19, 10, 15, 8, 17, 12, 21, 9, 16, 11, 14];
 const locales = { uk, ru, es, fr, de };
 
 const INPUT_LINE_HEIGHT = 20;
@@ -2064,16 +2065,22 @@ const ChatWindow = ({ route, navigation }) => {
                               onPress={() => handleToggleAudioPlayback(msg)}
                               activeOpacity={0.8}
                             >
-                              <View style={styles.audioPlayButton}>
-                                <FontAwesomeIcon
-                                  icon={playingAudioId === msg.id ? faPause : faPlay}
-                                  size={14}
-                                  color="#fff"
-                                />
-                              </View>
-                              <View style={styles.audioInfo}>
-                                <Text style={styles.audioLabel}>Голосове повідомлення</Text>
-                                <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                              <View style={styles.audioRow}>
+                                <View style={styles.audioPlayButton}>
+                                  <FontAwesomeIcon
+                                    icon={playingAudioId === msg.id ? faPause : faPlay}
+                                    size={14}
+                                    color="#fff"
+                                  />
+                                </View>
+                                <View style={styles.audioWaveformBlock}>
+                                  <View style={styles.audioWaveform}>
+                                    {AUDIO_WAVEFORM_BARS.map((height, index) => (
+                                      <View key={`${msg.id}-bar-${index}`} style={[styles.audioWaveBar, { height }]} />
+                                    ))}
+                                  </View>
+                                  <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                                </View>
                               </View>
                             </TouchableOpacity>
                           )}
@@ -2694,8 +2701,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 12,
-    marginTop: 4
+    marginTop: 4,
+    minWidth: 220
   },
+  audioRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   audioPlayButton: {
     width: 28,
     height: 28,
@@ -2705,8 +2714,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10
   },
-  audioInfo: { flex: 1 },
-  audioLabel: { color: '#fff', fontSize: 14, marginBottom: 2 },
+  audioWaveformBlock: { flex: 1, justifyContent: 'center' },
+  audioWaveform: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  audioWaveBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#9fc5e8',
+    marginRight: 2
+  },
   audioDuration: { color: '#a8a8a8', fontSize: 12 },
 
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
