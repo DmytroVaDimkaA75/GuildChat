@@ -76,10 +76,11 @@ import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const WAVEFORM_BAR_COUNT = 28;
-const WAVEFORM_MIN_HEIGHT = 6;
-const WAVEFORM_MAX_HEIGHT = 22;
-const WAVEFORM_MIN_DB = -60;
+const WAVEFORM_BAR_COUNT = 48;
+const WAVEFORM_MIN_HEIGHT = 4;
+const WAVEFORM_MAX_HEIGHT = 24;
+const WAVEFORM_MIN_DB = -80;
+const WAVEFORM_GAMMA = 1.4;
 const locales = { uk, ru, es, fr, de };
 
 const INPUT_LINE_HEIGHT = 20;
@@ -150,16 +151,17 @@ const buildWaveform = (meterings = [], barCount = WAVEFORM_BAR_COUNT) => {
     const start = i * chunkSize;
     const end = Math.min(start + chunkSize, clean.length);
     const chunk = clean.slice(start, end);
-    const avg = chunk.length ? chunk.reduce((sum, value) => sum + value, 0) / chunk.length : clean[clean.length - 1];
-    const normalized = Math.max(0, Math.min(1, (avg - WAVEFORM_MIN_DB) / (0 - WAVEFORM_MIN_DB)));
-    waveform.push(Number.isFinite(normalized) ? normalized : 0);
+    const peak = chunk.length ? Math.max(...chunk) : clean[clean.length - 1];
+    const normalized = Math.max(0, Math.min(1, (peak - WAVEFORM_MIN_DB) / (0 - WAVEFORM_MIN_DB)));
+    const emphasized = Math.pow(normalized, WAVEFORM_GAMMA);
+    waveform.push(Number.isFinite(emphasized) ? emphasized : 0);
   }
   return waveform;
 };
 
 const getWaveformBars = (waveform) => {
   if (Array.isArray(waveform) && waveform.length) return waveform;
-  return Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.2);
+  return Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.1);
 };
 
 const getHostLabel = (url = '') => {
@@ -1142,6 +1144,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [audioPlaybackState, setAudioPlaybackState] = useState({ id: null, position: 0, duration: 0 });
 
   const [fullSizeImageUri, setFullSizeImageUri] = useState(null);
   const [fullSizeImageModalVisible, setFullSizeImageModalVisible] = useState(false);
@@ -1237,6 +1240,7 @@ const ChatWindow = ({ route, navigation }) => {
       audioPlaybackRef.current = null;
     }
     setPlayingAudioId(null);
+    setAudioPlaybackState({ id: null, position: 0, duration: 0 });
   }, []);
 
   useEffect(() => {
@@ -1759,6 +1763,7 @@ const ChatWindow = ({ route, navigation }) => {
     if (playingAudioId === message.id) {
       await audioPlaybackRef.current?.pauseAsync();
       setPlayingAudioId(null);
+      setAudioPlaybackState((prev) => ({ ...prev, id: null }));
       return;
     }
     await stopPlayback();
@@ -1766,6 +1771,12 @@ const ChatWindow = ({ route, navigation }) => {
     audioPlaybackRef.current = sound;
     setPlayingAudioId(message.id);
     sound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) return;
+      setAudioPlaybackState({
+        id: message.id,
+        position: status.positionMillis || 0,
+        duration: status.durationMillis || message.audioDuration || 0
+      });
       if (status.didJustFinish) {
         stopPlayback().catch(() => {});
       }
@@ -2115,18 +2126,28 @@ const ChatWindow = ({ route, navigation }) => {
                                 </View>
                                 <View style={styles.audioWaveformBlock}>
                                   <View style={styles.audioWaveform}>
-                                    {getWaveformBars(msg.audioWaveform).map((value, index) => (
-                                      <View
-                                        key={`${msg.id}-bar-${index}`}
-                                        style={[
-                                          styles.audioWaveBar,
-                                          {
-                                            height:
-                                              WAVEFORM_MIN_HEIGHT + value * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT)
-                                          }
-                                        ]}
-                                      />
-                                    ))}
+                                    {(() => {
+                                      const bars = getWaveformBars(msg.audioWaveform);
+                                      const progress =
+                                        audioPlaybackState.id === msg.id && audioPlaybackState.duration
+                                          ? audioPlaybackState.position / audioPlaybackState.duration
+                                          : 0;
+                                      const playedBars = Math.round(progress * bars.length);
+                                      return bars.map((value, index) => (
+                                        <View
+                                          key={`${msg.id}-bar-${index}`}
+                                          style={[
+                                            styles.audioWaveBar,
+                                            index < playedBars && styles.audioWaveBarPlayed,
+                                            {
+                                              height:
+                                                WAVEFORM_MIN_HEIGHT +
+                                                value * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT)
+                                            }
+                                          ]}
+                                        />
+                                      ));
+                                    })()}
                                   </View>
                                   <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
                                 </View>
@@ -2770,6 +2791,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#9fc5e8',
     marginRight: 2
+  },
+  audioWaveBarPlayed: {
+    backgroundColor: '#4fc3ff'
   },
   audioDuration: { color: '#a8a8a8', fontSize: 12 },
 
