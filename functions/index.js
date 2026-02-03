@@ -472,6 +472,106 @@ exports.onGbgMapWrite = onValueWritten(
  * =====================================================================
  */
 
+const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db }) => {
+  const senderId = messageData.senderId;
+  const messageText = messageData.text || "Отправлено изображение";
+
+  const chatRef = db.ref(`/guilds/${guildId}/chats/${chatId}`);
+  const chatSnapshot = await chatRef.once("value");
+  const chatData = chatSnapshot.val();
+  if (!chatData || !chatData.members) return;
+
+  const members = Object.keys(chatData.members);
+  const senderProfile = await db.ref(`/users/${senderId}`).once("value");
+  const senderName = senderProfile.val()?.userName || "Новое сообщение";
+
+  // ✅ Отримувачі (без відправника)
+  const recipients = members.filter((m) => m !== senderId);
+  if (!recipients.length) return;
+
+  const nowMs = Date.now();
+
+  // ✅ Для кожного отримувача визначаємо: token + (members flag) + (schedule)
+  const userInfos = await Promise.all(
+    recipients.map(async (uid) => {
+      const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+      const token = tokenSnap.exists() ? tokenSnap.val() : null;
+      if (!token) return { uid, token: null, sound: false };
+
+      // ✅ якщо members/{uid} === true -> звук може бути, інакше завжди тихо
+      const chatSoundEnabled = chatData.members?.[uid] === true;
+      if (!chatSoundEnabled) return { uid, token, sound: false };
+
+      // ✅ якщо графік дозволяє -> зі звуком
+      let soundBySchedule = true;
+      try {
+        const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
+        soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
+      } catch (e) {
+        logger.error("[sendChatNotification] schedule check error:", e);
+        soundBySchedule = true;
+      }
+
+      return { uid, token, sound: !!soundBySchedule };
+    })
+  );
+
+  const soundTokens = userInfos.filter((x) => x.token && x.sound).map((x) => x.token);
+  const silentTokens = userInfos.filter((x) => x.token && !x.sound).map((x) => x.token);
+
+  const titleText = senderName;
+  const bodyText = messageText;
+
+  // ✅ 1) Зі звуком
+  if (soundTokens.length > 0) {
+    const payloadSound = {
+      data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "1" },
+      android: {
+        priority: "high",
+        notification: {
+          title: titleText,
+          body: bodyText,
+          sound: "smeh_minonovhasms",
+          channel_id: "chat_messages",
+        },
+      },
+      apns: {
+        payload: { aps: { alert: { title: titleText, body: bodyText }, sound: "default", "content-available": 1 } },
+      },
+    };
+
+    try {
+      await admin.messaging().sendEachForMulticast({ tokens: soundTokens, ...payloadSound });
+    } catch (e) {
+      logger.error("[sendChatNotification] sound send error:", e);
+    }
+  }
+
+  // ✅ 2) Тихо (без звуку)
+  if (silentTokens.length > 0) {
+    const payloadSilent = {
+      data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "0" },
+      android: {
+        priority: "high",
+        notification: {
+          title: titleText,
+          body: bodyText,
+          channel_id: "chat_messages_silent",
+        },
+      },
+      apns: {
+        payload: { aps: { alert: { title: titleText, body: bodyText }, "content-available": 1 } },
+      },
+    };
+
+    try {
+      await admin.messaging().sendEachForMulticast({ tokens: silentTokens, ...payloadSilent });
+    } catch (e) {
+      logger.error("[sendChatNotification] silent send error:", e);
+    }
+  }
+};
+
 exports.sendChatNotification = onValueCreated(
   {
     ref: "/guilds/{guildId}/chats/{chatId}/messages/{messageId}",
@@ -482,104 +582,7 @@ exports.sendChatNotification = onValueCreated(
     const messageData = event.data.val();
     if (!messageData) return null;
 
-    const senderId = messageData.senderId;
-    const messageText = messageData.text || "Отправлено изображение";
-
-    const chatRef = admin.database().ref(`/guilds/${guildId}/chats/${chatId}`);
-    const chatSnapshot = await chatRef.once("value");
-    const chatData = chatSnapshot.val();
-    if (!chatData || !chatData.members) return null;
-
-    const members = Object.keys(chatData.members);
-    const senderProfile = await admin.database().ref(`/users/${senderId}`).once("value");
-    const senderName = senderProfile.val()?.userName || "Новое сообщение";
-
-    // ✅ Отримувачі (без відправника)
-    const recipients = members.filter((m) => m !== senderId);
-    if (!recipients.length) return null;
-
-    const nowMs = Date.now();
-
-    // ✅ Для кожного отримувача визначаємо: token + (members flag) + (schedule)
-    const userInfos = await Promise.all(
-      recipients.map(async (uid) => {
-        const tokenSnap = await admin.database().ref(`/users/${uid}/fcmToken`).once("value");
-        const token = tokenSnap.exists() ? tokenSnap.val() : null;
-        if (!token) return { uid, token: null, sound: false };
-
-        // ✅ якщо members/{uid} === true -> звук може бути, інакше завжди тихо
-        const chatSoundEnabled = chatData.members?.[uid] === true;
-        if (!chatSoundEnabled) return { uid, token, sound: false };
-
-        // ✅ якщо графік дозволяє -> зі звуком
-        let soundBySchedule = true;
-        try {
-          const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
-          soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
-        } catch (e) {
-          logger.error("[sendChatNotification] schedule check error:", e);
-          soundBySchedule = true;
-        }
-
-        return { uid, token, sound: !!soundBySchedule };
-      })
-    );
-
-    const soundTokens = userInfos.filter((x) => x.token && x.sound).map((x) => x.token);
-    const silentTokens = userInfos.filter((x) => x.token && !x.sound).map((x) => x.token);
-
-    const titleText = senderName;
-    const bodyText = messageText;
-
-    // ✅ 1) Зі звуком
-    if (soundTokens.length > 0) {
-      const payloadSound = {
-        data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "1" },
-        android: {
-          priority: "high",
-          notification: {
-            title: titleText,
-            body: bodyText,
-            sound: "smeh_minonovhasms",
-            channel_id: "chat_messages",
-          },
-        },
-        apns: {
-          payload: { aps: { alert: { title: titleText, body: bodyText }, sound: "default", "content-available": 1 } },
-        },
-      };
-
-      try {
-        await admin.messaging().sendEachForMulticast({ tokens: soundTokens, ...payloadSound });
-      } catch (e) {
-        logger.error("[sendChatNotification] sound send error:", e);
-      }
-    }
-
-    // ✅ 2) Тихо (без звуку)
-    if (silentTokens.length > 0) {
-      const payloadSilent = {
-        data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "0" },
-        android: {
-          priority: "high",
-          notification: {
-            title: titleText,
-            body: bodyText,
-            channel_id: "chat_messages_silent",
-          },
-        },
-        apns: {
-          payload: { aps: { alert: { title: titleText, body: bodyText }, "content-available": 1 } },
-        },
-      };
-
-      try {
-        await admin.messaging().sendEachForMulticast({ tokens: silentTokens, ...payloadSilent });
-      } catch (e) {
-        logger.error("[sendChatNotification] silent send error:", e);
-      }
-    }
-
+    await sendChatNotificationForMessage({ guildId, chatId, messageData, db: admin.database() });
     return null;
   }
 );
@@ -589,32 +592,44 @@ exports.sendScheduledMessages = onSchedule(
   async (event) => {
     const now = Date.now();
     const db = admin.database();
-    const scheduledMessagesRef = db.ref("scheduledMessages");
-    const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
-    const snapshot = await query.once("value");
-    if (!snapshot.exists()) return null;
+    const guildsSnap = await db.ref("guilds").once("value");
+    if (!guildsSnap.exists()) return null;
 
-    const promises = [];
-    snapshot.forEach((childSnapshot) => {
-      const messageId = childSnapshot.key;
-      const messageData = childSnapshot.val();
-      if (messageData.sendAt <= now) {
-        promises.push(moveMessageToChat(messageId, messageData, db));
-      }
+    const guildIds = Object.keys(guildsSnap.val() || {});
+    const guildPromises = guildIds.map(async (guildId) => {
+      const scheduledMessagesRef = db.ref(`/guilds/${guildId}/scheduledMessages`);
+      const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
+      const snapshot = await query.once("value");
+      if (!snapshot.exists()) return;
+
+      const promises = [];
+      snapshot.forEach((childSnapshot) => {
+        const messageId = childSnapshot.key;
+        const messageData = childSnapshot.val();
+        if (messageData.sendAt <= now) {
+          promises.push(moveMessageToChat({ guildId, messageId, messageData, db }));
+        }
+      });
+
+      await Promise.all(promises);
     });
 
-    await Promise.all(promises);
+    await Promise.all(guildPromises);
     return null;
   }
 );
 
-async function moveMessageToChat(messageId, messageData, db) {
-  const { guildId, chatId, text, senderId } = messageData;
-  if (!guildId || !chatId) return db.ref(`scheduledMessages/${messageId}`).update({ status: "error" });
+async function moveMessageToChat({ guildId, messageId, messageData, db }) {
+  const { chatId, text, senderId } = messageData;
+  if (!guildId) return null;
+  if (!chatId) {
+    return db.ref(`/guilds/${guildId}/scheduledMessages/${messageId}`).update({ status: "error" });
+  }
   const chatMessagesRef = db.ref(`/guilds/${guildId}/chats/${chatId}/messages`);
   const finalMessage = { senderId, text, status: "sent", timestamp: admin.database.ServerValue.TIMESTAMP };
   await chatMessagesRef.push(finalMessage);
-  return db.ref(`scheduledMessages/${messageId}`).update({ status: "sent" });
+  await sendChatNotificationForMessage({ guildId, chatId, messageData, db });
+  return db.ref(`/guilds/${guildId}/scheduledMessages/${messageId}`).remove();
 }
 
 exports.syncGbgNotifications = onValueWritten(
@@ -623,13 +638,9 @@ exports.syncGbgNotifications = onValueWritten(
     region: "europe-west1",
   },
   async (event) => {
-    const triggeredGuildId = event.params.guildId;
-    if (triggeredGuildId && !String(triggeredGuildId).includes("10821")) {
-      return null;
-    }
-
-    const guildId = "ru11_10821";
-    const shortGuildId = "10821";
+    const guildId = String(event.params.guildId || "");
+    if (!guildId) return null;
+    const shortGuildId = guildId.includes("_") ? guildId.split("_").pop() : guildId;
 
     const db = admin.database();
     const LEAD_TIME_SECONDS = 120;
@@ -641,7 +652,7 @@ exports.syncGbgNotifications = onValueWritten(
     const [allSectorsSnap, mapTopologySnap, currentQueueSnap] = await Promise.all([
       db.ref(`/guilds/${guildId}/GBG/sectors`).once("value"),
       db.ref(`maps/${mapName}`).once("value"),
-      db.ref("gbgNotificationQueue").orderByChild("guildId").equalTo(guildId).once("value"),
+      db.ref(`/guilds/${guildId}/GBG/gbgNotificationQueue`).once("value"),
     ]);
 
     if (!allSectorsSnap.exists() || !mapTopologySnap.exists()) return null;
@@ -718,7 +729,7 @@ exports.syncGbgNotifications = onValueWritten(
           }
         }
 
-        updates[`gbgNotificationQueue/${taskId}`] = {
+        updates[`/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`] = {
           guildId: String(guildId),
           shortGuildId: shortGuildId,
           sectorId: String(targetId),
@@ -734,10 +745,10 @@ exports.syncGbgNotifications = onValueWritten(
       if (!processedTaskIds.has(taskId)) {
         const task = currentQueue[taskId];
         if (task.status === "pending") {
-          updates[`gbgNotificationQueue/${taskId}`] = null;
+          updates[`/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`] = null;
         } else if (task.status === "sent") {
           if (task.openTime < nowInSeconds - 21600) {
-            updates[`gbgNotificationQueue/${taskId}`] = null;
+            updates[`/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`] = null;
           }
         }
       }
@@ -770,29 +781,37 @@ exports.processGbgNotificationQueue = onSchedule(
   async (event) => {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const db = admin.database();
-    const queueRef = db.ref("gbgNotificationQueue");
+    const guildsSnap = await db.ref("guilds").once("value");
+    if (!guildsSnap.exists()) return null;
 
-    const query = queueRef.orderByChild("notificationTime").endAt(nowInSeconds);
-    const snapshot = await query.once("value");
+    const guildIds = Object.keys(guildsSnap.val() || {});
+    const guildPromises = guildIds.map(async (guildId) => {
+      const queueRef = db.ref(`/guilds/${guildId}/GBG/gbgNotificationQueue`);
+      const query = queueRef.orderByChild("notificationTime").endAt(nowInSeconds);
+      const snapshot = await query.once("value");
 
-    if (!snapshot.exists()) return null;
+      if (!snapshot.exists()) return;
 
-    const promises = [];
-    snapshot.forEach((child) => {
-      const task = child.val();
-      const key = child.key;
+      const promises = [];
+      snapshot.forEach((child) => {
+        const task = child.val();
+        const taskId = child.key;
+        const queuePath = `/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`;
 
-      if (task.status === "pending") {
-        promises.push(sendPushAndMarkSent(key, task, db));
-      }
+        if (task.status === "pending") {
+          promises.push(sendPushAndMarkSent({ taskId, task, db, queuePath }));
+        }
+      });
+
+      await Promise.all(promises);
     });
 
-    await Promise.all(promises);
+    await Promise.all(guildPromises);
     return null;
   }
 );
 
-async function sendPushAndMarkSent(taskId, task, db) {
+async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
   const { guildId, sectorId, army, openTime } = task;
   const nowInSeconds = Math.floor(Date.now() / 1000);
 
@@ -803,17 +822,17 @@ async function sendPushAndMarkSent(taskId, task, db) {
 
     const correctNotifyTime = openTime - 120;
 
-    return db.ref(`gbgNotificationQueue/${taskId}`).update({
+    return db.ref(queuePath).update({
       notificationTime: correctNotifyTime,
       status: "pending",
     });
   }
 
-  await db.ref(`gbgNotificationQueue/${taskId}`).update({ status: "processing" });
+  await db.ref(queuePath).update({ status: "processing" });
 
   const membersSnap = await db.ref(`/guilds/${guildId}/guildUsers`).once("value");
   if (!membersSnap.exists()) {
-    return db.ref(`gbgNotificationQueue/${taskId}`).remove();
+    return db.ref(queuePath).remove();
   }
 
   const memberIds = Object.keys(membersSnap.val());
@@ -915,7 +934,7 @@ async function sendPushAndMarkSent(taskId, task, db) {
     }
   }
 
-  return db.ref(`gbgNotificationQueue/${taskId}`).update({
+  return db.ref(queuePath).update({
     status: "sent",
     sentAt: admin.database.ServerValue.TIMESTAMP,
   });

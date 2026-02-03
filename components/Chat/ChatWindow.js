@@ -1755,7 +1755,7 @@ const ChatWindow = ({ route, navigation }) => {
       replyTo: replyToMessage?.id || null
     };
     database()
-      .ref('scheduledMessages')
+      .ref(`guilds/${guildId}/scheduledMessages`)
       .push(scheduledMessageData)
       .then(() => {
         setNewMessage('');
