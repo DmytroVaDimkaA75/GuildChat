@@ -76,6 +76,12 @@ import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const WAVEFORM_BAR_COUNT = 60;
+const WAVEFORM_MIN_HEIGHT = 2;
+const WAVEFORM_MAX_HEIGHT = 28;
+const WAVEFORM_MIN_DB = -80;
+const WAVEFORM_GAMMA = 1.4;
+const WAVEFORM_GRID_LINES = [0.2, 0.4, 0.6, 0.8];
 const locales = { uk, ru, es, fr, de };
 
 const INPUT_LINE_HEIGHT = 20;
@@ -135,6 +141,28 @@ const formatDuration = (durationMillis = 0) => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const buildWaveform = (meterings = [], barCount = WAVEFORM_BAR_COUNT) => {
+  const clean = meterings.filter((value) => Number.isFinite(value));
+  if (!clean.length) return [];
+  const chunkSize = Math.max(1, Math.floor(clean.length / barCount));
+  const waveform = [];
+  for (let i = 0; i < barCount; i += 1) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, clean.length);
+    const chunk = clean.slice(start, end);
+    const peak = chunk.length ? Math.max(...chunk) : clean[clean.length - 1];
+    const normalized = Math.max(0, Math.min(1, (peak - WAVEFORM_MIN_DB) / (0 - WAVEFORM_MIN_DB)));
+    const emphasized = Math.pow(normalized, WAVEFORM_GAMMA);
+    waveform.push(Number.isFinite(emphasized) ? emphasized : 0);
+  }
+  return waveform;
+};
+
+const getWaveformBars = (waveform) => {
+  if (Array.isArray(waveform) && waveform.length) return waveform;
+  return Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.1);
 };
 
 const getHostLabel = (url = '') => {
@@ -1117,6 +1145,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [audioPlaybackState, setAudioPlaybackState] = useState({ id: null, position: 0, duration: 0 });
 
   const [fullSizeImageUri, setFullSizeImageUri] = useState(null);
   const [fullSizeImageModalVisible, setFullSizeImageModalVisible] = useState(false);
@@ -1161,6 +1190,7 @@ const ChatWindow = ({ route, navigation }) => {
   const recordingRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const audioPlaybackRef = useRef(null);
+  const recordingMeteringsRef = useRef([]);
   const processedRead = useRef(new Set());
   const insets = useSafeAreaInsets();
 
@@ -1211,6 +1241,7 @@ const ChatWindow = ({ route, navigation }) => {
       audioPlaybackRef.current = null;
     }
     setPlayingAudioId(null);
+    setAudioPlaybackState({ id: null, position: 0, duration: 0 });
   }, []);
 
   useEffect(() => {
@@ -1666,7 +1697,20 @@ const ChatWindow = ({ route, navigation }) => {
       playsInSilentModeIOS: true,
       staysActiveInBackground: false
     });
-    const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    recordingMeteringsRef.current = [];
+    const recordingOptions = {
+      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      isMeteringEnabled: true
+    };
+    const { recording } = await Audio.Recording.createAsync(
+      recordingOptions,
+      (status) => {
+        if (status.isRecording && Number.isFinite(status.metering)) {
+          recordingMeteringsRef.current.push(status.metering);
+        }
+      },
+      100
+    );
     recordingRef.current = recording;
     setIsRecording(true);
     setRecordingDuration(0);
@@ -1690,6 +1734,7 @@ const ChatWindow = ({ route, navigation }) => {
     if (!uri) return;
     const status = await recording.getStatusAsync();
     const durationMillis = status?.durationMillis || recordingDuration;
+    const waveform = buildWaveform(recordingMeteringsRef.current);
     const extension = uri.split('.').pop() || 'm4a';
     setIsUploadingAudio(true);
     try {
@@ -1701,6 +1746,7 @@ const ChatWindow = ({ route, navigation }) => {
         senderId: userId,
         audioUrl,
         audioDuration: durationMillis,
+        audioWaveform: waveform,
         timestamp: Date.now(),
         status: 'sent',
         replyTo: replyToMessage?.id || null
@@ -1718,6 +1764,7 @@ const ChatWindow = ({ route, navigation }) => {
     if (playingAudioId === message.id) {
       await audioPlaybackRef.current?.pauseAsync();
       setPlayingAudioId(null);
+      setAudioPlaybackState((prev) => ({ ...prev, id: null }));
       return;
     }
     await stopPlayback();
@@ -1725,6 +1772,12 @@ const ChatWindow = ({ route, navigation }) => {
     audioPlaybackRef.current = sound;
     setPlayingAudioId(message.id);
     sound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) return;
+      setAudioPlaybackState({
+        id: message.id,
+        position: status.positionMillis || 0,
+        duration: status.durationMillis || message.audioDuration || 0
+      });
       if (status.didJustFinish) {
         stopPlayback().catch(() => {});
       }
@@ -2064,16 +2117,49 @@ const ChatWindow = ({ route, navigation }) => {
                               onPress={() => handleToggleAudioPlayback(msg)}
                               activeOpacity={0.8}
                             >
-                              <View style={styles.audioPlayButton}>
-                                <FontAwesomeIcon
-                                  icon={playingAudioId === msg.id ? faPause : faPlay}
-                                  size={14}
-                                  color="#fff"
-                                />
-                              </View>
-                              <View style={styles.audioInfo}>
-                                <Text style={styles.audioLabel}>Голосове повідомлення</Text>
-                                <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                              <View style={styles.audioRow}>
+                                <View style={styles.audioPlayButton}>
+                                  <FontAwesomeIcon
+                                    icon={playingAudioId === msg.id ? faPause : faPlay}
+                                    size={14}
+                                    color="#fff"
+                                  />
+                                </View>
+                                <View style={styles.audioWaveformBlock}>
+                                  <View style={styles.audioWaveformGrid}>
+                                    {WAVEFORM_GRID_LINES.map((position) => (
+                                      <View
+                                        key={`${msg.id}-grid-${position}`}
+                                        style={[styles.audioWaveformGridLine, { top: `${position * 100}%` }]}
+                                      />
+                                    ))}
+                                  </View>
+                                  <View style={styles.audioWaveform}>
+                                    {(() => {
+                                      const bars = getWaveformBars(msg.audioWaveform);
+                                      const progress =
+                                        audioPlaybackState.id === msg.id && audioPlaybackState.duration
+                                          ? audioPlaybackState.position / audioPlaybackState.duration
+                                          : 0;
+                                      const playedBars = Math.round(progress * bars.length);
+                                      return bars.map((value, index) => (
+                                        <View
+                                          key={`${msg.id}-bar-${index}`}
+                                          style={[
+                                            styles.audioWaveBar,
+                                            index < playedBars && styles.audioWaveBarPlayed,
+                                            {
+                                              height:
+                                                WAVEFORM_MIN_HEIGHT +
+                                                value * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT)
+                                            }
+                                          ]}
+                                        />
+                                      ));
+                                    })()}
+                                  </View>
+                                  <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                                </View>
                               </View>
                             </TouchableOpacity>
                           )}
@@ -2694,8 +2780,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 12,
-    marginTop: 4
+    marginTop: 4,
+    minWidth: 220
   },
+  audioRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   audioPlayButton: {
     width: 28,
     height: 28,
@@ -2705,8 +2793,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10
   },
-  audioInfo: { flex: 1 },
-  audioLabel: { color: '#fff', fontSize: 14, marginBottom: 2 },
+  audioWaveformBlock: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
+  audioWaveform: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    width: '100%',
+    height: WAVEFORM_MAX_HEIGHT,
+    marginBottom: 4
+  },
+  audioWaveformGrid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
+  },
+  audioWaveformGridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)'
+  },
+  audioWaveBar: {
+    width: 2,
+    borderRadius: 2,
+    backgroundColor: '#9fc5e8'
+  },
+  audioWaveBarPlayed: {
+    backgroundColor: '#4fc3ff'
+  },
   audioDuration: { color: '#a8a8a8', fontSize: 12 },
 
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
