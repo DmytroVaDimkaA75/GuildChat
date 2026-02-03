@@ -76,6 +76,10 @@ import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const WAVEFORM_BAR_COUNT = 28;
+const WAVEFORM_MIN_HEIGHT = 6;
+const WAVEFORM_MAX_HEIGHT = 22;
+const WAVEFORM_MIN_DB = -60;
 const locales = { uk, ru, es, fr, de };
 
 const INPUT_LINE_HEIGHT = 20;
@@ -135,6 +139,27 @@ const formatDuration = (durationMillis = 0) => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const buildWaveform = (meterings = [], barCount = WAVEFORM_BAR_COUNT) => {
+  const clean = meterings.filter((value) => Number.isFinite(value));
+  if (!clean.length) return [];
+  const chunkSize = Math.max(1, Math.floor(clean.length / barCount));
+  const waveform = [];
+  for (let i = 0; i < barCount; i += 1) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, clean.length);
+    const chunk = clean.slice(start, end);
+    const avg = chunk.length ? chunk.reduce((sum, value) => sum + value, 0) / chunk.length : clean[clean.length - 1];
+    const normalized = Math.max(0, Math.min(1, (avg - WAVEFORM_MIN_DB) / (0 - WAVEFORM_MIN_DB)));
+    waveform.push(Number.isFinite(normalized) ? normalized : 0);
+  }
+  return waveform;
+};
+
+const getWaveformBars = (waveform) => {
+  if (Array.isArray(waveform) && waveform.length) return waveform;
+  return Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.2);
 };
 
 const getHostLabel = (url = '') => {
@@ -1161,6 +1186,7 @@ const ChatWindow = ({ route, navigation }) => {
   const recordingRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const audioPlaybackRef = useRef(null);
+  const recordingMeteringsRef = useRef([]);
   const processedRead = useRef(new Set());
   const insets = useSafeAreaInsets();
 
@@ -1666,7 +1692,20 @@ const ChatWindow = ({ route, navigation }) => {
       playsInSilentModeIOS: true,
       staysActiveInBackground: false
     });
-    const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    recordingMeteringsRef.current = [];
+    const recordingOptions = {
+      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      isMeteringEnabled: true
+    };
+    const { recording } = await Audio.Recording.createAsync(
+      recordingOptions,
+      (status) => {
+        if (status.isRecording && Number.isFinite(status.metering)) {
+          recordingMeteringsRef.current.push(status.metering);
+        }
+      },
+      100
+    );
     recordingRef.current = recording;
     setIsRecording(true);
     setRecordingDuration(0);
@@ -1690,6 +1729,7 @@ const ChatWindow = ({ route, navigation }) => {
     if (!uri) return;
     const status = await recording.getStatusAsync();
     const durationMillis = status?.durationMillis || recordingDuration;
+    const waveform = buildWaveform(recordingMeteringsRef.current);
     const extension = uri.split('.').pop() || 'm4a';
     setIsUploadingAudio(true);
     try {
@@ -1701,6 +1741,7 @@ const ChatWindow = ({ route, navigation }) => {
         senderId: userId,
         audioUrl,
         audioDuration: durationMillis,
+        audioWaveform: waveform,
         timestamp: Date.now(),
         status: 'sent',
         replyTo: replyToMessage?.id || null
@@ -2064,16 +2105,31 @@ const ChatWindow = ({ route, navigation }) => {
                               onPress={() => handleToggleAudioPlayback(msg)}
                               activeOpacity={0.8}
                             >
-                              <View style={styles.audioPlayButton}>
-                                <FontAwesomeIcon
-                                  icon={playingAudioId === msg.id ? faPause : faPlay}
-                                  size={14}
-                                  color="#fff"
-                                />
-                              </View>
-                              <View style={styles.audioInfo}>
-                                <Text style={styles.audioLabel}>Голосове повідомлення</Text>
-                                <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                              <View style={styles.audioRow}>
+                                <View style={styles.audioPlayButton}>
+                                  <FontAwesomeIcon
+                                    icon={playingAudioId === msg.id ? faPause : faPlay}
+                                    size={14}
+                                    color="#fff"
+                                  />
+                                </View>
+                                <View style={styles.audioWaveformBlock}>
+                                  <View style={styles.audioWaveform}>
+                                    {getWaveformBars(msg.audioWaveform).map((value, index) => (
+                                      <View
+                                        key={`${msg.id}-bar-${index}`}
+                                        style={[
+                                          styles.audioWaveBar,
+                                          {
+                                            height:
+                                              WAVEFORM_MIN_HEIGHT + value * (WAVEFORM_MAX_HEIGHT - WAVEFORM_MIN_HEIGHT)
+                                          }
+                                        ]}
+                                      />
+                                    ))}
+                                  </View>
+                                  <Text style={styles.audioDuration}>{formatDuration(msg.audioDuration)}</Text>
+                                </View>
                               </View>
                             </TouchableOpacity>
                           )}
@@ -2694,8 +2750,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 12,
-    marginTop: 4
+    marginTop: 4,
+    minWidth: 220
   },
+  audioRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   audioPlayButton: {
     width: 28,
     height: 28,
@@ -2705,8 +2763,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10
   },
-  audioInfo: { flex: 1 },
-  audioLabel: { color: '#fff', fontSize: 14, marginBottom: 2 },
+  audioWaveformBlock: { flex: 1, justifyContent: 'center' },
+  audioWaveform: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  audioWaveBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#9fc5e8',
+    marginRight: 2
+  },
   audioDuration: { color: '#a8a8a8', fontSize: 12 },
 
   readReceiptOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12 },
