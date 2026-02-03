@@ -76,11 +76,12 @@ import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-const WAVEFORM_BAR_COUNT = 48;
-const WAVEFORM_MIN_HEIGHT = 4;
-const WAVEFORM_MAX_HEIGHT = 24;
+const WAVEFORM_BAR_COUNT = 60;
+const WAVEFORM_MIN_HEIGHT = 2;
+const WAVEFORM_MAX_HEIGHT = 28;
 const WAVEFORM_MIN_DB = -80;
 const WAVEFORM_GAMMA = 1.4;
+const WAVEFORM_GRID_LINES = [0.2, 0.4, 0.6, 0.8];
 const locales = { uk, ru, es, fr, de };
 
 const INPUT_LINE_HEIGHT = 20;
@@ -2125,6 +2126,14 @@ const ChatWindow = ({ route, navigation }) => {
                                   />
                                 </View>
                                 <View style={styles.audioWaveformBlock}>
+                                  <View style={styles.audioWaveformGrid}>
+                                    {WAVEFORM_GRID_LINES.map((position) => (
+                                      <View
+                                        key={`${msg.id}-grid-${position}`}
+                                        style={[styles.audioWaveformGridLine, { top: `${position * 100}%` }]}
+                                      />
+                                    ))}
+                                  </View>
                                   <View style={styles.audioWaveform}>
                                     {(() => {
                                       const bars = getWaveformBars(msg.audioWaveform);
@@ -2784,13 +2793,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10
   },
-  audioWaveformBlock: { flex: 1, justifyContent: 'center' },
-  audioWaveform: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  audioWaveformBlock: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
+  audioWaveform: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    width: '100%',
+    height: WAVEFORM_MAX_HEIGHT,
+    marginBottom: 4
+  },
+  audioWaveformGrid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
+  },
+  audioWaveformGridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)'
+  },
   audioWaveBar: {
-    width: 3,
+    width: 2,
     borderRadius: 2,
-    backgroundColor: '#9fc5e8',
-    marginRight: 2
+    backgroundColor: '#9fc5e8'
   },
   audioWaveBarPlayed: {
     backgroundColor: '#4fc3ff'
