@@ -159,6 +159,13 @@ const sendWidgetRefreshToGuild = async ({ guildId, reason = "", sectorId = "" })
   }
 };
 
+const getSectorOwnerKey = (sectorData) => {
+  if (!sectorData || typeof sectorData !== "object") return null;
+  const ownerValue = sectorData.owner ?? sectorData.ownerId;
+  if (ownerValue === undefined || ownerValue === null) return null;
+  return String(ownerValue);
+};
+
 /**
  * =====================================================================
  * ✅ Schedule helpers (локальний час користувача)
@@ -462,6 +469,29 @@ exports.onGbgMapWrite = onValueWritten(
     }
 
     await sendWidgetRefreshToGuild({ guildId, reason: "map_write", sectorId: "" });
+    return null;
+  }
+);
+
+exports.onGbgSectorOwnerChange = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const guildId = String(event.params.guildId || "");
+    const sectorId = String(event.params.sectorId || "");
+    if (!guildId) return null;
+
+    const beforeData = event.data?.before?.exists() ? event.data.before.val() : null;
+    const afterData = event.data?.after?.exists() ? event.data.after.val() : null;
+
+    const beforeOwner = getSectorOwnerKey(beforeData);
+    const afterOwner = getSectorOwnerKey(afterData);
+
+    if (beforeOwner === afterOwner) return null;
+
+    await sendWidgetRefreshToGuild({ guildId, reason: "sector_owner_change", sectorId });
     return null;
   }
 );

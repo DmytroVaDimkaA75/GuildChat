@@ -27,7 +27,8 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 
     // 2) Якщо сервер прислав лише тригер (підтягнути з Firebase)
     const data = remoteMessage?.data || {};
-    if (String(data.type || "") === "gbg_refresh_widget") {
+    const messageType = String(data.type || "");
+    if (messageType === "gbg_widget_refresh") {
       await refreshGbgWidgetCacheFromFirebase({
         guildId: data.guildId ? String(data.guildId) : null,
         reason: "fcm-trigger",
