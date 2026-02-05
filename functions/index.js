@@ -144,7 +144,7 @@ const sendWidgetRefreshToGuild = async ({ guildId, reason = "", sectorId = "" })
   for (const chunk of chunks) {
     try {
       // ✅ data-only multicast
-      await admin.messaging().sendEachForMulticast({
+      const response = await admin.messaging().sendEachForMulticast({
         tokens: chunk,
         data: dataPayload,
         android: { priority: "high" },
@@ -153,6 +153,16 @@ const sendWidgetRefreshToGuild = async ({ guildId, reason = "", sectorId = "" })
           headers: { "apns-priority": "5" },
         },
       });
+
+      if (response) {
+        logger.info("[WidgetRefresh] multicast result", {
+          guildId: String(guildId),
+          reason: String(reason || ""),
+          sectorId: String(sectorId || ""),
+          successCount: response.successCount,
+          failureCount: response.failureCount,
+        });
+      }
     } catch (e) {
       logger.error("[WidgetRefresh] sendEachForMulticast error:", e);
     }
