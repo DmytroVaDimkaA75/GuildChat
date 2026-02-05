@@ -23,6 +23,8 @@ import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
+import WidgetCacheDebugModal from "./WidgetCacheDebugModal";
+import { refreshGbgWidgetCacheFromFirebase } from "./gbgWidgetRefresh";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
@@ -291,6 +293,7 @@ const GVG = () => {
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
+  const [debugVisible, setDebugVisible] = useState(false);
 
   const [battlesVisible, setBattlesVisible] = useState(false);
   const [battlesRows, setBattlesRows] = useState([]);
@@ -846,6 +849,14 @@ const GVG = () => {
     return `${sign}${value}`;
   };
 
+  const handleDebugRefresh = async () => {
+    await refreshGbgWidgetCacheFromFirebase({
+      guildId,
+      reason: "manual-debug",
+      sectorId: "",
+    });
+  };
+
   // ===== Loader =====
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
@@ -870,9 +881,14 @@ const GVG = () => {
         <View style={styles.listTitleRow}>
           <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
-          <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
-            <Text style={styles.battlesBtnText}>Бої</Text>
-          </TouchableOpacity>
+          <View style={styles.listActions}>
+            <TouchableOpacity style={styles.debugBtn} onPress={() => setDebugVisible(true)}>
+              <Text style={styles.debugBtnText}>Дебаг</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
+              <Text style={styles.battlesBtnText}>Бої</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {sectorSchedule.length > 0 ? (
@@ -992,6 +1008,13 @@ const GVG = () => {
           </View>
         </View>
       )}
+
+      <WidgetCacheDebugModal
+        visible={debugVisible}
+        onClose={() => setDebugVisible(false)}
+        mapKey={mapKey}
+        onManualRefresh={handleDebugRefresh}
+      />
     </View>
   );
 };
@@ -1008,6 +1031,9 @@ const styles = StyleSheet.create({
   listTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 15 },
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
 
+  listActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  debugBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  debugBtnText: { color: "#E0E0E0", fontWeight: "700" },
   battlesBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   battlesBtnText: { color: "#E0E0E0", fontWeight: "700" },
 
