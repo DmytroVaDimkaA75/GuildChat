@@ -10,6 +10,7 @@ import {
   WIDGET_GBG_NEXT5_KEY,
   WIDGET_GBG_NEXT5_META_KEY,
 } from "./widgetGbgPush";
+import { WIDGET_GBG_LAST_FCM_KEY } from "./widgetCache";
 
 /** ✅ Красивий друк JSON/строки */
 const pretty = (value) => {
@@ -42,10 +43,17 @@ const WidgetCacheDebugModal = ({
     mapMeta: null,
     next5: null,
     next5Meta: null,
+    lastFcm: null,
   });
 
   const keys = useMemo(
-    () => [WIDGET_GBG_MAP_PNG_URI_KEY, WIDGET_GBG_MAP_META_KEY, WIDGET_GBG_NEXT5_KEY, WIDGET_GBG_NEXT5_META_KEY],
+    () => [
+      WIDGET_GBG_MAP_PNG_URI_KEY,
+      WIDGET_GBG_MAP_META_KEY,
+      WIDGET_GBG_NEXT5_KEY,
+      WIDGET_GBG_NEXT5_META_KEY,
+      WIDGET_GBG_LAST_FCM_KEY,
+    ],
     []
   );
 
@@ -59,6 +67,7 @@ const WidgetCacheDebugModal = ({
       mapMeta: safeParse(dict[WIDGET_GBG_MAP_META_KEY], null),
       next5: safeParse(dict[WIDGET_GBG_NEXT5_KEY], null),
       next5Meta: safeParse(dict[WIDGET_GBG_NEXT5_META_KEY], null),
+      lastFcm: safeParse(dict[WIDGET_GBG_LAST_FCM_KEY], null),
     });
   };
 
@@ -116,6 +125,9 @@ const WidgetCacheDebugModal = ({
 
             <Text style={styles.key}>widget_gbg_next5_meta:</Text>
             <Text style={styles.value}>{pretty(cache.next5Meta)}</Text>
+
+            <Text style={styles.key}>widget_gbg_last_fcm:</Text>
+            <Text style={styles.value}>{pretty(cache.lastFcm)}</Text>
           </ScrollView>
 
           <View style={styles.buttonsRow}>
