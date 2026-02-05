@@ -45,6 +45,7 @@ import ProfileMain from './Profile/ProfileMain';
 import SleepSchedule from './Profile/SleepSchedule';
 import MapComponent from './Quant/MapComponent';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
+import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 
 // НОВЫЕ ИКОНКИ
 import Admin from "./ico/menu/setting.svg";
@@ -819,6 +820,11 @@ export default function MainContent() {
 
         // ✅ data-only widget refresh: оновлюємо кеш віджета без нотифікації
         if (remoteMessage?.data?.type === 'gbg_widget_refresh') {
+          await recordWidgetFcmReceipt({
+            type: 'gbg_widget_refresh',
+            scope: 'foreground',
+            data: remoteMessage?.data || {},
+          });
           await refreshGbgWidgetCacheFromFirebase({
             guildId: remoteMessage?.data?.guildId ? String(remoteMessage.data.guildId) : null,
             reason: 'fcm-foreground',
