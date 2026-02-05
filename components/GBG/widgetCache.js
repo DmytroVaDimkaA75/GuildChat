@@ -7,7 +7,10 @@ const KEYS = {
   mapState: "widget_gbg_map_state",
   mapXml: "widget_gbg_map_xml",
   updatedAt: "widget_gbg_updated_at",
+  lastFcm: "widget_gbg_last_fcm",
 };
+
+export const WIDGET_GBG_LAST_FCM_KEY = KEYS.lastFcm;
 
 const getWidgetBridge = () => {
   return (
@@ -92,14 +95,22 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
 };
 
 export const readWidgetCacheDump = async () => {
-  const entries = await AsyncStorage.multiGet([KEYS.updatedAt, KEYS.next5, KEYS.mapState, KEYS.mapXml]);
+  const entries = await AsyncStorage.multiGet([
+    KEYS.updatedAt,
+    KEYS.next5,
+    KEYS.mapState,
+    KEYS.mapXml,
+    KEYS.lastFcm,
+  ]);
   const map = Object.fromEntries(entries);
 
   let next5 = null;
   let mapState = null;
+  let lastFcm = null;
 
   try { next5 = map[KEYS.next5] ? JSON.parse(map[KEYS.next5]) : null; } catch (e) {}
   try { mapState = map[KEYS.mapState] ? JSON.parse(map[KEYS.mapState]) : null; } catch (e) {}
+  try { lastFcm = map[KEYS.lastFcm] ? JSON.parse(map[KEYS.lastFcm]) : null; } catch (e) {}
 
   const xml = map[KEYS.mapXml] || "";
   const xmlLen = xml.length;
@@ -109,8 +120,20 @@ export const readWidgetCacheDump = async () => {
     updatedAt: map[KEYS.updatedAt] || null,
     next5,
     mapState,
+    lastFcm,
     mapXml: { length: xmlLen, head: xmlHead },
   };
+};
+
+export const recordWidgetFcmReceipt = async ({ type, scope, data }) => {
+  const payload = {
+    type: type ? String(type) : "",
+    scope: scope ? String(scope) : "",
+    receivedAt: Date.now(),
+    data: data && typeof data === "object" ? data : null,
+  };
+
+  await AsyncStorage.setItem(KEYS.lastFcm, JSON.stringify(payload));
 };
 
 /**
