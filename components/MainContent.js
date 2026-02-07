@@ -51,6 +51,7 @@ import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import Admin from "./ico/menu/setting.svg";
 import Chat from "./ico/menu/chat.svg";
 import GVG from "./ico/GVG.svg";
+import GB from "./ico/menu/GB.svg";
 import Profile from "./ico/menu/user.svg";
 
 const Stack = createStackNavigator();
@@ -167,6 +168,89 @@ function GBGStack() {
           ),
         })}
       />
+    </Stack.Navigator>
+  );
+}
+
+function GBStack() {
+  const { t } = useTranslation();
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="GBScreen"
+        component={GBScreen}
+        options={() => ({
+          title: t("gbScreen.gbTitle"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        })}
+      />
+      <Stack.Screen
+        name="GBChatWindow"
+        component={GBChatWindow}
+        options={({ navigation }) => ({
+          title: t("gbScreen.gbTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="GBExpress"
+        component={GBExpress}
+        options={({ navigation }) => ({
+          title: t("gbScreen.gbTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="MyGB"
+        component={MyGB}
+        options={({ navigation }) => ({
+          title: t("profileStack.myGBTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('AddGBComponent')} style={{ marginRight: 15 }}>
+              <Ionicons name="add" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="AddGBComponent" component={AddGBComponent} options={{ title: t("profileStack.addGBComponentTitle") }} />
+      <Stack.Screen
+        name="GBNewExpress"
+        component={GBNewExpress}
+        options={({ navigation }) => ({
+          title: t("gbScreen.gbTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="GBGuarant"
+        component={GBGuarant}
+        options={({ navigation }) => ({
+          title: t("gbScreen.gbTitle"),
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+      <Stack.Screen name="NewGBChat" component={NewGBChat} options={{ title: t("gbScreen.gbTitle") }} />
     </Stack.Navigator>
   );
 }
@@ -622,6 +706,14 @@ function AppNavigator({ onReady }) {
           options={{
             drawerLabel: t("drawer.pbgLabel"),
             drawerIconComponent: renderIcon(GVG)
+          }}
+        />
+        <Drawer.Screen
+          name="GB"
+          component={GBStack}
+          options={{
+            drawerLabel: t("drawer.gbLabel"),
+            drawerIconComponent: renderIcon(GB)
           }}
         />
         <Drawer.Screen
