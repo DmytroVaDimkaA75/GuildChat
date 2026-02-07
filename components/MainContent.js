@@ -179,9 +179,14 @@ function GBStack() {
       <Stack.Screen
         name="GBScreen"
         component={GBScreen}
-        options={() => ({
+        options={({ navigation }) => ({
           title: t("gbScreen.gbTitle"),
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate('NewGBChat', { from: 'GBChatList' })} style={{ marginRight: 15 }}>
+              <Ionicons name="add" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
         })}
       />
       <Stack.Screen
