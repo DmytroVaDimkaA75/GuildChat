@@ -1,12 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { getAuth } from 'firebase/auth';
-import { get, getDatabase, onValue, push, ref, update } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MultiSelect } from 'react-native-element-dropdown';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import database from '@react-native-firebase/database';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 
 const NewGBChat = () => {
@@ -40,11 +39,9 @@ const NewGBChat = () => {
   };
 
   useEffect(() => {
-    const db = getDatabase();
-
     // Отримання Великих Споруд
-    const buildingsRef = ref(db, 'greatBuildings');
-    onValue(buildingsRef, (snapshot) => {
+    const buildingsRef = database().ref('greatBuildings');
+    const handleBuildings = (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const seenKeys = new Set();
@@ -63,9 +60,12 @@ const NewGBChat = () => {
         buildingsArray.unshift({ label: t('newGBChat.selectAllOption'), value: 'selectAll', image: null });
         setGreatBuildings(buildingsArray);
       }
-    });
+    };
+    buildingsRef.on('value', handleBuildings);
 
     // Отримання учасників гільдії
+    let membersRef;
+    let handleMembers;
     const fetchGuildMembers = async () => {
       const guildId = await AsyncStorage.getItem('guildId');
       if (!guildId) {
@@ -73,9 +73,8 @@ const NewGBChat = () => {
         return;
       }
       console.log('Guild ID:', guildId);
-      const db = getDatabase();
-      const membersRef = ref(db, `guilds/${guildId}/guildUsers`);
-      onValue(membersRef, (snapshot) => {
+      membersRef = database().ref(`guilds/${guildId}/guildUsers`);
+      handleMembers = (snapshot) => {
         const data = snapshot.val();
         console.log('Дані з guildUsers:', data);
         if (data) {
@@ -89,10 +88,18 @@ const NewGBChat = () => {
         } else {
           console.warn(t('newGBChat.noGuildUsers'));
         }
-      });
+      };
+      membersRef.on('value', handleMembers);
     };
 
     fetchGuildMembers();
+
+    return () => {
+      buildingsRef.off('value', handleBuildings);
+      if (membersRef && handleMembers) {
+        membersRef.off('value', handleMembers);
+      }
+    };
   }, [t]);
 
   useEffect(() => {
@@ -106,9 +113,8 @@ const NewGBChat = () => {
       (async () => {
         const guildId = await AsyncStorage.getItem('guildId');
         if (!guildId) return;
-        const db = getDatabase();
-        const branchRef = ref(db, `guilds/${guildId}/GBChat/${id}`);
-        const snap = await get(branchRef);
+        const branchRef = database().ref(`guilds/${guildId}/GBChat/${id}`);
+        const snap = await branchRef.once('value');
         if (snap.exists()) {
           const data = snap.val();
           setChatName(data.name || '');
@@ -161,9 +167,7 @@ const NewGBChat = () => {
 
   const handleCreateChat = async () => {
     try {
-      const db = getDatabase();
-      const auth = getAuth();
-      const user = auth.currentUser;
+      const userId = await AsyncStorage.getItem('userId');
 
       const selectedPlaceLimits = placeLimit
         .map((selected, index) => (selected ? index + 1 : null))
@@ -179,7 +183,7 @@ const NewGBChat = () => {
           contributionMultiplier: contributionMultiplier || 0,
           selectedMembers,
         },
-        createdBy: user ? user.uid : null,
+        createdBy: userId || null,
       };
 
       const guildId = await AsyncStorage.getItem('guildId');
@@ -190,10 +194,10 @@ const NewGBChat = () => {
 
       if (isEditMode && editBranchId) {
         // Оновлення існуючої гілки
-        await update(ref(db, `guilds/${guildId}/GBChat/${editBranchId}`), newChat);
+        await database().ref(`guilds/${guildId}/GBChat/${editBranchId}`).update(newChat);
       } else {
         // Створення нового чату
-        await push(ref(db, `guilds/${guildId}/GBChat`), newChat);
+        await database().ref(`guilds/${guildId}/GBChat`).push(newChat);
       }
 
       // Повертаємося до попереднього екрану (звідки відкривали)
