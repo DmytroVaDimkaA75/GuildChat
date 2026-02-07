@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import database from '@react-native-firebase/database';
 
 const AddGBComponent = () => {
   const { t, i18n } = useTranslation();
@@ -24,37 +24,43 @@ const AddGBComponent = () => {
   }, []);
 
   useEffect(() => {
-    if (guildId && userId) {
-      const db = getDatabase();
-      const allGBRef = ref(db, 'greatBuildings');
-      onValue(allGBRef, (snapshot) => {
-        const allGBs = [];
-        snapshot.forEach((childSnapshot) => {
-          const id = childSnapshot.key;
-          const data = childSnapshot.val();
-          // data.buildingName може бути об'єктом з перекладами
-          allGBs.push({ id, name: data.buildingName, image: data.buildingImage });
-        });
-        setAvailableGBs(allGBs);
-      });
+    if (!guildId || !userId) return undefined;
 
-      const userGBRef = ref(db, `guilds/${guildId}/guildUsers/${userId}/greatBuild`);
-      onValue(userGBRef, (snapshot) => {
-        const userGBs = [];
-        snapshot.forEach((childSnapshot) => {
-          userGBs.push(childSnapshot.key);
-        });
-        setUserGBs(userGBs);
+    const allGBRef = database().ref('greatBuildings');
+    const handleAllGBs = (snapshot) => {
+      const allGBs = [];
+      snapshot.forEach((childSnapshot) => {
+        const id = childSnapshot.key;
+        const data = childSnapshot.val();
+        // data.buildingName може бути об'єктом з перекладами
+        allGBs.push({ id, name: data.buildingName, image: data.buildingImage });
       });
-    }
+      setAvailableGBs(allGBs);
+    };
+    allGBRef.on('value', handleAllGBs);
+
+    const userGBRef = database().ref(`guilds/${guildId}/guildUsers/${userId}/greatBuild`);
+    const handleUserGBs = (snapshot) => {
+      const nextUserGBs = [];
+      snapshot.forEach((childSnapshot) => {
+        nextUserGBs.push(childSnapshot.key);
+      });
+      setUserGBs(nextUserGBs);
+    };
+    userGBRef.on('value', handleUserGBs);
+
+    return () => {
+      allGBRef.off('value', handleAllGBs);
+      userGBRef.off('value', handleUserGBs);
+    };
   }, [guildId, userId]);
 
   const filteredGBs = availableGBs.filter((gb) => !userGBs.includes(gb.id));
 
   const handlePress = (id) => {
-    const db = getDatabase();
-    const gbRef = ref(db, `guilds/${guildId}/guildUsers/${userId}/greatBuild/${id}`);
-    set(gbRef, { level: 1 })
+    const gbRef = database().ref(`guilds/${guildId}/guildUsers/${userId}/greatBuild/${id}`);
+    gbRef
+      .set({ level: 1 })
       .then(() => {
         navigation.goBack(); // <-- замість replace('MyGB')
       })
