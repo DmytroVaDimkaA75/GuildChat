@@ -257,6 +257,14 @@ const AdminMain = () => {
   const handleEditBranch = (branchId) => {
     const branch = upgradeBranches.find(b => b.id === branchId);
     if (!branch) return;
+    const parentNavigation = navigation.getParent();
+    if (parentNavigation) {
+      parentNavigation.navigate('GB', {
+        screen: 'NewGBChat',
+        params: { editBranch: branch, from: 'AdminMain' },
+      });
+      return;
+    }
     navigation.navigate('NewGBChat', { editBranch: branch, from: 'AdminMain' });
   };
 
