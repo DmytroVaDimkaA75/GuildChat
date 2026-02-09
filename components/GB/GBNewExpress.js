@@ -225,13 +225,13 @@ const GBNewExpress = ({ route, navigation }) => {
     }, [value]);
 
     const handleIncrement = () => {
-      const newValue = Math.min(value + 1, maxValue);
+      const newValue = clampValue(parseInputValue() + 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
 
     const handleDecrement = () => {
-      const newValue = Math.max(value - 1, minValue);
+      const newValue = clampValue(parseInputValue() - 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
@@ -239,6 +239,10 @@ const GBNewExpress = ({ route, navigation }) => {
     const handleInputChange = (text) => {
       if (/^\d*$/.test(text)) {
         setInputValue(text);
+        if (text !== '') {
+          const parsedValue = clampValue(parseInt(text, 10));
+          onValueChange(parsedValue);
+        }
       }
     };
 
@@ -250,6 +254,10 @@ const GBNewExpress = ({ route, navigation }) => {
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
+
+    useEffect(() => {
+      setInputValue(String(value));
+    }, [value]);
 
     return (
       <View style={styles.stepperContainer}>
@@ -637,6 +645,7 @@ const styles = StyleSheet.create({
     stepperContainer: {
       flexDirection: 'row',
       alignItems: 'center',
+      width: '100%',
       borderWidth: 1,
       borderColor: '#4ea1ff',
       borderRadius: 4,
