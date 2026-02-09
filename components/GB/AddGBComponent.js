@@ -79,7 +79,7 @@ const AddGBComponent = () => {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity onPress={() => handlePress(item.id)}>
-      <View style={[styles.gbItem, { backgroundColor: '#f2f2f2' }]}>
+      <View style={styles.gbItem}>
         <Image source={{ uri: item.image }} style={styles.gbImage} />
         <Text style={styles.gbName}>{getLocalizedName(item.name)}</Text>
       </View>
@@ -101,17 +101,17 @@ const AddGBComponent = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 20,
-    backgroundColor: 'white', // додаємо явний білий фон
+    backgroundColor: '#0f1115',
   },
   gbItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
-    backgroundColor: '#f2f2f2',
+    backgroundColor: '#1b1f2a',
     marginBottom: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#cccccc',
+    borderColor: '#2a2f3a',
   },
   gbImage: {
     width: 50,
@@ -120,12 +120,13 @@ const styles = StyleSheet.create({
     resizeMode: 'contain'
   },
   gbName: {
-    fontSize: 18
+    fontSize: 18,
+    color: '#e6e9ef',
   },
   emptyMessage: {
     padding: 15,
     textAlign: 'center',
-    color: '#888',
+    color: '#9aa3b2',
     fontSize: 16
   }
 });
