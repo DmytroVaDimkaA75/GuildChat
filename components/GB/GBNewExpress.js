@@ -415,14 +415,14 @@ const GBNewExpress = ({ route, navigation }) => {
           onPress={formValid ? handleSave : null}
           style={{ marginRight: 15, opacity: formValid ? 1 : 0.5 }}
         >
-          <Ionicons name="checkmark" size={24} color="white" />
+          <Ionicons name="checkmark" size={24} color="#e6e9ef" />
         </TouchableOpacity>
       )
     });
   }, [navigation, handleSave, formValid]);
 
   return (
-    <ScrollView style={{ backgroundColor: '#FFF' }}>
+    <ScrollView style={{ backgroundColor: '#0f1115' }}>
       <View style={styles.container}>
         {buildingId && !scheduleTime ? (
           <View style={styles.block}>
@@ -438,12 +438,12 @@ const GBNewExpress = ({ route, navigation }) => {
                 </Text>
               </View>
             ) : (
-              <Text>{t('gbNewExpress.loadingBuildingInfo') || "Завантаження даних..."}</Text>
+              <Text style={styles.mutedText}>{t('gbNewExpress.loadingBuildingInfo') || "Завантаження даних..."}</Text>
             )}
           </View>
         ) : (
           <View style={styles.block}>
-            <Text style={{ marginBottom: 10 }}>{t('gbNewExpress.selectBuilding')}</Text>
+            <Text style={styles.blockLabel}>{t('gbNewExpress.selectBuilding')}</Text>
             <Dropdown
               style={styles.dropdown}
               containerStyle={styles.dropdownContainer}
@@ -467,7 +467,7 @@ const GBNewExpress = ({ route, navigation }) => {
                 return null;
               }}
               renderRightIcon={() => (
-                <FontAwesome name="chevron-down" size={12} color="#007AFF" />
+                <FontAwesome name="chevron-down" size={12} color="#4ea1ff" />
               )}
               renderItem={(item) => (
                 <View style={styles.dropdownItemContainer}>
@@ -486,7 +486,7 @@ const GBNewExpress = ({ route, navigation }) => {
         )}
 
         <View style={styles.block}>
-          <Text style={{ marginBottom: 10 }}>{t('gbNewExpress.levelThresholdLabel')}</Text>
+          <Text style={styles.blockLabel}>{t('gbNewExpress.levelThresholdLabel')}</Text>
           <Stepper
             value={parseInt(levelThreshold, 10) || 0}
             onValueChange={(val) => setLevelThreshold(val)}
@@ -500,7 +500,7 @@ const GBNewExpress = ({ route, navigation }) => {
         </View>
 
         <View style={styles.block}>
-          <Text style={{ marginBottom: 10 }}>{t('gbNewExpress.placeLimitLabel')}</Text>
+          <Text style={styles.blockLabel}>{t('gbNewExpress.placeLimitLabel')}</Text>
           <View style={styles.checkboxContainer}>
             {[1, 2, 3, 4, 5].map((value, index) => (
               <CustomCheckBox
@@ -515,7 +515,7 @@ const GBNewExpress = ({ route, navigation }) => {
 
         {!( !buildingId && scheduleTime ) && (
           <View style={styles.block}>
-            <Text style={{ marginBottom: 10 }}>{t('gbNewExpress.scheduleTime')}</Text>
+            <Text style={styles.blockLabel}>{t('gbNewExpress.scheduleTime')}</Text>
             <TouchableOpacity style={styles.dateButton} onPress={openDateTimeModal}>
               <Text style={styles.dateButtonText}>
                 {formatDayHourMinute()}
@@ -582,32 +582,32 @@ const GBNewExpress = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#FFF',
+      backgroundColor: '#0f1115',
       alignItems: 'center',
       paddingTop: 20,
     },
     block: {
-      backgroundColor: '#f2f2f2',
+      backgroundColor: '#1b1f2a',
       padding: 10,
       marginBottom: 20,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#cccccc',
+      borderColor: '#2a2f3a',
       width: '90%',
     },
     dropdown: {
       borderWidth: 1,
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0f1115',
       padding: 10,
       borderRadius: 6,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
       height: 50,
       flexDirection: 'row',
       alignItems: 'center',
     },
     dropdownContainer: {
       borderWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
       borderRadius: 8,
     },
     dropdownImage: {
@@ -622,6 +622,7 @@ const styles = StyleSheet.create({
     },
     dropdownItemText: {
       fontSize: 14,
+      color: '#e6e9ef',
     },
     buildingInfoContainer: {
       flexDirection: 'row',
@@ -634,20 +635,20 @@ const styles = StyleSheet.create({
     },
     buildingItemText: {
       fontSize: 20,
-      color: '#000',
+      color: '#e6e9ef',
     },
     stepperContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
       borderRadius: 4,
       overflow: 'hidden',
     },
     stepButton: {
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
     },
     stepButtonText: {
       color: '#fff',
@@ -655,15 +656,15 @@ const styles = StyleSheet.create({
     },
     valueInput: {
       textAlign: 'center',
-      backgroundColor: '#fff',
-      borderColor: '#007AFF',
+      backgroundColor: '#0f1115',
+      borderColor: '#4ea1ff',
       borderLeftWidth: 1,
       borderRightWidth: 1,
       fontSize: 16,
-      color: '#000',
+      color: '#e6e9ef',
     },
     dateButton: {
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 6,
@@ -676,18 +677,16 @@ const styles = StyleSheet.create({
     upgradeCostText: {
       marginTop: 10,
       fontSize: 12,
-      
-      
-      color: '#000'
+      color: '#9aa3b2'
     },
     modalBackground: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
       justifyContent: 'flex-end',
       alignItems: 'center',
     },
     modalContainer: {
-      backgroundColor: '#FFF',
+      backgroundColor: '#1b1f2a',
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
       width: '100%',
@@ -697,7 +696,7 @@ const styles = StyleSheet.create({
       fontSize: 20,
       fontWeight: '600',
       marginBottom: 15,
-      color: '#000',
+      color: '#e6e9ef',
       textAlign: 'center',
     },
     wheelWrapper: {
@@ -717,10 +716,10 @@ const styles = StyleSheet.create({
       height: 40,
       borderTopWidth: 1,
       borderBottomWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
     },
     modalButtonSave: {
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
       paddingVertical: 12,
       borderRadius: 10,
       alignItems: 'center',
@@ -734,6 +733,13 @@ const styles = StyleSheet.create({
     checkboxContainer: {
       flexDirection: 'row',
       justifyContent: 'space-around',
+    },
+    blockLabel: {
+      marginBottom: 10,
+      color: '#e6e9ef',
+    },
+    mutedText: {
+      color: '#9aa3b2',
     },
   });
 
