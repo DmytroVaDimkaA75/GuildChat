@@ -16,6 +16,7 @@ const GBMessageList = ({ messages }) => {
 const styles = StyleSheet.create({
   list: {
     flex: 1,
+    backgroundColor: '#0f1115',
   },
 });
 

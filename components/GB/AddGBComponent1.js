@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     //borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#2a2f3a',
   },
   gbImage: {
     width: 50,
@@ -83,11 +83,12 @@ const styles = StyleSheet.create({
   },
   gbName: {
     fontSize: 18,
+    color: '#e6e9ef',
   },
   emptyMessage: {
     padding: 15,
     textAlign: 'center',
-    color: '#888',
+    color: '#9aa3b2',
     fontSize: 16,
   },
 });

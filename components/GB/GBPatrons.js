@@ -625,7 +625,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
       <View style={styles.emptyBox}>
         <View style={styles.topRow}>
           <View style={styles.blockOne}>
-            <Text>{t('gbPatrons.leftColumnTitle')}</Text>
+            <Text style={styles.headerText}>{t('gbPatrons.leftColumnTitle')}</Text>
           </View>
           <ScrollView
             ref={block2ScrollRef}
@@ -637,7 +637,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
           >
             {columnTitles.map((title, idx) => (
               <View key={`header-${idx}`} style={[styles.block2Item, { width: columnWidths[idx] }]}>
-                <Text>{title}</Text>
+                <Text style={styles.headerText}>{title}</Text>
               </View>
             ))}
           </ScrollView>
@@ -661,7 +661,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                       style={{
                         width: BLOCK_ONE_WIDTH,
                         height: 3,
-                        backgroundColor: 'black',
+                        backgroundColor: '#2a2f3a',
                         marginBottom: 2,
                       }}
                     />
@@ -672,14 +672,14 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                       width: BLOCK_ONE_WIDTH,
                       height: rowHeight,
                       borderRightWidth: 1,
-                      borderRightColor: 'black',
+                      borderRightColor: '#2a2f3a',
                       borderTopWidth: 1,
-                      borderTopColor: 'black',
+                      borderTopColor: '#2a2f3a',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Text>{rIndex + 1}</Text>
+                    <Text style={styles.tableText}>{rIndex + 1}</Text>
                   </View>
                 </React.Fragment>
               ))}
@@ -724,7 +724,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                             <View
                               style={{
                                 height: 3,
-                                backgroundColor: 'black',
+                                backgroundColor: '#2a2f3a',
                                 width: columnWidths.reduce((a, b) => a + b, 0),
                                 marginBottom: 2,
                               }}
@@ -734,7 +734,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                             key={`tableRow-${rowIndex}`}
                             style={{
                               flexDirection: 'row',
-                              backgroundColor: isGuaranteed ? '#DCF8C6' : undefined,
+                              backgroundColor: isGuaranteed ? '#214a33' : undefined,
                             }}
                           >
                             {columnWidths.map((cw, colIndex) => {
@@ -773,7 +773,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                   cellContent = (
                                     <TouchableOpacity
                                       style={{
-                                        backgroundColor: '#007AFF',
+                                        backgroundColor: '#2f7de1',
                                         borderRadius: 6,
                                         paddingVertical: 4,
                                         paddingHorizontal: 8,
@@ -811,15 +811,15 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                     width: cw,
                                     height: rowHeight,
                                     borderLeftWidth: 1,
-                                    borderLeftColor: 'black',
+                                    borderLeftColor: '#2a2f3a',
                                     borderTopWidth: 1,
-                                    borderTopColor: 'black',
+                                    borderTopColor: '#2a2f3a',
                                     justifyContent: 'center',
                                     alignItems: 'center',
                                   }}
                                 >
                                   {typeof cellContent === 'string' || typeof cellContent === 'number'
-                                    ? <Text>{cellContent}</Text>
+                                    ? <Text style={styles.tableText}>{cellContent}</Text>
                                     : cellContent}
                                 </View>
                               );
@@ -879,7 +879,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       flexDirection: 'row',
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
       borderRadius: 4,
       overflow: 'hidden',
       paddingHorizontal: 0,
@@ -889,7 +889,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       <TouchableOpacity
         onPress={handleDecrement}
         style={{
-          backgroundColor: '#007AFF',
+          backgroundColor: '#2f7de1',
           width: buttonSize,
           height: buttonSize,
           justifyContent: 'center',
@@ -907,7 +907,8 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
           paddingVertical: 0,
           paddingHorizontal: 0,
           borderWidth: 0,
-          backgroundColor: 'white',
+          backgroundColor: '#0f1115',
+          color: '#e6e9ef',
         }}
         keyboardType="numeric"
         value={inputValue}
@@ -918,7 +919,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       <TouchableOpacity
         onPress={handleIncrement}
         style={{
-          backgroundColor: '#007AFF',
+          backgroundColor: '#2f7de1',
           width: buttonSize,
           height: buttonSize,
           justifyContent: 'center',
@@ -944,9 +945,9 @@ const styles = StyleSheet.create({
   emptyBox: {
     width: '100%',
     borderRadius: 10,
-    backgroundColor: '#eee',
+    backgroundColor: '#1b1f2a',
     borderWidth: 1,
-    borderColor: 'black',
+    borderColor: '#2a2f3a',
     padding: 3,
   },
   topRow: {
@@ -956,9 +957,9 @@ const styles = StyleSheet.create({
   blockOne: {
     width: BLOCK_ONE_WIDTH,
     borderRightWidth: 1,
-    borderRightColor: 'black',
+    borderRightColor: '#2a2f3a',
     borderBottomWidth: 1,
-    borderBottomColor: 'black',
+    borderBottomColor: '#2a2f3a',
     paddingHorizontal: 5,
     paddingVertical: 4,
     justifyContent: 'center',
@@ -969,9 +970,9 @@ const styles = StyleSheet.create({
   },
   block2Item: {
     borderLeftWidth: 1,
-    borderLeftColor: 'black',
+    borderLeftColor: '#2a2f3a',
     borderBottomWidth: 1,
-    borderBottomColor: 'black',
+    borderBottomColor: '#2a2f3a',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 4,
@@ -991,6 +992,13 @@ const styles = StyleSheet.create({
   },
   block4InnerScroll: {
     // inline styles
+  },
+  headerText: {
+    color: '#e6e9ef',
+    fontWeight: '600',
+  },
+  tableText: {
+    color: '#e6e9ef',
   },
 });
 

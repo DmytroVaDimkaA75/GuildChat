@@ -107,14 +107,14 @@ const MyGB = () => {
     }
   };
 
-  if (loading) return <ActivityIndicator size="large" color="#0000ff" />;
-  if (error) return <RNText>{t("Error")}:{error.message || t("myGB.unknownError")}</RNText>;
+  if (loading) return <ActivityIndicator size="large" color="#4ea1ff" />;
+  if (error) return <RNText style={styles.errorText}>{t("Error")}:{error.message || t("myGB.unknownError")}</RNText>;
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollView}>
         {greatBuilds.length === 0
-          ? <RNText>{t("myGB.noBuilds")}</RNText>
+          ? <RNText style={styles.infoText}>{t("myGB.noBuilds")}</RNText>
           : greatBuilds.map(build => {
               const localizedName = getLocalizedBuildingName(build);
               return (
@@ -125,18 +125,18 @@ const MyGB = () => {
                   })}>
                   <View style={styles.buildItem}>
                     <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(build.id)}>
-                      <Ionicons name="close" size={24} color="black" />
+                      <Ionicons name="close" size={24} color="#e6e9ef" />
                     </TouchableOpacity>
                     <View style={styles.imageNameContainer}>
                       <View style={styles.imageContainer}>
                         {build.buildingImage
                           ? <Image source={{ uri: build.buildingImage }} style={styles.buildingImage} />
-                          : <RNText>{t("myGB.imageNotAvailable")}</RNText>}
+                          : <RNText style={styles.mutedText}>{t("myGB.imageNotAvailable")}</RNText>}
                       </View>
                       <View style={styles.nameContainer}>
                         <View style={styles.nameBlock}><RNText style={styles.buildName}>{localizedName}</RNText></View>
                         <View style={styles.additionalLevelBlock}>
-                          <View style={styles.additionalLevelText}><RNText>{t("myGB.levelLabel")}</RNText></View>
+                          <View style={styles.additionalLevelText}><RNText style={styles.mutedText}>{t("myGB.levelLabel")}</RNText></View>
                           <View style={styles.additionalLevelStepper}>
                             <Stepper
                               key={`stepper-${build.id}-${build.level}`}
@@ -166,30 +166,33 @@ const MyGB = () => {
 
 // Стили остаются без изменений
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: '#fff' },
+  container: { flex: 1, padding: 10, backgroundColor: '#0f1115' },
   scrollView: { paddingBottom: 20 },
-  buildItem: { backgroundColor: '#e0e0e0', borderWidth: 1, borderColor: '#000', borderRadius: 5, marginBottom: 15, padding: 10, position: 'relative' },
+  buildItem: { backgroundColor: '#1b1f2a', borderWidth: 1, borderColor: '#2a2f3a', borderRadius: 5, marginBottom: 15, padding: 10, position: 'relative' },
   deleteButton: { position: 'absolute', top: 5, right: 5, zIndex: 1 },
   imageNameContainer: { flexDirection: 'row', alignItems: 'center' },
-  imageContainer: { width: 100, height: 100, borderWidth: 1, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 10, backgroundColor: '#fff' },
+  imageContainer: { width: 100, height: 100, borderWidth: 1, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 10, backgroundColor: '#0f1115', borderColor: '#2a2f3a' },
   buildingImage: { width: '100%', height: '100%', resizeMode: 'contain' },
-  nameContainer: { flex: 1, justifyContent: 'flex-start', alignItems: 'stretch', backgroundColor: '#e0e0e0' },
+  nameContainer: { flex: 1, justifyContent: 'flex-start', alignItems: 'stretch', backgroundColor: '#1b1f2a' },
   nameBlock: { padding: 5, alignItems: 'center' },
   additionalLevelBlock: { flexDirection: 'row', alignItems: 'center' },
-  additionalLevelText: { flex: 1, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', paddingVertical: 6 },
+  additionalLevelText: { flex: 1, borderWidth: 1, borderColor: '#2a2f3a', alignItems: 'center', paddingVertical: 6 },
   additionalLevelStepper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#4ea1ff',
     borderRadius: 4,
     overflow: 'hidden',
     height: 30,
   },
   buttonContainer: { alignItems: 'flex-end', marginTop: 10 },
-  createButton: { backgroundColor: '#007AFF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 5 },
+  createButton: { backgroundColor: '#2f7de1', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 5 },
   createButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  buildName: { fontSize: 18, fontWeight: 'bold' }
+  buildName: { fontSize: 18, fontWeight: 'bold', color: '#e6e9ef' },
+  mutedText: { color: '#9aa3b2' },
+  infoText: { color: '#e6e9ef' },
+  errorText: { color: '#ff6b6b', paddingHorizontal: 10, paddingTop: 10 },
 });
 
 export default MyGB;
