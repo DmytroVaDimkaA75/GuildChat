@@ -241,6 +241,10 @@ const GBNewExpress = ({ route, navigation }) => {
     const handleInputChange = (text) => {
       if (/^\d*$/.test(text)) {
         setInputValue(text);
+        if (text !== '') {
+          const parsedValue = clampValue(parseInt(text, 10));
+          onValueChange(parsedValue);
+        }
       }
     };
 
