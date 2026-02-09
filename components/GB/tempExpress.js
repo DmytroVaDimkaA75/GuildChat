@@ -244,7 +244,7 @@ const GBNewExpress = ({ route, navigation }) => {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: '#FFF' }}>
+    <ScrollView style={{ backgroundColor: '#0f1115' }}>
       <View style={styles.container}>
         {/* Відображення інформації про ВС (зображення та назва) */}
         <View style={styles.block}>
@@ -261,13 +261,15 @@ const GBNewExpress = ({ route, navigation }) => {
               </Text>
             </View>
           ) : (
-            <Text>{t('gbNewExpress.loadingBuildingInfo') || "Завантаження даних..."}</Text>
+            <Text style={styles.mutedText}>
+              {t('gbNewExpress.loadingBuildingInfo') || "Завантаження даних..."}
+            </Text>
           )}
         </View>
 
         {/* Stepper для мінімального рівня ВС (завжди активний) */}
         <View style={styles.block}>
-          <Text style={{ marginBottom: 10 }}>
+          <Text style={styles.blockLabel}>
             {t('gbNewExpress.levelThresholdLabel') || "Мінімальний рівень ВС"}
           </Text>
           <Stepper
@@ -281,7 +283,7 @@ const GBNewExpress = ({ route, navigation }) => {
 
         {/* Кнопка для відкриття модального вікна вибору дати/часу */}
         <View style={styles.block}>
-          <Text style={{ marginBottom: 10 }}>
+          <Text style={styles.blockLabel}>
             {t('gbNewExpress.scheduleTime') || "Запланувати час"}
           </Text>
           <TouchableOpacity style={styles.dateButton} onPress={openDateTimeModal}>
@@ -360,17 +362,17 @@ const GBNewExpress = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#FFF',
+      backgroundColor: '#0f1115',
       alignItems: 'center',
       paddingTop: 20,
     },
     block: {
-      backgroundColor: '#f2f2f2',
+      backgroundColor: '#1b1f2a',
       padding: 10,
       marginBottom: 20,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#cccccc',
+      borderColor: '#2a2f3a',
       width: '90%',
     },
     buildingInfoContainer: {
@@ -384,20 +386,20 @@ const styles = StyleSheet.create({
     },
     itemText: {
       fontSize: 20,
-      color: '#000',
+      color: '#e6e9ef',
     },
     stepperContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
       borderRadius: 4,
       overflow: 'hidden',
     },
     stepButton: {
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
     },
     stepButtonText: {
       color: '#fff',
@@ -405,15 +407,15 @@ const styles = StyleSheet.create({
     },
     valueInput: {
       textAlign: 'center',
-      backgroundColor: '#fff',
-      borderColor: '#007AFF',
+      backgroundColor: '#0f1115',
+      borderColor: '#4ea1ff',
       borderLeftWidth: 1,
       borderRightWidth: 1,
       fontSize: 16,
-      color: '#000',
+      color: '#e6e9ef',
     },
     dateButton: {
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 6,
@@ -425,12 +427,12 @@ const styles = StyleSheet.create({
     },
     modalBackground: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
       justifyContent: 'flex-end',
       alignItems: 'center',
     },
     modalContainer: {
-      backgroundColor: '#FFF',
+      backgroundColor: '#1b1f2a',
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
       width: '100%',
@@ -440,7 +442,7 @@ const styles = StyleSheet.create({
       fontSize: 20,
       fontWeight: '600',
       marginBottom: 15,
-      color: '#000',
+      color: '#e6e9ef',
       textAlign: 'center',
     },
     wheelWrapper: {
@@ -460,10 +462,10 @@ const styles = StyleSheet.create({
       height: 40,
       borderTopWidth: 1,
       borderBottomWidth: 1,
-      borderColor: '#007AFF',
+      borderColor: '#4ea1ff',
     },
     modalButtonSave: {
-      backgroundColor: '#007AFF',
+      backgroundColor: '#2f7de1',
       paddingVertical: 12,
       borderRadius: 10,
       alignItems: 'center',
@@ -473,6 +475,13 @@ const styles = StyleSheet.create({
       color: '#FFF',
       fontSize: 16,
       fontWeight: '500',
+    },
+    blockLabel: {
+      marginBottom: 10,
+      color: '#e6e9ef',
+    },
+    mutedText: {
+      color: '#9aa3b2',
     },
   });
 
