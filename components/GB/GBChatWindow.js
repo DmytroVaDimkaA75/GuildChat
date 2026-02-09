@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   ownMessage: {
     marginLeft: 20,
-    backgroundColor: '#214a33',
+    backgroundColor: '#1e3f54',
     alignSelf: 'flex-end',
   },
   otherMessage: {

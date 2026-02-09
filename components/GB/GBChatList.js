@@ -389,11 +389,11 @@ const styles = StyleSheet.create({
       color: '#e6e9ef',
     },
     expressChatItem: {
-      backgroundColor: '#214a33',
-      borderColor: '#2f5c3f',
+      backgroundColor: '#1e3f54',
+      borderColor: '#2a536d',
     },
     expressChatName: {
-      color: '#e6f4ea',
+      color: '#e6f4fd',
     },
     emptyMessage: {
       padding: 15,

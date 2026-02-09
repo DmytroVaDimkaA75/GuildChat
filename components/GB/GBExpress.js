@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
       borderRadius: 8,
     },
     ownChatItem: {
-      backgroundColor: '#214a33',
+      backgroundColor: '#1e3f54',
     },
     chatRow: {
       flexDirection: 'row',
