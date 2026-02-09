@@ -221,15 +221,19 @@ const GBNewExpress = ({ route, navigation }) => {
     const [inputValue, setInputValue] = useState(String(value));
 
     const clampValue = (nextValue) => Math.min(maxValue, Math.max(minValue, nextValue));
+    const parseInputValue = () => {
+      const parsed = parseInt(inputValue, 10);
+      return Number.isFinite(parsed) ? parsed : minValue;
+    };
 
     const handleIncrement = () => {
-      const newValue = clampValue(value + 1);
+      const newValue = clampValue(parseInputValue() + 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
 
     const handleDecrement = () => {
-      const newValue = clampValue(value - 1);
+      const newValue = clampValue(parseInputValue() - 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
@@ -245,9 +249,9 @@ const GBNewExpress = ({ route, navigation }) => {
     };
 
     const handleEndEditing = () => {
-      const parsedValue = clampValue(parseInt(inputValue, 10) || minValue);
-      onValueChange(parsedValue);
-      setInputValue(String(parsedValue));
+      const nextValue = clampValue(parseInputValue());
+      onValueChange(nextValue);
+      setInputValue(String(nextValue));
     };
 
     useEffect(() => {
@@ -641,6 +645,7 @@ const styles = StyleSheet.create({
     stepperContainer: {
       flexDirection: 'row',
       alignItems: 'center',
+      width: '100%',
       borderWidth: 1,
       borderColor: '#4ea1ff',
       borderRadius: 4,
