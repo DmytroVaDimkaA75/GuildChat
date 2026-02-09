@@ -40,7 +40,6 @@ const GBNewExpress = ({ route, navigation }) => {
   const [allowedGB, setAllowedGB] = useState(null);
   const [buildingInfo, setBuildingInfo] = useState(null);
   const [levelThreshold, setLevelThreshold] = useState(0);
-  const [stepperWidth, setStepperWidth] = useState(200);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
   const [placeLimit, setPlaceLimit] = useState([false, false, false, false, false]);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
@@ -219,7 +218,6 @@ const GBNewExpress = ({ route, navigation }) => {
   };
 
   const Stepper = ({ value, onValueChange, buttonSize = 40, minValue = 0, maxValue = 200 }) => {
-    const inputWidth = stepperWidth - buttonSize * 2;
     const [inputValue, setInputValue] = useState(String(value));
 
     const handleIncrement = () => {
@@ -253,14 +251,12 @@ const GBNewExpress = ({ route, navigation }) => {
       setInputValue(String(newValue));
     };
 
+    useEffect(() => {
+      setInputValue(String(value));
+    }, [value]);
+
     return (
-      <View
-        style={styles.stepperContainer}
-        onLayout={(event) => {
-          const { width } = event.nativeEvent.layout;
-          setStepperWidth(width);
-        }}
-      >
+      <View style={styles.stepperContainer}>
         <TouchableOpacity
           onPress={handleDecrement}
           style={[styles.stepButton, { width: buttonSize, height: buttonSize }]}
@@ -268,7 +264,7 @@ const GBNewExpress = ({ route, navigation }) => {
           <Text style={styles.stepButtonText}>-</Text>
         </TouchableOpacity>
         <TextInput
-          style={[styles.valueInput, { width: inputWidth, height: buttonSize }]}
+          style={[styles.valueInput, { height: buttonSize, flex: 1 }]}
           keyboardType="numeric"
           value={inputValue}
           onChangeText={handleInputChange}
