@@ -220,14 +220,16 @@ const GBNewExpress = ({ route, navigation }) => {
   const Stepper = ({ value, onValueChange, buttonSize = 40, minValue = 0, maxValue = 200 }) => {
     const [inputValue, setInputValue] = useState(String(value));
 
+    const clampValue = (nextValue) => Math.min(maxValue, Math.max(minValue, nextValue));
+
     const handleIncrement = () => {
-      const newValue = Math.min(value + 1, maxValue);
+      const newValue = clampValue(value + 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
 
     const handleDecrement = () => {
-      const newValue = Math.max(value - 1, minValue);
+      const newValue = clampValue(value - 1);
       onValueChange(newValue);
       setInputValue(String(newValue));
     };
@@ -235,20 +237,17 @@ const GBNewExpress = ({ route, navigation }) => {
     const handleInputChange = (text) => {
       if (/^\d*$/.test(text)) {
         setInputValue(text);
+        if (text !== '') {
+          const parsedValue = clampValue(parseInt(text, 10));
+          onValueChange(parsedValue);
+        }
       }
     };
 
     const handleEndEditing = () => {
-      let newValue = parseInt(inputValue, 10);
-      if (isNaN(newValue)) {
-        newValue = minValue;
-      } else if (newValue > maxValue) {
-        newValue = maxValue;
-      } else if (newValue < minValue) {
-        newValue = minValue;
-      }
-      onValueChange(newValue);
-      setInputValue(String(newValue));
+      const parsedValue = clampValue(parseInt(inputValue, 10) || minValue);
+      onValueChange(parsedValue);
+      setInputValue(String(parsedValue));
     };
 
     useEffect(() => {

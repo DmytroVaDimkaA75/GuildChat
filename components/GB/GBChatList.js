@@ -346,11 +346,13 @@ const GBChatList = () => {
           <TouchableOpacity
             style={[
               styles.chatItem,
-              item.id === 'express' && { backgroundColor: '#214a33' }
+              item.id === 'express' && styles.expressChatItem
             ]}
             onPress={() => handleChatSelect(item)}
           >
-            <Text style={styles.chatName}>{item.name}</Text>
+            <Text style={[styles.chatName, item.id === 'express' && styles.expressChatName]}>
+              {item.name}
+            </Text>
           </TouchableOpacity>
         )}
         keyExtractor={(item) => item.id}
@@ -385,6 +387,13 @@ const styles = StyleSheet.create({
     chatName: {
       fontSize: 18,
       color: '#e6e9ef',
+    },
+    expressChatItem: {
+      backgroundColor: '#214a33',
+      borderColor: '#2f5c3f',
+    },
+    expressChatName: {
+      color: '#e6f4ea',
     },
     emptyMessage: {
       padding: 15,

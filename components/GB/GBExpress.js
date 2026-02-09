@@ -327,7 +327,13 @@ const GBExpress = () => {
                   </View>
                 </View>
                 {item.chats.map((chat, index) => (
-                  <View key={index} style={styles.chatItem}>
+                  <View
+                    key={index}
+                    style={[
+                      styles.chatItem,
+                      chat.user === currentUserId && styles.ownChatItem
+                    ]}
+                  >
                     <View style={styles.chatRow}>
                       {buildingImages[chat.allowedGB] ? (
                         <Image
@@ -432,6 +438,9 @@ const styles = StyleSheet.create({
       marginVertical: 4,
       backgroundColor: '#222733',
       borderRadius: 8,
+    },
+    ownChatItem: {
+      backgroundColor: '#214a33',
     },
     chatRow: {
       flexDirection: 'row',
