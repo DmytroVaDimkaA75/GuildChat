@@ -316,6 +316,10 @@ const NewGBChat = () => {
         <MultiSelect
           style={styles.dropdown}
           containerStyle={styles.dropdownContainer}
+          placeholderStyle={styles.placeholderStyle}
+          selectedTextStyle={styles.selectedTextStyle}
+          itemTextStyle={styles.itemText}
+          itemContainerStyle={styles.dropdownItemContainer}
           data={greatBuildings}
           labelField="label"
           valueField="value"
@@ -360,6 +364,10 @@ const NewGBChat = () => {
         <MultiSelect
           style={styles.dropdown}
           containerStyle={styles.dropdownContainer}
+          placeholderStyle={styles.placeholderStyle}
+          selectedTextStyle={styles.selectedTextStyle}
+          itemTextStyle={styles.itemText}
+          itemContainerStyle={styles.dropdownItemContainer}
           data={guildMembers}
           labelField="name"
           valueField="userId"
@@ -436,6 +444,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4ea1ff',
     borderRadius: 8,
+    backgroundColor: '#1b1f2a',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -471,6 +480,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 5,
+  },
+  dropdownItemContainer: {
+    backgroundColor: '#1b1f2a',
   },
   buildingImage: {
     width: 30,
@@ -520,6 +532,12 @@ const styles = StyleSheet.create({
   blockSubtle: {
     marginBottom: 10,
     color: '#9aa3b2',
+  },
+  placeholderStyle: {
+    color: '#9aa3b2',
+  },
+  selectedTextStyle: {
+    color: '#e6e9ef',
   },
 });
 

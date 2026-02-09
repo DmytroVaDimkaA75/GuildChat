@@ -447,6 +447,10 @@ const GBNewExpress = ({ route, navigation }) => {
             <Dropdown
               style={styles.dropdown}
               containerStyle={styles.dropdownContainer}
+              placeholderStyle={styles.placeholderStyle}
+              selectedTextStyle={styles.selectedTextStyle}
+              itemTextStyle={styles.dropdownItemText}
+              itemContainerStyle={styles.dropdownItemContainer}
               data={buildings}
               labelField="label"
               valueField="value"
@@ -609,6 +613,7 @@ const styles = StyleSheet.create({
       borderWidth: 1,
       borderColor: '#4ea1ff',
       borderRadius: 8,
+      backgroundColor: '#1b1f2a',
     },
     dropdownImage: {
       width: 30,
@@ -619,6 +624,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       padding: 5,
+      backgroundColor: '#1b1f2a',
     },
     dropdownItemText: {
       fontSize: 14,
@@ -740,6 +746,12 @@ const styles = StyleSheet.create({
     },
     mutedText: {
       color: '#9aa3b2',
+    },
+    placeholderStyle: {
+      color: '#9aa3b2',
+    },
+    selectedTextStyle: {
+      color: '#e6e9ef',
     },
   });
 

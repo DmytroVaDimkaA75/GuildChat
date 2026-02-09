@@ -338,7 +338,7 @@ const GBGuarant = ({ route, navigation }) => {
               renderItem={item =>
                 item.separator ? (
                   <View style={styles.separator}>
-                    <Text>---</Text>
+                    <Text style={styles.separatorText}>---</Text>
                   </View>
                 ) : (
                   <View style={styles.item}>
@@ -348,7 +348,7 @@ const GBGuarant = ({ route, navigation }) => {
                         style={styles.memberAvatar}
                       />
                     )}
-                    <Text>{item.label}</Text>
+                    <Text style={styles.itemText}>{item.label}</Text>
                   </View>
                 )
               }
@@ -360,6 +360,7 @@ const GBGuarant = ({ route, navigation }) => {
             <TextInput
               style={styles.input}
               placeholder={t('gbGuarant.contributionAmountPlaceholder')}
+              placeholderTextColor="#9aa3b2"
               value={contributionAmount}
               onChangeText={setContributionAmount}
               keyboardType="numeric"
@@ -393,6 +394,7 @@ const GBGuarant = ({ route, navigation }) => {
 // Стили остаются без изменений
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     padding: 20,
     backgroundColor: '#0f1115',
   },
@@ -545,6 +547,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4ea1ff',
     borderRadius: 8,
+    backgroundColor: '#1b1f2a',
   },
   stepperContainer: {
     flexDirection: 'row',
@@ -575,18 +578,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2f3a',
     alignItems: 'center',
   },
-    item: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 10,
-      paddingHorizontal: 15,
-    },
-    memberAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      marginRight: 10,
-    },
-  });
+  separatorText: {
+    color: '#9aa3b2',
+  },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: '#1b1f2a',
+  },
+  itemText: {
+    color: '#e6e9ef',
+  },
+  memberAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+  },
+  placeholderStyle: {
+    color: '#9aa3b2',
+  },
+  selectedTextStyle: {
+    color: '#e6e9ef',
+  },
+});
   
 export default GBGuarant;
