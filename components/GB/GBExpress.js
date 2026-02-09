@@ -327,7 +327,13 @@ const GBExpress = () => {
                   </View>
                 </View>
                 {item.chats.map((chat, index) => (
-                  <View key={index} style={styles.chatItem}>
+                  <View
+                    key={index}
+                    style={[
+                      styles.chatItem,
+                      chat.user === currentUserId && styles.ownChatItem
+                    ]}
+                  >
                     <View style={styles.chatRow}>
                       {buildingImages[chat.allowedGB] ? (
                         <Image
@@ -384,13 +390,13 @@ const GBExpress = () => {
 const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: '#0f1115',
       padding: 10,
     },
     groupContainer: {
       marginBottom: 15,
       padding: 10,
-      backgroundColor: '#e0e0e0',
+      backgroundColor: '#1b1f2a',
       borderRadius: 10,
     },
     groupHeader: {
@@ -402,6 +408,7 @@ const styles = StyleSheet.create({
     groupTime: {
       fontSize: 16,
       fontWeight: 'bold',
+      color: '#e6e9ef',
     },
     iconContainer: {
       position: 'relative',
@@ -413,7 +420,7 @@ const styles = StyleSheet.create({
       position: 'absolute',
       top: -5,
       right: -10,
-      backgroundColor: '#0088cc',
+      backgroundColor: '#2f7de1',
       borderRadius: 8,
       minWidth: 16,
       height: 16,
@@ -422,15 +429,18 @@ const styles = StyleSheet.create({
       paddingHorizontal: 3,
     },
     badgeText: {
-      color: 'white',
+      color: '#fff',
       fontSize: 8,
       fontWeight: 'bold',
     },
     chatItem: {
       padding: 10,
       marginVertical: 4,
-      backgroundColor: '#f8f8f8',
+      backgroundColor: '#222733',
       borderRadius: 8,
+    },
+    ownChatItem: {
+      backgroundColor: '#214a33',
     },
     chatRow: {
       flexDirection: 'row',
@@ -445,7 +455,7 @@ const styles = StyleSheet.create({
       width: 50,
       height: 50,
       marginRight: 10,
-      backgroundColor: '#ccc',
+      backgroundColor: '#2a2f3a',
     },
     chatTextContainer: {
       flex: 1,
@@ -453,10 +463,11 @@ const styles = StyleSheet.create({
     chatTitle: {
       fontSize: 16,
       fontWeight: 'bold',
+      color: '#e6e9ef',
     },
     chatDescription: {
       fontSize: 14,
-      color: '#666',
+      color: '#9aa3b2',
     },
     boldText: {
       fontWeight: 'bold',
@@ -465,6 +476,7 @@ const styles = StyleSheet.create({
       fontSize: 16,
       textAlign: 'center',
       marginTop: 20,
+      color: '#9aa3b2',
     },
     buttonContainer: {
       flexDirection: 'row',
@@ -474,13 +486,13 @@ const styles = StyleSheet.create({
     button: {
       flex: 1,
       padding: 10,
-      backgroundColor: '#0088cc',
+      backgroundColor: '#2f7de1',
       borderRadius: 5,
       alignItems: 'center',
       marginHorizontal: 5,
     },
     disabledButton: {
-      backgroundColor: '#ccc',
+      backgroundColor: '#3a3f4a',
     },
     buttonText: {
       color: '#fff',
@@ -489,17 +501,18 @@ const styles = StyleSheet.create({
     modalOverlay: {
       flex: 1,
       justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: 'rgba(0,0,0,0.7)',
       padding: 20,
     },
     modalContainer: {
-      backgroundColor: '#fff',
+      backgroundColor: '#1b1f2a',
       borderRadius: 10,
       padding: 20,
     },
     modalText: {
       fontSize: 16,
       marginBottom: 20,
+      color: '#e6e9ef',
     },
     modalButtons: {
       flexDirection: 'row',
@@ -512,10 +525,10 @@ const styles = StyleSheet.create({
       borderRadius: 5,
     },
     cancelButton: {
-      backgroundColor: '#ccc',
+      backgroundColor: '#3a3f4a',
     },
     acceptButton: {
-      backgroundColor: '#0088cc',
+      backgroundColor: '#2f7de1',
     },
     modalButtonText: {
       color: '#fff',
