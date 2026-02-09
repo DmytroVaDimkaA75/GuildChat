@@ -242,14 +242,14 @@ const MyGB = () => {
     return unsubscribe;
   }, [navigation]);
 
-  if (loading) return <ActivityIndicator size="large" color="#0000ff" />;
-  if (error)   return <Text>{t("Error")}: {error.message || t("myGB.unknownError")}</Text>;
+  if (loading) return <ActivityIndicator size="large" color="#4ea1ff" />;
+  if (error)   return <Text style={styles.errorText}>{t("Error")}: {error.message || t("myGB.unknownError")}</Text>;
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollView}>
         {greatBuilds.length === 0 ? (
-          <Text>{t("myGB.noBuilds")}</Text>
+          <Text style={styles.infoText}>{t("myGB.noBuilds")}</Text>
         ) : (
           greatBuilds.map(build => {
             const name = getLocalizedBuildingName(build);
@@ -267,7 +267,7 @@ const MyGB = () => {
                     { cancelable: false }
                   )}
                 >
-                  <Ionicons name="close" size={24} color="black" />
+                  <Ionicons name="close" size={24} color="#e6e9ef" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -281,7 +281,7 @@ const MyGB = () => {
                     <View style={styles.imageContainer}>
                       {build.buildingImage
                         ? <Image source={{ uri: build.buildingImage }} style={styles.buildingImage}/>
-                        : <Text>{t("myGB.imageNotAvailable")}</Text>
+                        : <Text style={styles.mutedText}>{t("myGB.imageNotAvailable")}</Text>
                       }
                     </View>
 
@@ -290,7 +290,7 @@ const MyGB = () => {
 
                       <View style={styles.additionalLevelBlock}>
                         <View style={styles.additionalLevelText}>
-                          <Text>{t("myGB.levelLabel")}</Text>
+                          <Text style={styles.mutedText}>{t("myGB.levelLabel")}</Text>
                         </View>
                         <View style={styles.additionalLevelStepper}>
                           <Stepper
@@ -328,26 +328,29 @@ const MyGB = () => {
 
 // Стили остаются без изменений
 const styles = StyleSheet.create({
-    container:              { flex: 1, padding: 10, backgroundColor: '#fff' },
+    container:              { flex: 1, padding: 10, backgroundColor: '#0f1115' },
     scrollView:             { paddingBottom: 20 },
-    buildItem:              { backgroundColor:'#e0e0e0', borderWidth:1, borderColor:'#000', borderRadius:5, marginBottom:15, padding:10, position:'relative' },
+    buildItem:              { backgroundColor:'#1b1f2a', borderWidth:1, borderColor:'#2a2f3a', borderRadius:5, marginBottom:15, padding:10, position:'relative' },
     deleteButton:           { position:'absolute', top:5, right:5, zIndex:1 },
     imageNameContainer:     { flexDirection:'row', alignItems:'center' },
-    imageContainer:         { width:100, height:100, borderWidth:1, borderRadius:8, justifyContent:'center', alignItems:'center', marginRight:10, backgroundColor:'#fff' },
+    imageContainer:         { width:100, height:100, borderWidth:1, borderRadius:8, justifyContent:'center', alignItems:'center', marginRight:10, backgroundColor:'#0f1115', borderColor:'#2a2f3a' },
     buildingImage:          { width:'100%', height:'100%', resizeMode:'contain' },
-    nameContainer:          { flex:1, backgroundColor:'#e0e0e0', padding:5 },
-    buildName:              { fontSize:18, fontWeight:'bold', marginBottom:8 },
+    nameContainer:          { flex:1, backgroundColor:'#1b1f2a', padding:5 },
+    buildName:              { fontSize:18, fontWeight:'bold', marginBottom:8, color:'#e6e9ef' },
     additionalLevelBlock:   { flexDirection:'row', alignItems:'center', borderColor:'orange' },
-    additionalLevelText:    { flex:1, borderWidth:1, borderColor:'#ddd', alignItems:'center', paddingVertical:4 },
-    additionalLevelStepper: { flex:1, borderWidth:1, borderColor:'#ddd', alignItems:'center', justifyContent:'center', paddingVertical:4 },
-    stepperContainer:       { flexDirection:'row', alignItems:'center', borderWidth:1, borderColor:'#007AFF', borderRadius:4, overflow:'hidden' },
-    stepButton:             { justifyContent:'center', alignItems:'center', backgroundColor:'#007AFF' },
+    additionalLevelText:    { flex:1, borderWidth:1, borderColor:'#2a2f3a', alignItems:'center', paddingVertical:4 },
+    additionalLevelStepper: { flex:1, borderWidth:1, borderColor:'#2a2f3a', alignItems:'center', justifyContent:'center', paddingVertical:4 },
+    stepperContainer:       { flexDirection:'row', alignItems:'center', borderWidth:1, borderColor:'#4ea1ff', borderRadius:4, overflow:'hidden' },
+    stepButton:             { justifyContent:'center', alignItems:'center', backgroundColor:'#2f7de1' },
     stepButtonText:         { color:'#fff', fontSize:16 },
-    valueInput:             { flex:1, textAlign:'center', backgroundColor:'#fff', borderLeftWidth:1, borderRightWidth:1, borderColor:'#007AFF', fontSize:14, color:'#000' },
+    valueInput:             { flex:1, textAlign:'center', backgroundColor:'#0f1115', borderLeftWidth:1, borderRightWidth:1, borderColor:'#4ea1ff', fontSize:14, color:'#e6e9ef' },
     buttonContainer:        { alignItems:'flex-end', marginTop:10 },
-    createButton:           { backgroundColor:'#007AFF', paddingVertical:8, paddingHorizontal:12, borderRadius:5 },
+    createButton:           { backgroundColor:'#2f7de1', paddingVertical:8, paddingHorizontal:12, borderRadius:5 },
     createButtonText:       { color:'#fff', fontSize:14, fontWeight:'bold' },
-    createButtonDisabled:   { backgroundColor:'#aaa' },
+    createButtonDisabled:   { backgroundColor:'#3a3f4a' },
+    mutedText:              { color:'#9aa3b2' },
+    infoText:               { color:'#e6e9ef' },
+    errorText:              { color:'#ff6b6b', paddingHorizontal: 10, paddingTop: 10 },
   });
 
 export default MyGB;

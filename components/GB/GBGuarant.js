@@ -332,7 +332,7 @@ const GBGuarant = ({ route, navigation }) => {
               value={selectedValue}
               onChange={item => setSelectedValue(item.value)}
               renderRightIcon={() => (
-                <FontAwesome name="chevron-down" size={14} color="#007AFF" />
+                <FontAwesome name="chevron-down" size={14} color="#4ea1ff" />
               )}
               placeholder={t('gbGuarant.selectContributorPlaceholder')}
               renderItem={item =>
@@ -392,27 +392,29 @@ const GBGuarant = ({ route, navigation }) => {
 
 // Стили остаются без изменений
 const styles = StyleSheet.create({
-    container: {
-      padding: 20,
-    },
-    headerText: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: '#fff',
-    },
+  container: {
+    padding: 20,
+    backgroundColor: '#0f1115',
+  },
+  headerText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#e6e9ef',
+  },
     imageLevelContainer: {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    imageContainer: {
-      width: 110,
-      height: 110,
-      borderRadius: 10,
-      backgroundColor: '#fff',
-      borderWidth: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+  imageContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: '#0f1115',
+    borderWidth: 1,
+    borderColor: '#2a2f3a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
     buildingImage: {
       width: 100,
       height: 100,
@@ -424,18 +426,19 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       alignItems: 'center',
     },
-    levelLabel: {
-      marginBottom: 5,
-    },
+  levelLabel: {
+    marginBottom: 5,
+    color: '#9aa3b2',
+  },
     levelValue: {
       padding: 5,
       borderRadius: 5,
     },
-    levelText: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: '#000',
-    },
+  levelText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#e6e9ef',
+  },
     additionalTextContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -445,128 +448,133 @@ const styles = StyleSheet.create({
       flex: 1,
       justifyContent: 'center',
     },
-    contributionText: {
-      fontSize: 16,
-      color: '#333',
-    },
+  contributionText: {
+    fontSize: 16,
+    color: '#9aa3b2',
+  },
     buttonContainer: {
       width: '100%',
       justifyContent: 'center',
       alignItems: 'center',
     },
-    addButton: {
-      marginTop: 20,
-      paddingVertical: 12,
-      backgroundColor: '#007AFF',
-      borderRadius: 8,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+  addButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    backgroundColor: '#2f7de1',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
     addButtonText: {
       color: '#fff',
       fontSize: 18,
       fontWeight: 'bold',
     },
-    modalContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    modalContent: {
-      backgroundColor: '#fff',
-      borderRadius: 8,
-      padding: 16,
-      alignItems: 'center',
-      width: '80%',
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 16,
-      color: '#333',
-    },
-    input: {
-      width: '100%',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderColor: '#007AFF',
-      borderWidth: 1,
-      borderRadius: 8,
-      marginBottom: 16,
-    },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  modalContent: {
+    backgroundColor: '#1b1f2a',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    width: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#e6e9ef',
+  },
+  input: {
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderColor: '#4ea1ff',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: '#0f1115',
+    color: '#e6e9ef',
+  },
     modalButtons: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       width: '100%',
     },
-    saveButton: {
-      backgroundColor: '#007AFF',
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      borderRadius: 8,
-      flex: 1,
-      marginRight: 8,
-      alignItems: 'center',
-    },
+  saveButton: {
+    backgroundColor: '#2f7de1',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+    alignItems: 'center',
+  },
     saveButtonText: {
       color: '#fff',
       fontWeight: 'bold',
     },
-    cancelButton: {
-      backgroundColor: '#007AFF',
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      borderRadius: 8,
-      flex: 1,
-      marginLeft: 8,
-      alignItems: 'center',
-    },
+  cancelButton: {
+    backgroundColor: '#3a3f4a',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 8,
+    alignItems: 'center',
+  },
     cancelButtonText: {
       color: '#fff',
       fontWeight: 'bold',
     },
-    dropdown: {
-      width: '100%',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderColor: '#007AFF',
-      borderWidth: 1,
-      borderRadius: 8,
-      marginBottom: 16,
-    },
-    dropdownContainer: {
-      borderWidth: 1,
-      borderColor: '#007AFF',
-      borderRadius: 8,
-    },
-    stepperContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: '#007AFF',
-      borderRadius: 4,
-      overflow: 'hidden',
-    },
-    stepButton: {
-      backgroundColor: '#007AFF',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+  dropdown: {
+    width: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderColor: '#4ea1ff',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: '#0f1115',
+  },
+  dropdownContainer: {
+    borderWidth: 1,
+    borderColor: '#4ea1ff',
+    borderRadius: 8,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4ea1ff',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  stepButton: {
+    backgroundColor: '#2f7de1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
     stepButtonText: {
       fontSize: 16,
       color: '#fff',
     },
-    valueInput: {
-      fontSize: 16,
-      textAlign: 'center',
-      paddingVertical: 5,
-    },
-    separator: {
-      height: 10,
-      backgroundColor: '#dddddd',
-      alignItems: 'center',
-    },
+  valueInput: {
+    fontSize: 16,
+    textAlign: 'center',
+    paddingVertical: 5,
+    backgroundColor: '#0f1115',
+    color: '#e6e9ef',
+  },
+  separator: {
+    height: 10,
+    backgroundColor: '#2a2f3a',
+    alignItems: 'center',
+  },
     item: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -346,7 +346,7 @@ const GBChatList = () => {
           <TouchableOpacity
             style={[
               styles.chatItem,
-              item.id === 'express' && { backgroundColor: '#DCF8C6' }
+              item.id === 'express' && { backgroundColor: '#214a33' }
             ]}
             onPress={() => handleChatSelect(item)}
           >
@@ -367,34 +367,35 @@ const styles = StyleSheet.create({
       flex: 1,
       //padding: 20,
       //paddingTop: 10, // Щоб блок був максимально зверху
-      backgroundColor: 'white',
+      backgroundColor: '#0f1115',
     },
     chatItem: {
       flexDirection: 'row',
       alignItems: 'center',
       padding: 10,
-      backgroundColor: '#f2f2f2',
+      backgroundColor: '#1b1f2a',
       marginBottom: 10,
       marginTop: 10,
       marginLeft:20,
       marginRight:20,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#cccccc',
+      borderColor: '#2a2f3a',
     },
     chatName: {
       fontSize: 18,
+      color: '#e6e9ef',
     },
     emptyMessage: {
       padding: 15,
       textAlign: 'center',
-      color: '#888',
+      color: '#9aa3b2',
       fontSize: 16,
     },
     myInvestBlock: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#eaf4ff',
+      backgroundColor: '#182033',
       //borderRadius: 12,
       //paddingVertical: 12,
       paddingHorizontal: 18,
@@ -402,8 +403,8 @@ const styles = StyleSheet.create({
       //marginLeft: 20,
      borderWidth: 1,
       
-      borderColor: '#2296f3',
-      shadowColor: '#2296f3',
+      borderColor: '#4ea1ff',
+      shadowColor: '#4ea1ff',
       shadowOpacity: 0.10,
       shadowRadius: 8,
       elevation: 3,
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
       //paddingRight: 32, // Додаємо простір для хрестика
       paddingLeft: 8,
       position: 'relative',
-      backgroundColor: '#fff',
+      backgroundColor: '#0f1115',
       //borderRadius: 8,
      
       //borderColor: '#e0e0e0',
@@ -438,7 +439,7 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
     },
     myInvestText: {
-      color: '#2296f3',
+      color: '#4ea1ff',
       fontWeight: '700',
       fontSize: 16,
       letterSpacing: 0.2,
@@ -464,9 +465,9 @@ const styles = StyleSheet.create({
     pinnedMessageBlock: {
       width: screenWidth,
       height: 30,
-      backgroundColor: '#fff',
+      backgroundColor: '#1b1f2a',
       justifyContent: 'center',
-      borderColor: '#2296f3',
+      borderColor: '#4ea1ff',
       marginLeft: 0,
       alignSelf: 'flex-start',
       paddingLeft: 0,
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
       height: 32,
       marginRight: 8,
       borderRadius: 4,
-      backgroundColor: '#eee',
+      backgroundColor: '#2a2f3a',
     },
     pinnedContentRow: {
       flexDirection: "row",
@@ -496,17 +497,17 @@ const styles = StyleSheet.create({
       aspectRatio: 1,
       ///marginRight: 8,
       borderRadius: 4,
-      backgroundColor: '#eee',
+      backgroundColor: '#2a2f3a',
     },
     myInvestTitle: {
       fontSize: 12,
       fontWeight: 'bold',
-      color: '#0088cc',
+      color: '#4ea1ff',
       marginBottom: 2,
     },
     pinnedInvestText: {
       fontSize: 12,
-      color: "#333",
+      color: "#e6e9ef",
       flexShrink: 1,
       alignSelf: 'flex-start',
     },
@@ -519,14 +520,14 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 2,
-      backgroundColor: '#fff',
+      backgroundColor: '#1b1f2a',
       borderRadius: 12,
       //borderWidth: 1,
-      borderColor: '#ccc',
+      borderColor: '#2a2f3a',
       padding: 0,
     },
     removeInvestBtnText: {
-      color: '#d00',
+      color: '#ff6b6b',
       fontSize: 18,
       fontWeight: 'bold',
       lineHeight: 20,

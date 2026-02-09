@@ -120,7 +120,7 @@ const BonusView = ({ bonus, build }) => {
       </Modal>
 
       {paragraphs.length === 0 ? (
-        <Text>No bonus information available</Text>
+        <Text style={styles.emptyText}>No bonus information available</Text>
       ) : (
         paragraphs.map((paragraph, index) => (
           <Text key={index} style={styles.buildBonus}>
@@ -150,31 +150,31 @@ const BonusView = ({ bonus, build }) => {
 const styles = StyleSheet.create({
   bonusContainer: {
     borderWidth: 1,
-    borderColor: '#000',
+    borderColor: '#2a2f3a',
     padding: 5,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1b1f2a',
   },
   buildBonus: {
     fontSize: 16,
-    color: '#333',
+    color: '#e6e9ef',
     lineHeight: 24, // Для лучшей читаемости
   },
   highlightedText: {
     fontWeight: 'bold',
     textDecorationLine: 'underline',
-    color: '#007AFF', // Сделаем кликабельные ссылки синими
+    color: '#4ea1ff', // Сделаем кликабельные ссылки синими
   },
   // Стили для нашего кастомного модального окна
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContainer: {
     width: '80%',
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#1b1f2a',
     borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#000',
@@ -187,11 +187,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
     textAlign: 'center',
+    color: '#e6e9ef',
   },
   closeButton: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#4ea1ff',
     fontWeight: 'bold',
+  },
+  emptyText: {
+    color: '#9aa3b2',
   },
 });
 

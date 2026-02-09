@@ -281,22 +281,23 @@ const NewGBChat = () => {
   const isCreateDisabled = !chatName.trim() || !nodeRatio || Number(nodeRatio) === 0;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: '#ffffff' }}>
+    <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: '#0f1115' }}>
       {/* Блок для введення назви чату */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.chatNameLabel') || 'Назва чату'}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.chatNameLabel') || 'Назва чату'}</Text>
         <TextInput
           style={styles.chatNameInput}
           value={chatName}
           onChangeText={setChatName}
           placeholder={t('newGBChat.chatNamePlaceholder') || 'Введіть назву чату'}
+          placeholderTextColor="#9aa3b2"
         />
       </View>
 
       {/* Блок для коефіцієнта внеску (nodeRatio) */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.contributionRatioLabel')}</Text>
-        <Text style={{ marginBottom: 10 }}>{coefficientText}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.contributionRatioLabel')}</Text>
+        <Text style={styles.blockSubtle}>{coefficientText}</Text>
         <Stepper
           value={parseInt(nodeRatio, 10) || 0}
           onValueChange={(value) => {
@@ -311,7 +312,7 @@ const NewGBChat = () => {
 
       {/* Блок для вибору дозволених ВС */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.allowedGBsLabel')}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.allowedGBsLabel')}</Text>
         <MultiSelect
           style={styles.dropdown}
           containerStyle={styles.dropdownContainer}
@@ -333,17 +334,17 @@ const NewGBChat = () => {
               )}
               <Text style={styles.itemText}>{item?.label}</Text>
               {allowedGBs.includes(item?.value) && (
-                <FontAwesome name="check" size={16} color="#007AFF" style={{ marginLeft: 'auto' }} />
+                <FontAwesome name="check" size={16} color="#4ea1ff" style={{ marginLeft: 'auto' }} />
               )}
             </View>
           )}
-          renderRightIcon={() => <FontAwesome name="chevron-down" size={12} color="#007AFF" />}
+          renderRightIcon={() => <FontAwesome name="chevron-down" size={12} color="#4ea1ff" />}
         />
       </View>
 
       {/* Блок для мінімального рівня ВС */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.levelThresholdLabel')}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.levelThresholdLabel')}</Text>
         <Stepper
           value={parseInt(levelThreshold, 10) || 0}
           onValueChange={(value) => setLevelThreshold(value)}
@@ -355,7 +356,7 @@ const NewGBChat = () => {
 
       {/* Блок для вибору учасників гільдії */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.guildMembersLabel')}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.guildMembersLabel')}</Text>
         <MultiSelect
           style={styles.dropdown}
           containerStyle={styles.dropdownContainer}
@@ -375,17 +376,17 @@ const NewGBChat = () => {
               />
               <Text style={styles.itemText}>{item.name}</Text>
               {selectedMembers.includes(item.userId) && (
-                <FontAwesome name="check" size={16} color="#007AFF" style={{ marginLeft: 'auto' }} />
+                <FontAwesome name="check" size={16} color="#4ea1ff" style={{ marginLeft: 'auto' }} />
               )}
             </View>
           )}
-          renderRightIcon={() => <FontAwesome name="chevron-down" size={12} color="#007AFF" />}
+          renderRightIcon={() => <FontAwesome name="chevron-down" size={12} color="#4ea1ff" />}
         />
       </View>
 
       {/* Блок для обмеження місць */}
       <View style={styles.block}>
-        <Text style={{ marginBottom: 10 }}>{t('newGBChat.placeLimitLabel')}</Text>
+        <Text style={styles.blockLabel}>{t('newGBChat.placeLimitLabel')}</Text>
         <View style={styles.checkboxContainer}>
           {[1, 2, 3, 4, 5].map((value, index) => (
             <CustomCheckBox
@@ -417,23 +418,23 @@ const NewGBChat = () => {
 
 const styles = StyleSheet.create({
   block: {
-    backgroundColor: '#f2f2f2',
+    backgroundColor: '#1b1f2a',
     padding: 10,
     marginBottom: 20,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#cccccc',
+    borderColor: '#2a2f3a',
   },
   dropdown: {
     borderWidth: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0f1115',
     padding: 10,
     borderRadius: 6,
-    borderColor: '#007AFF',
+    borderColor: '#4ea1ff',
   },
   dropdownContainer: {
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#4ea1ff',
     borderRadius: 8,
   },
   checkboxContainer: {
@@ -444,14 +445,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#4ea1ff',
     borderRadius: 4,
     overflow: 'hidden',
   },
   stepButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#2f7de1',
   },
   stepButtonText: {
     color: '#fff',
@@ -459,12 +460,12 @@ const styles = StyleSheet.create({
   },
   valueInput: {
     textAlign: 'center',
-    backgroundColor: '#fff',
-    borderColor: '#007AFF',
+    backgroundColor: '#0f1115',
+    borderColor: '#4ea1ff',
     borderLeftWidth: 1,
     borderRightWidth: 1,
     fontSize: 16,
-    color: '#000',
+    color: '#e6e9ef',
   },
   itemContainer: {
     flexDirection: 'row',
@@ -484,16 +485,17 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 14,
+    color: '#e6e9ef',
   },
   createButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#2f7de1',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginVertical: 10,
   },
   createButtonDisabled: {
-    backgroundColor: '#b0b0b0',
+    backgroundColor: '#3a3f4a',
     opacity: 0.6,
   },
   createButtonText: {
@@ -503,12 +505,21 @@ const styles = StyleSheet.create({
   },
   chatNameInput: {
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#4ea1ff',
     borderRadius: 6,
     padding: 10,
-    backgroundColor: '#fff',
+    backgroundColor: '#0f1115',
     fontSize: 16,
     marginBottom: 5,
+    color: '#e6e9ef',
+  },
+  blockLabel: {
+    marginBottom: 10,
+    color: '#e6e9ef',
+  },
+  blockSubtle: {
+    marginBottom: 10,
+    color: '#9aa3b2',
   },
 });
 
