@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: 'white',
+    backgroundColor: '#0f1115',
   },
   messageWrapper: {
     flexDirection: 'row',
@@ -383,13 +383,13 @@ const styles = StyleSheet.create({
   },
   ownMessage: {
     marginLeft: 20,
-    backgroundColor: '#DCF8C6',
+    backgroundColor: '#1e3f54',
     alignSelf: 'flex-end',
   },
   otherMessage: {
     marginLeft: 10,
     marginRight: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#1b1f2a',
     alignSelf: 'flex-start',
   },
   avatar: {
@@ -400,6 +400,7 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontWeight: 'bold',
+    color: '#e6e9ef',
   },
   headerContainer: {
     flexDirection: 'row',
@@ -413,6 +414,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 14,
+    color: '#9aa3b2',
   },
   buildingImage: {
     width: 50,
@@ -431,8 +433,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   telegramButton: {
-    backgroundColor: '#0088cc',
-    color: 'white',
+    backgroundColor: '#2f7de1',
+    color: '#fff',
     paddingVertical: 6,
     borderRadius: 4,
     textAlign: 'center',
@@ -443,7 +445,7 @@ const styles = StyleSheet.create({
   emptyMessage: {
     textAlign: 'center',
     marginTop: 20,
-    color: 'gray',
+    color: '#9aa3b2',
   },
 });
 
