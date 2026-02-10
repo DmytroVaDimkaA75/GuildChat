@@ -6,7 +6,7 @@ import database from '@react-native-firebase/database';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 
 const AdminMain = () => {
@@ -16,6 +16,7 @@ const AdminMain = () => {
   const [guilds, setGuilds] = useState([]);
   const [guildMembersList, setGuildMembersList] = useState([]);
   const [showMembers, setShowMembers] = useState(false);
+  const [showGBGGoal, setShowGBGGoal] = useState(false);
   const chevronAnim = useRef(new Animated.Value(0)).current;
   const membersHeightAnim = useRef(new Animated.Value(0)).current;
   const [isCultureSettingsOpen, setCultureSettingsOpen] = useState(false);
@@ -23,6 +24,7 @@ const AdminMain = () => {
   const [selectedProductionTime, setSelectedProductionTime] = useState(null);
   const [notifyNextActions, setNotifyNextActions] = useState(false);
   const [upgradeBranches, setUpgradeBranches] = useState([]);
+  const [gbgGoalMaxPoints, setGbgGoalMaxPoints] = useState(true);
   const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
@@ -67,7 +69,7 @@ const AdminMain = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      let userNameRef, worldNameRef, guildNameRef;
+      let userNameRef, worldNameRef, guildNameRef, gbgGoalRef;
       
       const fetchInitialData = async () => {
         try {
@@ -84,6 +86,15 @@ const AdminMain = () => {
             
             guildNameRef = database().ref(`/guilds/${guildId}/guildName`);
             guildNameRef.on('value', snap => snap.exists() && setGuildName(snap.val()));
+
+            gbgGoalRef = database().ref(`/guilds/${guildId}/setting/GBGGoal`);
+            gbgGoalRef.on('value', snap => {
+              if (snap.exists()) {
+                setGbgGoalMaxPoints(!!snap.val());
+              } else {
+                setGbgGoalMaxPoints(true);
+              }
+            });
           }
           if (userId && guildId) {
             const cultureSnap = await database().ref(`/users/${userId}/${guildId}/culture`).once('value');
@@ -151,6 +162,7 @@ const AdminMain = () => {
         if (userNameRef) userNameRef.off('value');
         if (worldNameRef) worldNameRef.off('value');
         if (guildNameRef) guildNameRef.off('value');
+        if (gbgGoalRef) gbgGoalRef.off('value');
         setShowMembers(false);
       };
     }, [])
@@ -226,6 +238,18 @@ const AdminMain = () => {
       Alert.alert('Пароль скопирован');
     } catch (e) {
       Alert.alert('Ошибка', 'Не удалось скопировать пароль');
+    }
+  };
+
+  const handleGBGGoalChange = async (value) => {
+    setGbgGoalMaxPoints(value);
+    try {
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (!guildId) return;
+      await database().ref(`/guilds/${guildId}/setting/GBGGoal`).set(value);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Ошибка', 'Не вдалося оновити мету гільдії');
     }
   };
 
@@ -373,6 +397,27 @@ const AdminMain = () => {
               )}
             </Animated.View>
           </>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={styles.sectionTitle}>Мета гільдії на ПБГ</Text>
+          <TouchableOpacity onPress={() => setShowGBGGoal(v => !v)}>
+            <Ionicons name={showGBGGoal ? 'chevron-up' : 'chevron-down'} size={22} color="#3498db" />
+          </TouchableOpacity>
+        </View>
+        {showGBGGoal && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <Text style={[styles.mainText, { marginLeft: 0, maxWidth: '35%' }]}>Виснаження суперника</Text>
+            <Switch
+              value={gbgGoalMaxPoints}
+              onValueChange={handleGBGGoalChange}
+              trackColor={{ false: 'rgba(255,255,255,0.18)', true: 'rgba(52,152,219,0.35)' }}
+              thumbColor={gbgGoalMaxPoints ? '#3498db' : '#d0d0d0'}
+            />
+            <Text style={[styles.mainText, { marginLeft: 0, textAlign: 'right', maxWidth: '35%' }]}>Максимальна кількість очок</Text>
+          </View>
         )}
       </View>
       

@@ -47,6 +47,9 @@ const AdminSelectScreen = ({
     const guildInfo = {
       guildName: clanCaption,
       worldName: selectedWorld,
+      setting: {
+        GBGGoal: true,
+      },
     };
 
     try {
