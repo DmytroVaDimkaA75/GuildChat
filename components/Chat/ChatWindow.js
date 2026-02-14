@@ -2072,7 +2072,10 @@ const ChatWindow = ({ route, navigation }) => {
                       <MenuTrigger
                         triggerOnLongPress
                         onPress={() => setSelectedMessageId(msg.id)}
-                        customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
+                        customStyles={{
+                          TriggerTouchableComponent: TouchableOpacity,
+                          triggerOuterWrapper: isMe ? styles.menuTriggerRight : styles.menuTriggerLeft
+                        }}
                       >
                         <View
                           style={[
@@ -2658,12 +2661,15 @@ const styles = StyleSheet.create({
   },
 
   messageRow: { flexDirection: 'row', paddingHorizontal: 10, marginBottom: 4 },
+  menuTriggerRight: { alignItems: 'flex-end' },
+  menuTriggerLeft: { alignItems: 'flex-start' },
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
 
-  bubble: { maxWidth: '78%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2, alignSelf: 'flex-start' },
+  bubble: { maxWidth: '78%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
   bubbleReply: { maxWidth: '78%' },
   bubbleMe: {
+    alignSelf: 'flex-end',
     backgroundColor: 'rgba(52, 152, 219, 0.25)',
     borderBottomRightRadius: 4,
     borderWidth: 1,
