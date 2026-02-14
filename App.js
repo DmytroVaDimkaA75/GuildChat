@@ -261,29 +261,41 @@ const AppContent = () => {
 
   useEffect(() => {
     const checkAndLogWorldData = async () => {
-      try {
-        const userId = await AsyncStorage.getItem("userId");
-        const guildStr = await AsyncStorage.getItem("guildId");
-        if (userId && guildStr) {
-          const worldId = guildStr.split("_")[0];
-          const url = `https://foe.scoredb.io/${worldId}/Player/${userId}`;
-          const html = await (await fetch(url)).text();
-          const data = parsePlayerBlock(html);
-          if (data) {
-            console.log("Ім'я гравця:", data.userName);
-            console.log("ID гільдії:", data.guildId);
-          }
-        }
-      } catch (e) {
-        console.log("Помилка парсингу:", e);
-      }
-
       if (guildId) {
         fetchUserData();
       } else {
         setLoading(false);
         setChecked(true);
       }
+
+      // Не блокуємо старт додатка допоміжним запитом до зовнішнього сервісу.
+      // Іноді цей endpoint відповідає повільно, через що з'являється відчуття
+      // "довгого завантаження" навіть при стабільному інтернеті.
+      (async () => {
+        try {
+          const userId = await AsyncStorage.getItem("userId");
+          const guildStr = await AsyncStorage.getItem("guildId");
+          if (userId && guildStr) {
+            const worldId = guildStr.split("_")[0];
+            const url = `https://foe.scoredb.io/${worldId}/Player/${userId}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            try {
+              const response = await fetch(url, { signal: controller.signal });
+              const html = await response.text();
+              const data = parsePlayerBlock(html);
+              if (data) {
+                console.log("Ім'я гравця:", data.userName);
+                console.log("ID гільдії:", data.guildId);
+              }
+            } finally {
+              clearTimeout(timeoutId);
+            }
+          }
+        } catch (e) {
+          console.log("Помилка парсингу:", e);
+        }
+      })();
     };
 
     checkAndLogWorldData();
