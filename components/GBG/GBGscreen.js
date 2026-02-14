@@ -30,7 +30,6 @@ import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
 const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
-
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
@@ -871,7 +870,7 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
-      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim }]}>
+      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height }]}>
         <Svg width="100%" height="100%" viewBox={viewBox}>
           {renderMapPaths()}
         </Svg>
@@ -1024,7 +1023,7 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
   infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { height: HALF_HEIGHT, width: "100%", backgroundColor: "#1c1c1e", overflow: "hidden" },
+  mapContainer: { width: "100%", maxHeight: HALF_HEIGHT, alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
 
