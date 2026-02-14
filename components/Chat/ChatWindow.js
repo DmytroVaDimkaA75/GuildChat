@@ -42,7 +42,6 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -58,7 +57,8 @@ import {
   StatusBar,
   Clipboard,
   Share,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,7 +75,6 @@ import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const WAVEFORM_BAR_COUNT = 60;
 const WAVEFORM_MIN_HEIGHT = 2;
 const WAVEFORM_MAX_HEIGHT = 28;
@@ -1020,6 +1019,7 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) =
 // --- Модалка Просмотра (Зум + Шер) ---
 const ImageViewerModal = ({ visible, uri, onClose }) => {
   const [scale, setScale] = useState(1);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const lastTap = useRef(null);
 
   useEffect(() => {
@@ -1067,7 +1067,8 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <ScrollView
-            contentContainerStyle={styles.imageScrollView}
+            style={styles.imageScrollView}
+            contentContainerStyle={styles.imageScrollContent}
             maximumZoomScale={3}
             minimumZoomScale={1}
             centerContent={true}
@@ -1078,7 +1079,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
             <TouchableWithoutFeedback onPress={handleDoubleTap}>
               <Image
                 source={{ uri }}
-                style={[styles.fullScreenImage, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
+                style={[styles.fullScreenImage, { width: windowWidth, height: windowHeight }, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
                 resizeMode="contain"
               />
             </TouchableWithoutFeedback>
@@ -1091,6 +1092,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 
 const ChatWindow = ({ route, navigation }) => {
   const { chatId } = route.params || {};
+  const { width: windowWidth } = useWindowDimensions();
   const [groups, setGroups] = useState([]); // групи по датах
 
   useEffect(() => {
@@ -1990,7 +1992,7 @@ const ChatWindow = ({ route, navigation }) => {
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   onMomentumScrollEnd={(e) => {
-                    const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                    const page = Math.round(e.nativeEvent.contentOffset.x / Math.max(windowWidth, 1));
                     const msg = pinnedMessages[page];
                     if (msg?.id) scrollToMessage(msg.id);
                   }}
@@ -1998,7 +2000,7 @@ const ChatWindow = ({ route, navigation }) => {
                   {pinnedMessages.map((msg) => (
                     <TouchableOpacity
                       key={msg.id}
-                      style={styles.pinnedItemPage}
+                      style={[styles.pinnedItemPage, { width: windowWidth }]}
                       activeOpacity={0.9}
                       onPress={() => msg?.id && scrollToMessage(msg.id)}
                     >
@@ -2070,7 +2072,10 @@ const ChatWindow = ({ route, navigation }) => {
                       <MenuTrigger
                         triggerOnLongPress
                         onPress={() => setSelectedMessageId(msg.id)}
-                        customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
+                        customStyles={{
+                          TriggerTouchableComponent: TouchableOpacity,
+                          triggerOuterWrapper: isMe ? styles.menuTriggerRight : styles.menuTriggerLeft
+                        }}
                       >
                         <View
                           style={[
@@ -2636,7 +2641,7 @@ const styles = StyleSheet.create({
     borderColor: '#333',
     overflow: 'hidden'
   },
-  pinnedItemPage: { width: screenWidth, paddingHorizontal: 10 },
+  pinnedItemPage: { paddingHorizontal: 10 },
 
   // ✅ робимо контейнер рядком: бар + контент-колонка
   pinnedItemInner: { flexDirection: 'row', alignItems: 'center', width: '100%' },
@@ -2656,18 +2661,24 @@ const styles = StyleSheet.create({
   },
 
   messageRow: { flexDirection: 'row', paddingHorizontal: 10, marginBottom: 4 },
+  menuTriggerRight: { width: '100%', alignItems: 'flex-end' },
+  menuTriggerLeft: { width: '100%', alignItems: 'flex-start' },
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
 
-  bubble: { maxWidth: screenWidth * 0.75, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
-  bubbleReply: { width: screenWidth * 0.75 },
+  bubble: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
+  bubbleReply: { minWidth: '36%' },
   bubbleMe: {
+    maxWidth: '78%',
+    alignSelf: 'flex-end',
     backgroundColor: 'rgba(52, 152, 219, 0.25)',
     borderBottomRightRadius: 4,
     borderWidth: 1,
     borderColor: 'rgba(52, 152, 219, 0.3)'
   },
   bubbleThem: {
+    maxWidth: '88%',
+    alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderBottomLeftRadius: 4,
     borderWidth: 1,
@@ -2914,8 +2925,9 @@ const styles = StyleSheet.create({
   imageViewerContainer: { flex: 1, backgroundColor: '#000' },
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   imageViewerBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
-  imageScrollView: { flexGrow: 1, justifyContent: 'center' },
-  fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 },
+  imageScrollView: { flex: 1 },
+  imageScrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+  fullScreenImage: { width: '100%', height: '100%' },
 
   // --- compact preview (pinned/quoted) ---
   compactPreviewRow: { flexDirection: 'row', alignItems: 'center' },
