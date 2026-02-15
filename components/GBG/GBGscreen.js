@@ -23,8 +23,6 @@ import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
-import WidgetCacheDebugModal from "./WidgetCacheDebugModal";
-import { refreshGbgWidgetCacheFromFirebase } from "./gbgWidgetRefresh";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
@@ -382,11 +380,11 @@ const GVG = () => {
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
   const [infoVisible, setInfoVisible] = useState(false);
-  const [debugVisible, setDebugVisible] = useState(false);
 
   const [battlesVisible, setBattlesVisible] = useState(false);
   const [battlesRows, setBattlesRows] = useState([]);
   const [battlesLoading, setBattlesLoading] = useState(false);
+  const [battlesActivityOnly, setBattlesActivityOnly] = useState(false);
   const [battlesGuildId, setBattlesGuildId] = useState(null);
   const [battlesUserId, setBattlesUserId] = useState(null);
   const [battlesRaw, setBattlesRaw] = useState(null);
@@ -950,13 +948,7 @@ const GVG = () => {
     return `${sign}${value}`;
   };
 
-  const handleDebugRefresh = async () => {
-    await refreshGbgWidgetCacheFromFirebase({
-      guildId,
-      reason: "manual-debug",
-      sectorId: "",
-    });
-  };
+  const filteredBattlesRows = battlesActivityOnly ? battlesRows.filter((row) => row.hasDiff) : battlesRows;
 
   // ===== Loader =====
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
@@ -983,9 +975,6 @@ const GVG = () => {
           <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
           <View style={styles.listActions}>
-            <TouchableOpacity style={styles.debugBtn} onPress={() => setDebugVisible(true)}>
-              <Text style={styles.debugBtnText}>Дебаг</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
               <Text style={styles.battlesBtnText}>Бої</Text>
             </TouchableOpacity>
@@ -1066,11 +1055,19 @@ const GVG = () => {
         <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <View style={styles.battlesModal}>
-            <Text style={styles.battlesTitle}>Бої</Text>
+            <View style={styles.battlesTitleRow}>
+              <Text style={styles.battlesTitle}>Бої</Text>
+              <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
+                <View style={[styles.battlesCheckbox, battlesActivityOnly && styles.battlesCheckboxChecked]}>
+                  {battlesActivityOnly && <Text style={styles.battlesCheckboxMark}>✓</Text>}
+                </View>
+                <Text style={styles.battlesActivityLabel}>Активність</Text>
+              </TouchableOpacity>
+            </View>
             {battlesLoading ? (
               <ActivityIndicator size="large" color="#3498db" />
             ) : (
-              <ScrollView style={styles.battlesScroll}>
+              <>
                 <View style={styles.battlesHeaderRow}>
                   <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
                   <Text style={styles.battlesHeaderCell}>Перег</Text>
@@ -1078,7 +1075,9 @@ const GVG = () => {
                   <Text style={styles.battlesHeaderCell}>Разом</Text>
                   <Text style={styles.battlesHeaderCell}>Втрати</Text>
                 </View>
-                {battlesRows.map((row) => (
+
+                <ScrollView style={styles.battlesScroll}>
+                {filteredBattlesRows.map((row) => (
                   <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
                     <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
                       {formatName(row.userName)}
@@ -1101,7 +1100,8 @@ const GVG = () => {
                     </View>
                   </View>
                 ))}
-              </ScrollView>
+                </ScrollView>
+              </>
             )}
             <TouchableOpacity style={styles.battlesClose} onPress={handleBattlesClose}>
               <Text style={styles.battlesCloseText}>Закрити</Text>
@@ -1110,12 +1110,6 @@ const GVG = () => {
         </View>
       )}
 
-      <WidgetCacheDebugModal
-        visible={debugVisible}
-        onClose={() => setDebugVisible(false)}
-        mapKey={mapKey}
-        onManualRefresh={handleDebugRefresh}
-      />
     </View>
   );
 };
@@ -1133,8 +1127,6 @@ const styles = StyleSheet.create({
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
 
   listActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  debugBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  debugBtnText: { color: "#E0E0E0", fontWeight: "700" },
   battlesBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   battlesBtnText: { color: "#E0E0E0", fontWeight: "700" },
 
@@ -1193,9 +1185,23 @@ const styles = StyleSheet.create({
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
   battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 10 },
+  battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
+  battlesActivityLabel: { color: "#E0E0E0", fontSize: 13, fontWeight: "600" },
+  battlesCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  battlesCheckboxChecked: { borderColor: "#2ecc71", backgroundColor: "rgba(46, 204, 113, 0.18)" },
+  battlesCheckboxMark: { color: "#2ecc71", fontSize: 12, fontWeight: "900", lineHeight: 14 },
   battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
-  battlesHeaderRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)", paddingBottom: 6, marginBottom: 6 },
+  battlesHeaderRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.12)",
+    paddingBottom: 6,
+    marginBottom: 6,
+    backgroundColor: "rgba(30, 30, 30, 0.98)",
+    paddingTop: 2,
+  },
   battlesRow: { flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
   battlesRowHighlight: { backgroundColor: "rgba(46, 204, 113, 0.08)" },
   battlesHeaderCell: { flex: 1, color: "#A0D8FF", fontWeight: "800", fontSize: 12, textAlign: "center" },
