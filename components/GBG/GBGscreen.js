@@ -1067,7 +1067,7 @@ const GVG = () => {
             {battlesLoading ? (
               <ActivityIndicator size="large" color="#3498db" />
             ) : (
-              <ScrollView style={styles.battlesScroll} stickyHeaderIndices={[0]}>
+              <>
                 <View style={styles.battlesHeaderRow}>
                   <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
                   <Text style={styles.battlesHeaderCell}>Перег</Text>
@@ -1075,6 +1075,8 @@ const GVG = () => {
                   <Text style={styles.battlesHeaderCell}>Разом</Text>
                   <Text style={styles.battlesHeaderCell}>Втрати</Text>
                 </View>
+
+                <ScrollView style={styles.battlesScroll}>
                 {filteredBattlesRows.map((row) => (
                   <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
                     <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
@@ -1098,7 +1100,8 @@ const GVG = () => {
                     </View>
                   </View>
                 ))}
-              </ScrollView>
+                </ScrollView>
+              </>
             )}
             <TouchableOpacity style={styles.battlesClose} onPress={handleBattlesClose}>
               <Text style={styles.battlesCloseText}>Закрити</Text>
@@ -1190,7 +1193,15 @@ const styles = StyleSheet.create({
   battlesCheckboxChecked: { borderColor: "#2ecc71", backgroundColor: "rgba(46, 204, 113, 0.18)" },
   battlesCheckboxMark: { color: "#2ecc71", fontSize: 12, fontWeight: "900", lineHeight: 14 },
   battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
-  battlesHeaderRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)", paddingBottom: 6, marginBottom: 6, backgroundColor: "rgba(30, 30, 30, 0.98)", paddingTop: 2 },
+  battlesHeaderRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.12)",
+    paddingBottom: 6,
+    marginBottom: 6,
+    backgroundColor: "rgba(30, 30, 30, 0.98)",
+    paddingTop: 2,
+  },
   battlesRow: { flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
   battlesRowHighlight: { backgroundColor: "rgba(46, 204, 113, 0.08)" },
   battlesHeaderCell: { flex: 1, color: "#A0D8FF", fontWeight: "800", fontSize: 12, textAlign: "center" },
