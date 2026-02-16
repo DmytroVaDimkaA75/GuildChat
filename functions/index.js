@@ -1107,6 +1107,26 @@ const evaluateSectorVariant = ({ existingBuildings, plannedBuildings, victoryPoi
   return { sums, defenseRequirement, production };
 };
 
+const formatRecommendedBuildings = (plannedBuildings) => {
+  const ordered = [];
+  const counts = new Map();
+
+  (plannedBuildings || []).forEach((idRaw) => {
+    const id = String(idRaw || "").toLowerCase();
+    if (!id) return;
+    const name = GBG_BUILDING_NAME_MAP[id] || id;
+    if (!counts.has(name)) ordered.push(name);
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+
+  return ordered
+    .map((name) => {
+      const count = counts.get(name) || 0;
+      return count > 1 ? `${count} ${name}` : name;
+    })
+    .join(",\n");
+};
+
 exports.scheduleGbgSectorBuildCheck = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
@@ -1178,7 +1198,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
 
               const sectorId = String(task.sectorId || "");
               if (!sectorId) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_sector_id", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
@@ -1191,14 +1211,14 @@ exports.processGbgSectorBuildChecks = onSchedule(
               ]);
 
               if (!sectorSnap.exists()) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "sector_missing", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
               const sector = sectorSnap.val() || {};
               const freeSlots = Number(sector.freeSlots || 0);
               if (!Number.isFinite(freeSlots) || freeSlots <= 0) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_free_slots", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
@@ -1214,7 +1234,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
                 .filter((item) => !!item.buildingId);
 
               if (availableBuildingOptions.length === 0) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_available_buildings", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
@@ -1226,7 +1246,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
 
               const variants = buildSectorConstructionVariants({ freeSlots, options: availableBuildingOptions, treasury });
               if (!variants.length) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_variants", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
@@ -1243,7 +1263,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
                 .filter((v) => (Number(v?.sums?.attack) || 0) >= 80);
 
               if (!evaluated.length) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_variants_attack_lt_80", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
@@ -1258,11 +1278,12 @@ exports.processGbgSectorBuildChecks = onSchedule(
               }
 
               if (!membersSnap.exists()) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_members", doneAt: nowSec });
+                await db.ref(queuePath).remove();
                 return;
               }
 
               const memberIds = Object.keys(membersSnap.val() || {});
+              const nowMs = Date.now();
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
                   const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
@@ -1273,54 +1294,81 @@ exports.processGbgSectorBuildChecks = onSchedule(
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
                   if (!token) return null;
 
-                  return token;
+                  let soundBySchedule = true;
+                  try {
+                    const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
+                    soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
+                  } catch (e) {
+                    logger.error("[GBG_BUILD_CHECK] schedule check error:", e);
+                    soundBySchedule = true;
+                  }
+
+                  return { token, sound: !!soundBySchedule };
                 })
               );
 
-              const tokens = Array.from(new Set(leaderInfos.filter(Boolean)));
-              if (!tokens.length) {
-                await db.ref(queuePath).update({ status: "skipped", reason: "no_guild_leader_tokens", doneAt: nowSec });
+              const validInfos = leaderInfos.filter(Boolean);
+              const soundTokens = Array.from(new Set(validInfos.filter((x) => x.sound).map((x) => x.token)));
+              const silentTokens = Array.from(new Set(validInfos.filter((x) => !x.sound).map((x) => x.token)));
+              if (!soundTokens.length && !silentTokens.length) {
+                await db.ref(queuePath).remove();
                 return;
               }
 
-              const plannedReadable = best.planned.map((id) => GBG_BUILDING_NAME_MAP[id] || id).join(", ");
-              const titleText = "Будівництво";
-              const messageText = `Сектор ${sectorId}. Необхідно побудувати: ${plannedReadable}`;
+              const plannedReadable = formatRecommendedBuildings(best.planned);
+              const titleText = "🛠️ Рекомендовано побудувати";
+              const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
 
-              const chunks = chunkArray(tokens, 500);
-              await Promise.all(
-                chunks.map((chunk) =>
-                  admin.messaging().sendEachForMulticast({
-                    tokens: chunk,
-                    data: {
-                      screen: "GBG",
-                      type: "gbg_build_plan",
-                      title: titleText,
-                      body: messageText,
-                      guildId: String(guildId),
-                      sectorId: String(sectorId),
-                    },
-                    notification: { title: titleText, body: messageText },
-                    android: { priority: "high", notification: { channel_id: "gbg_sector" } },
-                    apns: { payload: { aps: { sound: "default" } } },
-                  })
-                )
-              );
+              if (soundTokens.length > 0) {
+                const chunks = chunkArray(soundTokens, 500);
+                await Promise.all(
+                  chunks.map((chunk) =>
+                    admin.messaging().sendEachForMulticast({
+                      tokens: chunk,
+                      data: {
+                        screen: "GBG",
+                        type: "gbg_build_plan",
+                        title: titleText,
+                        body: messageText,
+                        guildId: String(guildId),
+                        sectorId: String(sectorId),
+                        sound: "1",
+                      },
+                      notification: { title: titleText, body: messageText },
+                      android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
+                      apns: { payload: { aps: { sound: "default" } } },
+                    })
+                  )
+                );
+              }
 
-              await db.ref(queuePath).update({
-                status: "sent",
-                doneAt: nowSec,
-                result: {
-                  planned: best.planned,
-                  attack: best.sums.attack,
-                  defenseRequirement: best.defenseRequirement,
-                  production: best.production,
-                  gbgGoal,
-                },
-              });
+              if (silentTokens.length > 0) {
+                const chunks = chunkArray(silentTokens, 500);
+                await Promise.all(
+                  chunks.map((chunk) =>
+                    admin.messaging().sendEachForMulticast({
+                      tokens: chunk,
+                      data: {
+                        screen: "GBG",
+                        type: "gbg_build_plan",
+                        title: titleText,
+                        body: messageText,
+                        guildId: String(guildId),
+                        sectorId: String(sectorId),
+                        sound: "0",
+                      },
+                      notification: { title: titleText, body: messageText },
+                      android: { priority: "high", notification: { channel_id: "gbg_build_silent" } },
+                      apns: { payload: { aps: { "content-available": 1 } } },
+                    })
+                  )
+                );
+              }
+
+              await db.ref(queuePath).remove();
             } catch (e) {
               logger.error("[GBG_BUILD_CHECK] processing error", { guildId, taskId, error: e?.message || e });
-              await db.ref(queuePath).update({ status: "error", doneAt: nowSec, error: String(e?.message || e) });
+              await db.ref(queuePath).remove();
             }
           })
         );
