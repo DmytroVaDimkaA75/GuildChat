@@ -391,18 +391,25 @@ const getUserScheduleForNotifications = async (uid) => {
 
   const schedulesSnap = await admin.database().ref(`/users/${uid}/setting/schedules`).once("value");
   if (!schedulesSnap.exists()) {
-    return { timeZone, schedule: null };
+    return { timeZone, schedules: [] };
   }
 
-  const schedules = schedulesSnap.val() || {};
-  let scheduleId = preferredId;
+  const schedulesMap = schedulesSnap.val() || {};
 
-  if (!scheduleId || !schedules[scheduleId]) {
-    scheduleId = Object.keys(schedules)[0] || null;
+  if (preferredId && schedulesMap[preferredId]) {
+    return { timeZone, schedules: [schedulesMap[preferredId]] };
   }
 
-  const schedule = scheduleId ? schedules[scheduleId] : null;
-  return { timeZone, schedule };
+  const schedules = Object.keys(schedulesMap)
+    .map((id) => schedulesMap[id])
+    .filter((item) => item && typeof item === "object");
+
+  return { timeZone, schedules };
+};
+
+const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
+  if (!Array.isArray(schedules) || !schedules.length) return true;
+  return schedules.some((schedule) => isUserActiveNow(schedule, utcMs, timeZone));
 };
 
 /**
@@ -545,8 +552,8 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db
       // ✅ якщо графік дозволяє -> зі звуком
       let soundBySchedule = true;
       try {
-        const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
-        soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
+        const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
+        soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
       } catch (e) {
         logger.error("[sendChatNotification] schedule check error:", e);
         soundBySchedule = true;
@@ -887,8 +894,8 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
 
       let soundBySchedule = true;
       try {
-        const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
-        soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
+        const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
+        soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
       } catch (e) {
         logger.error("[GBG] schedule check error:", e);
         soundBySchedule = true;
@@ -1296,8 +1303,8 @@ exports.processGbgSectorBuildChecks = onSchedule(
 
                   let soundBySchedule = true;
                   try {
-                    const { timeZone, schedule } = await getUserScheduleForNotifications(uid);
-                    soundBySchedule = isUserActiveNow(schedule, nowMs, timeZone);
+                    const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
+                    soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
                   } catch (e) {
                     logger.error("[GBG_BUILD_CHECK] schedule check error:", e);
                     soundBySchedule = true;
