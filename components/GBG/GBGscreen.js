@@ -878,7 +878,12 @@ const GVG = () => {
       const usersRaw = usersSnap.exists() ? usersSnap.val() || {} : {};
       const storedRaw = storedSnap.exists() ? storedSnap.val() || {} : {};
 
+      const currentMapId = raw?.mapId;
+      const storedMapId = storedRaw?.mapId;
+      const canCalculateDiff = currentMapId === storedMapId;
+
       const rows = Object.entries(raw).map(([playerId, entry]) => {
+        if (playerId === "mapId") return null;
         const negotiationsWon = Number(entry?.negotiationsWon) || 0;
         const battlesWon = Number(entry?.battlesWon) || 0;
         const attrition = Number(entry?.attrition) || 0;
@@ -890,10 +895,10 @@ const GVG = () => {
         const storedAttrition = Number(storedEntry?.attrition) || 0;
         const storedTotal = storedBattles + storedNegotiations * 2;
 
-        const diffNegotiations = negotiationsWon - storedNegotiations;
-        const diffBattles = battlesWon - storedBattles;
-        const diffTotal = total - storedTotal;
-        const diffAttrition = attrition - storedAttrition;
+        const diffNegotiations = canCalculateDiff ? negotiationsWon - storedNegotiations : 0;
+        const diffBattles = canCalculateDiff ? battlesWon - storedBattles : 0;
+        const diffTotal = canCalculateDiff ? total - storedTotal : 0;
+        const diffAttrition = canCalculateDiff ? attrition - storedAttrition : 0;
         const hasDiff = diffNegotiations !== 0 || diffBattles !== 0 || diffTotal !== 0 || diffAttrition !== 0;
 
         const userName = usersRaw?.[playerId]?.userName ? String(usersRaw[playerId].userName) : playerId;
@@ -911,9 +916,19 @@ const GVG = () => {
           diffAttrition,
           hasDiff,
         };
-      });
-      rows.sort((a, b) => b.total - a.total);
-      setBattlesRows(rows);
+      }).filter(Boolean);
+
+      const hasNegativeAttritionDiff = canCalculateDiff && rows.some((row) => row.diffAttrition < 0);
+      const normalizedRows = hasNegativeAttritionDiff
+        ? rows.map((row) => ({
+            ...row,
+            diffAttrition: row.attrition,
+            hasDiff: row.diffNegotiations !== 0 || row.diffBattles !== 0 || row.diffTotal !== 0 || row.attrition !== 0,
+          }))
+        : rows;
+
+      normalizedRows.sort((a, b) => b.total - a.total);
+      setBattlesRows(normalizedRows);
       setBattlesVisible(true);
     } catch (e) {
       Alert.alert(t("gbgScreen.errors.title"), "Не вдалося завантажити таблицю боїв.");
