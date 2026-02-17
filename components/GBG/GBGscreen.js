@@ -114,23 +114,34 @@ const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: "Вулканічний �
 
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
 const BUILDING_BONUS_MAP = {
-  guild_command_post_improvised: 20,
-  guild_command_post_forward: 40,
-  guild_command_post_fortified: 60,
-  barracks_improvised: 20,
-  barracks: 40,
-  barracks_reinforced: 60,
-  basic_field_outpost_diamond: 20,
-  regular_field_outpost_diamond: 40,
-  advanced_field_outpost_diamond: 60,
+  guild_command_post_improvised: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 15, flatProductionBonus: 0 },
+  guild_command_post_forward: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 30, flatProductionBonus: 0 },
+  guild_command_post_fortified: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 100, flatProductionBonus: 0 },
+  barracks_improvised: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 0, flatProductionBonus: 0 },
+  barracks: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 0, flatProductionBonus: 0 },
+  barracks_reinforced: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 0, flatProductionBonus: 0 },
+  basic_field_outpost_diamond: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 0, flatProductionBonus: 25 },
+  regular_field_outpost_diamond: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 0, flatProductionBonus: 50 },
+  advanced_field_outpost_diamond: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 0, flatProductionBonus: 100 },
+};
+const BUILDING_DISPLAY_NAME_MAP = {
+  guild_command_post_improvised: "Базовий польовий табір",
+  guild_command_post_forward: "Звичайний польовий табір",
+  guild_command_post_fortified: "Покращений польовий табір",
+  barracks_improvised: "Базові казарми гільдії",
+  barracks: "Звичайні казарми гільдії",
+  barracks_reinforced: "Покращені казарми гільдії",
+  basic_field_outpost_diamond: "Базовий польовий аванпост",
+  regular_field_outpost_diamond: "Звичайний польовий аванпост",
+  advanced_field_outpost_diamond: "Покращений польовий аванпост",
 };
 const STAFF_ONLY_BUILDING_BONUS_MAP = {
-  guild_fieldcamp_small: 26,
-  guild_fieldcamp: 52,
-  guild_fieldcamp_fortified: 80,
-  basic_guild_fortress_diamond: 26,
-  regular_guild_fortress_diamond: 52,
-  advanced_guild_fortress_diamond: 80,
+  guild_fieldcamp_small: { attackBonus: 26, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  guild_fieldcamp: { attackBonus: 52, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  guild_fieldcamp_fortified: { attackBonus: 80, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  basic_guild_fortress_diamond: { attackBonus: 26, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  regular_guild_fortress_diamond: { attackBonus: 52, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  advanced_guild_fortress_diamond: { attackBonus: 80, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
 };
 
 const parseStaffSectors = (rawValue) => {
@@ -169,25 +180,32 @@ const getBuildingsWithBonuses = (entry) => {
   const buildings =
     Array.isArray(rawBuildings) ? rawBuildings : rawBuildings && typeof rawBuildings === "object" ? Object.values(rawBuildings) : [];
   if (buildings.length === 0) return [];
-  const isStaffSector = !!entry.staff;
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== "object") return list;
     const state = String(building.state || "").toLowerCase();
     if (state !== "active" && state !== "building") return list;
     const name = building.name ? String(building.name).toLowerCase() : "";
     if (!name) return list;
-    const baseBonus = BUILDING_BONUS_MAP[name];
-    const staffOnlyBonus = STAFF_ONLY_BUILDING_BONUS_MAP[name];
-    const bonus = Number.isFinite(baseBonus) ? baseBonus : Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
-    //const bonus = Number.isFinite(baseBonus) ? baseBonus : isStaffSector && Number.isFinite(staffOnlyBonus) ? staffOnlyBonus : null;
-    if (!Number.isFinite(bonus)) return list;
+    const baseBonuses = BUILDING_BONUS_MAP[name];
+    const staffOnlyBonuses = STAFF_ONLY_BUILDING_BONUS_MAP[name];
+    const bonusData = baseBonuses || staffOnlyBonuses;
+    if (!bonusData || typeof bonusData !== "object") return list;
+
+    const attackBonus = Number(bonusData.attackBonus) || 0;
+    const defenseRequirementBonus = Number(bonusData.defenseRequirementBonus) || 0;
+    const productionBonus = Number(bonusData.productionBonus) || 0;
+    const flatProductionBonus = Number(bonusData.flatProductionBonus) || 0;
+    const displayName = BUILDING_DISPLAY_NAME_MAP[name] || name;
+    const hasAnyBonus = attackBonus > 0 || defenseRequirementBonus > 0 || productionBonus > 0 || flatProductionBonus > 0;
+    if (!hasAnyBonus) return list;
+
     if (state === "active") {
-      list.push({ bonus, readyAt: 0 });
+      list.push({ attackBonus, defenseRequirementBonus, productionBonus, flatProductionBonus, displayName, readyAt: 0 });
       return list;
     }
     const readyAt = Number(building.readyAt);
     if (!Number.isFinite(readyAt) || readyAt <= 0) return list;
-    list.push({ bonus, readyAt });
+    list.push({ attackBonus, defenseRequirementBonus, productionBonus, flatProductionBonus, displayName, readyAt });
     return list;
   }, []);
 };
@@ -227,9 +245,31 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
 };
 
 const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
-  if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
+  if (!mapKey || !sectorId || !sectors || !shortGuildId) {
+    return {
+      value: 100,
+      readyAt: null,
+      defenseRequirementBonusValue: 0,
+      defenseRequirementBonusReadyAt: null,
+      productionBonusValue: 0,
+      productionBonusReadyAt: null,
+      flatProductionBonusValue: 0,
+      flatProductionBonusReadyAt: null,
+    };
+  }
   const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
-  if (neighborIds.length === 0) return { value: 100, readyAt: null };
+  if (neighborIds.length === 0) {
+    return {
+      value: 100,
+      readyAt: null,
+      defenseRequirementBonusValue: 0,
+      defenseRequirementBonusReadyAt: null,
+      productionBonusValue: 0,
+      productionBonusReadyAt: null,
+      flatProductionBonusValue: 0,
+      flatProductionBonusReadyAt: null,
+    };
+  }
   const shortId = String(shortGuildId);
   const bonuses = [];
   neighborIds.forEach((neighborId) => {
@@ -239,22 +279,72 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
     if (!ownerId || ownerId !== shortId) return;
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
-  if (bonuses.length === 0) return { value: 100, readyAt: null };
-  const totalPossible = bonuses.reduce((sum, item) => sum + item.bonus, 0);
-  if (totalPossible <= 0) return { value: 100, readyAt: null };
-  if (totalPossible <= 80) {
+  if (bonuses.length === 0) {
+    return {
+      value: 100,
+      readyAt: null,
+      defenseRequirementBonusValue: 0,
+      defenseRequirementBonusReadyAt: null,
+      productionBonusValue: 0,
+      productionBonusReadyAt: null,
+      flatProductionBonusValue: 0,
+      flatProductionBonusReadyAt: null,
+    };
+  }
+  const totalAttackPossible = bonuses.reduce((sum, item) => sum + (Number(item.attackBonus) || 0), 0);
+  const totalDefenseRequirementBonus = bonuses.reduce((sum, item) => sum + (Number(item.defenseRequirementBonus) || 0), 0);
+  const totalProductionBonus = bonuses.reduce((sum, item) => sum + (Number(item.productionBonus) || 0), 0);
+  const totalFlatProductionBonus = bonuses.reduce((sum, item) => sum + (Number(item.flatProductionBonus) || 0), 0);
+  const defenseRequirementBonusReadyAt =
+    totalDefenseRequirementBonus > 0 ? bonuses.reduce((max, item) => Math.max(max, Number(item.readyAt) || 0), 0) : 0;
+  const productionBonusReadyAt =
+    totalProductionBonus > 0 ? bonuses.reduce((max, item) => Math.max(max, Number(item.readyAt) || 0), 0) : 0;
+  const flatProductionBonusReadyAt =
+    totalFlatProductionBonus > 0 ? bonuses.reduce((max, item) => Math.max(max, Number(item.readyAt) || 0), 0) : 0;
+
+  if (totalAttackPossible <= 0) {
+    return {
+      value: 100,
+      readyAt: null,
+      defenseRequirementBonusValue: totalDefenseRequirementBonus,
+      defenseRequirementBonusReadyAt: defenseRequirementBonusReadyAt > 0 ? defenseRequirementBonusReadyAt : null,
+      productionBonusValue: totalProductionBonus,
+      productionBonusReadyAt: productionBonusReadyAt > 0 ? productionBonusReadyAt : null,
+      flatProductionBonusValue: totalFlatProductionBonus,
+      flatProductionBonusReadyAt: flatProductionBonusReadyAt > 0 ? flatProductionBonusReadyAt : null,
+    };
+  }
+  if (totalAttackPossible <= 80) {
     const latestReadyAt = bonuses.reduce((max, item) => Math.max(max, item.readyAt), 0);
-    return { value: 100 - totalPossible, readyAt: latestReadyAt > 0 ? latestReadyAt : null };
+    return {
+      value: 100 - totalAttackPossible,
+      readyAt: latestReadyAt > 0 ? latestReadyAt : null,
+      defenseRequirementBonusValue: totalDefenseRequirementBonus,
+      defenseRequirementBonusReadyAt: defenseRequirementBonusReadyAt > 0 ? defenseRequirementBonusReadyAt : null,
+      productionBonusValue: totalProductionBonus,
+      productionBonusReadyAt: productionBonusReadyAt > 0 ? productionBonusReadyAt : null,
+      flatProductionBonusValue: totalFlatProductionBonus,
+      flatProductionBonusReadyAt: flatProductionBonusReadyAt > 0 ? flatProductionBonusReadyAt : null,
+    };
   }
   const sorted = [...bonuses].sort((a, b) => a.readyAt - b.readyAt);
   let running = 0;
   let targetReadyAt = 0;
   for (const item of sorted) {
-    running += item.bonus;
+    running += Number(item.attackBonus) || 0;
     targetReadyAt = item.readyAt;
     if (running >= 80) break;
   }
-  return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
+  return {
+    value: 20,
+    readyAt: targetReadyAt > 0 ? targetReadyAt : null,
+    defenseRequirementBonusValue: totalDefenseRequirementBonus,
+    defenseRequirementBonusReadyAt: defenseRequirementBonusReadyAt > 0 ? defenseRequirementBonusReadyAt : null,
+    productionBonusValue: totalProductionBonus,
+    productionBonusReadyAt: productionBonusReadyAt > 0 ? productionBonusReadyAt : null,
+    flatProductionBonusValue: totalFlatProductionBonus,
+    flatProductionBonusReadyAt: flatProductionBonusReadyAt > 0 ? flatProductionBonusReadyAt : null,
+  };
 };
 
 const formatRemaining = (seconds) => {
@@ -627,6 +717,12 @@ const GVG = () => {
           army: armyRaw === "attack" || armyRaw === "defense" ? armyRaw : "",
           bonusValue: bonusInfo.value,
           bonusReadyAt: bonusInfo.readyAt,
+          defenseRequirementBonusValue: Number(bonusInfo.defenseRequirementBonusValue) || 0,
+          defenseRequirementBonusReadyAt: bonusInfo.defenseRequirementBonusReadyAt ? Number(bonusInfo.defenseRequirementBonusReadyAt) : 0,
+          productionBonusValue: Number(bonusInfo.productionBonusValue) || 0,
+          productionBonusReadyAt: bonusInfo.productionBonusReadyAt ? Number(bonusInfo.productionBonusReadyAt) : 0,
+          flatProductionBonusValue: Number(bonusInfo.flatProductionBonusValue) || 0,
+          flatProductionBonusReadyAt: bonusInfo.flatProductionBonusReadyAt ? Number(bonusInfo.flatProductionBonusReadyAt) : 0,
         };
       })
       .filter(Boolean)
@@ -722,6 +818,12 @@ const GVG = () => {
       army: item.army || "",
       bonusValue: Number.isFinite(item.bonusValue) ? item.bonusValue : 100,
       bonusReadyAt: item.bonusReadyAt ? Number(item.bonusReadyAt) : 0,
+      defenseRequirementBonusValue: Number(item.defenseRequirementBonusValue) || 0,
+      defenseRequirementBonusReadyAt: item.defenseRequirementBonusReadyAt ? Number(item.defenseRequirementBonusReadyAt) : 0,
+      productionBonusValue: Number(item.productionBonusValue) || 0,
+      productionBonusReadyAt: item.productionBonusReadyAt ? Number(item.productionBonusReadyAt) : 0,
+      flatProductionBonusValue: Number(item.flatProductionBonusValue) || 0,
+      flatProductionBonusReadyAt: item.flatProductionBonusReadyAt ? Number(item.flatProductionBonusReadyAt) : 0,
     }));
 
     const json = JSON.stringify(next5);

@@ -980,6 +980,367 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
   });
 }
 
+const GBG_BUILDING_BONUS_MAP = {
+  guild_command_post_improvised: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 15, flatProductionBonus: 0 },
+  guild_command_post_forward: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 30, flatProductionBonus: 0 },
+  guild_command_post_fortified: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 100, flatProductionBonus: 0 },
+  barracks_improvised: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 0, flatProductionBonus: 0 },
+  barracks: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 0, flatProductionBonus: 0 },
+  barracks_reinforced: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 0, flatProductionBonus: 0 },
+  basic_field_outpost_diamond: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 0, flatProductionBonus: 25 },
+  regular_field_outpost_diamond: { attackBonus: 40, defenseRequirementBonus: 10, productionBonus: 0, flatProductionBonus: 50 },
+  advanced_field_outpost_diamond: { attackBonus: 60, defenseRequirementBonus: 30, productionBonus: 0, flatProductionBonus: 100 },
+  guild_fieldcamp_small: { attackBonus: 26, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  guild_fieldcamp: { attackBonus: 52, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  guild_fieldcamp_fortified: { attackBonus: 80, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  basic_guild_fortress_diamond: { attackBonus: 26, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  regular_guild_fortress_diamond: { attackBonus: 52, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+  advanced_guild_fortress_diamond: { attackBonus: 80, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 },
+};
+
+const GBG_BUILDING_NAME_MAP = {
+  guild_command_post_improvised: "Базовий польовий табір",
+  guild_command_post_forward: "Звичайний польовий табір",
+  guild_command_post_fortified: "Покращений польовий табір",
+  barracks_improvised: "Базові казарми гільдії",
+  barracks: "Звичайні казарми гільдії",
+  barracks_reinforced: "Покращені казарми гільдії",
+  basic_field_outpost_diamond: "Базовий польовий аванпост",
+  regular_field_outpost_diamond: "Звичайний польовий аванпост",
+  advanced_field_outpost_diamond: "Покращений польовий аванпост",
+};
+
+const toArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") return Object.values(value);
+  return [];
+};
+
+const getMapBaseDefense = (mapNameRaw) => {
+  const mapName = String(mapNameRaw || "").toLowerCase();
+  if (mapName === "waterfall_archipelago") return 100;
+  if (mapName === "volcano_archipelago" || mapName === "volcanic_archipelago") return 110;
+  return 110;
+};
+
+const getBuildingBonusesById = (buildingIdRaw) => {
+  const key = String(buildingIdRaw || "").toLowerCase();
+  return GBG_BUILDING_BONUS_MAP[key] || { attackBonus: 0, defenseRequirementBonus: 0, productionBonus: 0, flatProductionBonus: 0 };
+};
+
+const getPercentLimit = (amount) => {
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return numeric * 0.01;
+};
+
+const buildSectorConstructionVariants = ({ freeSlots, options, treasury }) => {
+  const out = [];
+  const normalizedSlots = Number(freeSlots);
+  if (!Number.isFinite(normalizedSlots) || normalizedSlots <= 0) return out;
+  if (!Array.isArray(options) || options.length === 0) return out;
+
+  const walk = (slotIndex, planned, spent) => {
+    if (slotIndex >= normalizedSlots) {
+      out.push({ planned: [...planned], spent: { ...spent } });
+      return;
+    }
+
+    options.forEach((option) => {
+      const buildingId = String(option.buildingId || "").toLowerCase();
+      if (!buildingId) return;
+      const resources = option.resources || {};
+      const spentNext = { ...spent };
+      let valid = true;
+
+      Object.entries(resources).forEach(([resourceKey, rawCost]) => {
+        if (!valid) return;
+        const cost = Number(rawCost);
+        if (!Number.isFinite(cost) || cost <= 0) return;
+
+        const treasuryTotal = Number(treasury?.[resourceKey] || 0);
+        const prevSpent = Number(spentNext[resourceKey] || 0);
+        const remainingBeforeThisSlot = treasuryTotal - prevSpent;
+        if (remainingBeforeThisSlot <= 0) {
+          valid = false;
+          return;
+        }
+
+        if (cost > getPercentLimit(remainingBeforeThisSlot)) {
+          valid = false;
+          return;
+        }
+
+        spentNext[resourceKey] = prevSpent + cost;
+      });
+
+      if (!valid) return;
+
+      planned.push(buildingId);
+      walk(slotIndex + 1, planned, spentNext);
+      planned.pop();
+    });
+  };
+
+  walk(0, [], {});
+  return out;
+};
+
+const evaluateSectorVariant = ({ existingBuildings, plannedBuildings, victoryPoints, mapBaseDefense }) => {
+  const allBuildings = [...existingBuildings, ...plannedBuildings];
+  const sums = allBuildings.reduce(
+    (acc, buildingId) => {
+      const b = getBuildingBonusesById(buildingId);
+      acc.attack += Number(b.attackBonus) || 0;
+      acc.defenseRequirement += Number(b.defenseRequirementBonus) || 0;
+      acc.productionPercent += Number(b.productionBonus) || 0;
+      acc.productionFlat += Number(b.flatProductionBonus) || 0;
+      return acc;
+    },
+    { attack: 0, defenseRequirement: 0, productionPercent: 0, productionFlat: 0 }
+  );
+
+  const vp = Number(victoryPoints) || 0;
+  const defenseRequirement = mapBaseDefense + (sums.defenseRequirement * mapBaseDefense) / 100;
+  const production = vp + (vp * sums.productionPercent) / 100 + sums.productionFlat;
+
+  return { sums, defenseRequirement, production };
+};
+
+const formatRecommendedBuildings = (plannedBuildings) => {
+  const ordered = [];
+  const counts = new Map();
+
+  (plannedBuildings || []).forEach((idRaw) => {
+    const id = String(idRaw || "").toLowerCase();
+    if (!id) return;
+    const name = GBG_BUILDING_NAME_MAP[id] || id;
+    if (!counts.has(name)) ordered.push(name);
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+
+  return ordered
+    .map((name) => {
+      const count = counts.get(name) || 0;
+      return count > 1 ? `${count} ${name}` : name;
+    })
+    .join(",\n");
+};
+
+exports.scheduleGbgSectorBuildCheck = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const guildId = String(event.params.guildId || "");
+    const sectorId = String(event.params.sectorId || "");
+    if (!guildId || !sectorId) return null;
+
+    const shortGuildId = guildId.includes("_") ? guildId.split("_").pop() : guildId;
+    const before = event.data.before.exists() ? event.data.before.val() : null;
+    const after = event.data.after.exists() ? event.data.after.val() : null;
+    if (!after || typeof after !== "object") return null;
+
+    const prevOwner = getSectorOwnerKey(before);
+    const nextOwner = getSectorOwnerKey(after);
+    if (nextOwner !== String(shortGuildId)) return null;
+    if (prevOwner === String(shortGuildId)) return null;
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const runAt = nowSec + 300;
+    const taskId = `${sectorId}_${runAt}`;
+
+    await admin.database().ref(`/guilds/${guildId}/GBG/buildCheckQueue/${taskId}`).set({
+      guildId,
+      sectorId,
+      capturedAt: nowSec,
+      runAt,
+      status: "pending",
+    });
+
+    return null;
+  }
+);
+
+exports.processGbgSectorBuildChecks = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    region: "europe-west1",
+    timeZone: "Europe/Kiev",
+  },
+  async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const db = admin.database();
+    const guildsSnap = await db.ref("guilds").once("value");
+    if (!guildsSnap.exists()) return null;
+
+    const guildIds = Object.keys(guildsSnap.val() || {});
+    await Promise.all(
+      guildIds.map(async (guildId) => {
+        const queueRef = db.ref(`/guilds/${guildId}/GBG/buildCheckQueue`);
+        const dueSnap = await queueRef.orderByChild("runAt").endAt(nowSec).once("value");
+        if (!dueSnap.exists()) return;
+
+        const tasks = [];
+        dueSnap.forEach((child) => {
+          const task = child.val() || {};
+          if (task.status !== "pending") return;
+          tasks.push({ taskId: child.key, task });
+        });
+
+        await Promise.all(
+          tasks.map(async ({ taskId, task }) => {
+            const queuePath = `/guilds/${guildId}/GBG/buildCheckQueue/${taskId}`;
+
+            try {
+              await db.ref(queuePath).update({ status: "processing", processingAt: nowSec });
+
+              const sectorId = String(task.sectorId || "");
+              if (!sectorId) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const [sectorSnap, resourcesSnap, settingSnap, mapSnap, membersSnap] = await Promise.all([
+                db.ref(`/guilds/${guildId}/GBG/sectors/${sectorId}`).once("value"),
+                db.ref(`/guilds/${guildId}/resources`).once("value"),
+                db.ref(`/guilds/${guildId}/setting`).once("value"),
+                db.ref(`/guilds/${guildId}/GBG/map`).once("value"),
+                db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+              ]);
+
+              if (!sectorSnap.exists()) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const sector = sectorSnap.val() || {};
+              const freeSlots = Number(sector.freeSlots || 0);
+              if (!Number.isFinite(freeSlots) || freeSlots <= 0) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const existingBuildings = toArray(sector.buildings)
+                .map((b) => String(b?.name || "").toLowerCase())
+                .filter(Boolean);
+
+              const availableBuildingOptions = toArray(sector.availableBuildings)
+                .map((item) => ({
+                  buildingId: String(item?.buildingId || "").toLowerCase(),
+                  resources: item?.costs?.resources || {},
+                }))
+                .filter((item) => !!item.buildingId);
+
+              if (availableBuildingOptions.length === 0) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const treasury = resourcesSnap.exists() ? (resourcesSnap.val() || {}) : {};
+              const mapName = mapSnap.exists() ? mapSnap.val() : "volcano_archipelago";
+              const mapBaseDefense = getMapBaseDefense(mapName);
+              const victoryPoints = Number(sector.victoryPoints || 0);
+              const gbgGoal = !!(settingSnap.exists() ? settingSnap.val()?.GBGGoal : false);
+
+              const variants = buildSectorConstructionVariants({ freeSlots, options: availableBuildingOptions, treasury });
+              if (!variants.length) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const evaluated = variants
+                .map((variant) => {
+                  const metrics = evaluateSectorVariant({
+                    existingBuildings,
+                    plannedBuildings: variant.planned,
+                    victoryPoints,
+                    mapBaseDefense,
+                  });
+                  return { ...variant, ...metrics };
+                })
+                .filter((v) => (Number(v?.sums?.attack) || 0) >= 80);
+
+              if (!evaluated.length) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              let best = evaluated[0];
+              for (let i = 1; i < evaluated.length; i += 1) {
+                const cur = evaluated[i];
+                if (gbgGoal) {
+                  if (cur.production > best.production) best = cur;
+                } else if (cur.defenseRequirement > best.defenseRequirement) {
+                  best = cur;
+                }
+              }
+
+              if (!membersSnap.exists()) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const memberIds = Object.keys(membersSnap.val() || {});
+              const leaderInfos = await Promise.all(
+                memberIds.map(async (uid) => {
+                  const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
+                  const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
+                  if (role !== "guildLeader") return null;
+
+                  const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+                  const token = tokenSnap.exists() ? tokenSnap.val() : null;
+                  if (!token) return null;
+
+                  return token;
+                })
+              );
+
+              const tokens = Array.from(new Set(leaderInfos.filter(Boolean)));
+              if (!tokens.length) {
+                await db.ref(queuePath).remove();
+                return;
+              }
+
+              const plannedReadable = formatRecommendedBuildings(best.planned);
+              const titleText = "🛠️ Рекомендовано побудувати";
+              const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
+
+              const chunks = chunkArray(tokens, 500);
+              await Promise.all(
+                chunks.map((chunk) =>
+                  admin.messaging().sendEachForMulticast({
+                    tokens: chunk,
+                    data: {
+                      screen: "GBG",
+                      type: "gbg_build_plan",
+                      title: titleText,
+                      body: messageText,
+                      guildId: String(guildId),
+                      sectorId: String(sectorId),
+                    },
+                    notification: { title: titleText, body: messageText },
+                    android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
+                    apns: { payload: { aps: { sound: "default" } } },
+                  })
+                )
+              );
+
+              await db.ref(queuePath).remove();
+            } catch (e) {
+              logger.error("[GBG_BUILD_CHECK] processing error", { guildId, taskId, error: e?.message || e });
+              await db.ref(queuePath).remove();
+            }
+          })
+        );
+      })
+    );
+
+    return null;
+  }
+);
+
 exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (request) => {
   const { guildId } = request.data;
   if (!guildId) return { success: false };
