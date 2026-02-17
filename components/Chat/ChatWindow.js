@@ -548,7 +548,9 @@ const Spoiler = ({ children }) => {
   );
 };
 
-const parseMentions = (text) => {
+const normalizeMentionName = (value) => String(value || '').trim().toLowerCase();
+
+const parseMentions = (text, mentionNameSet = new Set()) => {
   if (!text) return [];
   const parts = [];
   const regex = /@([a-z0-9_.-]+(?:\s+[a-z0-9_.-]+)*)/gi;
@@ -559,7 +561,9 @@ const parseMentions = (text) => {
     if (match.index > lastIndex) {
       parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
     }
-    parts.push({ type: 'mention', content: match[0] });
+    const mentionBody = String(match[1] || '').trim();
+    const isKnownMention = mentionNameSet.has(normalizeMentionName(mentionBody));
+    parts.push({ type: isKnownMention ? 'mention' : 'normal', content: match[0] });
     lastIndex = match.index + match[0].length;
   }
 
@@ -567,7 +571,7 @@ const parseMentions = (text) => {
   return parts;
 };
 
-const parseFormattedText = (text) => {
+const parseFormattedText = (text, mentionNameSet = new Set()) => {
   const parts = [];
   let lastIndex = 0;
 
@@ -576,7 +580,7 @@ const parseFormattedText = (text) => {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index)) });
+      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index), mentionNameSet) });
     }
     const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
     let type = 'normal';
@@ -587,11 +591,11 @@ const parseFormattedText = (text) => {
     else if (match[5]) type = 'strikethrough';
     else if (match[6]) type = 'spoiler';
 
-    parts.push({ type, content: parseFormattedText(matchedContent) });
+    parts.push({ type, content: parseFormattedText(matchedContent, mentionNameSet) });
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex)) });
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex), mentionNameSet) });
   return parts;
 };
 
@@ -651,8 +655,8 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
     );
   });
 
-const FormattedText = ({ text }) => {
-  const parts = parseFormattedText(text || '');
+const FormattedText = ({ text, mentionNameSet }) => {
+  const parts = parseFormattedText(text || '', mentionNameSet);
   return <Text style={styles.messageText}>{renderFormattedParts(parts)}</Text>;
 };
 
@@ -1175,6 +1179,10 @@ const ChatWindow = ({ route, navigation }) => {
   const [linkUrl, setLinkUrl] = useState('');
 
   const [guildMembers, setGuildMembers] = useState([]);
+  const mentionNameSet = useMemo(
+    () => new Set(guildMembers.map((member) => normalizeMentionName(member?.userName)).filter(Boolean)),
+    [guildMembers]
+  );
   const [mentionStartIndex, setMentionStartIndex] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
 
@@ -2164,7 +2172,7 @@ const ChatWindow = ({ route, navigation }) => {
                             </TouchableOpacity>
                           )}
 
-                          {!!messageText && <FormattedText text={messageText} />}
+                          {!!messageText && <FormattedText text={messageText} mentionNameSet={mentionNameSet} />}
 
                           {uniqueUrls.map((u) => (
                             <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
