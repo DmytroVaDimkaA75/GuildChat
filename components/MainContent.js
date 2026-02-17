@@ -893,12 +893,6 @@ export default function MainContent() {
           sound: 'build',
         });
 
-        await notifee.createChannel({
-          id: 'gbg_build_silent',
-          name: 'GBG Build Recommendations Silent',
-          importance: AndroidImportance.HIGH,
-        });
-
         // ✅ Канал чату зі звуком
         await notifee.createChannel({
           id: 'chat_messages',
@@ -955,7 +949,7 @@ export default function MainContent() {
           messageType === 'gbg_sector_open'
             ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
             : messageType === 'gbg_build_plan'
-              ? (soundFlag ? 'gbg_build' : 'gbg_build_silent')
+              ? 'gbg_build'
             : messageType === 'chat_message'
               ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
               : 'default';

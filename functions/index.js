@@ -1290,7 +1290,6 @@ exports.processGbgSectorBuildChecks = onSchedule(
               }
 
               const memberIds = Object.keys(membersSnap.val() || {});
-              const nowMs = Date.now();
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
                   const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
@@ -1301,23 +1300,12 @@ exports.processGbgSectorBuildChecks = onSchedule(
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
                   if (!token) return null;
 
-                  let soundBySchedule = true;
-                  try {
-                    const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
-                    soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
-                  } catch (e) {
-                    logger.error("[GBG_BUILD_CHECK] schedule check error:", e);
-                    soundBySchedule = true;
-                  }
-
-                  return { token, sound: !!soundBySchedule };
+                  return token;
                 })
               );
 
-              const validInfos = leaderInfos.filter(Boolean);
-              const soundTokens = Array.from(new Set(validInfos.filter((x) => x.sound).map((x) => x.token)));
-              const silentTokens = Array.from(new Set(validInfos.filter((x) => !x.sound).map((x) => x.token)));
-              if (!soundTokens.length && !silentTokens.length) {
+              const tokens = Array.from(new Set(leaderInfos.filter(Boolean)));
+              if (!tokens.length) {
                 await db.ref(queuePath).remove();
                 return;
               }
@@ -1326,51 +1314,25 @@ exports.processGbgSectorBuildChecks = onSchedule(
               const titleText = "🛠️ Рекомендовано побудувати";
               const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
 
-              if (soundTokens.length > 0) {
-                const chunks = chunkArray(soundTokens, 500);
-                await Promise.all(
-                  chunks.map((chunk) =>
-                    admin.messaging().sendEachForMulticast({
-                      tokens: chunk,
-                      data: {
-                        screen: "GBG",
-                        type: "gbg_build_plan",
-                        title: titleText,
-                        body: messageText,
-                        guildId: String(guildId),
-                        sectorId: String(sectorId),
-                        sound: "1",
-                      },
-                      notification: { title: titleText, body: messageText },
-                      android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
-                      apns: { payload: { aps: { sound: "default" } } },
-                    })
-                  )
-                );
-              }
-
-              if (silentTokens.length > 0) {
-                const chunks = chunkArray(silentTokens, 500);
-                await Promise.all(
-                  chunks.map((chunk) =>
-                    admin.messaging().sendEachForMulticast({
-                      tokens: chunk,
-                      data: {
-                        screen: "GBG",
-                        type: "gbg_build_plan",
-                        title: titleText,
-                        body: messageText,
-                        guildId: String(guildId),
-                        sectorId: String(sectorId),
-                        sound: "0",
-                      },
-                      notification: { title: titleText, body: messageText },
-                      android: { priority: "high", notification: { channel_id: "gbg_build_silent" } },
-                      apns: { payload: { aps: { "content-available": 1 } } },
-                    })
-                  )
-                );
-              }
+              const chunks = chunkArray(tokens, 500);
+              await Promise.all(
+                chunks.map((chunk) =>
+                  admin.messaging().sendEachForMulticast({
+                    tokens: chunk,
+                    data: {
+                      screen: "GBG",
+                      type: "gbg_build_plan",
+                      title: titleText,
+                      body: messageText,
+                      guildId: String(guildId),
+                      sectorId: String(sectorId),
+                    },
+                    notification: { title: titleText, body: messageText },
+                    android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
+                    apns: { payload: { aps: { sound: "default" } } },
+                  })
+                )
+              );
 
               await db.ref(queuePath).remove();
             } catch (e) {
