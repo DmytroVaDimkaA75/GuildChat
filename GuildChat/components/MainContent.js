@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Alert, useWindowDimensions } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -773,6 +773,7 @@ const styles = StyleSheet.create({
 });
 
 function AppNavigator() {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [showAdmin, setShowAdmin] = React.useState(false);
@@ -799,7 +800,7 @@ function AppNavigator() {
   }, [guildId]);
 
   return (
-    <NavigationContainer key={guildId}>
+    <NavigationContainer key={`${guildId || "noguild"}-${windowWidth}x${windowHeight}`}>
       <Drawer.Navigator 
         drawerContent={props => <CustomDrawerContent {...props} />} 
         initialRouteName="GB"

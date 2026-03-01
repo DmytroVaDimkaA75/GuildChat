@@ -15,7 +15,8 @@ import {
   ActivityIndicator,
   Clipboard,
   Linking,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  useWindowDimensions
 } from "react-native";
 import {
   getDatabase,
@@ -139,7 +140,6 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
   );
 };
 
-const { width: screenWidth } = Dimensions.get('window');
 const locales = { uk, ru, es, fr, de };
 
 const isYouTubeURL = (url) => url.includes('youtube.com') || url.includes('youtu.be');
@@ -648,6 +648,8 @@ const defaultWrapSelection = (marker, text, selection, setText, setSelection) =>
 };
 
 const ChatWindow = ({ route, navigation }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const pinnedCarouselWidth = Math.max(windowWidth - 50, 0);
   const { chatId } = route.params || {};
 
   const [messages, setMessages] = useState([]);
@@ -1514,7 +1516,7 @@ const renderReadReceiptOption = (message) => {
               <TouchableOpacity
                 key={pm.id}
                 onPress={() => scrollToMessage(pm.id)}
-                style={{ width: screenWidth - 50 }}
+                style={{ width: pinnedCarouselWidth }}
               >
                 <View style={styles.pinnedMessageBlock}>
                   {renderPinnedContent(pm)}
@@ -1613,7 +1615,7 @@ const renderReadReceiptOption = (message) => {
                                     const totalImages = message.imageUrls.length;
                                     const imagesPerRow = totalImages <= 4 ? totalImages : 4;
                                     const imageMargin = 4;
-                                    const imageSize = (screenWidth - (imagesPerRow + 1) * imageMargin) / imagesPerRow;
+                                    const imageSize = (windowWidth - (imagesPerRow + 1) * imageMargin) / imagesPerRow;
                                     return message.imageUrls.map((imgUrl, i) => (
                                       <TouchableOpacity
                                         key={i}
@@ -2439,14 +2441,14 @@ const styles = StyleSheet.create({
   },
   pinnedMessageWrapper: {
     flexDirection: 'row',
-    width: screenWidth,
+    width: '100%',
     height: 50,
   },
   pinnedMessagesContainer: {
-    width: screenWidth - 50,
+    flex: 1,
   },
   pinnedMessageBlock: {
-    width: screenWidth - 50,
+    width: '100%',
     height: 50,
     backgroundColor: '#fff',
     paddingHorizontal: 5,

@@ -1,6 +1,6 @@
 // App.js
 import React, { useState, useEffect, useContext } from "react";
-import { StyleSheet, View, ActivityIndicator, Alert, Platform } from "react-native";
+import { StyleSheet, View, ActivityIndicator, Alert, Platform, useWindowDimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
@@ -36,6 +36,7 @@ Notifications.setNotificationHandler({
 });
 
 const AppContent = () => {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const { guildId } = useContext(GuildContext);
 
@@ -151,10 +152,10 @@ const AppContent = () => {
 
   if (!checked) return null;
 
-  if (userData) return <MainContent key={guildId} />;
+  if (userData) return <MainContent key={`${guildId || "noguild"}-${windowWidth}x${windowHeight}`} />;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer key={`setup-${windowWidth}x${windowHeight}`}>
       <Stack.Navigator initialRouteName="RoleSelectionScreen">
         <Stack.Screen name="RoleSelectionScreen" options={{ headerShown: false }}>
           {props => (
