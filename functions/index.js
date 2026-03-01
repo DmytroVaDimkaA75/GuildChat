@@ -380,8 +380,6 @@ const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
 };
 
 // Витягуємо TZ + розклад користувача
-// TZ: users/{uid}/setting/timeZone
-// scheduleId: users/{uid}/setting/notificationScheduleId (або activeScheduleId) (якщо немає — беремо перший)
 const getUserScheduleForNotifications = async (uid) => {
   const settingSnap = await admin.database().ref(`/users/${uid}/setting`).once("value");
   const setting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
@@ -415,7 +413,6 @@ const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
 /**
  * =====================================================================
  * ✅ 1) Callable тест для кнопки “Тест data-only”
- * НЕ ламає існуючі sendGbgHelpNotification / sendChatNotification тощо.
  * =====================================================================
  */
 exports.sendWidgetDataOnlyTest = onCall({ region: "europe-west1" }, async (request) => {
@@ -453,7 +450,7 @@ exports.sendWidgetDataOnlyTest = onCall({ region: "europe-west1" }, async (reque
 
 /**
  * =====================================================================
- * ✅ 2) Тригери на opponents і map (окремі ref => без конфліктів)
+ * ✅ 2) Тригери на opponents / map / owner change
  * =====================================================================
  */
 exports.onGbgOpponentsWrite = onValueWritten(
@@ -515,7 +512,7 @@ exports.onGbgSectorOwnerChange = onValueWritten(
 
 /**
  * =====================================================================
- * ✅ ТВОЇ ІСНУЮЧІ ФУНКЦІЇ (без перейменувань і без конфліктів)
+ * ✅ Chat notifications
  * =====================================================================
  */
 
@@ -634,9 +631,14 @@ exports.sendChatNotification = onValueCreated(
   }
 );
 
+/**
+ * =====================================================================
+ * ✅ Scheduled messages
+ * =====================================================================
+ */
 exports.sendScheduledMessages = onSchedule(
   { schedule: "every 1 minutes", region: "europe-west1", timeZone: "Europe/Kiev" },
-  async (event) => {
+  async () => {
     const now = Date.now();
     const db = admin.database();
     const guildsSnap = await db.ref("guilds").once("value");
@@ -679,6 +681,11 @@ async function moveMessageToChat({ guildId, messageId, messageData, db }) {
   return db.ref(`/guilds/${guildId}/scheduledMessages/${messageId}`).remove();
 }
 
+/**
+ * =====================================================================
+ * ✅ GBG: build queue for sector open notifications
+ * =====================================================================
+ */
 exports.syncGbgNotifications = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
@@ -805,7 +812,7 @@ exports.syncGbgNotifications = onValueWritten(
       await db.ref().update(updates);
     }
 
-    // ✅ Тихий refresh віджета (data-only), НЕ ламає твою чергу пушів
+    // ✅ Тихий refresh віджета (data-only)
     try {
       const sectorId = String(event.params.sectorId || "");
       await sendWidgetRefreshToGuild({ guildId, reason: "sector_write", sectorId });
@@ -822,10 +829,9 @@ exports.processGbgNotificationQueue = onSchedule(
     schedule: "every 1 minutes",
     region: "europe-west1",
     timeZone: "Europe/Kiev",
-    // ✅ add secrets for runtime
     secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
   },
-  async (event) => {
+  async () => {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const db = admin.database();
     const guildsSnap = await db.ref("guilds").once("value");
@@ -885,7 +891,6 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
   const memberIds = Object.keys(membersSnap.val());
   const nowMs = Date.now();
 
-  // ✅ Для кожного користувача визначаємо sound по графіку
   const userInfos = await Promise.all(
     memberIds.map(async (uid) => {
       const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
@@ -915,19 +920,14 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
 
-  // ✅ Telegram: duplicate the push into channel
-  // (самі пуші не блокуємо, якщо TG впаде)
+  // ✅ Telegram: ТІЛЬКИ “людський” текст (без guildId/sector/openTime)
   try {
-    const tgText =
-      `<b>${titleText}</b>\n` +
-      `${messageText}\n`;
-
+    const tgText = `<b>${titleText}</b>\n${messageText}\n`;
     await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
   } catch (e) {
     logger.error("[TG] error while sending:", e);
   }
 
-  // ✅ 1) Зі звуком
   if (soundTokens.length > 0) {
     const payloadSound = {
       data: {
@@ -955,7 +955,6 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
     }
   }
 
-  // ✅ 2) Тихо (без звуку)
   if (silentTokens.length > 0) {
     const payloadSilent = {
       data: {
@@ -986,6 +985,12 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
     sentAt: admin.database.ServerValue.TIMESTAMP,
   });
 }
+
+/**
+ * =====================================================================
+ * ✅ GBG build-plan helpers / maps
+ * =====================================================================
+ */
 
 const GBG_BUILDING_BONUS_MAP = {
   guild_command_post_improvised: { attackBonus: 20, defenseRequirementBonus: 5, productionBonus: 15, flatProductionBonus: 0 },
@@ -1134,6 +1139,11 @@ const formatRecommendedBuildings = (plannedBuildings) => {
     .join(",\n");
 };
 
+/**
+ * =====================================================================
+ * ✅ Schedule build check after capture
+ * =====================================================================
+ */
 exports.scheduleGbgSectorBuildCheck = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
@@ -1175,6 +1185,8 @@ exports.processGbgSectorBuildChecks = onSchedule(
     schedule: "every 1 minutes",
     region: "europe-west1",
     timeZone: "Europe/Kiev",
+    // ✅ TG SECRETS: щоб Telegram працював у цьому scheduler
+    secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
   },
   async () => {
     const nowSec = Math.floor(Date.now() / 1000);
@@ -1334,6 +1346,19 @@ exports.processGbgSectorBuildChecks = onSchedule(
                 )
               );
 
+              // ✅ TG BUILD PLAN: дублюємо в Telegram (без технічних полів)
+              try {
+                const tgText =
+                  `<b>${titleText}</b>\n` +
+                  `Сектор <b>${sectorId}</b>\n` +
+                  `Рекомендовано побудувати:\n` +
+                  `${plannedReadable}`;
+
+                await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
+              } catch (e) {
+                logger.error("[TG] build plan send error:", e);
+              }
+
               await db.ref(queuePath).remove();
             } catch (e) {
               logger.error("[GBG_BUILD_CHECK] processing error", { guildId, taskId, error: e?.message || e });
@@ -1348,6 +1373,11 @@ exports.processGbgSectorBuildChecks = onSchedule(
   }
 );
 
+/**
+ * =====================================================================
+ * ✅ Help notification (callable)
+ * =====================================================================
+ */
 exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (request) => {
   const { guildId } = request.data;
   if (!guildId) return { success: false };
