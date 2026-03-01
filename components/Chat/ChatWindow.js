@@ -1093,9 +1093,27 @@ const ImageViewerModal = ({ visible, uri, screenWidth, screenHeight, onClose }) 
 };
 
 const ChatWindow = ({ route, navigation }) => {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const [windowSize, setWindowSize] = useState(() => Dimensions.get('window'));
+  const screenWidth = Number(windowSize?.width) || 0;
+  const screenHeight = Number(windowSize?.height) || 0;
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
+
+  useEffect(() => {
+    const onChange = ({ window }) => {
+      if (window && typeof window === 'object') setWindowSize(window);
+    };
+
+    const subscription = Dimensions.addEventListener('change', onChange);
+
+    return () => {
+      if (subscription && typeof subscription.remove === 'function') {
+        subscription.remove();
+      } else if (typeof Dimensions.removeEventListener === 'function') {
+        Dimensions.removeEventListener('change', onChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!chatId) return;

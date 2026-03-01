@@ -359,8 +359,9 @@ const getArmyColor = (army) => {
 };
 
 const GVG = () => {
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const halfHeight = windowHeight * 0.5;
+  const [windowSize, setWindowSize] = useState(() => Dimensions.get("window"));
+  const windowWidth = Number(windowSize?.width) || 0;
+  const halfHeight = (Number(windowSize?.height) || 0) * 0.5;
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -395,6 +396,22 @@ const GVG = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
   const { t } = useTranslation();
+
+  useEffect(() => {
+    const onChange = ({ window }) => {
+      if (window && typeof window === "object") setWindowSize(window);
+    };
+
+    const subscription = Dimensions.addEventListener("change", onChange);
+
+    return () => {
+      if (subscription && typeof subscription.remove === "function") {
+        subscription.remove();
+      } else if (typeof Dimensions.removeEventListener === "function") {
+        Dimensions.removeEventListener("change", onChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
