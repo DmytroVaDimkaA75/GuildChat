@@ -58,7 +58,8 @@ import {
   StatusBar,
   Clipboard,
   Share,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1022,7 +1023,7 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) =
 };
 
 // --- Модалка Просмотра (Зум + Шер) ---
-const ImageViewerModal = ({ visible, uri, onClose }) => {
+const ImageViewerModal = ({ visible, uri, screenWidth, screenHeight, onClose }) => {
   const [scale, setScale] = useState(1);
   const lastTap = useRef(null);
 
@@ -1082,7 +1083,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
             <TouchableWithoutFeedback onPress={handleDoubleTap}>
               <Image
                 source={{ uri }}
-                style={[styles.fullScreenImage, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
+                style={[styles.fullScreenImage, { width: screenWidth || 1, height: (screenHeight || 1) * 0.8 }, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
                 resizeMode="contain"
               />
             </TouchableWithoutFeedback>
@@ -1094,6 +1095,9 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 };
 
 const ChatWindow = ({ route, navigation }) => {
+  const { width: runtimeWidth, height: runtimeHeight } = useWindowDimensions();
+  const windowWidth = Number(runtimeWidth) || screenWidth;
+  const windowHeight = Number(runtimeHeight) || screenHeight;
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
 
@@ -1998,7 +2002,7 @@ const ChatWindow = ({ route, navigation }) => {
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   onMomentumScrollEnd={(e) => {
-                    const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                    const page = Math.round(e.nativeEvent.contentOffset.x / Math.max(windowWidth, 1));
                     const msg = pinnedMessages[page];
                     if (msg?.id) scrollToMessage(msg.id);
                   }}
@@ -2594,7 +2598,7 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} onClose={() => setFullSizeImageModalVisible(false)} />
+        <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} screenWidth={windowWidth} screenHeight={windowHeight} onClose={() => setFullSizeImageModalVisible(false)} />
 
         <Modal
           animationType="slide"
