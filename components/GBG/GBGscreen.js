@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
@@ -26,8 +26,6 @@ import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
-const { height, width } = Dimensions.get("window");
-const HALF_HEIGHT = height * 0.5;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
@@ -1153,7 +1151,7 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
   infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { width: "100%", maxHeight: HALF_HEIGHT, alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
+  mapContainer: { width: "100%", alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
 
@@ -1194,7 +1192,6 @@ const styles = StyleSheet.create({
   infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
   infoModal: {
     width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
     backgroundColor: "rgba(30, 30, 30, 0.9)",
     borderRadius: 20,
     padding: 20,
@@ -1202,7 +1199,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
-  infoList: { maxHeight: HALF_HEIGHT * 0.7 },
+  infoList: {},
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
@@ -1218,7 +1215,7 @@ const styles = StyleSheet.create({
   disabledText: { color: "#6a737c" },
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesModal: { width: "92%", backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1226,7 +1223,7 @@ const styles = StyleSheet.create({
   battlesCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   battlesCheckboxChecked: { borderColor: "#2ecc71", backgroundColor: "rgba(46, 204, 113, 0.18)" },
   battlesCheckboxMark: { color: "#2ecc71", fontSize: 12, fontWeight: "900", lineHeight: 14 },
-  battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
+  battlesScroll: {},
   battlesHeaderRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
