@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
@@ -361,6 +362,9 @@ const getArmyColor = (army) => {
 };
 
 const GVG = () => {
+  const { width: runtimeWidth, height: runtimeHeight } = useWindowDimensions();
+  const windowWidth = Number(runtimeWidth) || width;
+  const halfHeightDynamic = (Number(runtimeHeight) || height) * 0.5;
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -768,10 +772,10 @@ const GVG = () => {
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) return;
-      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
+      const { pageX = windowWidth / 2, pageY = halfHeightDynamic } = event?.nativeEvent || {};
       const position =
-        pageX > width / 2
-          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
+        pageX > windowWidth / 2
+          ? { right: Math.max(windowWidth - pageX, 20), top: Math.max(pageY - 20, 20) }
           : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
 
       setPopupStyle(position);
@@ -979,7 +983,7 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
-      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height }]}>
+      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height, maxHeight: halfHeightDynamic }]}>
         <Svg width="100%" height="100%" viewBox={viewBox}>
           {renderMapPaths()}
         </Svg>
@@ -1033,9 +1037,9 @@ const GVG = () => {
       {infoVisible && (
         <View style={styles.infoOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
+          <Animated.View style={[styles.infoModal, { maxHeight: halfHeightDynamic * 1.2 }]}>
             <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
-            <ScrollView style={styles.infoList}>
+            <ScrollView style={[styles.infoList, { maxHeight: halfHeightDynamic * 0.7 }]}>
               {opponentList.length === 0 ? (
                 <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
               ) : (
@@ -1069,7 +1073,7 @@ const GVG = () => {
       {battlesVisible && (
         <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.battlesModal}>
+          <View style={[styles.battlesModal, { maxHeight: halfHeightDynamic * 1.6 }]}>
             <View style={styles.battlesTitleRow}>
               <Text style={styles.battlesTitle}>Бої</Text>
               <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
@@ -1091,7 +1095,7 @@ const GVG = () => {
                   <Text style={styles.battlesHeaderCell}>Втрати</Text>
                 </View>
 
-                <ScrollView style={styles.battlesScroll}>
+                <ScrollView style={[styles.battlesScroll, { maxHeight: halfHeightDynamic * 1.2 }]}>
                 {filteredBattlesRows.map((row) => (
                   <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
                     <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
