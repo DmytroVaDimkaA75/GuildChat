@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useLayoutEffect, useRef } from "react";
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text, ScrollView, Animated } from "react-native";
+import { View, StyleSheet, Dimensions, TouchableOpacity, Text, ScrollView, Animated, useWindowDimensions } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faFire } from "@fortawesome/free-solid-svg-icons";
@@ -10,9 +10,6 @@ import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 import { useNavigation } from '@react-navigation/native';
 // Компонент інтерактивної карти режиму GBG
-
-const { height } = Dimensions.get('window');
-const HALF_HEIGHT = height * 0.5;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -216,6 +213,8 @@ const getArmyColor = (army) => {
 
 
 const GVG = () => {
+  const { height: windowHeight } = useWindowDimensions();
+  const mapHeight = windowHeight * 0.5;
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -731,7 +730,7 @@ const GVG = () => {
       }
 
       const screenWidth = Dimensions.get('window').width;
-      const { pageX = screenWidth / 2, pageY = HALF_HEIGHT } =
+      const { pageX = screenWidth / 2, pageY = mapHeight } =
         event?.nativeEvent || {};
       const position =
         pageX > screenWidth / 2
@@ -835,7 +834,7 @@ const GVG = () => {
 
   return (
     <View style={styles.win}>
-      <View style={styles.mapContainer}>
+      <View style={[styles.mapContainer, { height: mapHeight }]}>
         <Svg
           width="100%"
           height="100%"
@@ -956,7 +955,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   mapContainer: {
-    height: HALF_HEIGHT,
     width: "100%",
     backgroundColor: "#f0f0f0",
     overflow: "hidden",
