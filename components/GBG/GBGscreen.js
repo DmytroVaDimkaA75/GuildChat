@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
@@ -26,8 +26,6 @@ import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 
-const { height, width } = Dimensions.get("window");
-const HALF_HEIGHT = height * 0.5;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
@@ -361,6 +359,8 @@ const getArmyColor = (army) => {
 };
 
 const GVG = () => {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const halfHeight = windowHeight * 0.5;
   const [selectedId, setSelectedId] = useState(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
@@ -768,10 +768,10 @@ const GVG = () => {
     try {
       const gid = guildId || (await AsyncStorage.getItem("guildId"));
       if (!gid) return;
-      const { pageX = width / 2, pageY = HALF_HEIGHT } = event?.nativeEvent || {};
+      const { pageX = windowWidth / 2, pageY = halfHeight } = event?.nativeEvent || {};
       const position =
-        pageX > width / 2
-          ? { right: Math.max(width - pageX, 20), top: Math.max(pageY - 20, 20) }
+        pageX > windowWidth / 2
+          ? { right: Math.max(windowWidth - pageX, 20), top: Math.max(pageY - 20, 20) }
           : { left: Math.max(pageX - 20, 20), top: Math.max(pageY - 20, 20) };
 
       setPopupStyle(position);
@@ -979,7 +979,7 @@ const GVG = () => {
     <View style={styles.win}>
       <StatusBar barStyle="light-content" />
 
-      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height }]}>
+      <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height, maxHeight: halfHeight }]}>
         <Svg width="100%" height="100%" viewBox={viewBox}>
           {renderMapPaths()}
         </Svg>
@@ -1033,9 +1033,9 @@ const GVG = () => {
       {infoVisible && (
         <View style={styles.infoOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
+          <Animated.View style={[styles.infoModal, { maxHeight: halfHeight * 1.2 }]}>
             <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
-            <ScrollView style={styles.infoList}>
+            <ScrollView style={[styles.infoList, { maxHeight: halfHeight * 0.7 }]}>
               {opponentList.length === 0 ? (
                 <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
               ) : (
@@ -1069,7 +1069,7 @@ const GVG = () => {
       {battlesVisible && (
         <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <View style={styles.battlesModal}>
+          <View style={[styles.battlesModal, { maxHeight: halfHeight * 1.6 }]}>
             <View style={styles.battlesTitleRow}>
               <Text style={styles.battlesTitle}>Бої</Text>
               <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
@@ -1091,7 +1091,7 @@ const GVG = () => {
                   <Text style={styles.battlesHeaderCell}>Втрати</Text>
                 </View>
 
-                <ScrollView style={styles.battlesScroll}>
+                <ScrollView style={[styles.battlesScroll, { maxHeight: halfHeight * 1.2 }]}>
                 {filteredBattlesRows.map((row) => (
                   <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
                     <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
   infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { width: "100%", maxHeight: HALF_HEIGHT, alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
+  mapContainer: { width: "100%", alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
 
@@ -1175,7 +1175,6 @@ const styles = StyleSheet.create({
   infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
   infoModal: {
     width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
     backgroundColor: "rgba(30, 30, 30, 0.9)",
     borderRadius: 20,
     padding: 20,
@@ -1183,7 +1182,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
-  infoList: { maxHeight: HALF_HEIGHT * 0.7 },
+  infoList: {},
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
@@ -1199,7 +1198,7 @@ const styles = StyleSheet.create({
   disabledText: { color: "#6a737c" },
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesModal: { width: "92%", backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1207,7 +1206,7 @@ const styles = StyleSheet.create({
   battlesCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   battlesCheckboxChecked: { borderColor: "#2ecc71", backgroundColor: "rgba(46, 204, 113, 0.18)" },
   battlesCheckboxMark: { color: "#2ecc71", fontSize: 12, fontWeight: "900", lineHeight: 14 },
-  battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
+  battlesScroll: {},
   battlesHeaderRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
