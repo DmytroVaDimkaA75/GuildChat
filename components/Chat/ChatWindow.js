@@ -42,7 +42,6 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -58,7 +57,8 @@ import {
   StatusBar,
   Clipboard,
   Share,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,7 +75,6 @@ import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const WAVEFORM_BAR_COUNT = 60;
 const WAVEFORM_MIN_HEIGHT = 2;
 const WAVEFORM_MAX_HEIGHT = 28;
@@ -1022,7 +1021,7 @@ const QuotedMessage = ({ replyTo, guildId, chatId, minimal = false, onPress }) =
 };
 
 // --- Модалка Просмотра (Зум + Шер) ---
-const ImageViewerModal = ({ visible, uri, onClose }) => {
+const ImageViewerModal = ({ visible, uri, screenWidth, screenHeight, onClose }) => {
   const [scale, setScale] = useState(1);
   const lastTap = useRef(null);
 
@@ -1082,7 +1081,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
             <TouchableWithoutFeedback onPress={handleDoubleTap}>
               <Image
                 source={{ uri }}
-                style={[styles.fullScreenImage, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
+                style={[styles.fullScreenImage, { width: screenWidth, height: screenHeight * 0.8 }, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
                 resizeMode="contain"
               />
             </TouchableWithoutFeedback>
@@ -1094,6 +1093,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 };
 
 const ChatWindow = ({ route, navigation }) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
 
@@ -2594,7 +2594,13 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} onClose={() => setFullSizeImageModalVisible(false)} />
+        <ImageViewerModal
+          visible={fullSizeImageModalVisible}
+          uri={fullSizeImageUri}
+          screenWidth={screenWidth}
+          screenHeight={screenHeight}
+          onClose={() => setFullSizeImageModalVisible(false)}
+        />
 
         <Modal
           animationType="slide"
@@ -2923,7 +2929,7 @@ const styles = StyleSheet.create({
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   imageViewerBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
   imageScrollView: { flexGrow: 1, justifyContent: 'center' },
-  fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 },
+  fullScreenImage: {},
 
   // --- compact preview (pinned/quoted) ---
   compactPreviewRow: { flexDirection: 'row', alignItems: 'center' },
