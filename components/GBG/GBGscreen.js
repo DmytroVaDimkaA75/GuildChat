@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";

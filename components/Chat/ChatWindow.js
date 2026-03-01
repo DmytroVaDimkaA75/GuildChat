@@ -42,7 +42,6 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -58,7 +57,8 @@ import {
   StatusBar,
   Clipboard,
   Share,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
