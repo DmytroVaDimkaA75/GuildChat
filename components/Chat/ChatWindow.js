@@ -42,7 +42,6 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -76,7 +75,6 @@ import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const WAVEFORM_BAR_COUNT = 60;
 const WAVEFORM_MIN_HEIGHT = 2;
 const WAVEFORM_MAX_HEIGHT = 28;
@@ -1100,6 +1098,22 @@ const ChatWindow = ({ route, navigation }) => {
   const windowHeight = Number(runtimeHeight) || screenHeight;
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
+
+  useEffect(() => {
+    const onChange = ({ window }) => {
+      if (window && typeof window === 'object') setWindowSize(window);
+    };
+
+    const subscription = Dimensions.addEventListener('change', onChange);
+
+    return () => {
+      if (subscription && typeof subscription.remove === 'function') {
+        subscription.remove();
+      } else if (typeof Dimensions.removeEventListener === 'function') {
+        Dimensions.removeEventListener('change', onChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!chatId) return;
@@ -2927,7 +2941,7 @@ const styles = StyleSheet.create({
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   imageViewerBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
   imageScrollView: { flexGrow: 1, justifyContent: 'center' },
-  fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 },
+  fullScreenImage: {},
 
   // --- compact preview (pinned/quoted) ---
   compactPreviewRow: { flexDirection: 'row', alignItems: 'center' },
