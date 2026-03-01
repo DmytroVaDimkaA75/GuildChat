@@ -1081,7 +1081,7 @@ const ImageViewerModal = ({ visible, uri, screenWidth, screenHeight, onClose }) 
             <TouchableWithoutFeedback onPress={handleDoubleTap}>
               <Image
                 source={{ uri }}
-                style={[styles.fullScreenImage, { width: screenWidth, height: screenHeight * 0.8 }, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
+                style={[styles.fullScreenImage, { width: screenWidth || 1, height: (screenHeight || 1) * 0.8 }, Platform.OS === 'android' && { transform: [{ scale: scale }] }]}
                 resizeMode="contain"
               />
             </TouchableWithoutFeedback>
@@ -1094,8 +1094,8 @@ const ImageViewerModal = ({ visible, uri, screenWidth, screenHeight, onClose }) 
 
 const ChatWindow = ({ route, navigation }) => {
   const [windowSize, setWindowSize] = useState(() => Dimensions.get('window'));
-  const screenWidth = Number(windowSize?.width) || 0;
-  const screenHeight = Number(windowSize?.height) || 0;
+  const windowWidth = Number(windowSize?.width) || screenWidth;
+  const windowHeight = Number(windowSize?.height) || screenHeight;
   const { chatId } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
 
@@ -2016,7 +2016,7 @@ const ChatWindow = ({ route, navigation }) => {
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
                   onMomentumScrollEnd={(e) => {
-                    const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                    const page = Math.round(e.nativeEvent.contentOffset.x / Math.max(windowWidth, 1));
                     const msg = pinnedMessages[page];
                     if (msg?.id) scrollToMessage(msg.id);
                   }}
@@ -2612,13 +2612,7 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        <ImageViewerModal
-          visible={fullSizeImageModalVisible}
-          uri={fullSizeImageUri}
-          screenWidth={screenWidth}
-          screenHeight={screenHeight}
-          onClose={() => setFullSizeImageModalVisible(false)}
-        />
+        <ImageViewerModal visible={fullSizeImageModalVisible} uri={fullSizeImageUri} screenWidth={windowWidth} screenHeight={windowHeight} onClose={() => setFullSizeImageModalVisible(false)} />
 
         <Modal
           animationType="slide"
