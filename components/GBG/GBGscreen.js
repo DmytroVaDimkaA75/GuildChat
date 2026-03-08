@@ -1,4 +1,4 @@
-import { faFire, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
+import { faFire, faVolumeHigh } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from "@react-native-firebase/database";
@@ -21,6 +21,7 @@ import {
 import Svg, { G, Path } from "react-native-svg";
 import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
+import GVGIcon from "../ico/menu/GVG.svg";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
@@ -379,9 +380,8 @@ const GVG = () => {
   const [opponentMapById, setOpponentMapById] = useState({});
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
-  const [infoVisible, setInfoVisible] = useState(false);
-
   const [battlesVisible, setBattlesVisible] = useState(false);
+  const [battlesTab, setBattlesTab] = useState("participants");
   const [battlesRows, setBattlesRows] = useState([]);
   const [battlesLoading, setBattlesLoading] = useState(false);
   const [battlesActivityOnly, setBattlesActivityOnly] = useState(false);
@@ -537,8 +537,8 @@ const GVG = () => {
         fontWeight: "bold",
       },
       headerRight: () => (
-        <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
-          <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
+        <TouchableOpacity style={styles.headerSoundButton} activeOpacity={0.8}>
+          <FontAwesomeIcon icon={faVolumeHigh} size={20} color="#E0E0E0" />
         </TouchableOpacity>
       ),
     });
@@ -861,6 +861,7 @@ const GVG = () => {
       const storedUserId = await AsyncStorage.getItem("userId");
       if (!storedGuildId || !storedUserId) {
         Alert.alert(t("gbgScreen.errors.title"), t("gbgScreen.errors.guildNotFound"));
+        setBattlesVisible(false);
         setBattlesLoading(false);
         return;
       }
@@ -929,9 +930,9 @@ const GVG = () => {
 
       normalizedRows.sort((a, b) => b.total - a.total);
       setBattlesRows(normalizedRows);
-      setBattlesVisible(true);
     } catch (e) {
       Alert.alert(t("gbgScreen.errors.title"), "Не вдалося завантажити таблицю боїв.");
+      setBattlesVisible(false);
     } finally {
       setBattlesLoading(false);
     }
@@ -990,8 +991,14 @@ const GVG = () => {
           <Text style={styles.listTitle}>{t("gbgScreen.listTitle")}</Text>
 
           <View style={styles.listActions}>
-            <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
-              <Text style={styles.battlesBtnText}>Бої</Text>
+            <TouchableOpacity
+              style={styles.battlesBtn}
+              onPress={() => {
+                setBattlesTab("participants");
+                openBattlesModal();
+              }}
+            >
+              <GVGIcon width={20} height={20} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1030,30 +1037,6 @@ const GVG = () => {
         )}
       </View>
 
-      {infoVisible && (
-        <View style={styles.infoOverlay}>
-          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
-            <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
-            <ScrollView style={styles.infoList}>
-              {opponentList.length === 0 ? (
-                <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
-              ) : (
-                opponentList.map((op) => (
-                  <View key={op.key ?? op.id} style={styles.infoRow}>
-                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
-                    <Text style={styles.infoName}>{op.name || op.id}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-            <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
-              <Text style={styles.infoCloseText}>{t("gbgScreen.info.close")}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      )}
-
       {popupVisible && (
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
@@ -1070,18 +1053,33 @@ const GVG = () => {
         <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <View style={styles.battlesModal}>
-            <View style={styles.battlesTitleRow}>
-              <Text style={styles.battlesTitle}>Бої</Text>
+            <View style={styles.battlesTabsRow}>
+              <TouchableOpacity
+                style={[styles.battlesTabButton, battlesTab === "participants" && styles.battlesTabButtonActive]}
+                onPress={() => setBattlesTab("participants")}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.battlesTabText, battlesTab === "participants" && styles.battlesTabTextActive]}>Учасники</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.battlesTabButton, battlesTab === "opponents" && styles.battlesTabButtonActive]}
+                onPress={() => setBattlesTab("opponents")}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.battlesTabText, battlesTab === "opponents" && styles.battlesTabTextActive]}>Суперники</Text>
+              </TouchableOpacity>
+            </View>
+            {battlesTab === "participants" && (
               <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
                 <View style={[styles.battlesCheckbox, battlesActivityOnly && styles.battlesCheckboxChecked]}>
                   {battlesActivityOnly && <Text style={styles.battlesCheckboxMark}>✓</Text>}
                 </View>
                 <Text style={styles.battlesActivityLabel}>Активність</Text>
               </TouchableOpacity>
-            </View>
-            {battlesLoading ? (
+            )}
+            {battlesTab === "participants" && battlesLoading ? (
               <ActivityIndicator size="large" color="#3498db" />
-            ) : (
+            ) : battlesTab === "participants" ? (
               <>
                 <View style={styles.battlesHeaderRow}>
                   <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
@@ -1117,6 +1115,19 @@ const GVG = () => {
                 ))}
                 </ScrollView>
               </>
+            ) : (
+              <ScrollView style={styles.infoList}>
+                {opponentList.length === 0 ? (
+                  <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
+                ) : (
+                  opponentList.map((op) => (
+                    <View key={op.key ?? op.id} style={styles.infoRow}>
+                      <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
+                      <Text style={styles.infoName}>{op.name || op.id}</Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
             )}
             <TouchableOpacity style={styles.battlesClose} onPress={handleBattlesClose}>
               <Text style={styles.battlesCloseText}>Закрити</Text>
@@ -1133,7 +1144,7 @@ const styles = StyleSheet.create({
   win: { flex: 1, backgroundColor: "#121212" },
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
-  infoButton: { marginRight: 15, padding: 5 },
+  headerSoundButton: { paddingHorizontal: 12, paddingVertical: 6, marginRight: 12 },
   mapContainer: { width: "100%", maxHeight: HALF_HEIGHT, alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
@@ -1142,8 +1153,16 @@ const styles = StyleSheet.create({
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
 
   listActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  battlesBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  battlesBtnText: { color: "#E0E0E0", fontWeight: "700" },
+  battlesBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   sectorList: { width: "100%" },
   sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
@@ -1172,24 +1191,11 @@ const styles = StyleSheet.create({
   emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
   emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
 
-  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  infoModal: {
-    width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
-    backgroundColor: "rgba(30, 30, 30, 0.9)",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
   infoList: { maxHeight: HALF_HEIGHT * 0.7 },
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
   infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
-  infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
-  infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
 
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
   popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
@@ -1200,7 +1206,22 @@ const styles = StyleSheet.create({
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
   battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  battlesTabsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  battlesTabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+  },
+  battlesTabButtonActive: {
+    backgroundColor: "#3498db",
+    borderColor: "#3498db",
+  },
+  battlesTabText: { color: "#E0E0E0", fontWeight: "700" },
+  battlesTabTextActive: { color: "#FFFFFF" },
   battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
   battlesActivityLabel: { color: "#E0E0E0", fontSize: 13, fontWeight: "600" },
