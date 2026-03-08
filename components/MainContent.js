@@ -50,7 +50,7 @@ import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 // НОВЫЕ ИКОНКИ
 import Admin from "./ico/menu/setting.svg";
 import Chat from "./ico/menu/chat.svg";
-import GVG from "./ico/GVG.svg";
+import GVG from "./ico/menu/GVG.svg";
 import GB from "./ico/menu/GB.svg";
 import Profile from "./ico/menu/user.svg";
 
