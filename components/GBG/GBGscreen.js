@@ -1,4 +1,4 @@
-import { faFire, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
+import { faFire, faVolumeHigh } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from "@react-native-firebase/database";
@@ -21,6 +21,7 @@ import {
 import Svg, { G, Path } from "react-native-svg";
 import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
+import GVGIcon from "../ico/menu/GVG.svg";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
@@ -379,9 +380,8 @@ const GVG = () => {
   const [opponentMapById, setOpponentMapById] = useState({});
   const [opponentStaffSectors, setOpponentStaffSectors] = useState({});
   const [areOpponentsLoaded, setAreOpponentsLoaded] = useState(false);
-  const [infoVisible, setInfoVisible] = useState(false);
-
-  const [battlesVisible, setBattlesVisible] = useState(false);
+  const [statsVisible, setStatsVisible] = useState(false);
+  const [statsTab, setStatsTab] = useState("participants");
   const [battlesRows, setBattlesRows] = useState([]);
   const [battlesLoading, setBattlesLoading] = useState(false);
   const [battlesActivityOnly, setBattlesActivityOnly] = useState(false);
@@ -537,8 +537,8 @@ const GVG = () => {
         fontWeight: "bold",
       },
       headerRight: () => (
-        <TouchableOpacity style={styles.infoButton} onPress={() => setInfoVisible(true)}>
-          <FontAwesomeIcon icon={faInfoCircle} size={22} color="#E0E0E0" />
+        <TouchableOpacity style={styles.infoButton} onPress={() => {}} activeOpacity={0.8}>
+          <FontAwesomeIcon icon={faVolumeHigh} size={22} color="#E0E0E0" />
         </TouchableOpacity>
       ),
     });
@@ -853,7 +853,8 @@ const GVG = () => {
   }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
 
   const openBattlesModal = async () => {
-    setBattlesVisible(true);
+    setStatsTab("participants");
+    setStatsVisible(true);
     setBattlesRows([]);
     setBattlesLoading(true);
     try {
@@ -929,15 +930,15 @@ const GVG = () => {
 
       normalizedRows.sort((a, b) => b.total - a.total);
       setBattlesRows(normalizedRows);
-      setBattlesVisible(true);
     } catch (e) {
       Alert.alert(t("gbgScreen.errors.title"), "Не вдалося завантажити таблицю боїв.");
+      setStatsVisible(false);
     } finally {
       setBattlesLoading(false);
     }
   };
 
-  const handleBattlesClose = async () => {
+  const handleStatsClose = async () => {
     try {
       if (battlesGuildId && battlesUserId && battlesRaw) {
         await database()
@@ -947,7 +948,7 @@ const GVG = () => {
     } catch (e) {
       Alert.alert(t("gbgScreen.errors.title"), "Не вдалося зберегти копію таблиці.");
     } finally {
-      setBattlesVisible(false);
+      setStatsVisible(false);
     }
   };
 
@@ -991,7 +992,7 @@ const GVG = () => {
 
           <View style={styles.listActions}>
             <TouchableOpacity style={styles.battlesBtn} onPress={openBattlesModal}>
-              <Text style={styles.battlesBtnText}>Бої</Text>
+              <GVGIcon width={22} height={22} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1030,30 +1031,6 @@ const GVG = () => {
         )}
       </View>
 
-      {infoVisible && (
-        <View style={styles.infoOverlay}>
-          <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
-          <Animated.View style={styles.infoModal}>
-            <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
-            <ScrollView style={styles.infoList}>
-              {opponentList.length === 0 ? (
-                <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
-              ) : (
-                opponentList.map((op) => (
-                  <View key={op.key ?? op.id} style={styles.infoRow}>
-                    <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
-                    <Text style={styles.infoName}>{op.name || op.id}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-            <TouchableOpacity style={styles.infoClose} onPress={() => setInfoVisible(false)}>
-              <Text style={styles.infoCloseText}>{t("gbgScreen.info.close")}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      )}
-
       {popupVisible && (
         <TouchableOpacity style={styles.popupOverlay} activeOpacity={1} onPress={() => setPopupVisible(false)}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={3} />
@@ -1066,59 +1043,87 @@ const GVG = () => {
         </TouchableOpacity>
       )}
 
-      {battlesVisible && (
+      {statsVisible && (
         <View style={styles.battlesOverlay}>
           <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={5} />
           <View style={styles.battlesModal}>
-            <View style={styles.battlesTitleRow}>
-              <Text style={styles.battlesTitle}>Бої</Text>
-              <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
-                <View style={[styles.battlesCheckbox, battlesActivityOnly && styles.battlesCheckboxChecked]}>
-                  {battlesActivityOnly && <Text style={styles.battlesCheckboxMark}>✓</Text>}
-                </View>
-                <Text style={styles.battlesActivityLabel}>Активність</Text>
+            <View style={styles.statsTabsRow}>
+              <TouchableOpacity style={[styles.statsTab, statsTab === "participants" && styles.statsTabActive]} onPress={() => setStatsTab("participants")}>
+                <Text style={[styles.statsTabText, statsTab === "participants" && styles.statsTabTextActive]}>Учасники</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.statsTab, statsTab === "opponents" && styles.statsTabActive]} onPress={() => setStatsTab("opponents")}>
+                <Text style={[styles.statsTabText, statsTab === "opponents" && styles.statsTabTextActive]}>Суперники</Text>
               </TouchableOpacity>
             </View>
-            {battlesLoading ? (
-              <ActivityIndicator size="large" color="#3498db" />
+
+            {statsTab === "participants" ? (
+              battlesLoading ? (
+                <ActivityIndicator size="large" color="#3498db" />
+              ) : (
+                <>
+                  <View style={styles.battlesTitleRow}>
+                    <Text style={styles.battlesTitle}>Бої</Text>
+                    <TouchableOpacity style={styles.battlesActivityToggle} onPress={() => setBattlesActivityOnly((prev) => !prev)} activeOpacity={0.8}>
+                      <View style={[styles.battlesCheckbox, battlesActivityOnly && styles.battlesCheckboxChecked]}>
+                        {battlesActivityOnly && <Text style={styles.battlesCheckboxMark}>✓</Text>}
+                      </View>
+                      <Text style={styles.battlesActivityLabel}>Активність</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.battlesHeaderRow}>
+                    <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
+                    <Text style={styles.battlesHeaderCell}>Перег</Text>
+                    <Text style={styles.battlesHeaderCell}>Бої</Text>
+                    <Text style={styles.battlesHeaderCell}>Разом</Text>
+                    <Text style={styles.battlesHeaderCell}>Втрати</Text>
+                  </View>
+
+                  <ScrollView style={styles.battlesScroll}>
+                    {filteredBattlesRows.map((row) => (
+                      <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
+                        <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
+                          {formatName(row.userName)}
+                        </Text>
+                        <View style={styles.battlesCellStack}>
+                          <Text style={styles.battlesCell}>{row.negotiationsWon}</Text>
+                          {formatDiff(row.diffNegotiations) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffNegotiations)}</Text>}
+                        </View>
+                        <View style={styles.battlesCellStack}>
+                          <Text style={styles.battlesCell}>{row.battlesWon}</Text>
+                          {formatDiff(row.diffBattles) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffBattles)}</Text>}
+                        </View>
+                        <View style={styles.battlesCellStack}>
+                          <Text style={styles.battlesCell}>{row.total}</Text>
+                          {formatDiff(row.diffTotal) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffTotal)}</Text>}
+                        </View>
+                        <View style={styles.battlesCellStack}>
+                          <Text style={styles.battlesCell}>{row.attrition}</Text>
+                          {formatDiff(row.diffAttrition) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffAttrition)}</Text>}
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )
             ) : (
               <>
-                <View style={styles.battlesHeaderRow}>
-                  <Text style={[styles.battlesHeaderCell, styles.battlesIdCell]}>Гравець</Text>
-                  <Text style={styles.battlesHeaderCell}>Перег</Text>
-                  <Text style={styles.battlesHeaderCell}>Бої</Text>
-                  <Text style={styles.battlesHeaderCell}>Разом</Text>
-                  <Text style={styles.battlesHeaderCell}>Втрати</Text>
-                </View>
-
-                <ScrollView style={styles.battlesScroll}>
-                {filteredBattlesRows.map((row) => (
-                  <View key={row.playerId} style={[styles.battlesRow, row.hasDiff && styles.battlesRowHighlight]}>
-                    <Text style={[styles.battlesCell, styles.battlesIdCell]} numberOfLines={1}>
-                      {formatName(row.userName)}
-                    </Text>
-                    <View style={styles.battlesCellStack}>
-                      <Text style={styles.battlesCell}>{row.negotiationsWon}</Text>
-                      {formatDiff(row.diffNegotiations) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffNegotiations)}</Text>}
-                    </View>
-                    <View style={styles.battlesCellStack}>
-                      <Text style={styles.battlesCell}>{row.battlesWon}</Text>
-                      {formatDiff(row.diffBattles) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffBattles)}</Text>}
-                    </View>
-                    <View style={styles.battlesCellStack}>
-                      <Text style={styles.battlesCell}>{row.total}</Text>
-                      {formatDiff(row.diffTotal) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffTotal)}</Text>}
-                    </View>
-                    <View style={styles.battlesCellStack}>
-                      <Text style={styles.battlesCell}>{row.attrition}</Text>
-                      {formatDiff(row.diffAttrition) && <Text style={styles.battlesDiffText}>{formatDiff(row.diffAttrition)}</Text>}
-                    </View>
-                  </View>
-                ))}
+                <Text style={styles.infoTitle}>{t("gbgScreen.info.title")}</Text>
+                <ScrollView style={styles.infoList}>
+                  {opponentList.length === 0 ? (
+                    <Text style={styles.infoEmpty}>{t("gbgScreen.info.empty")}</Text>
+                  ) : (
+                    opponentList.map((op) => (
+                      <View key={op.key ?? op.id} style={styles.infoRow}>
+                        <View style={[styles.infoColor, { backgroundColor: op.sectorColor || "#FFFFFF" }]} />
+                        <Text style={styles.infoName}>{op.name || op.id}</Text>
+                      </View>
+                    ))
+                  )}
                 </ScrollView>
               </>
             )}
-            <TouchableOpacity style={styles.battlesClose} onPress={handleBattlesClose}>
+
+            <TouchableOpacity style={styles.battlesClose} onPress={handleStatsClose}>
               <Text style={styles.battlesCloseText}>Закрити</Text>
             </TouchableOpacity>
           </View>
@@ -1142,8 +1147,16 @@ const styles = StyleSheet.create({
   listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
 
   listActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  battlesBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#2a2a2a", borderRadius: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  battlesBtnText: { color: "#E0E0E0", fontWeight: "700" },
+  battlesBtn: {
+    width: 40,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2a2a2a",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
 
   sectorList: { width: "100%" },
   sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
@@ -1172,25 +1185,12 @@ const styles = StyleSheet.create({
   emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
   emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
 
-  infoOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  infoModal: {
-    width: "85%",
-    maxHeight: HALF_HEIGHT * 1.2,
-    backgroundColor: "rgba(30, 30, 30, 0.9)",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
   infoList: { maxHeight: HALF_HEIGHT * 0.7 },
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
   infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
-  infoClose: { marginTop: 20, alignSelf: "center", paddingHorizontal: 25, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 25 },
-  infoCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
   popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
@@ -1200,6 +1200,11 @@ const styles = StyleSheet.create({
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
   battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  statsTabsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  statsTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.08)" },
+  statsTabActive: { backgroundColor: "rgba(52, 152, 219, 0.25)", borderWidth: 1, borderColor: "rgba(52, 152, 219, 0.8)" },
+  statsTabText: { color: "#C8C8C8", fontWeight: "700" },
+  statsTabTextActive: { color: "#FFFFFF" },
   battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
   battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
