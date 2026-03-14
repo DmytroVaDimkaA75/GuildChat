@@ -1306,7 +1306,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
                 memberIds.map(async (uid) => {
                   const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
                   const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
-                  if (role !== "guildLeader") return null;
+                  if (role !== "guildLeader" && role !== "tester") return null;
 
                   const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
