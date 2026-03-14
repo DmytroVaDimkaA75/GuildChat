@@ -31,6 +31,7 @@ const AdminMain = () => {
   const convertRole = (role) => {
     switch (role) {
       case 'guildLeader': return 'Адміністратор';
+      case 'tester': return 'Тестер';
       case 'member': return 'Користувач';
       default: return role;
     }

@@ -61,6 +61,7 @@ const menuOptions = [
       keyDate: new Date(2024, 2, 21),
     },
     { text: "Сервіси", fullText: "Сервіси", icon: <Servise width="24" height="24" fill={COLORS.textSecondary} /> },
+    { text: "Культурні поселення", fullText: "Культурні поселення", icon: <Admin width="24" height="24" fill={COLORS.textSecondary} /> },
     { text: "Альтанка", fullText: "Альтанка", icon: <Chat width="24" height="24" fill={COLORS.danger} /> }, 
     { text: "Абетка", fullText: "Абетка", icon: <Azbook width="24" height="24" fill={COLORS.textSecondary} /> },
     {
@@ -274,7 +275,8 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
     }
   };
 
-  const isGuildLeader = (role) => role === "guildLeader";
+  const hasLeaderAccess = (role) => role === "guildLeader" || role === "tester";
+  const isTester = (role) => role === "tester";
   
   function isOptionVisible(option, currentDate) {
     if (!option.keyDate) return true;
@@ -380,7 +382,8 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                     <Text style={styles.sectionTitle}>Основне</Text>
                     {menuOptions.map((option, index) => {
                         if (!isOptionVisible(option, new Date())) return null;
-                        if (option.fullText === "Адміністративна панель" && !isGuildLeader(userRole)) return null;
+                        if (option.fullText === "Адміністративна панель" && !hasLeaderAccess(userRole)) return null;
+                        if (option.fullText === "Культурні поселення" && !isTester(userRole)) return null;
 
                         const isSelected = selectedOption === index;
 

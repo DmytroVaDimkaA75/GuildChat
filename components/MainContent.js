@@ -278,6 +278,38 @@ function AdmintStack() {
   );
 }
 
+function CultureStack() {
+  const { t } = useTranslation();
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="CulturalSettlements"
+        component={CulturalSettlements}
+        options={() => ({
+          title: t("drawer.culture"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
+          headerShadowVisible: false,
+        })}
+      />
+      <Stack.Screen
+        name="CulturalPlanner"
+        component={CulturalPlanner}
+        options={{
+          title: t("drawer.culture"),
+        }}
+      />
+      <Stack.Screen
+        name="Planning"
+        component={Planning}
+        options={{
+          title: t("drawer.culture"),
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 function ProfileStack() {
   const { t } = useTranslation();
   return (
@@ -624,7 +656,8 @@ function CustomDrawerContent(props) {
 function AppNavigator({ onReady }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
-  const [showAdmin, setShowAdmin] = React.useState(false);
+  const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
+  const [isTester, setIsTester] = React.useState(false);
 
   const confirmDeletion = (members) =>
     new Promise((resolve) => {
@@ -662,18 +695,22 @@ function AppNavigator({ onReady }) {
         if (!userId || !guildId) return;
         const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
         const snap = await userRoleRef.once('value');
-        if (snap.exists() && snap.val() === 'guildLeader') {
-          setShowAdmin(true);
+        const role = snap.exists() ? snap.val() : null;
+        const canUseLeaderFeatures = role === 'guildLeader' || role === 'tester';
+
+        setHasLeaderAccess(canUseLeaderFeatures);
+        setIsTester(role === 'tester');
+
+        if (canUseLeaderFeatures) {
           await syncGuildMembers({
             guildId,
             confirmDeletion,
             confirmAddition,
           });
-        } else {
-          setShowAdmin(false);
         }
       } catch (e) {
-        setShowAdmin(false);
+        setHasLeaderAccess(false);
+        setIsTester(false);
       }
     };
     fetchRole();
@@ -729,7 +766,17 @@ function AppNavigator({ onReady }) {
             drawerIconComponent: renderIcon(Profile)
           }}
         />
-        {showAdmin && (
+        {isTester && (
+          <Drawer.Screen
+            name="culture"
+            component={CultureStack}
+            options={{
+              drawerLabel: t("drawer.culture"),
+              drawerIconComponent: renderIcon(Admin)
+            }}
+          />
+        )}
+        {hasLeaderAccess && (
           <Drawer.Screen
             name="admin"
             component={AdmintStack}
