@@ -657,6 +657,7 @@ function AppNavigator({ onReady }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
+  const [isTester, setIsTester] = React.useState(false);
 
   const confirmDeletion = (members) =>
     new Promise((resolve) => {
@@ -697,18 +698,19 @@ function AppNavigator({ onReady }) {
         const role = snap.exists() ? snap.val() : null;
         const canUseLeaderFeatures = role === 'guildLeader' || role === 'tester';
 
+        setHasLeaderAccess(canUseLeaderFeatures);
+        setIsTester(role === 'tester');
+
         if (canUseLeaderFeatures) {
-          setHasLeaderAccess(true);
           await syncGuildMembers({
             guildId,
             confirmDeletion,
             confirmAddition,
           });
-        } else {
-          setHasLeaderAccess(false);
         }
       } catch (e) {
         setHasLeaderAccess(false);
+        setIsTester(false);
       }
     };
     fetchRole();
@@ -764,7 +766,7 @@ function AppNavigator({ onReady }) {
             drawerIconComponent: renderIcon(Profile)
           }}
         />
-        {hasLeaderAccess && (
+        {isTester && (
           <Drawer.Screen
             name="culture"
             component={CultureStack}

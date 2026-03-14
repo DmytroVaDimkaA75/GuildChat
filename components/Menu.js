@@ -276,6 +276,7 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
   };
 
   const hasLeaderAccess = (role) => role === "guildLeader" || role === "tester";
+  const isTester = (role) => role === "tester";
   
   function isOptionVisible(option, currentDate) {
     if (!option.keyDate) return true;
@@ -381,7 +382,8 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                     <Text style={styles.sectionTitle}>Основне</Text>
                     {menuOptions.map((option, index) => {
                         if (!isOptionVisible(option, new Date())) return null;
-                        if ((option.fullText === "Адміністративна панель" || option.fullText === "Культурні поселення") && !hasLeaderAccess(userRole)) return null;
+                        if (option.fullText === "Адміністративна панель" && !hasLeaderAccess(userRole)) return null;
+                        if (option.fullText === "Культурні поселення" && !isTester(userRole)) return null;
 
                         const isSelected = selectedOption === index;
 
