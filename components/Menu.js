@@ -27,6 +27,7 @@ import Azbook from "./ico/menu/task.svg";
 import Profile from "./ico/menu/user.svg";
 import Quant from "./ico/menu/quant.svg";
 import Servise from "./ico/menu/servise.svg";
+import Boat2 from "./ico/boat2.svg";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const MENU_WIDTH = 320; 
@@ -61,7 +62,7 @@ const menuOptions = [
       keyDate: new Date(2024, 2, 21),
     },
     { text: "Сервіси", fullText: "Сервіси", icon: <Servise width="24" height="24" fill={COLORS.textSecondary} /> },
-    { text: "Культурні поселення", fullText: "Культурні поселення", icon: <Admin width="24" height="24" fill={COLORS.textSecondary} /> },
+    { text: "Культурні поселення", fullText: "Культурні поселення", icon: <Boat2 width="24" height="24" fill={COLORS.textSecondary} /> },
     { text: "Альтанка", fullText: "Альтанка", icon: <Chat width="24" height="24" fill={COLORS.danger} /> }, 
     { text: "Абетка", fullText: "Абетка", icon: <Azbook width="24" height="24" fill={COLORS.textSecondary} /> },
     {
