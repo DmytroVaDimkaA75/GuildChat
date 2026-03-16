@@ -28,6 +28,8 @@ import GuildMembersList from "./Chat/GuildMemberList";
 import NewGroupChat from "./Chat/NewGroupChat";
 import CulturalPlanner from './Culture/CulturalPlanner';
 import CulturalSettlements from './Culture/CulturalSettlements';
+import CulturalOptions from './Culture/CulturalOptions';
+import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
@@ -292,6 +294,20 @@ function CultureStack() {
           headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
           headerShadowVisible: false,
         })}
+      />
+      <Stack.Screen
+        name="CulturalOptions"
+        component={CulturalOptions}
+        options={{
+          title: t("drawer.culture"),
+        }}
+      />
+      <Stack.Screen
+        name="TechnologyCosts"
+        component={TechnologyCosts}
+        options={{
+          title: t("drawer.culture"),
+        }}
       />
       <Stack.Screen
         name="CulturalPlanner"
