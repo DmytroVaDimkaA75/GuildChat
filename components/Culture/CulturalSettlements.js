@@ -43,7 +43,7 @@ const SETTLEMENTS = [
   },
   {
     label: 'Імперія Моголів',
-    value: 'mongols',
+    value: 'mughals',
     image: require('./Mughal.png'),
   },
   {

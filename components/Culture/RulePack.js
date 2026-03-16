@@ -519,6 +519,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 32,
         goodsCostPolicy: 'fixed',
         totalGoodsCost: 10,
+        allowedGoods: ['fish'],
         unlocks: [{ type: 'building', buildingId: 'small_cutter' }]
       },
       {
@@ -527,6 +528,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 120,
         goodsCostPolicy: 'fixed',
         totalGoodsCost: 25,
+        allowedGoods: ['fish'],
         unlocks: [{ type: 'building', buildingId: 'spice_market' }]
       },
       {
@@ -535,6 +537,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 195,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 80,
+        allowedGoods: ['fish', 'spice'],
         unlocks: [{ type: 'building', buildingId: 'small_shed' }]
       },
       {
@@ -543,6 +546,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 280,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 125,
+        allowedGoods: ['fish', 'spice'],
         unlocks: [
           { type: 'building', buildingId: 'long_pier' },
           { type: 'building', buildingId: 'wide_pier' }
@@ -554,6 +558,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 375,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 170,
+        allowedGoods: ['fish', 'spice'],
         unlocks: [{ type: 'building', buildingId: 'rum_distillery' }]
       },
       {
@@ -562,6 +567,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 480,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 200,
+        allowedGoods: ['fish', 'spice', 'rum'],
         unlocks: [{ type: 'building', buildingId: 'red_sails_brig' }]
       },
       {
@@ -570,6 +576,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 595,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 230,
+        allowedGoods: ['fish', 'spice', 'rum'],
         unlocks: [{ type: 'building', buildingId: 'cannon_builder' }]
       },
       {
@@ -578,6 +585,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 720,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 260,
+        allowedGoods: ['fish', 'spice', 'rum', 'cannons'],
         unlocks: [{ type: 'building', buildingId: 'barracks' }]
       },
       {
@@ -586,6 +594,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 855,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 290,
+        allowedGoods: ['fish', 'spice', 'rum', 'cannons'],
         unlocks: [{ type: 'building', buildingId: 'blackwater_galleon' }]
       },
       {
@@ -594,6 +603,7 @@ export const piratesRulePack = {
         requiredDiplomacy: 1000,
         goodsCostPolicy: 'flex_mix_same_total',
         totalGoodsCost: 320,
+        allowedGoods: ['fish', 'spice', 'rum', 'cannons'],
         unlocks: [{ type: 'building', buildingId: 'large_pier' }]
       }
     ]
@@ -961,9 +971,9 @@ export const egyptiansRulePack = {
   }
 };
 
-export const mongolsRulePack = {
-  rulePackVersion: 'mongols_map_only_v1',
-  settlementType: 'mongols',
+export const mughalsRulePack = {
+  rulePackVersion: 'mughals_map_only_v1',
+  settlementType: 'mughals',
   status: 'map_only',
   map: {
     sectorTileSize: { w: 4, h: 4 },
@@ -1031,7 +1041,7 @@ export const RULE_PACKS = {
   vikings: vikingsRulePack,
   aztecs: aztecsRulePack,
   egyptians: egyptiansRulePack,
-  mongols: mongolsRulePack,
+  mughals: mughalsRulePack,
   polynesia: polynesiaRulePack,
   japanese: japaneseRulePack
 };
