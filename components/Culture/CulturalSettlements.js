@@ -5,6 +5,14 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+const COLORS = {
+  background: '#121212',
+  surface: '#1E1E1E',
+  border: '#2F2F2F',
+  textPrimary: '#FFFFFF',
+  accent: '#2196f3',
+};
+
 const CulturalSettlements = () => {
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
@@ -81,7 +89,7 @@ const CulturalSettlements = () => {
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={COLORS.accent} />
       </View>
     );
   }
@@ -103,15 +111,15 @@ const CulturalSettlements = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.background,
     padding: 16,
   },
   settlementsItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e0e0e0',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#000',
+    borderColor: COLORS.border,
     borderRadius: 5,
     marginBottom: 15,
     padding: 10,
@@ -128,11 +136,13 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
+    color: COLORS.textPrimary,
   },
   loader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
 });
 
