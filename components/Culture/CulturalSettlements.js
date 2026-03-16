@@ -44,6 +44,7 @@ const CulturalSettlements = () => {
     { label: 'Ацтеки', value: 'Aztecs' },
     { label: 'Імперія Моголів', value: 'Mughal' },
     { label: 'Полінезія', value: 'Polynesia' },
+    { label: 'Піратське поселення', value: 'Pirates' },
   ];
 
   const images = {
@@ -53,6 +54,7 @@ const CulturalSettlements = () => {
     Aztecs:  require('./Aztecs.png'),
     Mughal:  require('./Mughal.png'),
     Polynesia: require('./Polynesia.png'),
+    Pirates: require('./Pirates.png'),
   };
 
   const handleSelect = async (value) => {
