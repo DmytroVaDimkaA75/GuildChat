@@ -49,6 +49,7 @@ import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 
 // НОВЫЕ ИКОНКИ
 import Admin from "./ico/menu/setting.svg";
+import Boat2 from "./ico/boat2.svg";
 import Chat from "./ico/menu/chat.svg";
 import GVG from "./ico/menu/GVG.svg";
 import GB from "./ico/menu/GB.svg";
@@ -772,7 +773,7 @@ function AppNavigator({ onReady }) {
             component={CultureStack}
             options={{
               drawerLabel: t("drawer.culture"),
-              drawerIconComponent: renderIcon(Admin)
+              drawerIconComponent: renderIcon(Boat2)
             }}
           />
         )}
