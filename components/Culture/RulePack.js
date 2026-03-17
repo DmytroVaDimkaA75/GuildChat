@@ -508,6 +508,10 @@ export const piratesRulePack = {
   techTree: {
     requiredDiplomacyThresholds: [32, 120, 195, 280, 375, 480, 595, 720, 855, 1000],
     costGoodsSource: 'runState.tech.nodes[].costGoods',
+    paymentRules: {
+      allowedGoodsPolicy: 'all_unlocked_goods',
+      description: 'Кожну технологію можна оплачувати будь-якою комбінацією товарів, виробництво яких уже відкрите на момент оплати.'
+    },
     validation: {
       enforceTotalGoodsCost: true,
       rule: 'sum(costGoods) == totalGoodsCost'
@@ -919,14 +923,120 @@ export const vikingsRulePack = {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 25,
     allSectors: [
-      'E1:H4', 'I1:L4', 'M1:P4', 'Q1:T4',
-      'A5:D8', 'E5:H8', 'I5:L8', 'M5:P8', 'Q5:T8',
-      'A9:D12', 'E9:H12', 'I9:L12', 'M9:P12', 'Q9:T12', 'U9:X12',
-      'A13:D16', 'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16',
-      'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20'
+      'E1:H4',
+      'I1:L4',
+      'M1:P4',
+      'Q1:T4',
+      'A5:D8',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'A9:D12',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'A13:D16',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'U13:X16',
+      'E17:H20',
+      'I17:L20',
+      'M17:P20',
+      'Q17:T20'
     ],
     startOpenSectors: ['I5:L8', 'M5:P8', 'I9:L12', 'M9:P12'],
     unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [55, 120, 195, 280, 375, 480, 595, 720, 855, 1000],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Святиня',
+        requiredDiplomacy: 55,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 10,
+        allowedGoods: ['axes']
+      },
+      {
+        id: 'adv_02',
+        name: 'Медоварня',
+        requiredDiplomacy: 120,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 34,
+        allowedGoods: ['axes']
+      },
+      {
+        id: 'adv_03',
+        name: 'Хатина',
+        requiredDiplomacy: 195,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 52,
+        allowedGoods: ['axes', 'mead']
+      },
+      {
+        id: 'adv_04',
+        name: 'Мисливець на звірів',
+        requiredDiplomacy: 280,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 69,
+        allowedGoods: ['axes', 'mead']
+      },
+      {
+        id: 'adv_05',
+        name: 'Тотем клану',
+        requiredDiplomacy: 375,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 86,
+        allowedGoods: ['axes', 'mead', 'horns']
+      },
+      {
+        id: 'adv_06',
+        name: 'Базар',
+        requiredDiplomacy: 480,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 103,
+        allowedGoods: ['axes', 'mead', 'horns']
+      },
+      {
+        id: 'adv_07',
+        name: 'Ферма вовни',
+        requiredDiplomacy: 595,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 120,
+        allowedGoods: ['axes', 'mead', 'horns']
+      },
+      {
+        id: 'adv_08',
+        name: 'Будинок клану',
+        requiredDiplomacy: 720,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 137,
+        allowedGoods: ['axes', 'mead', 'horns', 'wool']
+      },
+      {
+        id: 'adv_09',
+        name: 'Стара верба',
+        requiredDiplomacy: 855,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 155,
+        allowedGoods: ['axes', 'mead', 'horns', 'wool']
+      },
+      {
+        id: 'adv_10',
+        name: 'Медова зала',
+        requiredDiplomacy: 1000,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 172,
+        allowedGoods: ['axes', 'mead', 'horns', 'wool']
+      }
+    ]
   }
 };
 
@@ -938,15 +1048,125 @@ export const aztecsRulePack = {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 30,
     allSectors: [
-      'I1:L4', 'M1:P4', 'Q1:T4',
-      'E5:H8', 'I5:L8', 'M5:P8', 'Q5:T8', 'U5:X8',
-      'E9:H12', 'I9:L12', 'M9:P12', 'Q9:T12', 'U9:X12',
-      'A13:D16', 'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16',
-      'A17:D20', 'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20', 'U17:X20',
-      'E21:H24', 'I21:L24', 'M21:P24', 'Q21:T24', 'U21:X24'
+      'I1:L4',
+      'M1:P4',
+      'Q1:T4',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'U5:X8',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'A13:D16',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'U13:X16',
+      'A17:D20',
+      'E17:H20',
+      'I17:L20',
+      'M17:P20',
+      'Q17:T20',
+      'U17:X20',
+      'E21:H24',
+      'I21:L24',
+      'M21:P24',
+      'Q21:T24',
+      'U21:X24'
     ],
     startOpenSectors: ['M9:P12', 'Q9:T12', 'U9:X12', 'M13:P16', 'Q13:T16', 'U13:X16'],
     unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [55, 120, 195, 280, 375, 480, 595, 720, 855, 1000],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Проста Святиня',
+        requiredDiplomacy: 55,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 15,
+        allowedGoods: ['vegetables']
+      },
+      {
+        id: 'adv_02',
+        name: 'Вольєр Кетцалей',
+        requiredDiplomacy: 120,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 30,
+        allowedGoods: ['vegetables']
+      },
+      {
+        id: 'adv_03',
+        name: 'Житло яотегихуа',
+        requiredDiplomacy: 195,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 60,
+        allowedGoods: ['vegetables', 'headdresses']
+      },
+      {
+        id: 'adv_04',
+        name: 'Кукурузна ферма',
+        requiredDiplomacy: 280,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 100,
+        allowedGoods: ['vegetables', 'headdresses']
+      },
+      {
+        id: 'adv_05',
+        name: 'Декоративна статуя та Статуя з візерунком',
+        requiredDiplomacy: 375,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 115,
+        allowedGoods: ['vegetables', 'headdresses', 'corn']
+      },
+      {
+        id: 'adv_06',
+        name: 'Тешкоцинго',
+        requiredDiplomacy: 480,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 140,
+        allowedGoods: ['vegetables', 'headdresses', 'corn']
+      },
+      {
+        id: 'adv_07',
+        name: 'Майстерня каменаря',
+        requiredDiplomacy: 595,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 160,
+        allowedGoods: ['vegetables', 'headdresses', 'corn']
+      },
+      {
+        id: 'adv_08',
+        name: 'Палац Піллі',
+        requiredDiplomacy: 720,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 185,
+        allowedGoods: ['vegetables', 'headdresses', 'corn', 'stone_figures']
+      },
+      {
+        id: 'adv_09',
+        name: 'Камінь Сонця',
+        requiredDiplomacy: 855,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 210,
+        allowedGoods: ['vegetables', 'headdresses', 'corn', 'stone_figures']
+      },
+      {
+        id: 'adv_10',
+        name: 'Великий храм',
+        requiredDiplomacy: 1000,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 230,
+        allowedGoods: ['vegetables', 'headdresses', 'corn', 'stone_figures']
+      }
+    ]
   }
 };
 
@@ -958,41 +1178,319 @@ export const egyptiansRulePack = {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 41,
     allSectors: [
-      'A1:D4', 'E1:H4', 'I1:L4', 'M1:P4', 'Q1:T4', 'U1:X4', 'Y1:AB4',
-      'A5:D8', 'E5:H8', 'I5:L8', 'M5:P8', 'Q5:T8', 'U5:X8', 'Y5:AB8',
-      'A9:D12', 'E9:H12', 'I9:L12', 'M9:P12', 'Q9:T12', 'U9:X12', 'Y9:AB12',
-      'A13:D16', 'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16', 'Y13:AB16',
-      'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20', 'U17:X20', 'Y17:AB20',
-      'M21:P24', 'Q21:T24', 'U21:X24', 'Y21:AB24',
-      'Q25:T28', 'U25:X28', 'Y25:AB28'
+      'A1:D4',
+      'E1:H4',
+      'I1:L4',
+      'M1:P4',
+      'Q1:T4',
+      'U1:X4',
+      'Y1:AB4',
+      'A5:D8',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'U5:X8',
+      'Y5:AB8',
+      'A9:D12',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'Y9:AB12',
+      'A13:D16',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'U13:X16',
+      'Y13:AB16',
+      'E17:H20',
+      'I17:L20',
+      'M17:P20',
+      'Q17:T20',
+      'U17:X20',
+      'Y17:AB20',
+      'M21:P24',
+      'Q21:T24',
+      'U21:X24',
+      'Y21:AB24',
+      'Q25:T28',
+      'U25:X28',
+      'Y25:AB28'
     ],
-    startOpenSectors: ['A5:D8', 'E5:H8', 'I5:L8', 'M5:P8', 'A9:D12', 'E9:H12', 'I9:L12', 'M9:P12'],
-    unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+    startOpenSectors: [
+      'A5:D8',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'A9:D12',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12'
+    ],
+    unlockRules: {
+      adjacency: 'side_only',
+      diagonalCounts: false
+    }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [60, 160, 250, 360, 480, 610, 750, 900, 1060, 1230, 1420, 1610, 1820],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Статуя божества',
+        requiredDiplomacy: 60,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 14,
+        allowedGoods: ['barley']
+      },
+      {
+        id: 'adv_02',
+        name: 'Гончарня',
+        requiredDiplomacy: 160,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 30,
+        allowedGoods: ['barley']
+      },
+      {
+        id: 'adv_03',
+        name: 'Коліснична майстерня і багатоповерховий глиняний будинок',
+        requiredDiplomacy: 250,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 50,
+        allowedGoods: ['barley', 'pottery']
+      },
+      {
+        id: 'adv_04',
+        name: 'Вирощена пальма (північ) і вирощена пальма (схід)',
+        requiredDiplomacy: 360,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 70,
+        allowedGoods: ['barley', 'pottery']
+      },
+      {
+        id: 'adv_05',
+        name: 'Парковий ставок',
+        requiredDiplomacy: 480,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 85,
+        allowedGoods: ['barley', 'pottery']
+      },
+      {
+        id: 'adv_06',
+        name: 'Квіткова ферма',
+        requiredDiplomacy: 610,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 100,
+        allowedGoods: ['barley', 'pottery']
+      },
+      {
+        id: 'adv_07',
+        name: 'Красивий пальмовий сад (північ) і красивий пальмовий сад (схід)',
+        requiredDiplomacy: 750,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 120,
+        allowedGoods: ['barley', 'pottery', 'flowers']
+      },
+      {
+        id: 'adv_08',
+        name: 'Житловий квартал',
+        requiredDiplomacy: 900,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 140,
+        allowedGoods: ['barley', 'pottery', 'flowers']
+      },
+      {
+        id: 'adv_09',
+        name: 'Стійло для слонів',
+        requiredDiplomacy: 1060,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 155,
+        allowedGoods: ['barley', 'pottery', 'flowers']
+      },
+      {
+        id: 'adv_10',
+        name: 'Жертвопринесення',
+        requiredDiplomacy: 1230,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 170,
+        allowedGoods: ['barley', 'pottery', 'flowers']
+      },
+      {
+        id: 'adv_11',
+        name: 'Процесія',
+        requiredDiplomacy: 1420,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 190,
+        allowedGoods: ['barley', 'pottery', 'flowers', 'offerings']
+      },
+      {
+        id: 'adv_12',
+        name: 'Розкішний особняк та оазис',
+        requiredDiplomacy: 1610,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 205,
+        allowedGoods: ['barley', 'pottery', 'flowers', 'offerings']
+      },
+      {
+        id: 'adv_13',
+        name: 'Піраміда',
+        requiredDiplomacy: 1820,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 220,
+        allowedGoods: ['barley', 'pottery', 'flowers', 'offerings']
+      }
+    ]
   }
 };
 
-export const mughalsRulePack = {
-  rulePackVersion: 'mughals_map_only_v1',
-  settlementType: 'mughals',
+export const mongolsRulePack = {
+  rulePackVersion: 'mongols_map_only_v1',
+  settlementType: 'mongols',
   status: 'map_only',
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 43,
     allSectors: [
-      'A1:D4', 'E1:H4', 'I1:L4', 'M1:P4', 'Q1:T4', 'U1:X4', 'Y1:AB4',
-      'A5:D8', 'E5:H8', 'I5:L8', 'M5:P8', 'Q5:T8', 'U5:X8', 'Y5:AB8',
-      'A9:D12', 'E9:H12', 'I9:L12', 'M9:P12', 'Q9:T12', 'U9:X12', 'Y9:AB12',
-      'A13:D16', 'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16', 'Y13:AB16',
-      'A17:D20', 'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20', 'U17:X20', 'Y17:AB20',
-      'E21:H24', 'I21:L24', 'M21:P24', 'Q21:T24', 'U21:X24',
-      'I25:L28', 'M25:P28', 'Q25:T28'
+      'A1:D4',
+      'E1:H4',
+      'I1:L4',
+      'M1:P4',
+      'Q1:T4',
+      'U1:X4',
+      'Y1:AB4',
+      'A5:D8',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'U5:X8',
+      'Y5:AB8',
+      'A9:D12',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'Y9:AB12',
+      'A13:D16',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'U13:X16',
+      'Y13:AB16',
+      'A17:D20',
+      'E17:H20',
+      'I17:L20',
+      'M17:P20',
+      'Q17:T20',
+      'U17:X20',
+      'Y17:AB20',
+      'E21:H24',
+      'I21:L24',
+      'M21:P24',
+      'Q21:T24',
+      'U21:X24',
+      'I25:L28',
+      'M25:P28',
+      'Q25:T28'
     ],
     startOpenSectors: [
-      'I5:L8', 'M5:P8', 'Q5:T8', 'U5:X8',
-      'I9:L12', 'M9:P12', 'Q9:T12', 'U9:X12',
-      'I13:L16', 'M13:P16', 'Q13:T16'
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'U5:X8',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16'
     ],
     unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [102, 214, 307, 400, 540, 700, 870, 1050, 1260],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Водний канал',
+        requiredDiplomacy: 102,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 5,
+        allowedGoods: ['basmati_rice']
+      },
+      {
+        id: 'adv_02',
+        name: 'Ткачі сарі',
+        requiredDiplomacy: 214,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 20,
+        allowedGoods: ['basmati_rice']
+      },
+      {
+        id: 'adv_03',
+        name: 'Шанті гар',
+        requiredDiplomacy: 307,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 50,
+        allowedGoods: ['basmati_rice', 'sari']
+      },
+      {
+        id: 'adv_04',
+        name: 'Шатри',
+        requiredDiplomacy: 400,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 85,
+        allowedGoods: ['basmati_rice', 'sari']
+      },
+      {
+        id: 'adv_05',
+        name: 'Лавка спецій',
+        requiredDiplomacy: 540,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 130,
+        allowedGoods: ['basmati_rice', 'sari']
+      },
+      {
+        id: 'adv_06',
+        name: 'Балдахін',
+        requiredDiplomacy: 700,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 160,
+        allowedGoods: ['basmati_rice', 'sari', 'spices']
+      },
+      {
+        id: 'adv_07',
+        name: 'Лотосова квіткова ферма',
+        requiredDiplomacy: 870,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 190,
+        allowedGoods: ['basmati_rice', 'sari', 'spices']
+      },
+      {
+        id: 'adv_08',
+        name: 'Чарбаг',
+        requiredDiplomacy: 1050,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 220,
+        allowedGoods: ['basmati_rice', 'sari', 'spices', 'lotus']
+      },
+      {
+        id: 'adv_09',
+        name: 'Хавелі',
+        requiredDiplomacy: 1260,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 250,
+        allowedGoods: ['basmati_rice', 'sari', 'spices', 'lotus']
+      }
+    ]
   }
 };
 
@@ -1004,15 +1502,119 @@ export const polynesiaRulePack = {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 24,
     allSectors: [
-      'E1:H4', 'I1:L4', 'M1:P4',
-      'A5:D8', 'E5:H8', 'I5:L8', 'M5:P8', 'Q5:T8',
-      'A9:D12', 'E9:H12', 'I9:L12', 'M9:P12', 'Q9:T12',
-      'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16',
-      'M17:P20', 'Q17:T20', 'U17:X20', 'Y17:AB20',
-      'Q21:T24', 'U21:X24', 'Y21:AB24'
+      'E1:H4',
+      'I1:L4',
+      'M1:P4',
+      'A5:D8',
+      'E5:H8',
+      'I5:L8',
+      'M5:P8',
+      'Q5:T8',
+      'A9:D12',
+      'E9:H12',
+      'I9:L12',
+      'M9:P12',
+      'Q9:T12',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'M17:P20',
+      'Q17:T20',
+      'U17:X20',
+      'Y17:AB20',
+      'Q21:T24',
+      'U21:X24',
+      'Y21:AB24'
     ],
     startOpenSectors: ['M13:P16', 'Q13:T16', 'M17:P20', 'Q17:T20'],
     unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [30, 120, 195, 280, 375, 480, 595, 720, 855, 1000],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Танцювальна сцена',
+        requiredDiplomacy: 30,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 5,
+        allowedGoods: ['fresh_fish']
+      },
+      {
+        id: 'adv_02',
+        name: 'Пальмовий сад',
+        requiredDiplomacy: 120,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 10,
+        allowedGoods: ['fresh_fish']
+      },
+      {
+        id: 'adv_03',
+        name: 'Житло на палях',
+        requiredDiplomacy: 195,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 40,
+        allowedGoods: ['fresh_fish', 'coconut']
+      },
+      {
+        id: 'adv_04',
+        name: 'Мелодична статуя та Статуя Музики',
+        requiredDiplomacy: 280,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 70,
+        allowedGoods: ['fresh_fish', 'coconut']
+      },
+      {
+        id: 'adv_05',
+        name: 'Ферма кави',
+        requiredDiplomacy: 375,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 95,
+        allowedGoods: ['fresh_fish', 'coconut']
+      },
+      {
+        id: 'adv_06',
+        name: 'Суспільна кухня',
+        requiredDiplomacy: 480,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 110,
+        allowedGoods: ['fresh_fish', 'coconut', 'coffee']
+      },
+      {
+        id: 'adv_07',
+        name: 'Будівельник катамаранів',
+        requiredDiplomacy: 595,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 135,
+        allowedGoods: ['fresh_fish', 'coconut', 'coffee']
+      },
+      {
+        id: 'adv_08',
+        name: 'Сімейний будинок',
+        requiredDiplomacy: 720,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 150,
+        allowedGoods: ['fresh_fish', 'coconut', 'coffee', 'catamarans']
+      },
+      {
+        id: 'adv_09',
+        name: 'Природний тотем',
+        requiredDiplomacy: 855,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 170,
+        allowedGoods: ['fresh_fish', 'coconut', 'coffee', 'catamarans']
+      },
+      {
+        id: 'adv_10',
+        name: 'Хижа королівського сховища',
+        requiredDiplomacy: 1000,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 190,
+        allowedGoods: ['fresh_fish', 'coconut', 'coffee', 'catamarans']
+      }
+    ]
   }
 };
 
@@ -1024,15 +1626,119 @@ export const japaneseRulePack = {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 24,
     allSectors: [
-      'Q1:T4', 'U1:X4',
-      'M5:P8', 'Q5:T8', 'U5:X8',
-      'M9:P12', 'Q9:T12', 'U9:X12',
-      'E13:H16', 'I13:L16', 'M13:P16', 'Q13:T16', 'U13:X16',
-      'A17:D20', 'E17:H20', 'I17:L20', 'M17:P20', 'Q17:T20', 'U17:X20',
-      'A21:D24', 'E21:H24', 'I21:L24', 'M21:P24', 'Q21:T24'
+      'Q1:T4',
+      'U1:X4',
+      'M5:P8',
+      'Q5:T8',
+      'U5:X8',
+      'M9:P12',
+      'Q9:T12',
+      'U9:X12',
+      'E13:H16',
+      'I13:L16',
+      'M13:P16',
+      'Q13:T16',
+      'U13:X16',
+      'A17:D20',
+      'E17:H20',
+      'I17:L20',
+      'M17:P20',
+      'Q17:T20',
+      'U17:X20',
+      'A21:D24',
+      'E21:H24',
+      'I21:L24',
+      'M21:P24',
+      'Q21:T24'
     ],
     startOpenSectors: ['Q13:T16', 'U13:X16', 'Q17:T20', 'U17:X20'],
     unlockRules: { adjacency: 'side_only', diagonalCounts: false }
+  },
+
+  techTree: {
+    requiredDiplomacyThresholds: [30, 60, 100, 140, 198, 254, 315, 381, 453, 530],
+    advancementsCatalog: [
+      {
+        id: 'adv_01',
+        name: 'Святиня Сінто',
+        requiredDiplomacy: 30,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 10,
+        allowedGoods: ['soy']
+      },
+      {
+        id: 'adv_02',
+        name: 'Галерея',
+        requiredDiplomacy: 60,
+        goodsCostPolicy: 'fixed',
+        totalGoodsCost: 35,
+        allowedGoods: ['soy']
+      },
+      {
+        id: 'adv_03',
+        name: 'Будинок Сьон-дзукурі',
+        requiredDiplomacy: 100,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 60,
+        allowedGoods: ['soy', 'paintings']
+      },
+      {
+        id: 'adv_04',
+        name: 'Ворота торі та Священні ворота торі',
+        requiredDiplomacy: 140,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 75,
+        allowedGoods: ['soy', 'paintings']
+      },
+      {
+        id: 'adv_05',
+        name: 'Зброяр',
+        requiredDiplomacy: 198,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 100,
+        allowedGoods: ['soy', 'paintings']
+      },
+      {
+        id: 'adv_06',
+        name: 'Чайний будиночок',
+        requiredDiplomacy: 254,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 115,
+        allowedGoods: ['soy', 'paintings', 'armor']
+      },
+      {
+        id: 'adv_07',
+        name: 'Майстерня інструментів',
+        requiredDiplomacy: 315,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 130,
+        allowedGoods: ['soy', 'paintings', 'armor']
+      },
+      {
+        id: 'adv_08',
+        name: 'Маєток Сьон-дзукурі',
+        requiredDiplomacy: 381,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 150,
+        allowedGoods: ['soy', 'paintings', 'armor', 'musical_instruments']
+      },
+      {
+        id: 'adv_09',
+        name: 'Сад Дзен',
+        requiredDiplomacy: 453,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 170,
+        allowedGoods: ['soy', 'paintings', 'armor', 'musical_instruments']
+      },
+      {
+        id: 'adv_10',
+        name: 'Дозьє',
+        requiredDiplomacy: 530,
+        goodsCostPolicy: 'flex_mix_same_total',
+        totalGoodsCost: 190,
+        allowedGoods: ['soy', 'paintings', 'armor', 'musical_instruments']
+      }
+    ]
   }
 };
 
@@ -1041,7 +1747,7 @@ export const RULE_PACKS = {
   vikings: vikingsRulePack,
   aztecs: aztecsRulePack,
   egyptians: egyptiansRulePack,
-  mughals: mughalsRulePack,
+  mongols: mongolsRulePack,
   polynesia: polynesiaRulePack,
   japanese: japaneseRulePack
 };
