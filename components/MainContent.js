@@ -29,7 +29,6 @@ import NewGroupChat from "./Chat/NewGroupChat";
 import CulturalPlanner from './Culture/CulturalPlanner';
 import CulturalSettlements from './Culture/CulturalSettlements';
 import CulturalOptions from './Culture/CulturalOptions';
-import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
@@ -60,6 +59,12 @@ import Profile from "./ico/menu/user.svg";
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
 const navigationRef = createNavigationContainerRef();
+
+
+const LazyTechnologyCosts = (props) => {
+  const Screen = require('./Culture/TechnologyCosts').default;
+  return <Screen {...props} />;
+};
 
 // --- ДИЗАЙН СИСТЕМА ---
 const COLORS = {
@@ -304,7 +309,7 @@ function CultureStack() {
       />
       <Stack.Screen
         name="TechnologyCosts"
-        component={TechnologyCosts}
+        component={LazyTechnologyCosts}
         options={{
           title: t("drawer.culture"),
         }}
