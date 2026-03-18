@@ -1,27 +1,38 @@
-import { useRoute } from '@react-navigation/native';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import RULE_PACKS from './RulePack';
 
 const COLORS = {
   background: '#121212',
   surface: '#1E1E1E',
   border: '#2F2F2F',
+  borderError: '#EF5350',
   textPrimary: '#FFFFFF',
   textSecondary: '#BDBDBD',
   accent: '#2196f3',
 };
 
 const TechnologyCosts = () => {
+  const navigation = useNavigation();
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const [inputs, setInputs] = useState({});
+  const [invalidTechIds, setInvalidTechIds] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const techList = useMemo(() => {
-    const pack = RULE_PACKS[settlementName];
-    const advancements = pack?.techTree?.advancementsCatalog || [];
+    const selectedPack = RULE_PACKS[settlementName];
+    const selectedAdvancements = selectedPack?.techTree?.advancementsCatalog || [];
 
-    return advancements.filter((item) => (item?.allowedGoods || []).length >= 2);
+    if (selectedAdvancements.length > 0) {
+      return selectedAdvancements.filter((item) => (item?.allowedGoods || []).length >= 1);
+    }
+
+    const fallbackAdvancements = RULE_PACKS?.pirates?.techTree?.advancementsCatalog || [];
+    return fallbackAdvancements.filter((item) => (item?.allowedGoods || []).length >= 1);
   }, [settlementName]);
 
   const handleChange = (techId, good, value) => {
@@ -30,19 +41,123 @@ const TechnologyCosts = () => {
       ...prev,
       [key]: value,
     }));
+
+    if (invalidTechIds.includes(techId)) {
+      setInvalidTechIds((prev) => prev.filter((id) => id !== techId));
+    }
   };
+
+  const parseGoodValue = (rawValue) => {
+    const value = String(rawValue ?? '').trim();
+
+    if (value === '') {
+      return { value: 0, isValid: true };
+    }
+
+    if (!/^\d+$/.test(value)) {
+      return { value: 0, isValid: false };
+    }
+
+    return { value: Number(value), isValid: true };
+  };
+
+  const buildSavePayload = useCallback(() => {
+    const invalidIds = [];
+
+    const payload = techList.map((tech) => {
+      const allowedGoods = tech.allowedGoods || [];
+      const totalCost = Number(tech.totalGoodsCost || 0);
+      let sum = 0;
+      let hasInvalidInput = false;
+
+      const costGoods = allowedGoods.reduce((acc, good) => {
+        const key = `${tech.id}:${good}`;
+        const parsed = parseGoodValue(inputs[key]);
+
+        if (!parsed.isValid) {
+          hasInvalidInput = true;
+        }
+
+        sum += parsed.value;
+        acc[good] = parsed.value;
+        return acc;
+      }, {});
+
+      if (hasInvalidInput || sum !== totalCost) {
+        invalidIds.push(tech.id);
+      }
+
+      return {
+        advancementId: tech.id,
+        status: 'unlocked',
+        costGoods,
+      };
+    });
+
+    return {
+      invalidIds,
+      payload,
+    };
+  }, [inputs, techList]);
+
+  const handleSave = useCallback(async () => {
+    const { invalidIds, payload } = buildSavePayload();
+
+    if (invalidIds.length > 0) {
+      setInvalidTechIds(invalidIds);
+      Alert.alert(
+        'Помилка перевірки',
+        'Для виділених технологій сума товарів має дорівнювати загальній вартості, а значення мають бути цілими невід’ємними числами.',
+      );
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+
+      if (!userId || !guildId) {
+        Alert.alert('Помилка', 'Не вдалося визначити користувача або гільдію.');
+        return;
+      }
+
+      const path = `users/${userId}/${guildId}/settlement/tech`;
+      await database().ref(path).set(payload);
+      Alert.alert('Збережено', 'Технології успішно збережені.');
+      setInvalidTechIds([]);
+    } catch (error) {
+      console.error('Помилка збереження технологій:', error);
+      Alert.alert('Помилка', 'Не вдалося зберегти технології. Спробуйте ще раз.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [buildSavePayload]);
+
+
+
+  useEffect(() => {
+    navigation.setParams({
+      onSaveTechCosts: handleSave,
+      isSavingTechCosts: isSaving,
+    });
+  }, [handleSave, isSaving, navigation]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Вартість технологій: {settlementName || '—'}</Text>
 
+
       {techList.length === 0 ? (
         <Text style={styles.emptyText}>
-          Для цього поселення немає технологій із двома або більше можливими товарами.
+          Для цього поселення немає технологій з доступними товарами.
         </Text>
       ) : (
         techList.map((tech) => (
-          <View key={tech.id} style={styles.card}>
+          <View
+            key={tech.id}
+            style={[styles.card, invalidTechIds.includes(tech.id) && styles.cardError]}
+          >
             <Text style={styles.techTitle}>{tech.name}</Text>
             <Text style={styles.techMeta}>Загальна вартість: {tech.totalGoodsCost}</Text>
 
@@ -95,6 +210,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 14,
+  },
+  cardError: {
+    borderColor: COLORS.borderError,
+    borderWidth: 2,
   },
   techTitle: {
     color: COLORS.textPrimary,
