@@ -25,9 +25,14 @@ const TechnologyCosts = () => {
 
   const techList = useMemo(() => {
     const selectedPack = RULE_PACKS[settlementName];
-    const advancements = selectedPack?.techTree?.advancementsCatalog || [];
+    const selectedAdvancements = selectedPack?.techTree?.advancementsCatalog || [];
 
-    return advancements.filter((item) => (item?.allowedGoods || []).length >= 1);
+    if (selectedAdvancements.length > 0) {
+      return selectedAdvancements.filter((item) => (item?.allowedGoods || []).length >= 1);
+    }
+
+    const fallbackAdvancements = RULE_PACKS?.pirates?.techTree?.advancementsCatalog || [];
+    return fallbackAdvancements.filter((item) => (item?.allowedGoods || []).length >= 1);
   }, [settlementName]);
 
   const handleChange = (techId, good, value) => {
