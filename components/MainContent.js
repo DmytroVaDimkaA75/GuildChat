@@ -305,9 +305,21 @@ function CultureStack() {
       <Stack.Screen
         name="TechnologyCosts"
         component={TechnologyCosts}
-        options={{
+        options={({ route }) => ({
           title: t("drawer.culture"),
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onSaveTechnologyCosts) {
+                  route.params.onSaveTechnologyCosts();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
       />
       <Stack.Screen
         name="CulturalPlanner"
