@@ -1036,14 +1036,25 @@ export const japaneseRulePack = {
   }
 };
 
+const ensureTechTree = (pack) => {
+  if (pack?.techTree?.advancementsCatalog?.length) {
+    return pack;
+  }
+
+  return {
+    ...pack,
+    techTree: piratesRulePack.techTree,
+  };
+};
+
 export const RULE_PACKS = {
-  pirates: piratesRulePack,
-  vikings: vikingsRulePack,
-  aztecs: aztecsRulePack,
-  egyptians: egyptiansRulePack,
-  mughals: mughalsRulePack,
-  polynesia: polynesiaRulePack,
-  japanese: japaneseRulePack
+  pirates: ensureTechTree(piratesRulePack),
+  vikings: ensureTechTree(vikingsRulePack),
+  aztecs: ensureTechTree(aztecsRulePack),
+  egyptians: ensureTechTree(egyptiansRulePack),
+  mughals: ensureTechTree(mughalsRulePack),
+  polynesia: ensureTechTree(polynesiaRulePack),
+  japanese: ensureTechTree(japaneseRulePack)
 };
 
 export default RULE_PACKS;
