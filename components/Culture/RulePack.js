@@ -1748,6 +1748,7 @@ export const RULE_PACKS = {
   aztecs: aztecsRulePack,
   egyptians: egyptiansRulePack,
   mongols: mongolsRulePack,
+  mughals: mongolsRulePack,
   polynesia: polynesiaRulePack,
   japanese: japaneseRulePack
 };

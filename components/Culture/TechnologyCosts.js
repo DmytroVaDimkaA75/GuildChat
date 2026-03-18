@@ -18,7 +18,14 @@ const TechnologyCosts = () => {
   const [inputs, setInputs] = useState({});
 
   const techList = useMemo(() => {
-    const pack = RULE_PACKS[settlementName];
+    if (!settlementName) return [];
+
+    const packByKey = RULE_PACKS[settlementName];
+    const packByType = Object.values(RULE_PACKS).find(
+      (item) => item?.settlementType === settlementName
+    );
+
+    const pack = packByKey || packByType;
     const advancements = pack?.techTree?.advancementsCatalog || [];
 
     return advancements.filter((item) => (item?.allowedGoods || []).length >= 2);
