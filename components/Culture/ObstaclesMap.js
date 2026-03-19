@@ -12,7 +12,6 @@ const COLORS = {
 };
 
 const MAP_VIEWBOX = { width: 279.99976, height: 280 };
-const MAP_RATIO = MAP_VIEWBOX.width / MAP_VIEWBOX.height;
 const TILE_SIZE = 10;
 
 const lettersToIndex = (letters) => {
@@ -41,25 +40,57 @@ const parseSectorRange = (range) => {
   };
 };
 
+const getRectsBounds = (rects) => {
+  if (!rects.length) {
+    return {
+      x: 0,
+      y: 0,
+      width: MAP_VIEWBOX.width,
+      height: MAP_VIEWBOX.height,
+    };
+  }
+
+  const minX = Math.min(...rects.map((r) => r.x));
+  const minY = Math.min(...rects.map((r) => r.y));
+  const maxX = Math.max(...rects.map((r) => r.x + r.width));
+  const maxY = Math.max(...rects.map((r) => r.y + r.height));
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+};
+
 const ObstaclesMap = () => {
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const { width: screenWidth } = Dimensions.get('window');
 
-  const mapWidth = screenWidth;
-  const mapHeight = mapWidth / MAP_RATIO;
-
-  const sectorRects = useMemo(() => {
+  const { sectorRects, startOpenRects } = useMemo(() => {
     const pack = RULE_PACKS[settlementName];
     const sectors = pack?.map?.allSectors || [];
-    return sectors.map(parseSectorRange).filter(Boolean);
+    const startOpenSectors = pack?.map?.startOpenSectors || [];
+
+    return {
+      sectorRects: sectors.map(parseSectorRange).filter(Boolean),
+      startOpenRects: startOpenSectors.map(parseSectorRange).filter(Boolean),
+    };
   }, [settlementName]);
+
+  const visibleBounds = useMemo(() => getRectsBounds(sectorRects), [sectorRects]);
+  const mapHeight = screenWidth * (visibleBounds.height / visibleBounds.width);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Перешкоди: {settlementName || '—'}</Text>
 
-      <Svg width={mapWidth} height={mapHeight} viewBox={`0 0 ${MAP_VIEWBOX.width} ${MAP_VIEWBOX.height}`}>
+      <Svg
+        width={screenWidth}
+        height={mapHeight}
+        viewBox={`${visibleBounds.x} ${visibleBounds.y} ${visibleBounds.width} ${visibleBounds.height}`}
+      >
         <Defs>
           <ClipPath id="allowedSectorsClip">
             {sectorRects.map((rect, idx) => (
@@ -76,6 +107,17 @@ const ObstaclesMap = () => {
 
         <G clipPath="url(#allowedSectorsClip)">
           <MapSvg width={MAP_VIEWBOX.width} height={MAP_VIEWBOX.height} />
+
+          {startOpenRects.map((rect, idx) => (
+            <Rect
+              key={`start-open-${idx}`}
+              x={rect.x}
+              y={rect.y}
+              width={rect.width}
+              height={rect.height}
+              fill="#FFFFFF"
+            />
+          ))}
         </G>
       </Svg>
     </View>
