@@ -11,7 +11,7 @@ const COLORS = {
   textPrimary: '#FFFFFF',
 };
 
-const MAP_VIEWBOX = { width: 239.99976, height: 200 };
+const MAP_VIEWBOX = { width: 279.99976, height: 280 };
 const MAP_RATIO = MAP_VIEWBOX.width / MAP_VIEWBOX.height;
 const TILE_SIZE = 10;
 
