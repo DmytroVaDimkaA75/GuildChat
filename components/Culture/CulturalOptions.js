@@ -19,9 +19,8 @@ const CulturalOptions = () => {
   };
 
   const handleOpenObstacles = () => {
-    navigation.navigate('CulturalPlanner', {
+    navigation.navigate('ObstaclesMap', {
       settlementName,
-      start: false,
     });
   };
 
