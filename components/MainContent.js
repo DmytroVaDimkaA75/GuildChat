@@ -31,6 +31,7 @@ import CulturalSettlements from './Culture/CulturalSettlements';
 import CulturalOptions from './Culture/CulturalOptions';
 import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
+import ObstaclesMap from './Culture/ObstaclesMap';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
 import GBExpress from './GB/GBExpress';
@@ -334,6 +335,25 @@ function CultureStack() {
         options={{
           title: t("drawer.culture"),
         }}
+      />
+      <Stack.Screen
+        name="ObstaclesMap"
+        component={ObstaclesMap}
+        options={({ route }) => ({
+          title: t("drawer.culture"),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onSaveObstaclesMap) {
+                  route.params.onSaveObstaclesMap();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
       />
     </Stack.Navigator>
   );

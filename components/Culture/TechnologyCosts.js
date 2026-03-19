@@ -122,7 +122,12 @@ const TechnologyCosts = () => {
         return;
       }
 
-      await database().ref(`/users/${userId}/${guildId}/settlement/tech`).set(payload);
+      const basePath = `/users/${userId}/${guildId}/settlement`;
+      await database().ref(`${basePath}/tech`).set(payload);
+      await database().ref(basePath).update({
+        settlementName: settlementName || null,
+        edit: { status: 'edit' },
+      });
       Alert.alert('Успіх', 'Технології успішно збережено.');
     } catch (error) {
       console.error('Не вдалося зберегти технології:', error);
