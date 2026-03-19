@@ -139,11 +139,12 @@ const ObstaclesMap = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Перешкоди: {settlementName || '—'}</Text>
 
-      <Svg
-        width={screenWidth}
-        height={mapHeight}
-        viewBox={`${visibleBounds.x} ${visibleBounds.y} ${visibleBounds.width} ${visibleBounds.height}`}
-      >
+      <View style={[styles.mapWrap, { width: screenWidth, height: mapHeight }]}>
+        <Svg
+          width={screenWidth}
+          height={mapHeight}
+          viewBox={`${visibleBounds.x} ${visibleBounds.y} ${visibleBounds.width} ${visibleBounds.height}`}
+        >
         <Defs>
           <ClipPath id="allowedSectorsClip">
             {sectorRects.map((rect, idx) => (
@@ -203,19 +204,26 @@ const ObstaclesMap = () => {
             />
           ))}
 
-          {nonStartOpenRects.map((rect, idx) => (
-            <Rect
-              key={`touch-${nonStartOpenSectors[idx]}`}
-              x={rect.x}
-              y={rect.y}
-              width={rect.width}
-              height={rect.height}
-              fill="transparent"
-              onPress={() => openSectorModal(nonStartOpenSectors[idx])}
-            />
-          ))}
         </G>
-      </Svg>
+        </Svg>
+
+        <View style={StyleSheet.absoluteFill}>
+          {nonStartOpenRects.map((rect, idx) => {
+            const x = ((rect.x - visibleBounds.x) / visibleBounds.width) * screenWidth;
+            const y = ((rect.y - visibleBounds.y) / visibleBounds.height) * mapHeight;
+            const width = (rect.width / visibleBounds.width) * screenWidth;
+            const height = (rect.height / visibleBounds.height) * mapHeight;
+            return (
+              <Pressable
+                key={`touch-${nonStartOpenSectors[idx]}`}
+                style={[styles.sectorTouch, { left: x, top: y, width, height }]}
+                hitSlop={4}
+                onPress={() => openSectorModal(nonStartOpenSectors[idx])}
+              />
+            );
+          })}
+        </View>
+      </View>
 
       <Modal transparent animationType="slide" visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -306,19 +314,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 16,
   },
+  mapWrap: {
+    position: 'relative',
+  },
+  sectorTouch: {
+    position: 'absolute',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
     width: '100%',
-    maxWidth: 420,
     backgroundColor: '#1E1E1E',
-    borderRadius: 12,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     padding: 16,
+    paddingBottom: 24,
   },
   modalTitle: {
     color: '#FFFFFF',
