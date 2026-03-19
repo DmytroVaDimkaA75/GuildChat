@@ -31,6 +31,7 @@ import CulturalSettlements from './Culture/CulturalSettlements';
 import CulturalOptions from './Culture/CulturalOptions';
 import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
+import ObstaclesMap from './Culture/ObstaclesMap';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
 import GBExpress from './GB/GBExpress';
@@ -331,6 +332,13 @@ function CultureStack() {
       <Stack.Screen
         name="Planning"
         component={Planning}
+        options={{
+          title: t("drawer.culture"),
+        }}
+      />
+      <Stack.Screen
+        name="ObstaclesMap"
+        component={ObstaclesMap}
         options={{
           title: t("drawer.culture"),
         }}
