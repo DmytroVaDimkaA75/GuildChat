@@ -23,7 +23,7 @@ const TechnologyCosts = () => {
   const [invalidTechIds, setInvalidTechIds] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const techList = useMemo(() => {
+  const allTechList = useMemo(() => {
     if (!settlementName) return [];
 
     const packByKey = RULE_PACKS[settlementName];
@@ -37,13 +37,18 @@ const TechnologyCosts = () => {
     return advancements;
   }, [settlementName]);
 
+  const techList = useMemo(
+    () => allTechList.filter((item) => (item?.allowedGoods || []).length >= 2),
+    [allTechList]
+  );
+
   const allSettlementGoods = useMemo(() => {
     const goods = new Set();
-    techList.forEach((tech) => {
+    allTechList.forEach((tech) => {
       (tech.allowedGoods || []).forEach((good) => goods.add(good));
     });
     return Array.from(goods);
-  }, [techList]);
+  }, [allTechList]);
 
   const handleChange = (techId, good, value) => {
     const key = `${techId}:${good}`;
@@ -59,17 +64,23 @@ const TechnologyCosts = () => {
     const nextInvalidTechIds = [];
     const payload = {};
 
-    techList.forEach((tech) => {
+    allTechList.forEach((tech) => {
       const costGoods = {};
       let total = 0;
+      const techAllowedGoods = tech.allowedGoods || [];
+      const isSingleGoodsTech = techAllowedGoods.length === 1;
 
       allSettlementGoods.forEach((good) => {
-        const key = `${tech.id}:${good}`;
-        const raw = inputs[key];
-        const parsed = Number(raw);
-        const amount = (tech.allowedGoods || []).includes(good) && Number.isFinite(parsed) && parsed > 0
-          ? parsed
-          : 0;
+        let amount = 0;
+        if (isSingleGoodsTech && techAllowedGoods[0] === good) {
+          amount = Number(tech.totalGoodsCost) || 0;
+        } else if (techAllowedGoods.includes(good)) {
+          const key = `${tech.id}:${good}`;
+          const raw = inputs[key];
+          const parsed = Number(raw);
+          amount = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        }
+
         costGoods[good] = amount;
         total += amount;
       });
@@ -80,25 +91,24 @@ const TechnologyCosts = () => {
 
       payload[tech.id] = {
         advancementId: tech.id,
-        status: 'unlocked',
+        status: 'locked',
         costGoods,
       };
     });
 
     return { payload, nextInvalidTechIds };
-  }, [allSettlementGoods, inputs, techList]);
+  }, [allSettlementGoods, allTechList, inputs]);
 
   const handleSave = useCallback(async () => {
-    if (!techList.length || isSaving) return;
+    if (!allTechList.length || isSaving) return;
 
     const { payload, nextInvalidTechIds } = buildTechPayload();
-    setInvalidTechIds(nextInvalidTechIds);
+    const visibleInvalidTechIds = nextInvalidTechIds.filter((id) =>
+      techList.some((tech) => tech.id === id)
+    );
+    setInvalidTechIds(visibleInvalidTechIds);
 
-    if (nextInvalidTechIds.length > 0) {
-      Alert.alert(
-        'Помилка валідації',
-        'Сума товарів в деяких технологіях не дорівнює загальній вартості. Перевірте підсвічені технології.'
-      );
+    if (visibleInvalidTechIds.length > 0) {
       return;
     }
 
@@ -120,7 +130,7 @@ const TechnologyCosts = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [buildTechPayload, isSaving, techList.length]);
+  }, [allTechList.length, buildTechPayload, isSaving, techList]);
 
   useEffect(() => {
     navigation.setParams({
@@ -134,7 +144,7 @@ const TechnologyCosts = () => {
 
       {techList.length === 0 ? (
         <Text style={styles.emptyText}>
-          Для цього поселення немає технологій.
+          Для цього поселення немає технологій із двома або більше товарами для відкриття.
         </Text>
       ) : (
         techList.map((tech) => (
