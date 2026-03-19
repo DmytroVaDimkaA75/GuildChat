@@ -339,9 +339,21 @@ function CultureStack() {
       <Stack.Screen
         name="ObstaclesMap"
         component={ObstaclesMap}
-        options={{
+        options={({ route }) => ({
           title: t("drawer.culture"),
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onSaveObstaclesMap) {
+                  route.params.onSaveObstaclesMap();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
       />
     </Stack.Navigator>
   );

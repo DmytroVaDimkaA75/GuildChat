@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { useRoute } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
+  Alert,
   Dimensions,
   Modal,
   Pressable,
@@ -11,6 +12,8 @@ import {
 } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
 
 import MapSvg from './map.svg';
 import RULE_PACKS from './RulePack';
@@ -66,6 +69,7 @@ const getRectsBounds = (rects) => {
 };
 
 const ObstaclesMap = () => {
+  const navigation = useNavigation();
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const { width: screenWidth } = Dimensions.get('window');
@@ -134,6 +138,66 @@ const ObstaclesMap = () => {
 
     setObstacleRects((prev) => [...prev.filter((o) => o.sector !== selectedSector), obstacle]);
   };
+
+
+  const buildObstaclePayload = useCallback(() => {
+    const grouped = {};
+
+    obstacleRects.forEach((item, index) => {
+      const sector = item?.sector;
+      if (!sector) return;
+      const sectorRect = parseSectorRange(sector);
+      if (!sectorRect) return;
+
+      const startMatch = String(sector).match(/^([A-Z]+)(\d+):/);
+      const baseId = startMatch
+        ? `obs_${startMatch[1].toLowerCase()}${startMatch[2]}`
+        : `obs_${String(sector).toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+      const obstacleData = {
+        obstacleId: `${baseId}_${index + 1}`,
+        x: Math.round((item.rect.x - sectorRect.x) / TILE_SIZE),
+        y: Math.round((item.rect.y - sectorRect.y) / TILE_SIZE),
+        w: Math.round(item.rect.width / TILE_SIZE),
+        h: Math.round(item.rect.height / TILE_SIZE),
+      };
+
+      if (!grouped[sector]) grouped[sector] = [];
+      grouped[sector].push(obstacleData);
+    });
+
+    return grouped;
+  }, [obstacleRects]);
+
+  const handleSave = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+
+      if (!userId || !guildId) {
+        Alert.alert('Помилка', 'Не знайдено userId або guildId для збереження.');
+        return;
+      }
+
+      const basePath = `/users/${userId}/${guildId}/settlement`;
+      await database().ref(`${basePath}/sectorObstaclesStatic`).set(buildObstaclePayload());
+      await database().ref(basePath).update({
+        settlementName: settlementName || null,
+        edit: { status: 'edit' },
+      });
+
+      Alert.alert('Успіх', 'Перешкоди успішно збережено.');
+    } catch (error) {
+      console.error('Не вдалося зберегти перешкоди:', error);
+      Alert.alert('Помилка', 'Не вдалося зберегти перешкоди. Спробуйте ще раз.');
+    }
+  }, [buildObstaclePayload, settlementName]);
+
+  useEffect(() => {
+    navigation.setParams({
+      onSaveObstaclesMap: handleSave,
+    });
+  }, [handleSave, navigation]);
 
   return (
     <View style={styles.container}>
