@@ -183,7 +183,7 @@ const ObstaclesMap = () => {
       await database().ref(`${basePath}/sectorObstaclesStatic`).set(buildObstaclePayload());
       await database().ref(basePath).update({
         settlementName: settlementName || null,
-        edit: { status: 'edit' },
+        status: 'edit',
       });
 
       Alert.alert('Успіх', 'Перешкоди успішно збережено.');
@@ -196,8 +196,9 @@ const ObstaclesMap = () => {
   useEffect(() => {
     navigation.setParams({
       onSaveObstaclesMap: handleSave,
+      canSaveObstaclesMap: obstacleRects.length > 0,
     });
-  }, [handleSave, navigation]);
+  }, [handleSave, navigation, obstacleRects.length]);
 
   return (
     <View style={styles.container}>

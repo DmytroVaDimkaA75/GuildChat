@@ -126,7 +126,7 @@ const TechnologyCosts = () => {
       await database().ref(`${basePath}/tech`).set(payload);
       await database().ref(basePath).update({
         settlementName: settlementName || null,
-        edit: { status: 'edit' },
+        status: 'edit',
       });
       Alert.alert('Успіх', 'Технології успішно збережено.');
     } catch (error) {
