@@ -31,6 +31,8 @@ import CulturalSettlements from './Culture/CulturalSettlements';
 import CulturalOptions from './Culture/CulturalOptions';
 import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
+import ObstaclesMap from './Culture/ObstaclesMap';
+import SettlementGamePlanner from './Culture/SettlementGamePlanner';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
 import GBExpress from './GB/GBExpress';
@@ -298,9 +300,21 @@ function CultureStack() {
       <Stack.Screen
         name="CulturalOptions"
         component={CulturalOptions}
-        options={{
+        options={({ route }) => ({
           title: t("drawer.culture"),
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onSaveCulturalOptions) {
+                  route.params.onSaveCulturalOptions();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
       />
       <Stack.Screen
         name="TechnologyCosts"
@@ -331,6 +345,36 @@ function CultureStack() {
       <Stack.Screen
         name="Planning"
         component={Planning}
+        options={{
+          title: t("drawer.culture"),
+        }}
+      />
+      <Stack.Screen
+        name="ObstaclesMap"
+        component={ObstaclesMap}
+        options={({ route }) => {
+          const canSave = Boolean(route.params?.canSaveObstaclesMap);
+          return {
+            title: t("drawer.culture"),
+            headerRight: () => (
+              <TouchableOpacity
+                disabled={!canSave}
+                onPress={() => {
+                  if (canSave && route.params?.onSaveObstaclesMap) {
+                    route.params.onSaveObstaclesMap();
+                  }
+                }}
+                style={{ marginRight: 15, opacity: canSave ? 1 : 0.35 }}
+              >
+                <Ionicons name="checkmark" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            ),
+          };
+        }}
+      />
+      <Stack.Screen
+        name="SettlementGamePlanner"
+        component={SettlementGamePlanner}
         options={{
           title: t("drawer.culture"),
         }}
@@ -592,6 +636,60 @@ function CustomDrawerContent(props) {
     outputRange: ['0deg', '180deg'],
   });
 
+  const handleCultureMenuPress = async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const activeGuildId = await AsyncStorage.getItem('guildId');
+
+      if (!userId || !activeGuildId) {
+        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
+        return;
+      }
+
+      const settlementPath = `users/${userId}/${activeGuildId}/settlement`;
+      const settlementSnap = await database().ref(settlementPath).once('value');
+
+      if (!settlementSnap.exists()) {
+        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
+        return;
+      }
+
+      const settlementData = settlementSnap.val() || {};
+      const status = settlementData.status;
+      const selectedSettlement = settlementData.settlementName;
+
+      if (status === 'game') {
+        props.navigation.navigate('culture', {
+          screen: 'SettlementGamePlanner',
+          params: { settlementName: selectedSettlement },
+        });
+        return;
+      }
+
+      if (status === 'edit' && selectedSettlement) {
+        const [techSnap, obstacleSnap] = await Promise.all([
+          database().ref(`${settlementPath}/tech`).once('value'),
+          database().ref(`${settlementPath}/sectorObstaclesStatic`).once('value'),
+        ]);
+
+        props.navigation.navigate('culture', {
+          screen: 'CulturalOptions',
+          params: {
+            settlementName: selectedSettlement,
+            hasTech: techSnap.exists(),
+            hasObstacles: obstacleSnap.exists(),
+          },
+        });
+        return;
+      }
+
+      props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
+    } catch (error) {
+      console.error('Помилка під час відкриття культурного поселення:', error);
+      props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
+    }
+  };
+
   return (
     <DrawerContentScrollView {...props} style={styles.drawerContent} contentContainerStyle={{ paddingTop: 0 }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
@@ -657,7 +755,7 @@ function CustomDrawerContent(props) {
           return (
             <React.Fragment key={route.key}>
               <TouchableOpacity
-                onPress={() => props.navigation.navigate(route.name)}
+                onPress={() => (route.name === 'culture' ? handleCultureMenuPress() : props.navigation.navigate(route.name))}
                 style={[styles.menuItem, { backgroundColor: bgColor }]}
                 activeOpacity={0.8}
               >

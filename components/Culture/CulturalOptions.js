@@ -1,5 +1,8 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const COLORS = {
   background: '#121212',
@@ -14,16 +17,84 @@ const CulturalOptions = () => {
   const route = useRoute();
   const settlementName = route.params?.settlementName;
 
+  const [hasTech, setHasTech] = useState(Boolean(route.params?.hasTech));
+  const [hasObstacles, setHasObstacles] = useState(Boolean(route.params?.hasObstacles));
+
   const handleOpenTechnologyCosts = () => {
     navigation.navigate('TechnologyCosts', { settlementName });
   };
 
   const handleOpenObstacles = () => {
-    navigation.navigate('CulturalPlanner', {
+    navigation.navigate('ObstaclesMap', {
       settlementName,
-      start: false,
     });
   };
+
+  const refreshEditFlags = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (!userId || !guildId) return;
+
+      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const [techSnap, obstacleSnap] = await Promise.all([
+        database().ref(`${basePath}/tech`).once('value'),
+        database().ref(`${basePath}/sectorObstaclesStatic`).once('value'),
+      ]);
+
+      setHasTech(techSnap.exists());
+      setHasObstacles(obstacleSnap.exists());
+    } catch (e) {
+      console.error('Не вдалося оновити прапорці правки:', e);
+    }
+  }, []);
+
+  const handleConfirmGameMode = useCallback(async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (!userId || !guildId) {
+        Alert.alert('Помилка', 'Не знайдено userId або guildId.');
+        return;
+      }
+
+      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const [techSnap, obstacleSnap] = await Promise.all([
+        database().ref(`${basePath}/tech`).once('value'),
+        database().ref(`${basePath}/sectorObstaclesStatic`).once('value'),
+      ]);
+
+      if (!techSnap.exists() || !obstacleSnap.exists()) {
+        Alert.alert('Увага', 'Для переходу в режим game потрібно зберегти і технології, і перешкоди.');
+        return;
+      }
+
+      await database().ref(basePath).update({
+        settlementName: settlementName || null,
+        status: 'game',
+      });
+
+      Alert.alert('Успіх', 'Статус змінено на game.');
+    } catch (error) {
+      console.error('Не вдалося змінити статус на game:', error);
+      Alert.alert('Помилка', 'Не вдалося змінити статус на game.');
+    }
+  }, [settlementName]);
+
+  useEffect(() => {
+    refreshEditFlags();
+  }, [refreshEditFlags]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', refreshEditFlags);
+    return unsubscribe;
+  }, [navigation, refreshEditFlags]);
+
+  useEffect(() => {
+    navigation.setParams({
+      onSaveCulturalOptions: handleConfirmGameMode,
+    });
+  }, [handleConfirmGameMode, navigation]);
 
   return (
     <View style={styles.container}>
@@ -35,7 +106,9 @@ const CulturalOptions = () => {
           onPress={handleOpenTechnologyCosts}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>Вартість технологій</Text>
+          <Text style={styles.buttonText}>
+            {hasTech ? 'Вартість технологій (правка)' : 'Вартість технологій'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -43,7 +116,9 @@ const CulturalOptions = () => {
           onPress={handleOpenObstacles}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>Перешкоди</Text>
+          <Text style={styles.buttonText}>
+            {hasObstacles ? 'Перешкоди (правка)' : 'Перешкоди'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
