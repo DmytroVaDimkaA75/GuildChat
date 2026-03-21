@@ -69,8 +69,24 @@ export const piratesRulePack = {
     }
   },
 
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'O13:T16',
+        topLeftTile: 'O13',
+        size: { w: 6, h: 4 }
+      }
+    }
+  },
+
   deletePolicy: {
-    ifActiveJobRunning: 'action_not_allowed'
+    ifActiveJobRunning: 'action_not_allowed',
+    protectedBuildingIds: ['town_hall']
   },
 
   actionsCatalog: [
@@ -919,6 +935,26 @@ export const vikingsRulePack = {
   rulePackVersion: 'vikings_map_only_v1',
   settlementType: 'vikings',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'M5:P7',
+        topLeftTile: 'M5',
+        size: { w: 4, h: 3 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 25,
@@ -1044,6 +1080,26 @@ export const aztecsRulePack = {
   rulePackVersion: 'aztecs_map_only_v1',
   settlementType: 'aztecs',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'T9:X13',
+        topLeftTile: 'T9',
+        size: { w: 5, h: 5 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 30,
@@ -1174,6 +1230,26 @@ export const egyptiansRulePack = {
   rulePackVersion: 'egyptians_map_only_v1',
   settlementType: 'egyptians',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'K5:P12',
+        topLeftTile: 'K5',
+        size: { w: 6, h: 8 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 41,
@@ -1351,6 +1427,26 @@ export const mongolsRulePack = {
   rulePackVersion: 'mongols_map_only_v1',
   settlementType: 'mongols',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'L5:T10',
+        topLeftTile: 'L5',
+        size: { w: 9, h: 6 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 43,
@@ -1498,6 +1594,26 @@ export const polynesiaRulePack = {
   rulePackVersion: 'polynesia_map_only_v1',
   settlementType: 'polynesia',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'R13:T16',
+        topLeftTile: 'R13',
+        size: { w: 3, h: 4 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 24,
@@ -1622,6 +1738,26 @@ export const japaneseRulePack = {
   rulePackVersion: 'japanese_map_only_v1',
   settlementType: 'japanese',
   status: 'map_only',
+
+  coreBuildings: {
+    townHall: {
+      id: 'town_hall',
+      name: 'Ратуша',
+      required: true,
+      canMove: true,
+      canDelete: false,
+      startPlacement: {
+        footprint: 'U13:X16',
+        topLeftTile: 'U13',
+        size: { w: 4, h: 4 }
+      }
+    }
+  },
+
+  deletePolicy: {
+    protectedBuildingIds: ['town_hall']
+  },
+
   map: {
     sectorTileSize: { w: 4, h: 4 },
     totalSectors: 24,
