@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import RULE_PACKS from './RulePack';
 
 const COLORS = {
   background: '#121212',
@@ -69,9 +70,13 @@ const CulturalOptions = () => {
         return;
       }
 
+      const pack = RULE_PACKS[settlementName] || Object.values(RULE_PACKS).find((item) => item?.settlementType === settlementName);
+      const openedSectors = pack?.map?.startOpenSectors || [];
+
       await database().ref(basePath).update({
         settlementName: settlementName || null,
         status: 'game',
+        openedSectors,
       });
 
       Alert.alert('Успіх', 'Статус змінено на game.');

@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
-import Svg, { ClipPath, Defs, G, Rect } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
+import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native';
+import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import MapSvg from './map.svg';
 import RULE_PACKS from './RulePack';
@@ -9,6 +11,8 @@ import RULE_PACKS from './RulePack';
 const COLORS = {
   background: '#121212',
   textPrimary: '#FFFFFF',
+  borderStrong: '#111111',
+  sectorGrid: '#303030',
 };
 
 const MAP_VIEWBOX = { width: 279.99976, height: 280 };
@@ -53,19 +57,64 @@ const SettlementGamePlanner = () => {
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const { width: screenWidth } = Dimensions.get('window');
+  const [openedSectorsFromDb, setOpenedSectorsFromDb] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { allRects, startOpenRects } = useMemo(() => {
-    const pack = RULE_PACKS[settlementName];
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+        if (!userId || !guildId) {
+          if (isMounted) {
+            setOpenedSectorsFromDb([]);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const snap = await database().ref(`/users/${userId}/${guildId}/settlement/openedSectors`).once('value');
+        const data = snap.exists() ? snap.val() : [];
+        const arr = Array.isArray(data) ? data : Object.values(data || {});
+
+        if (isMounted) {
+          setOpenedSectorsFromDb(arr.filter(Boolean));
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Не вдалося завантажити openedSectors:', error);
+        if (isMounted) {
+          setOpenedSectorsFromDb([]);
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const { allRects, openedRects } = useMemo(() => {
+    const pack = RULE_PACKS[settlementName] || Object.values(RULE_PACKS).find((item) => item?.settlementType === settlementName);
     const allSectors = pack?.map?.allSectors || [];
-    const startOpenSectors = pack?.map?.startOpenSectors || [];
     return {
       allRects: allSectors.map(parseSectorRange).filter(Boolean),
-      startOpenRects: startOpenSectors.map(parseSectorRange).filter(Boolean),
+      openedRects: openedSectorsFromDb.map(parseSectorRange).filter(Boolean),
     };
-  }, [settlementName]);
+  }, [openedSectorsFromDb, settlementName]);
 
   const bounds = useMemo(() => getRectsBounds(allRects), [allRects]);
   const mapHeight = screenWidth * (bounds.height / bounds.width);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -85,15 +134,41 @@ const SettlementGamePlanner = () => {
 
         <G clipPath="url(#gameAllowedClip)">
           <MapSvg width={MAP_VIEWBOX.width} height={MAP_VIEWBOX.height} />
-          {startOpenRects.map((rect, idx) => (
-            <Rect
-              key={`g-open-${idx}`}
-              x={rect.x}
-              y={rect.y}
-              width={rect.width}
-              height={rect.height}
-              fill="#FFFFFF"
-            />
+          {openedRects.map((rect, idx) => (
+            <G key={`g-open-${idx}`}>
+              <Rect x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill="#FFFFFF" />
+              <Rect
+                x={rect.x}
+                y={rect.y}
+                width={rect.width}
+                height={rect.height}
+                fill="none"
+                stroke={COLORS.borderStrong}
+                strokeWidth={1.8}
+              />
+              {[1, 2, 3].map((i) => (
+                <Line
+                  key={`g-v-${idx}-${i}`}
+                  x1={rect.x + i * TILE_SIZE}
+                  y1={rect.y}
+                  x2={rect.x + i * TILE_SIZE}
+                  y2={rect.y + rect.height}
+                  stroke={COLORS.sectorGrid}
+                  strokeWidth={0.7}
+                />
+              ))}
+              {[1, 2, 3].map((i) => (
+                <Line
+                  key={`g-h-${idx}-${i}`}
+                  x1={rect.x}
+                  y1={rect.y + i * TILE_SIZE}
+                  x2={rect.x + rect.width}
+                  y2={rect.y + i * TILE_SIZE}
+                  stroke={COLORS.sectorGrid}
+                  strokeWidth={0.7}
+                />
+              ))}
+            </G>
           ))}
         </G>
       </Svg>
@@ -112,6 +187,12 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 18,
     marginBottom: 16,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
 });
 
