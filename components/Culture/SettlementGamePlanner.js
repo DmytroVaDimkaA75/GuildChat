@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
-import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import MapSvg from './map.svg';
@@ -74,74 +74,48 @@ const getStepTargetFootprints = (step) => {
   const footprints = Array.isArray(step?.footprints) ? step.footprints : [];
   const tiles = Array.isArray(step?.tiles) ? step.tiles : [];
   const targetFootprints = Array.isArray(step?.targetFootprints) ? step.targetFootprints : [];
+  const movePoints = [step?.from, step?.to];
 
   return Array.from(
     new Set(
-      [...footprints, ...tiles, ...targetFootprints]
+      [...footprints, ...tiles, ...targetFootprints, ...movePoints]
         .map(normalizeFootprint)
         .filter(Boolean)
     )
   );
 };
 
-const normalizePlacedBuildings = (buildings) => {
-  const source = Array.isArray(buildings) ? buildings : [];
-  return source
-    .map((building) => {
-      const buildingId = building?.buildingId || '';
-      const footprint = normalizeFootprint(building?.footprint);
-      if (!buildingId || !footprint) return null;
-      return {
-        buildingId,
-        footprint,
-        hasActiveJob: Boolean(building?.job),
-      };
-    })
-    .filter(Boolean);
+const getBuildingDisplayName = (pack, buildingId) => {
+  if (!buildingId) return 'Будівля';
+  if (buildingId === 'town_hall') return pack?.coreBuildings?.townHall?.name || 'Ратуша';
+  const groups = pack?.buildings ? Object.values(pack.buildings) : [];
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue;
+    const found = group.find((item) => item?.id === buildingId);
+    if (found?.name) return found.name;
+  }
+  return buildingId;
 };
 
-const evaluateStarterStep = (step, normalizedBuildings) => {
-  if (!step?.actionType || !step?.buildingId) return false;
-
-  const buildingMatches = normalizedBuildings.filter((item) => item.buildingId === step.buildingId);
-  const targets = getStepTargetFootprints(step);
-  const hasBuildingAt = (footprint) => buildingMatches.some((item) => item.footprint === footprint);
-  const hasActiveJobAt = (footprint) =>
-    buildingMatches.some((item) => item.footprint === footprint && item.hasActiveJob);
+const formatTaskText = (step, pack) => {
+  if (!step) return 'Стартовий план завершено.';
+  const buildingName = getBuildingDisplayName(pack, step.buildingId);
 
   if (step.actionType === 'move') {
-    const toFootprint = normalizeFootprint(step.to);
-    return Boolean(toFootprint && hasBuildingAt(toFootprint));
+    return `Перемістити ${buildingName} з ${step.from} на ${step.to}`;
   }
-
   if (step.actionType === 'build') {
-    if (targets.length > 0) return targets.every(hasBuildingAt);
-    if (Number.isFinite(step.expectedCount)) return buildingMatches.length >= Number(step.expectedCount);
-    return false;
+    const targets = getStepTargetFootprints(step);
+    return `Побудувати ${buildingName}${targets.length ? ` (${targets.join(', ')})` : ''}`;
   }
-
   if (step.actionType === 'delete') {
-    if (targets.length > 0) return targets.every((target) => !hasBuildingAt(target));
-    return buildingMatches.length === 0;
+    const targets = getStepTargetFootprints(step);
+    return `Видалити ${buildingName}${targets.length ? ` (${targets.join(', ')})` : ''}`;
   }
-
   if (step.actionType === 'start_production') {
-    if (targets.length > 0) return targets.every(hasActiveJobAt);
-    if (Number.isFinite(step.expectedCount)) {
-      return buildingMatches.filter((item) => item.hasActiveJob).length >= Number(step.expectedCount);
-    }
-    return buildingMatches.some((item) => item.hasActiveJob);
+    return `Запустити виробництво: ${buildingName}`;
   }
-
-  return false;
-};
-
-const isReminderTriggerSatisfied = (trigger, completedStepIds) => {
-  if (!trigger?.type || !trigger?.stepId) return false;
-  if (trigger.type === 'step_completed' || trigger.type === 'build_completed') {
-    return completedStepIds.has(trigger.stepId);
-  }
-  return false;
+  return step.description || step.id;
 };
 
 const SettlementGamePlanner = () => {
@@ -152,7 +126,11 @@ const SettlementGamePlanner = () => {
   const [obstacleRectsFromDb, setObstacleRectsFromDb] = useState([]);
   const [buildingRectsFromDb, setBuildingRectsFromDb] = useState([]);
   const [placedBuildingsFromDb, setPlacedBuildingsFromDb] = useState([]);
-  const [collectedGoodsFromDb, setCollectedGoodsFromDb] = useState({});
+  const [planStepIndex, setPlanStepIndex] = useState(0);
+  const [identity, setIdentity] = useState({ userId: null, guildId: null });
+  const [isCompletingStep, setIsCompletingStep] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [movePreviewRect, setMovePreviewRect] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -170,10 +148,14 @@ const SettlementGamePlanner = () => {
             setObstacleRectsFromDb([]);
             setBuildingRectsFromDb([]);
             setPlacedBuildingsFromDb([]);
-            setCollectedGoodsFromDb({});
+            setPlanStepIndex(0);
             setIsLoading(false);
           }
           return;
+        }
+
+        if (isMounted) {
+          setIdentity({ userId, guildId });
         }
 
         settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
@@ -183,7 +165,7 @@ const SettlementGamePlanner = () => {
           const openedRaw = settlementData?.openedSectors || [];
           const obstaclesRaw = settlementData?.sectorObstaclesStatic || {};
           const buildingsRaw = settlementData?.placedBuildings || [];
-          const collectedGoodsRaw = settlementData?.stats?.collected?.goods || {};
+          const dbStepIndex = Number(settlementData?.starterPlanProgress?.currentStepIndex);
 
           const openedArr = Array.isArray(openedRaw) ? openedRaw : Object.values(openedRaw || {});
           const buildingsArr = Array.isArray(buildingsRaw) ? buildingsRaw : Object.values(buildingsRaw || {});
@@ -222,7 +204,7 @@ const SettlementGamePlanner = () => {
             setObstacleRectsFromDb(nextObstacleRects);
             setBuildingRectsFromDb(nextBuildingRects);
             setPlacedBuildingsFromDb(buildingsArr);
-            setCollectedGoodsFromDb(collectedGoodsRaw || {});
+            setPlanStepIndex(Number.isFinite(dbStepIndex) && dbStepIndex >= 0 ? dbStepIndex : 0);
             setIsLoading(false);
           }
         };
@@ -235,7 +217,7 @@ const SettlementGamePlanner = () => {
           setObstacleRectsFromDb([]);
           setBuildingRectsFromDb([]);
           setPlacedBuildingsFromDb([]);
-          setCollectedGoodsFromDb({});
+          setPlanStepIndex(0);
           setIsLoading(false);
         }
       }
@@ -277,39 +259,10 @@ const SettlementGamePlanner = () => {
     if (!starterPlan) return null;
 
     const steps = Array.isArray(starterPlan.steps) ? starterPlan.steps : [];
-    const normalizedBuildings = normalizePlacedBuildings(placedBuildingsFromDb);
-    const completedStepIds = new Set();
-
-    steps.forEach((step) => {
-      if (evaluateStarterStep(step, normalizedBuildings)) {
-        completedStepIds.add(step.id);
-      }
-    });
-
-    const currentStep =
-      steps.find((step) => {
-        if (completedStepIds.has(step.id)) return false;
-        const deps = Array.isArray(step.dependsOn) ? step.dependsOn : [];
-        return deps.every((depStepId) => completedStepIds.has(depStepId));
-      }) || null;
-
-    const completedCount = steps.filter((step) => completedStepIds.has(step.id)).length;
-    const totalCollectedGoods = Object.values(collectedGoodsFromDb || {}).reduce(
-      (sum, value) => sum + (Number(value) || 0),
-      0
-    );
-
-    const completionType = starterPlan?.completion?.type;
-    const minCollectEvents = Number(starterPlan?.completion?.minCollectEvents) || 1;
-    const collectedEnoughGoods =
-      completionType === 'first_goods_collect' ? totalCollectedGoods >= minCollectEvents : true;
-    const allStepsDone = steps.length > 0 && completedCount === steps.length;
-    const isCompleted = allStepsDone && collectedEnoughGoods;
-
-    const reminderRules = Array.isArray(starterPlan.reminderRules) ? starterPlan.reminderRules : [];
-    const activeReminders = reminderRules.filter((rule) =>
-      isReminderTriggerSatisfied(rule?.trigger, completedStepIds)
-    );
+    const safeIndex = Math.max(0, Math.min(planStepIndex, steps.length));
+    const currentStep = safeIndex < steps.length ? steps[safeIndex] : null;
+    const completedCount = safeIndex;
+    const isCompleted = safeIndex >= steps.length;
 
     const currentStepTargetRects = currentStep
       ? getStepTargetFootprints(currentStep).map(parseGridRange).filter(Boolean)
@@ -319,12 +272,141 @@ const SettlementGamePlanner = () => {
       currentStep,
       completedCount,
       totalSteps: steps.length,
-      totalCollectedGoods,
       isCompleted,
-      activeReminders: isCompleted ? [] : activeReminders,
       currentStepTargetRects,
     };
-  }, [starterPlan, placedBuildingsFromDb, collectedGoodsFromDb]);
+  }, [starterPlan, planStepIndex]);
+
+  useEffect(() => {
+    const step = starterPlanProgress?.currentStep;
+    if (!step || step.actionType !== 'move') {
+      setMovePreviewRect(null);
+      return;
+    }
+
+    const fromRect = parseGridRange(step.from);
+    const toRect = parseGridRange(step.to);
+    if (!fromRect || !toRect) {
+      setMovePreviewRect(null);
+      return;
+    }
+
+    let animationFrameId = null;
+    const cycleMs = 2000;
+    const moveMs = 1000;
+    const cycleStart = Date.now();
+
+    const tick = () => {
+      const elapsed = (Date.now() - cycleStart) % cycleMs;
+
+      if (elapsed <= moveMs) {
+        const t = elapsed / moveMs;
+        setMovePreviewRect({
+          x: fromRect.x + (toRect.x - fromRect.x) * t,
+          y: fromRect.y + (toRect.y - fromRect.y) * t,
+          width: fromRect.width + (toRect.width - fromRect.width) * t,
+          height: fromRect.height + (toRect.height - fromRect.height) * t,
+        });
+      } else {
+        setMovePreviewRect({
+          x: fromRect.x,
+          y: fromRect.y,
+          width: fromRect.width,
+          height: fromRect.height,
+        });
+      }
+
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    tick();
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      setMovePreviewRect(null);
+    };
+  }, [starterPlanProgress?.currentStep?.id]);
+
+  const handleCompleteCurrentTask = async () => {
+    if (!starterPlan || !starterPlanProgress?.currentStep || isCompletingStep) return;
+    if (!identity.userId || !identity.guildId) return;
+
+    const step = starterPlanProgress.currentStep;
+    const settlementPath = `/users/${identity.userId}/${identity.guildId}/settlement`;
+
+    try {
+      setActionError('');
+      setIsCompletingStep(true);
+
+      let nextPlacedBuildings = Array.isArray(placedBuildingsFromDb) ? [...placedBuildingsFromDb] : [];
+
+      if (step.actionType === 'move') {
+        const fromFootprint = normalizeFootprint(step.from);
+        const toFootprint = normalizeFootprint(step.to);
+
+        if (!toFootprint) {
+          throw new Error('Не вдалося визначити кінцеву позицію для переміщення.');
+        }
+
+        let moved = false;
+        nextPlacedBuildings = nextPlacedBuildings.map((building) => {
+          if (moved) return building;
+          if (building?.buildingId !== step.buildingId) return building;
+
+          const buildingFootprint = normalizeFootprint(building?.footprint);
+          if (!fromFootprint || buildingFootprint === fromFootprint) {
+            moved = true;
+            return { ...building, footprint: toFootprint };
+          }
+          return building;
+        });
+
+        if (!moved) {
+          const fallbackIdx = nextPlacedBuildings.findIndex((building) => building?.buildingId === step.buildingId);
+          if (fallbackIdx >= 0) {
+            nextPlacedBuildings[fallbackIdx] = {
+              ...nextPlacedBuildings[fallbackIdx],
+              footprint: toFootprint,
+            };
+          }
+        }
+
+        setMovePreviewRect(parseGridRange(toFootprint));
+      }
+
+      const nextStepIndex = Math.min(
+        starterPlanProgress.completedCount + 1,
+        starterPlanProgress.totalSteps
+      );
+
+      await database().ref(settlementPath).update({
+        placedBuildings: nextPlacedBuildings,
+        starterPlanProgress: {
+          planId: starterPlan.id,
+          currentStepIndex: nextStepIndex,
+          updatedAt: Date.now(),
+        },
+      });
+
+      const nextBuildingRects = nextPlacedBuildings
+        .map((building) => ({
+          rect: parseGridRange(building?.footprint),
+          buildingId: building?.buildingId || '',
+          instanceId: building?.instanceId || '',
+        }))
+        .filter((item) => item.rect);
+
+      setPlacedBuildingsFromDb(nextPlacedBuildings);
+      setBuildingRectsFromDb(nextBuildingRects);
+      setPlanStepIndex(nextStepIndex);
+    } catch (error) {
+      console.error('Не вдалося завершити поточний крок:', error);
+      setActionError('Не вдалося зберегти виконання кроку. Спробуйте ще раз.');
+    } finally {
+      setIsCompletingStep(false);
+    }
+  };
 
   const bounds = useMemo(() => getRectsBounds(allRects), [allRects]);
   const mapHeight = screenWidth * (bounds.height / bounds.width);
@@ -340,39 +422,6 @@ const SettlementGamePlanner = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Планувальник: {settlementName || '—'}</Text>
-      {starterPlan ? (
-        <View style={styles.planCard}>
-          <Text style={styles.planName}>{starterPlan.name}</Text>
-          <Text style={styles.planMeta}>
-            Виконано кроків: {starterPlanProgress?.completedCount || 0}/{starterPlanProgress?.totalSteps || 0}
-          </Text>
-          <Text style={styles.planMeta}>
-            Зібрано товарів: {starterPlanProgress?.totalCollectedGoods || 0}
-          </Text>
-
-          {starterPlanProgress?.isCompleted ? (
-            <Text style={styles.planDone}>Стартовий план завершено.</Text>
-          ) : starterPlanProgress?.currentStep ? (
-            <Text style={styles.planCurrentStep}>
-              Поточний крок {starterPlanProgress.currentStep.order}:{' '}
-              {starterPlanProgress.currentStep.description || starterPlanProgress.currentStep.id}
-            </Text>
-          ) : (
-            <Text style={styles.planCurrentStep}>Очікування наступного кроку.</Text>
-          )}
-
-          {starterPlanProgress?.activeReminders?.length ? (
-            <View style={styles.remindersBlock}>
-              <Text style={styles.remindersTitle}>Нагадування</Text>
-              {starterPlanProgress.activeReminders.map((reminder) => (
-                <Text key={reminder.id} style={styles.reminderText}>
-                  • {reminder.title}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
       <Svg
         width={screenWidth}
         height={mapHeight}
@@ -461,8 +510,41 @@ const SettlementGamePlanner = () => {
               strokeWidth={1.5}
             />
           ))}
+
+          {movePreviewRect ? (
+            <Rect
+              x={movePreviewRect.x}
+              y={movePreviewRect.y}
+              width={movePreviewRect.width}
+              height={movePreviewRect.height}
+              fill="rgba(255, 193, 7, 0.35)"
+              stroke="#FFC107"
+              strokeWidth={1.5}
+            />
+          ) : null}
         </G>
       </Svg>
+
+      <View style={styles.taskRow}>
+        <Text style={styles.taskText}>
+          {!starterPlan
+            ? 'Для цього поселення стартовий план не задано.'
+            : starterPlanProgress?.isCompleted
+            ? 'Стартовий план завершено.'
+            : formatTaskText(starterPlanProgress?.currentStep, pack)}
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.doneButton,
+            (isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep) && styles.doneButtonDisabled,
+          ]}
+          disabled={isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep}
+          onPress={handleCompleteCurrentTask}
+        >
+          <Text style={styles.doneButtonText}>{isCompletingStep ? 'Збереження...' : 'Виконано'}</Text>
+        </TouchableOpacity>
+      </View>
+      {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
     </View>
   );
 };
@@ -479,50 +561,37 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 16,
   },
-  planCard: {
+  taskRow: {
     width: '96%',
-    backgroundColor: '#1E1E1E',
-    borderWidth: 1,
-    borderColor: '#2D2D2D',
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  taskText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  doneButton: {
+    backgroundColor: '#1976D2',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
-  planName: {
+  doneButtonDisabled: {
+    opacity: 0.55,
+  },
+  doneButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  planMeta: {
-    color: '#CFCFCF',
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  planCurrentStep: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  planDone: {
-    color: '#81C784',
-    fontSize: 14,
-    marginTop: 8,
     fontWeight: '600',
   },
-  remindersBlock: {
-    marginTop: 10,
-  },
-  remindersTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  reminderText: {
-    color: '#E0E0E0',
+  errorText: {
+    width: '96%',
+    marginTop: 8,
+    color: '#FF8A80',
     fontSize: 13,
-    marginBottom: 2,
   },
   loader: {
     flex: 1,
