@@ -79,6 +79,7 @@ const ObstaclesMap = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [obstacleRects, setObstacleRects] = useState([]);
   const [modalGridSize, setModalGridSize] = useState({ width: 0, height: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
   const { sectorRects, startOpenRects, nonStartOpenSectors, nonStartOpenRects } = useMemo(() => {
     const pack = RULE_PACKS[settlementName];
@@ -169,6 +170,62 @@ const ObstaclesMap = () => {
     return grouped;
   }, [obstacleRects]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+
+        if (!userId || !guildId) {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+
+        const snap = await database().ref(`/users/${userId}/${guildId}/settlement/sectorObstaclesStatic`).once('value');
+        const data = snap.exists() ? snap.val() : {};
+        const restoredObstacles = [];
+
+        Object.entries(data || {}).forEach(([sector, obstacles]) => {
+          const sectorRect = parseSectorRange(sector);
+          if (!sectorRect || !Array.isArray(obstacles)) return;
+
+          obstacles.forEach((obstacle) => {
+            const x = Number(obstacle?.x);
+            const y = Number(obstacle?.y);
+            const w = Number(obstacle?.w);
+            const h = Number(obstacle?.h);
+
+            if (![x, y, w, h].every((value) => Number.isFinite(value))) return;
+
+            restoredObstacles.push({
+              sector,
+              rect: {
+                x: sectorRect.x + x * TILE_SIZE,
+                y: sectorRect.y + y * TILE_SIZE,
+                width: w * TILE_SIZE,
+                height: h * TILE_SIZE,
+              },
+            });
+          });
+        });
+
+        if (isMounted) {
+          setObstacleRects(restoredObstacles);
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Не вдалося завантажити збережені перешкоди:', error);
+        if (isMounted) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleSave = useCallback(async () => {
     try {
       const userId = await AsyncStorage.getItem('userId');
@@ -203,6 +260,7 @@ const ObstaclesMap = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Перешкоди: {settlementName || '—'}</Text>
+      {isLoading ? <Text style={styles.loadingText}>Завантаження перешкод…</Text> : null}
 
       <View style={[styles.mapWrap, { width: screenWidth, height: mapHeight }]}>
         <Svg
@@ -378,6 +436,10 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 18,
     marginBottom: 16,
+  },
+  loadingText: {
+    color: '#BDBDBD',
+    marginBottom: 8,
   },
   mapWrap: {
     position: 'relative',

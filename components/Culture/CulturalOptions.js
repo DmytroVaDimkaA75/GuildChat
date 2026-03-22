@@ -72,11 +72,36 @@ const CulturalOptions = () => {
 
       const pack = RULE_PACKS[settlementName] || Object.values(RULE_PACKS).find((item) => item?.settlementType === settlementName);
       const openedSectors = pack?.map?.startOpenSectors || [];
+      const townHallConfig = pack?.coreBuildings?.townHall;
+      const townHallFootprint = townHallConfig?.startPlacement?.footprint || null;
+
+      const placedBuildingsSnap = await database().ref(`${basePath}/placedBuildings`).once('value');
+      const placedBuildingsRaw = placedBuildingsSnap.exists() ? placedBuildingsSnap.val() : [];
+      const placedBuildings = Array.isArray(placedBuildingsRaw)
+        ? placedBuildingsRaw
+        : Object.values(placedBuildingsRaw || {});
+
+      const nextPlacedBuildings = [
+        ...placedBuildings.filter((item) => item?.buildingId !== 'town_hall'),
+      ];
+
+      if (townHallFootprint) {
+        nextPlacedBuildings.push({
+          instanceId: 'town_hall_1',
+          buildingId: 'town_hall',
+          footprint: townHallFootprint,
+          rotation: 0,
+          placedAt: 0,
+          passive: null,
+          job: null,
+        });
+      }
 
       await database().ref(basePath).update({
         settlementName: settlementName || null,
         status: 'game',
         openedSectors,
+        placedBuildings: nextPlacedBuildings,
       });
 
       Alert.alert('Успіх', 'Статус змінено на game.');
