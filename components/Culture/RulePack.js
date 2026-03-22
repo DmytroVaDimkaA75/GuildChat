@@ -747,7 +747,7 @@ export const piratesRulePack = {
             actionType: 'move',
             buildingId: 'town_hall',
             from: 'O13:T16',
-            to: 'O13:T16',
+            to: 'O15:T18',
             description: 'Контрольний стартовий крок: підтвердити позицію Ратуші.'
           },
           {

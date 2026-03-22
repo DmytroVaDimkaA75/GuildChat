@@ -291,6 +291,19 @@ const SettlementGamePlanner = () => {
       return;
     }
 
+    const isSameFromTo =
+      fromRect.x === toRect.x &&
+      fromRect.y === toRect.y &&
+      fromRect.width === toRect.width &&
+      fromRect.height === toRect.height;
+
+    const visualToRect = isSameFromTo
+      ? {
+          ...toRect,
+          x: toRect.x + Math.max(6, Math.round(toRect.width * 0.35)),
+        }
+      : toRect;
+
     let animationFrameId = null;
     const cycleMs = 2000;
     const moveMs = 1000;
@@ -302,18 +315,22 @@ const SettlementGamePlanner = () => {
       if (elapsed <= moveMs) {
         const t = elapsed / moveMs;
         setMovePreviewRect({
-          x: fromRect.x + (toRect.x - fromRect.x) * t,
-          y: fromRect.y + (toRect.y - fromRect.y) * t,
-          width: fromRect.width + (toRect.width - fromRect.width) * t,
-          height: fromRect.height + (toRect.height - fromRect.height) * t,
+          x: fromRect.x + (visualToRect.x - fromRect.x) * t,
+          y: fromRect.y + (visualToRect.y - fromRect.y) * t,
+          width: fromRect.width + (visualToRect.width - fromRect.width) * t,
+          height: fromRect.height + (visualToRect.height - fromRect.height) * t,
         });
       } else {
-        setMovePreviewRect({
-          x: fromRect.x,
-          y: fromRect.y,
-          width: fromRect.width,
-          height: fromRect.height,
-        });
+        if (elapsed < moveMs + 120) {
+          setMovePreviewRect(null);
+        } else {
+          setMovePreviewRect({
+            x: fromRect.x,
+            y: fromRect.y,
+            width: fromRect.width,
+            height: fromRect.height,
+          });
+        }
       }
 
       animationFrameId = requestAnimationFrame(tick);
