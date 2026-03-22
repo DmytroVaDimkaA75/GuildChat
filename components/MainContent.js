@@ -300,13 +300,18 @@ function CultureStack() {
       <Stack.Screen
         name="CulturalOptions"
         component={CulturalOptions}
-        options={({ route }) => ({
+        options={({ route, navigation }) => ({
           title: t("drawer.culture"),
           headerRight: () => (
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
                 if (route.params?.onSaveCulturalOptions) {
-                  route.params.onSaveCulturalOptions();
+                  const ok = await route.params.onSaveCulturalOptions();
+                  if (ok) {
+                    navigation.navigate('SettlementGamePlanner', {
+                      settlementName: route.params?.settlementName,
+                    });
+                  }
                 }
               }}
               style={{ marginRight: 15 }}
@@ -319,13 +324,18 @@ function CultureStack() {
       <Stack.Screen
         name="TechnologyCosts"
         component={TechnologyCosts}
-        options={({ route }) => ({
+        options={({ route, navigation }) => ({
           title: t("drawer.culture"),
           headerRight: () => (
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
                 if (route.params?.onSaveTechnologyCosts) {
-                  route.params.onSaveTechnologyCosts();
+                  const ok = await route.params.onSaveTechnologyCosts();
+                  if (ok) {
+                    navigation.navigate('CulturalOptions', {
+                      settlementName: route.params?.settlementName,
+                    });
+                  }
                 }
               }}
               style={{ marginRight: 15 }}
@@ -352,16 +362,21 @@ function CultureStack() {
       <Stack.Screen
         name="ObstaclesMap"
         component={ObstaclesMap}
-        options={({ route }) => {
+        options={({ route, navigation }) => {
           const canSave = Boolean(route.params?.canSaveObstaclesMap);
           return {
             title: t("drawer.culture"),
             headerRight: () => (
               <TouchableOpacity
                 disabled={!canSave}
-                onPress={() => {
+                onPress={async () => {
                   if (canSave && route.params?.onSaveObstaclesMap) {
-                    route.params.onSaveObstaclesMap();
+                    const ok = await route.params.onSaveObstaclesMap();
+                    if (ok) {
+                      navigation.navigate('CulturalOptions', {
+                        settlementName: route.params?.settlementName,
+                      });
+                    }
                   }
                 }}
                 style={{ marginRight: 15, opacity: canSave ? 1 : 0.35 }}
@@ -375,9 +390,22 @@ function CultureStack() {
       <Stack.Screen
         name="SettlementGamePlanner"
         component={SettlementGamePlanner}
-        options={{
+        options={({ route }) => ({
           title: t("drawer.culture"),
-        }}
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (route.params?.onDeleteSettlement) {
+                  route.params.onDeleteSettlement();
+                }
+              }}
+              style={{ marginRight: 15 }}
+            >
+              <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
       />
     </Stack.Navigator>
   );
@@ -744,7 +772,7 @@ function CustomDrawerContent(props) {
         {props.state.routes.map((route, index) => {
           const focused = props.state.index === index;
           const { drawerLabel, drawerIconComponent } = props.descriptors[route.key].options;
-          const isServiceItem = route.name === 'servise';
+          const shouldShowTopSeparator = route.name === 'profile';
 
           const iconColor = focused ? COLORS.primary : COLORS.textSecondary;
           const textColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
@@ -754,6 +782,7 @@ function CustomDrawerContent(props) {
 
           return (
             <React.Fragment key={route.key}>
+              {shouldShowTopSeparator && <View style={styles.separator} />}
               <TouchableOpacity
                 onPress={() => (route.name === 'culture' ? handleCultureMenuPress() : props.navigation.navigate(route.name))}
                 style={[styles.menuItem, { backgroundColor: bgColor }]}
@@ -767,7 +796,6 @@ function CustomDrawerContent(props) {
                 </Text>
                 {focused && <View style={styles.activeIndicator} />}
               </TouchableOpacity>
-              {isServiceItem && <View style={styles.separator} />}
             </React.Fragment>
           );
         })}
@@ -885,14 +913,6 @@ function AppNavigator({ onReady }) {
             drawerIconComponent: renderIcon(GB)
           }}
         />
-        <Drawer.Screen
-          name="profile"
-          component={ProfileStack}
-          options={{
-            drawerLabel: t("drawer.profileLabel"),
-            drawerIconComponent: renderIcon(Profile)
-          }}
-        />
         {isTester && (
           <Drawer.Screen
             name="culture"
@@ -903,6 +923,14 @@ function AppNavigator({ onReady }) {
             }}
           />
         )}
+        <Drawer.Screen
+          name="profile"
+          component={ProfileStack}
+          options={{
+            drawerLabel: t("drawer.profileLabel"),
+            drawerIconComponent: renderIcon(Profile)
+          }}
+        />
         {hasLeaderAccess && (
           <Drawer.Screen
             name="admin"

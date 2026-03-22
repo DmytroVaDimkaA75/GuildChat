@@ -233,7 +233,7 @@ const ObstaclesMap = () => {
 
       if (!userId || !guildId) {
         Alert.alert('Помилка', 'Не знайдено userId або guildId для збереження.');
-        return;
+        return false;
       }
 
       const basePath = `/users/${userId}/${guildId}/settlement`;
@@ -244,9 +244,11 @@ const ObstaclesMap = () => {
       });
 
       Alert.alert('Успіх', 'Перешкоди успішно збережено.');
+      return true;
     } catch (error) {
       console.error('Не вдалося зберегти перешкоди:', error);
       Alert.alert('Помилка', 'Не вдалося зберегти перешкоди. Спробуйте ще раз.');
+      return false;
     }
   }, [buildObstaclePayload, settlementName]);
 

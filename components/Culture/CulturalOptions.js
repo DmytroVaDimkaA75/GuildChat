@@ -56,7 +56,7 @@ const CulturalOptions = () => {
       const guildId = await AsyncStorage.getItem('guildId');
       if (!userId || !guildId) {
         Alert.alert('Помилка', 'Не знайдено userId або guildId.');
-        return;
+        return false;
       }
 
       const basePath = `/users/${userId}/${guildId}/settlement`;
@@ -67,7 +67,7 @@ const CulturalOptions = () => {
 
       if (!techSnap.exists() || !obstacleSnap.exists()) {
         Alert.alert('Увага', 'Для переходу в режим game потрібно зберегти і технології, і перешкоди.');
-        return;
+        return false;
       }
 
       const pack = RULE_PACKS[settlementName] || Object.values(RULE_PACKS).find((item) => item?.settlementType === settlementName);
@@ -104,10 +104,11 @@ const CulturalOptions = () => {
         placedBuildings: nextPlacedBuildings,
       });
 
-      Alert.alert('Успіх', 'Статус змінено на game.');
+      return true;
     } catch (error) {
       console.error('Не вдалося змінити статус на game:', error);
       Alert.alert('Помилка', 'Не вдалося змінити статус на game.');
+      return false;
     }
   }, [settlementName]);
 

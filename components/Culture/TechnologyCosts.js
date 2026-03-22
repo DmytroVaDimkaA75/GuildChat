@@ -101,7 +101,7 @@ const TechnologyCosts = () => {
   }, [allSettlementGoods, allTechList, inputs]);
 
   const handleSave = useCallback(async () => {
-    if (!allTechList.length || isSaving) return;
+    if (!allTechList.length || isSaving) return false;
 
     const { payload, nextInvalidTechIds } = buildTechPayload();
     const visibleInvalidTechIds = nextInvalidTechIds.filter((id) =>
@@ -110,7 +110,7 @@ const TechnologyCosts = () => {
     setInvalidTechIds(visibleInvalidTechIds);
 
     if (visibleInvalidTechIds.length > 0) {
-      return;
+      return false;
     }
 
     try {
@@ -120,7 +120,7 @@ const TechnologyCosts = () => {
 
       if (!userId || !guildId) {
         Alert.alert('Помилка', 'Не знайдено userId або guildId для збереження.');
-        return;
+        return false;
       }
 
       const basePath = `/users/${userId}/${guildId}/settlement`;
@@ -130,9 +130,11 @@ const TechnologyCosts = () => {
         status: 'edit',
       });
       Alert.alert('Успіх', 'Технології успішно збережено.');
+      return true;
     } catch (error) {
       console.error('Не вдалося зберегти технології:', error);
       Alert.alert('Помилка', 'Не вдалося зберегти технології. Спробуйте ще раз.');
+      return false;
     } finally {
       setIsSaving(false);
     }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
-import { ActivityIndicator, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import MapSvg from './map.svg';
@@ -35,15 +35,34 @@ const lettersToIndex = (letters) => {
   return idx;
 };
 
-const parseSectorRange = (range) => {
+const indexToLetters = (index) => {
+  let n = Number(index);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  let out = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+};
+
+const parseRangeMeta = (range) => {
   if (!range) return null;
   const match = String(range).toUpperCase().match(RANGE_RE);
   if (!match) return null;
+  return {
+    startCol: lettersToIndex(match[1]),
+    startRow: Number(match[2]),
+    endCol: lettersToIndex(match[3]),
+    endRow: Number(match[4]),
+  };
+};
 
-  const startCol = lettersToIndex(match[1]);
-  const startRow = Number(match[2]);
-  const endCol = lettersToIndex(match[3]);
-  const endRow = Number(match[4]);
+const parseSectorRange = (range) => {
+  const meta = parseRangeMeta(range);
+  if (!meta) return null;
+  const { startCol, startRow, endCol, endRow } = meta;
 
   return {
     x: (startCol - 1) * TILE_SIZE,
@@ -51,6 +70,21 @@ const parseSectorRange = (range) => {
     width: (endCol - startCol + 1) * TILE_SIZE,
     height: (endRow - startRow + 1) * TILE_SIZE,
   };
+};
+
+const absoluteRectToFootprint = (rect) => {
+  const xTiles = Math.round(rect.x / TILE_SIZE);
+  const yTiles = Math.round(rect.y / TILE_SIZE);
+  const wTiles = Math.round(rect.width / TILE_SIZE);
+  const hTiles = Math.round(rect.height / TILE_SIZE);
+  const startCol = xTiles + 1;
+  const startRow = yTiles + 1;
+  const endCol = startCol + wTiles - 1;
+  const endRow = startRow + hTiles - 1;
+  const startLetters = indexToLetters(startCol);
+  const endLetters = indexToLetters(endCol);
+  if (!startLetters || !endLetters) return null;
+  return `${startLetters}${startRow}:${endLetters}${endRow}`;
 };
 
 const getRectsBounds = (rects) => {
@@ -118,20 +152,39 @@ const getBuildingColor = (pack, buildingId) => {
   return BUILDING_COLOR[category] || '#6D9EEB';
 };
 
+const isObstacleDeleteStep = (step) =>
+  step?.actionType === 'clear_obstacle' ||
+  step?.targetType === 'obstacle' ||
+  step?.buildingId === 'obstacle';
+
+const getStepColor = (pack, step) => {
+  if (isObstacleDeleteStep(step)) return '#4A4A4A';
+  return getBuildingColor(pack, step?.buildingId);
+};
+
 const expandStarterPlanBuildSteps = (plan) => {
   if (!plan) return null;
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const expandedSteps = [];
 
   steps.forEach((step) => {
-    if (step?.actionType !== 'build') {
+    const isObstacleStep = isObstacleDeleteStep(step);
+    const normalizedStep = isObstacleStep
+      ? { ...step, actionType: 'clear_obstacle', targetType: 'obstacle' }
+      : step;
+
+    if (
+      normalizedStep?.actionType !== 'build' &&
+      normalizedStep?.actionType !== 'delete' &&
+      normalizedStep?.actionType !== 'clear_obstacle'
+    ) {
       expandedSteps.push(step);
       return;
     }
 
-    const footprints = Array.isArray(step.footprints) ? step.footprints : [];
-    const tiles = Array.isArray(step.tiles) ? step.tiles : [];
-    const targetFootprints = Array.isArray(step.targetFootprints) ? step.targetFootprints : [];
+    const footprints = Array.isArray(normalizedStep.footprints) ? normalizedStep.footprints : [];
+    const tiles = Array.isArray(normalizedStep.tiles) ? normalizedStep.tiles : [];
+    const targetFootprints = Array.isArray(normalizedStep.targetFootprints) ? normalizedStep.targetFootprints : [];
 
     let targetKey = null;
     let sourceTargets = [];
@@ -147,22 +200,22 @@ const expandStarterPlanBuildSteps = (plan) => {
     }
 
     if (!targetKey || sourceTargets.length <= 1) {
-      expandedSteps.push(step);
+      expandedSteps.push(normalizedStep);
       return;
     }
 
     sourceTargets.forEach((target, index) => {
-      const splitId = `${step.id}__${index + 1}`;
+      const splitId = `${normalizedStep.id}__${index + 1}`;
       const splitStep = {
-        ...step,
+        ...normalizedStep,
         id: splitId,
         expectedCount: 1,
         [targetKey]: [target],
       };
 
-      const inheritedDependsOn = Array.isArray(step.dependsOn) ? [...step.dependsOn] : [];
+      const inheritedDependsOn = Array.isArray(normalizedStep.dependsOn) ? [...normalizedStep.dependsOn] : [];
       if (index > 0) {
-        splitStep.dependsOn = [`${step.id}__${index}`];
+        splitStep.dependsOn = [`${normalizedStep.id}__${index}`];
       } else {
         splitStep.dependsOn = inheritedDependsOn;
       }
@@ -209,6 +262,10 @@ const formatTaskText = (step, pack) => {
     const targets = getStepTargetFootprints(step);
     return `Видалити ${buildingName}${targets.length ? ` (${targets.join(', ')})` : ''}`;
   }
+  if (step.actionType === 'clear_obstacle') {
+    const targets = getStepTargetFootprints(step);
+    return `Видалити перешкоду${targets.length ? ` (${targets.join(', ')})` : ''}`;
+  }
   if (step.actionType === 'start_production') {
     return `Запустити виробництво: ${buildingName}`;
   }
@@ -216,6 +273,7 @@ const formatTaskText = (step, pack) => {
 };
 
 const SettlementGamePlanner = () => {
+  const navigation = useNavigation();
   const route = useRoute();
   const settlementName = route.params?.settlementName;
   const { width: screenWidth } = Dimensions.get('window');
@@ -229,7 +287,41 @@ const SettlementGamePlanner = () => {
   const [actionError, setActionError] = useState('');
   const [movePreviewRect, setMovePreviewRect] = useState(null);
   const [buildPreview, setBuildPreview] = useState(null);
+  const [deletePreview, setDeletePreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const handleDeleteSettlement = async () => {
+      const userId = await AsyncStorage.getItem('userId');
+      const guildId = await AsyncStorage.getItem('guildId');
+      if (!userId || !guildId) return;
+
+      Alert.alert(
+        'Підтвердження',
+        'Видалити весь прогрес культурного поселення?',
+        [
+          { text: 'Ні', style: 'cancel' },
+          {
+            text: 'Так',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await database().ref(`/users/${userId}/${guildId}/settlement`).remove();
+                navigation.navigate('CulturalSettlements');
+              } catch (error) {
+                console.error('Не вдалося видалити settlement:', error);
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    };
+
+    navigation.setParams({
+      onDeleteSettlement: handleDeleteSettlement,
+    });
+  }, [navigation]);
 
   useEffect(() => {
     let isMounted = true;
@@ -281,6 +373,8 @@ const SettlementGamePlanner = () => {
               if (![x, y, w, h].every((value) => Number.isFinite(value))) return;
 
               nextObstacleRects.push({
+                sector,
+                obstacleId: obstacle?.obstacleId || null,
                 x: sectorRect.x + x * TILE_SIZE,
                 y: sectorRect.y + y * TILE_SIZE,
                 width: w * TILE_SIZE,
@@ -288,6 +382,11 @@ const SettlementGamePlanner = () => {
               });
             });
           });
+
+          const normalizedObstacleRects = nextObstacleRects.map((rect) => ({
+            ...rect,
+            footprint: absoluteRectToFootprint(rect),
+          }));
 
           const nextBuildingRects = buildingsArr
             .map((building) => ({
@@ -300,7 +399,7 @@ const SettlementGamePlanner = () => {
 
           if (isMounted) {
             setOpenedSectorsFromDb(openedArr.filter(Boolean));
-            setObstacleRectsFromDb(nextObstacleRects);
+            setObstacleRectsFromDb(normalizedObstacleRects);
             setBuildingRectsFromDb(nextBuildingRects);
             setPlacedBuildingsFromDb(buildingsArr);
             setPlanStepIndex(Number.isFinite(dbStepIndex) && dbStepIndex >= 0 ? dbStepIndex : 0);
@@ -386,11 +485,13 @@ const SettlementGamePlanner = () => {
     if (!step) {
       setMovePreviewRect(null);
       setBuildPreview(null);
+      setDeletePreview(null);
       return;
     }
 
     if (step.actionType === 'build') {
       setMovePreviewRect(null);
+      setDeletePreview(null);
       const firstTarget = getStepTargetFootprints(step)[0];
       const targetRect = parseGridRange(firstTarget);
       if (!targetRect) {
@@ -398,7 +499,7 @@ const SettlementGamePlanner = () => {
         return;
       }
 
-      const color = getBuildingColor(pack, step.buildingId);
+      const color = getStepColor(pack, step);
       let animationFrameId = null;
       const cycleMs = 2000;
       const fadeMs = 1000;
@@ -407,7 +508,7 @@ const SettlementGamePlanner = () => {
       const tick = () => {
         const elapsed = (Date.now() - cycleStart) % cycleMs;
         const strokeOpacity = elapsed <= fadeMs ? elapsed / fadeMs : 1;
-        const fillOpacity = elapsed <= fadeMs ? (elapsed / fadeMs) * 0.5 : 0.5;
+        const fillOpacity = elapsed <= fadeMs ? (elapsed / fadeMs) * 0.9 : 0.9;
 
         setBuildPreview({
           rect: targetRect,
@@ -428,13 +529,60 @@ const SettlementGamePlanner = () => {
       };
     }
 
+    if (step.actionType === 'delete' || step.actionType === 'clear_obstacle') {
+      setMovePreviewRect(null);
+      setBuildPreview(null);
+      const firstTarget = getStepTargetFootprints(step)[0];
+      const targetRect = parseGridRange(firstTarget);
+      if (!targetRect) {
+        setDeletePreview(null);
+        return;
+      }
+
+      const color = getStepColor(pack, step);
+      let animationFrameId = null;
+      const cycleMs = 2000;
+      const fadeMs = 1000;
+      const cycleStart = Date.now();
+
+      const tick = () => {
+        const elapsed = (Date.now() - cycleStart) % cycleMs;
+
+        if (elapsed <= fadeMs) {
+          const t = elapsed / fadeMs;
+          const strokeOpacity = 1 - t;
+          const fillOpacity = 0.9 * (1 - t);
+          setDeletePreview({
+            rect: targetRect,
+            color,
+            strokeOpacity,
+            fillOpacity,
+          });
+        } else {
+          setDeletePreview(null);
+        }
+
+        animationFrameId = requestAnimationFrame(tick);
+      };
+
+      tick();
+      return () => {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+        setDeletePreview(null);
+      };
+    }
+
     if (step.actionType !== 'move') {
       setMovePreviewRect(null);
       setBuildPreview(null);
+      setDeletePreview(null);
       return;
     }
 
     setBuildPreview(null);
+    setDeletePreview(null);
     const fromRect = parseGridRange(step.from);
     const toRect = parseGridRange(step.to);
     if (!fromRect || !toRect) {
@@ -501,6 +649,10 @@ const SettlementGamePlanner = () => {
     if (!identity.userId || !identity.guildId) return;
 
     const step = starterPlanProgress.currentStep;
+    if (isObstacleDeleteStep(step) && step.actionType !== 'delete' && step.actionType !== 'clear_obstacle') {
+      setActionError('Перешкоди можна лише видаляти.');
+      return;
+    }
     const settlementPath = `/users/${identity.userId}/${identity.guildId}/settlement`;
 
     try {
@@ -565,13 +717,46 @@ const SettlementGamePlanner = () => {
         });
       }
 
-      if (step.actionType === 'delete') {
+      if (step.actionType === 'delete' || step.actionType === 'clear_obstacle') {
         const targets = new Set(getStepTargetFootprints(step));
-        nextPlacedBuildings = nextPlacedBuildings.filter((building) => {
-          if (building?.buildingId !== step.buildingId) return true;
-          const footprint = normalizeFootprint(building?.footprint);
-          return !targets.has(footprint);
-        });
+        if (isObstacleDeleteStep(step)) {
+          const remainingObstacles = obstacleRectsFromDb.filter(
+            (obstacle) => !targets.has(obstacle.footprint)
+          );
+
+          const groupedBySector = {};
+          remainingObstacles.forEach((obstacle, index) => {
+            const sector = obstacle?.sector;
+            if (!sector) return;
+            const sectorMeta = parseRangeMeta(sector);
+            if (!sectorMeta) return;
+
+            const absoluteX = Math.round(obstacle.x / TILE_SIZE);
+            const absoluteY = Math.round(obstacle.y / TILE_SIZE);
+            const localX = absoluteX - (sectorMeta.startCol - 1);
+            const localY = absoluteY - (sectorMeta.startRow - 1);
+            const w = Math.round(obstacle.width / TILE_SIZE);
+            const h = Math.round(obstacle.height / TILE_SIZE);
+
+            if (!groupedBySector[sector]) groupedBySector[sector] = [];
+            groupedBySector[sector].push({
+              obstacleId: obstacle.obstacleId || `obs_${index + 1}`,
+              x: localX,
+              y: localY,
+              w,
+              h,
+            });
+          });
+
+          await database().ref(`${settlementPath}/sectorObstaclesStatic`).set(groupedBySector);
+          setObstacleRectsFromDb(remainingObstacles);
+        } else {
+          nextPlacedBuildings = nextPlacedBuildings.filter((building) => {
+            if (building?.buildingId !== step.buildingId) return true;
+            const footprint = normalizeFootprint(building?.footprint);
+            return !targets.has(footprint);
+          });
+        }
       }
 
       if (step.actionType === 'start_production') {
@@ -640,7 +825,13 @@ const SettlementGamePlanner = () => {
     starterPlanProgress?.currentStep?.actionType === 'move' ? starterPlanProgress.currentStep : null;
   const activeBuildStep =
     starterPlanProgress?.currentStep?.actionType === 'build' ? starterPlanProgress.currentStep : null;
+  const activeDeleteStep =
+    (starterPlanProgress?.currentStep?.actionType === 'delete' ||
+      starterPlanProgress?.currentStep?.actionType === 'clear_obstacle')
+      ? starterPlanProgress.currentStep
+      : null;
   const moveFromFootprint = normalizeFootprint(activeMoveStep?.from);
+  const deleteTargets = new Set(getStepTargetFootprints(activeDeleteStep));
 
   return (
     <View style={styles.container}>
@@ -697,7 +888,12 @@ const SettlementGamePlanner = () => {
             </G>
           ))}
 
-          {obstacleRectsFromDb.map((rect, idx) => (
+          {obstacleRectsFromDb
+            .filter((rect) => {
+              if (!activeDeleteStep || !isObstacleDeleteStep(activeDeleteStep)) return true;
+              return !deleteTargets.has(rect.footprint);
+            })
+            .map((rect, idx) => (
             <Rect
               key={`g-obstacle-${idx}`}
               x={rect.x}
@@ -712,7 +908,13 @@ const SettlementGamePlanner = () => {
             .filter((building) => {
               if (!activeMoveStep) return true;
               if (building.buildingId !== activeMoveStep.buildingId) return true;
-              return building.footprint !== moveFromFootprint;
+              if (building.footprint === moveFromFootprint) return false;
+              return true;
+            })
+            .filter((building) => {
+              if (!activeDeleteStep) return true;
+              if (building.buildingId !== activeDeleteStep.buildingId) return true;
+              return !deleteTargets.has(building.footprint);
             })
             .map((building, idx) => (
             <Rect
@@ -721,13 +923,13 @@ const SettlementGamePlanner = () => {
               y={building.rect.y}
               width={building.rect.width}
               height={building.rect.height}
-              fill={hexToRgba(getBuildingColor(pack, building.buildingId), 0.45)}
-              stroke={getBuildingColor(pack, building.buildingId)}
+              fill={hexToRgba(getBuildingColor(pack, building.buildingId), 0.9)}
+              stroke="#000000"
               strokeWidth={1}
             />
           ))}
 
-          {!activeMoveStep && !activeBuildStep &&
+          {!activeMoveStep && !activeBuildStep && !activeDeleteStep &&
             (starterPlanProgress?.currentStepTargetRects || []).map((rect, idx) => (
             <Rect
               key={`g-target-${idx}`}
@@ -747,8 +949,8 @@ const SettlementGamePlanner = () => {
               y={movePreviewRect.y}
               width={movePreviewRect.width}
               height={movePreviewRect.height}
-              fill="rgba(255, 0, 255, 0.35)"
-              stroke="#FF00FF"
+              fill={hexToRgba(getBuildingColor(pack, activeMoveStep?.buildingId), 0.9)}
+              stroke="#000000"
               strokeWidth={1.5}
             />
           ) : null}
@@ -760,7 +962,19 @@ const SettlementGamePlanner = () => {
               width={buildPreview.rect.width}
               height={buildPreview.rect.height}
               fill={hexToRgba(buildPreview.color, buildPreview.fillOpacity)}
-              stroke={hexToRgba(buildPreview.color, buildPreview.strokeOpacity)}
+              stroke={hexToRgba('#000000', buildPreview.strokeOpacity)}
+              strokeWidth={1.5}
+            />
+          ) : null}
+
+          {deletePreview ? (
+            <Rect
+              x={deletePreview.rect.x}
+              y={deletePreview.rect.y}
+              width={deletePreview.rect.width}
+              height={deletePreview.rect.height}
+              fill={hexToRgba(deletePreview.color, deletePreview.fillOpacity)}
+              stroke={hexToRgba('#000000', deletePreview.strokeOpacity)}
               strokeWidth={1.5}
             />
           ) : null}
