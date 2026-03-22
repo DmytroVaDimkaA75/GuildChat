@@ -19,6 +19,13 @@ const MAP_VIEWBOX = { width: 279.99976, height: 280 };
 const TILE_SIZE = 10;
 const TILE_RE = /^([A-Z]+)(\d+)$/;
 const RANGE_RE = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
+const BUILDING_COLOR = {
+  town_hall: '#FF00FF',
+  residential: '#00AA00',
+  coin: '#6D9EEB',
+  diplomacy: '#6D9EEB',
+  goods: '#E60A18',
+};
 
 const lettersToIndex = (letters) => {
   let idx = 0;
@@ -85,6 +92,96 @@ const getStepTargetFootprints = (step) => {
   );
 };
 
+const hexToRgba = (hex, alpha = 1) => {
+  const normalized = String(hex || '').replace('#', '');
+  if (normalized.length !== 6) return `rgba(255,255,255,${alpha})`;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getBuildingCategory = (pack, buildingId) => {
+  if (!buildingId) return null;
+  if (buildingId === 'town_hall') return 'town_hall';
+  const buildingGroups = pack?.buildings ? Object.entries(pack.buildings) : [];
+  for (const [groupKey, items] of buildingGroups) {
+    if (!Array.isArray(items)) continue;
+    const found = items.find((item) => item?.id === buildingId);
+    if (found) return found.category || groupKey;
+  }
+  return null;
+};
+
+const getBuildingColor = (pack, buildingId) => {
+  const category = getBuildingCategory(pack, buildingId);
+  return BUILDING_COLOR[category] || '#6D9EEB';
+};
+
+const expandStarterPlanBuildSteps = (plan) => {
+  if (!plan) return null;
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  const expandedSteps = [];
+
+  steps.forEach((step) => {
+    if (step?.actionType !== 'build') {
+      expandedSteps.push(step);
+      return;
+    }
+
+    const footprints = Array.isArray(step.footprints) ? step.footprints : [];
+    const tiles = Array.isArray(step.tiles) ? step.tiles : [];
+    const targetFootprints = Array.isArray(step.targetFootprints) ? step.targetFootprints : [];
+
+    let targetKey = null;
+    let sourceTargets = [];
+    if (footprints.length > 0) {
+      targetKey = 'footprints';
+      sourceTargets = footprints;
+    } else if (tiles.length > 0) {
+      targetKey = 'tiles';
+      sourceTargets = tiles;
+    } else if (targetFootprints.length > 0) {
+      targetKey = 'targetFootprints';
+      sourceTargets = targetFootprints;
+    }
+
+    if (!targetKey || sourceTargets.length <= 1) {
+      expandedSteps.push(step);
+      return;
+    }
+
+    sourceTargets.forEach((target, index) => {
+      const splitId = `${step.id}__${index + 1}`;
+      const splitStep = {
+        ...step,
+        id: splitId,
+        expectedCount: 1,
+        [targetKey]: [target],
+      };
+
+      const inheritedDependsOn = Array.isArray(step.dependsOn) ? [...step.dependsOn] : [];
+      if (index > 0) {
+        splitStep.dependsOn = [`${step.id}__${index}`];
+      } else {
+        splitStep.dependsOn = inheritedDependsOn;
+      }
+
+      if (index < sourceTargets.length - 1) {
+        delete splitStep.completesMilestoneId;
+        delete splitStep.onComplete;
+      }
+
+      expandedSteps.push(splitStep);
+    });
+  });
+
+  return {
+    ...plan,
+    steps: expandedSteps,
+  };
+};
+
 const getBuildingDisplayName = (pack, buildingId) => {
   if (!buildingId) return 'Будівля';
   if (buildingId === 'town_hall') return pack?.coreBuildings?.townHall?.name || 'Ратуша';
@@ -131,6 +228,7 @@ const SettlementGamePlanner = () => {
   const [isCompletingStep, setIsCompletingStep] = useState(false);
   const [actionError, setActionError] = useState('');
   const [movePreviewRect, setMovePreviewRect] = useState(null);
+  const [buildPreview, setBuildPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -194,6 +292,7 @@ const SettlementGamePlanner = () => {
           const nextBuildingRects = buildingsArr
             .map((building) => ({
               rect: parseGridRange(building?.footprint),
+              footprint: normalizeFootprint(building?.footprint),
               buildingId: building?.buildingId || '',
               instanceId: building?.instanceId || '',
             }))
@@ -247,6 +346,11 @@ const SettlementGamePlanner = () => {
     return preferred || plans[0];
   }, [pack]);
 
+  const effectiveStarterPlan = useMemo(
+    () => expandStarterPlanBuildSteps(starterPlan),
+    [starterPlan]
+  );
+
   const { allRects, openedRects } = useMemo(() => {
     const allSectors = pack?.map?.allSectors || [];
     return {
@@ -256,9 +360,9 @@ const SettlementGamePlanner = () => {
   }, [openedSectorsFromDb, pack]);
 
   const starterPlanProgress = useMemo(() => {
-    if (!starterPlan) return null;
+    if (!effectiveStarterPlan) return null;
 
-    const steps = Array.isArray(starterPlan.steps) ? starterPlan.steps : [];
+    const steps = Array.isArray(effectiveStarterPlan.steps) ? effectiveStarterPlan.steps : [];
     const safeIndex = Math.max(0, Math.min(planStepIndex, steps.length));
     const currentStep = safeIndex < steps.length ? steps[safeIndex] : null;
     const completedCount = safeIndex;
@@ -275,15 +379,62 @@ const SettlementGamePlanner = () => {
       isCompleted,
       currentStepTargetRects,
     };
-  }, [starterPlan, planStepIndex]);
+  }, [effectiveStarterPlan, planStepIndex]);
 
   useEffect(() => {
     const step = starterPlanProgress?.currentStep;
-    if (!step || step.actionType !== 'move') {
+    if (!step) {
       setMovePreviewRect(null);
+      setBuildPreview(null);
       return;
     }
 
+    if (step.actionType === 'build') {
+      setMovePreviewRect(null);
+      const firstTarget = getStepTargetFootprints(step)[0];
+      const targetRect = parseGridRange(firstTarget);
+      if (!targetRect) {
+        setBuildPreview(null);
+        return;
+      }
+
+      const color = getBuildingColor(pack, step.buildingId);
+      let animationFrameId = null;
+      const cycleMs = 2000;
+      const fadeMs = 1000;
+      const cycleStart = Date.now();
+
+      const tick = () => {
+        const elapsed = (Date.now() - cycleStart) % cycleMs;
+        const strokeOpacity = elapsed <= fadeMs ? elapsed / fadeMs : 1;
+        const fillOpacity = elapsed <= fadeMs ? (elapsed / fadeMs) * 0.5 : 0.5;
+
+        setBuildPreview({
+          rect: targetRect,
+          color,
+          strokeOpacity,
+          fillOpacity,
+        });
+
+        animationFrameId = requestAnimationFrame(tick);
+      };
+
+      tick();
+      return () => {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+        setBuildPreview(null);
+      };
+    }
+
+    if (step.actionType !== 'move') {
+      setMovePreviewRect(null);
+      setBuildPreview(null);
+      return;
+    }
+
+    setBuildPreview(null);
     const fromRect = parseGridRange(step.from);
     const toRect = parseGridRange(step.to);
     if (!fromRect || !toRect) {
@@ -343,10 +494,10 @@ const SettlementGamePlanner = () => {
       }
       setMovePreviewRect(null);
     };
-  }, [starterPlanProgress?.currentStep?.id]);
+  }, [starterPlanProgress?.currentStep?.id, pack]);
 
   const handleCompleteCurrentTask = async () => {
-    if (!starterPlan || !starterPlanProgress?.currentStep || isCompletingStep) return;
+    if (!effectiveStarterPlan || !starterPlanProgress?.currentStep || isCompletingStep) return;
     if (!identity.userId || !identity.guildId) return;
 
     const step = starterPlanProgress.currentStep;
@@ -392,6 +543,54 @@ const SettlementGamePlanner = () => {
         setMovePreviewRect(parseGridRange(toFootprint));
       }
 
+      if (step.actionType === 'build') {
+        const targets = getStepTargetFootprints(step);
+        const existingKeys = new Set(
+          nextPlacedBuildings.map((building) => `${building?.buildingId || ''}|${normalizeFootprint(building?.footprint) || ''}`)
+        );
+
+        targets.forEach((targetFootprint, idx) => {
+          const key = `${step.buildingId}|${targetFootprint}`;
+          if (existingKeys.has(key)) return;
+          nextPlacedBuildings.push({
+            instanceId: `${step.buildingId}_${Date.now()}_${idx}`,
+            buildingId: step.buildingId,
+            footprint: targetFootprint,
+            rotation: 0,
+            placedAt: Date.now(),
+            passive: null,
+            job: null,
+          });
+          existingKeys.add(key);
+        });
+      }
+
+      if (step.actionType === 'delete') {
+        const targets = new Set(getStepTargetFootprints(step));
+        nextPlacedBuildings = nextPlacedBuildings.filter((building) => {
+          if (building?.buildingId !== step.buildingId) return true;
+          const footprint = normalizeFootprint(building?.footprint);
+          return !targets.has(footprint);
+        });
+      }
+
+      if (step.actionType === 'start_production') {
+        const targets = new Set(getStepTargetFootprints(step));
+        nextPlacedBuildings = nextPlacedBuildings.map((building) => {
+          if (building?.buildingId !== step.buildingId) return building;
+          const footprint = normalizeFootprint(building?.footprint);
+          if (!targets.size || targets.has(footprint)) {
+            return {
+              ...building,
+              job: {
+                startedAt: Date.now(),
+              },
+            };
+          }
+          return building;
+        });
+      }
+
       const nextStepIndex = Math.min(
         starterPlanProgress.completedCount + 1,
         starterPlanProgress.totalSteps
@@ -400,7 +599,7 @@ const SettlementGamePlanner = () => {
       await database().ref(settlementPath).update({
         placedBuildings: nextPlacedBuildings,
         starterPlanProgress: {
-          planId: starterPlan.id,
+          planId: effectiveStarterPlan.id,
           currentStepIndex: nextStepIndex,
           updatedAt: Date.now(),
         },
@@ -409,6 +608,7 @@ const SettlementGamePlanner = () => {
       const nextBuildingRects = nextPlacedBuildings
         .map((building) => ({
           rect: parseGridRange(building?.footprint),
+          footprint: normalizeFootprint(building?.footprint),
           buildingId: building?.buildingId || '',
           instanceId: building?.instanceId || '',
         }))
@@ -435,6 +635,12 @@ const SettlementGamePlanner = () => {
       </View>
     );
   }
+
+  const activeMoveStep =
+    starterPlanProgress?.currentStep?.actionType === 'move' ? starterPlanProgress.currentStep : null;
+  const activeBuildStep =
+    starterPlanProgress?.currentStep?.actionType === 'build' ? starterPlanProgress.currentStep : null;
+  const moveFromFootprint = normalizeFootprint(activeMoveStep?.from);
 
   return (
     <View style={styles.container}>
@@ -502,20 +708,27 @@ const SettlementGamePlanner = () => {
             />
           ))}
 
-          {buildingRectsFromDb.map((building, idx) => (
+          {buildingRectsFromDb
+            .filter((building) => {
+              if (!activeMoveStep) return true;
+              if (building.buildingId !== activeMoveStep.buildingId) return true;
+              return building.footprint !== moveFromFootprint;
+            })
+            .map((building, idx) => (
             <Rect
               key={`g-building-${building.instanceId || idx}`}
               x={building.rect.x}
               y={building.rect.y}
               width={building.rect.width}
               height={building.rect.height}
-              fill={building.buildingId === 'town_hall' ? '#E3F2FD' : '#81D4FA'}
-              stroke="#0D47A1"
+              fill={hexToRgba(getBuildingColor(pack, building.buildingId), 0.45)}
+              stroke={getBuildingColor(pack, building.buildingId)}
               strokeWidth={1}
             />
           ))}
 
-          {(starterPlanProgress?.currentStepTargetRects || []).map((rect, idx) => (
+          {!activeMoveStep && !activeBuildStep &&
+            (starterPlanProgress?.currentStepTargetRects || []).map((rect, idx) => (
             <Rect
               key={`g-target-${idx}`}
               x={rect.x}
@@ -534,8 +747,20 @@ const SettlementGamePlanner = () => {
               y={movePreviewRect.y}
               width={movePreviewRect.width}
               height={movePreviewRect.height}
-              fill="rgba(255, 193, 7, 0.35)"
-              stroke="#FFC107"
+              fill="rgba(255, 0, 255, 0.35)"
+              stroke="#FF00FF"
+              strokeWidth={1.5}
+            />
+          ) : null}
+
+          {buildPreview ? (
+            <Rect
+              x={buildPreview.rect.x}
+              y={buildPreview.rect.y}
+              width={buildPreview.rect.width}
+              height={buildPreview.rect.height}
+              fill={hexToRgba(buildPreview.color, buildPreview.fillOpacity)}
+              stroke={hexToRgba(buildPreview.color, buildPreview.strokeOpacity)}
               strokeWidth={1.5}
             />
           ) : null}
@@ -544,7 +769,7 @@ const SettlementGamePlanner = () => {
 
       <View style={styles.taskRow}>
         <Text style={styles.taskText}>
-          {!starterPlan
+          {!effectiveStarterPlan
             ? 'Для цього поселення стартовий план не задано.'
             : starterPlanProgress?.isCompleted
             ? 'Стартовий план завершено.'
