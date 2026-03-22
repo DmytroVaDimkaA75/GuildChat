@@ -58,6 +58,8 @@ const SettlementGamePlanner = () => {
   const settlementName = route.params?.settlementName;
   const { width: screenWidth } = Dimensions.get('window');
   const [openedSectorsFromDb, setOpenedSectorsFromDb] = useState([]);
+  const [obstacleRectsFromDb, setObstacleRectsFromDb] = useState([]);
+  const [buildingRectsFromDb, setBuildingRectsFromDb] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -74,18 +76,57 @@ const SettlementGamePlanner = () => {
           return;
         }
 
-        const snap = await database().ref(`/users/${userId}/${guildId}/settlement/openedSectors`).once('value');
-        const data = snap.exists() ? snap.val() : [];
-        const arr = Array.isArray(data) ? data : Object.values(data || {});
+        const settlementSnap = await database().ref(`/users/${userId}/${guildId}/settlement`).once('value');
+        const settlementData = settlementSnap.exists() ? settlementSnap.val() : {};
+
+        const openedRaw = settlementData?.openedSectors || [];
+        const obstaclesRaw = settlementData?.sectorObstaclesStatic || {};
+        const buildingsRaw = settlementData?.placedBuildings || [];
+
+        const openedArr = Array.isArray(openedRaw) ? openedRaw : Object.values(openedRaw || {});
+        const buildingsArr = Array.isArray(buildingsRaw) ? buildingsRaw : Object.values(buildingsRaw || {});
+
+        const nextObstacleRects = [];
+        Object.entries(obstaclesRaw || {}).forEach(([sector, obstacles]) => {
+          const sectorRect = parseSectorRange(sector);
+          if (!sectorRect || !Array.isArray(obstacles)) return;
+
+          obstacles.forEach((obstacle) => {
+            const x = Number(obstacle?.x);
+            const y = Number(obstacle?.y);
+            const w = Number(obstacle?.w);
+            const h = Number(obstacle?.h);
+            if (![x, y, w, h].every((value) => Number.isFinite(value))) return;
+
+            nextObstacleRects.push({
+              x: sectorRect.x + x * TILE_SIZE,
+              y: sectorRect.y + y * TILE_SIZE,
+              width: w * TILE_SIZE,
+              height: h * TILE_SIZE,
+            });
+          });
+        });
+
+        const nextBuildingRects = buildingsArr
+          .map((building) => ({
+            rect: parseSectorRange(building?.footprint),
+            buildingId: building?.buildingId || '',
+            instanceId: building?.instanceId || '',
+          }))
+          .filter((item) => item.rect);
 
         if (isMounted) {
-          setOpenedSectorsFromDb(arr.filter(Boolean));
+          setOpenedSectorsFromDb(openedArr.filter(Boolean));
+          setObstacleRectsFromDb(nextObstacleRects);
+          setBuildingRectsFromDb(nextBuildingRects);
           setIsLoading(false);
         }
       } catch (error) {
-        console.error('Не вдалося завантажити openedSectors:', error);
+        console.error('Не вдалося завантажити дані settlement:', error);
         if (isMounted) {
           setOpenedSectorsFromDb([]);
+          setObstacleRectsFromDb([]);
+          setBuildingRectsFromDb([]);
           setIsLoading(false);
         }
       }
@@ -169,6 +210,30 @@ const SettlementGamePlanner = () => {
                 />
               ))}
             </G>
+          ))}
+
+          {obstacleRectsFromDb.map((rect, idx) => (
+            <Rect
+              key={`g-obstacle-${idx}`}
+              x={rect.x}
+              y={rect.y}
+              width={rect.width}
+              height={rect.height}
+              fill="#4A4A4A"
+            />
+          ))}
+
+          {buildingRectsFromDb.map((building, idx) => (
+            <Rect
+              key={`g-building-${building.instanceId || idx}`}
+              x={building.rect.x}
+              y={building.rect.y}
+              width={building.rect.width}
+              height={building.rect.height}
+              fill={building.buildingId === 'town_hall' ? '#E3F2FD' : '#81D4FA'}
+              stroke="#0D47A1"
+              strokeWidth={1}
+            />
           ))}
         </G>
       </Svg>

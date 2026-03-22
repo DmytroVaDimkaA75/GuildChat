@@ -22,6 +22,7 @@ const TechnologyCosts = () => {
   const [inputs, setInputs] = useState({});
   const [invalidTechIds, setInvalidTechIds] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const allTechList = useMemo(() => {
     if (!settlementName) return [];
@@ -135,7 +136,52 @@ const TechnologyCosts = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [allTechList.length, buildTechPayload, isSaving, techList]);
+  }, [allTechList.length, buildTechPayload, isSaving, settlementName, techList]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const guildId = await AsyncStorage.getItem('guildId');
+
+        if (!userId || !guildId) {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+
+        const techSnap = await database().ref(`/users/${userId}/${guildId}/settlement/tech`).once('value');
+        const techData = techSnap.exists() ? techSnap.val() : {};
+        const nextInputs = {};
+
+        techList.forEach((tech) => {
+          const dbTech = techData?.[tech.id];
+          const dbCostGoods = dbTech?.costGoods || {};
+
+          (tech.allowedGoods || []).forEach((good) => {
+            const rawValue = Number(dbCostGoods?.[good]);
+            if (Number.isFinite(rawValue) && rawValue > 0) {
+              nextInputs[`${tech.id}:${good}`] = String(rawValue);
+            }
+          });
+        });
+
+        if (isMounted) {
+          setInputs(nextInputs);
+          setInvalidTechIds([]);
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Не вдалося завантажити збережені технології:', error);
+        if (isMounted) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [techList]);
 
   useEffect(() => {
     navigation.setParams({
@@ -147,7 +193,9 @@ const TechnologyCosts = () => {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Вартість технологій: {settlementName || '—'}</Text>
 
-      {techList.length === 0 ? (
+      {isLoading ? (
+        <Text style={styles.emptyText}>Завантаження збережених значень…</Text>
+      ) : techList.length === 0 ? (
         <Text style={styles.emptyText}>
           Для цього поселення немає технологій із двома або більше товарами для відкриття.
         </Text>
