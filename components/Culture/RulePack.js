@@ -1,7 +1,7 @@
 // RulePack.js
 
 export const piratesRulePack = {
-  rulePackVersion: 'pirates_v1.3',
+  rulePackVersion: 'pirates_v1.4',
   settlementType: 'pirates',
 
   objectives: {
@@ -724,6 +724,165 @@ export const piratesRulePack = {
       requiredAdvancementId: 'adv_10'
     },
     description: 'Перемога досягається після завершення лінійки квестів. Додатковий показник — 1000 дипломатії та великий пірс.'
+  },
+
+  starterPlans: {
+    defaultPlanId: 'pirates_first_goods_v1',
+    plans: [
+      {
+        id: 'pirates_first_goods_v1',
+        name: 'Старт піратів до першого збору товарів',
+        description: 'Стандартизований стартовий маршрут для піратського поселення.',
+        completion: {
+          type: 'first_goods_collect',
+          triggerAction: 'collect',
+          fromBuildingCategory: 'goods',
+          minCollectEvents: 1,
+          description: 'План завершується після першого збору будь-якого товару з виробничої будівлі.'
+        },
+        steps: [
+          {
+            id: 'step_01_verify_town_hall_position',
+            order: 1,
+            actionType: 'move',
+            buildingId: 'town_hall',
+            from: 'O13:T16',
+            to: 'O13:T16',
+            description: 'Контрольний стартовий крок: підтвердити позицію Ратуші.'
+          },
+          {
+            id: 'step_02_build_seven_hammocks',
+            order: 2,
+            actionType: 'build',
+            buildingId: 'hammock_place',
+            footprints: [
+              'S19:T20',
+              'Q19:R20',
+              'O19:P20',
+              'M19:N20',
+              'M17:N18',
+              'M15:N16',
+              'Q13:R14'
+            ],
+            expectedCount: 7,
+            dependsOn: ['step_01_verify_town_hall_position'],
+            completesMilestoneId: 'task_01'
+          },
+          {
+            id: 'step_03_build_four_small_piers',
+            order: 3,
+            actionType: 'build',
+            buildingId: 'small_pier',
+            tiles: ['S13', 'S14', 'T13', 'T14'],
+            expectedCount: 4,
+            dependsOn: ['step_02_build_seven_hammocks'],
+            completesMilestoneId: 'task_02'
+          },
+          {
+            id: 'step_04_delete_four_small_piers',
+            order: 4,
+            actionType: 'delete',
+            buildingId: 'small_pier',
+            tiles: ['S13', 'S14', 'T13', 'T14'],
+            expectedCount: 4,
+            dependsOn: ['step_03_build_four_small_piers']
+          },
+          {
+            id: 'step_05_build_hammock_after_piers',
+            order: 5,
+            actionType: 'build',
+            buildingId: 'hammock_place',
+            footprints: ['S13:T14'],
+            expectedCount: 1,
+            dependsOn: ['step_04_delete_four_small_piers'],
+            onComplete: [
+              {
+                type: 'schedule_reminder',
+                reminderRuleId: 'rem_collect_from_hammocks_start'
+              }
+            ]
+          },
+          {
+            id: 'step_06_build_two_fisheries',
+            order: 6,
+            actionType: 'build',
+            buildingId: 'fishery',
+            footprints: ['M9:P11', 'M12:P14'],
+            expectedCount: 2,
+            dependsOn: ['step_05_build_hammock_after_piers'],
+            completesMilestoneId: 'task_03',
+            onComplete: [
+              {
+                type: 'schedule_reminder',
+                reminderRuleId: 'rem_start_fishery_production_after_build'
+              }
+            ]
+          },
+          {
+            id: 'step_07_start_fishery_production',
+            order: 7,
+            actionType: 'start_production',
+            buildingId: 'fishery',
+            targetFootprints: ['M9:P11', 'M12:P14'],
+            dependsOn: ['step_06_build_two_fisheries'],
+            requires: ['all_target_buildings_built']
+          }
+        ],
+        reminderRules: [
+          {
+            id: 'rem_collect_from_hammocks_start',
+            title: 'Зібрати дублони з гамаків',
+            trigger: {
+              type: 'step_completed',
+              stepId: 'step_05_build_hammock_after_piers'
+            },
+            target: {
+              buildingId: 'hammock_place',
+              sourceStepIds: [
+                'step_02_build_seven_hammocks',
+                'step_05_build_hammock_after_piers'
+              ]
+            },
+            schedule: {
+              mode: 'recurring',
+              everyMin: 300,
+              firstTrigger: 'immediate'
+            },
+            message: 'Час зібрати дублони з місць для гамака.'
+          },
+          {
+            id: 'rem_start_fishery_production_after_build',
+            title: 'Запустити виробництво у рибалок',
+            trigger: {
+              type: 'build_completed',
+              stepId: 'step_06_build_two_fisheries',
+              allTargetsRequired: true
+            },
+            schedule: {
+              mode: 'one_time',
+              offsetSec: 0
+            },
+            message: 'Будівництво рибалок завершено. Запустіть виробництво.'
+          },
+          {
+            id: 'rem_collect_first_goods_from_fishery',
+            title: 'Перший збір товару',
+            trigger: {
+              type: 'step_completed',
+              stepId: 'step_07_start_fishery_production'
+            },
+            target: {
+              buildingId: 'fishery'
+            },
+            schedule: {
+              mode: 'from_active_job_end',
+              once: true
+            },
+            message: 'Час виконати перший збір товару.'
+          }
+        ]
+      }
+    ]
   },
 
   questLines: [
