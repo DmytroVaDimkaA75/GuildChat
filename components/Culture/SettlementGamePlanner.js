@@ -280,6 +280,10 @@ const SettlementGamePlanner = () => {
   const [openedSectorsFromDb, setOpenedSectorsFromDb] = useState([]);
   const [obstacleRectsFromDb, setObstacleRectsFromDb] = useState([]);
   const [buildingRectsFromDb, setBuildingRectsFromDb] = useState([]);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
   const [placedBuildingsFromDb, setPlacedBuildingsFromDb] = useState([]);
   const [planStepIndex, setPlanStepIndex] = useState(0);
   const [identity, setIdentity] = useState({ userId: null, guildId: null });
@@ -288,6 +292,14 @@ const SettlementGamePlanner = () => {
   const [movePreviewRect, setMovePreviewRect] = useState(null);
   const [buildPreview, setBuildPreview] = useState(null);
   const [deletePreview, setDeletePreview] = useState(null);
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -344,8 +356,64 @@ const SettlementGamePlanner = () => {
           return;
         }
 
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
         if (isMounted) {
           setIdentity({ userId, guildId });
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+        const settlementSnap = await database().ref(`/users/${userId}/${guildId}/settlement`).once('value');
+        const settlementData = settlementSnap.exists() ? settlementSnap.val() : {};
+
+        const openedRaw = settlementData?.openedSectors || [];
+        const obstaclesRaw = settlementData?.sectorObstaclesStatic || {};
+        const buildingsRaw = settlementData?.placedBuildings || [];
+
+        const openedArr = Array.isArray(openedRaw) ? openedRaw : Object.values(openedRaw || {});
+        const buildingsArr = Array.isArray(buildingsRaw) ? buildingsRaw : Object.values(buildingsRaw || {});
+
+        const nextObstacleRects = [];
+        Object.entries(obstaclesRaw || {}).forEach(([sector, obstacles]) => {
+          const sectorRect = parseSectorRange(sector);
+          if (!sectorRect || !Array.isArray(obstacles)) return;
+
+          obstacles.forEach((obstacle) => {
+            const x = Number(obstacle?.x);
+            const y = Number(obstacle?.y);
+            const w = Number(obstacle?.w);
+            const h = Number(obstacle?.h);
+            if (![x, y, w, h].every((value) => Number.isFinite(value))) return;
+
+            nextObstacleRects.push({
+              x: sectorRect.x + x * TILE_SIZE,
+              y: sectorRect.y + y * TILE_SIZE,
+              width: w * TILE_SIZE,
+              height: h * TILE_SIZE,
+            });
+          });
+        });
+
+        const nextBuildingRects = buildingsArr
+          .map((building) => ({
+            rect: parseSectorRange(building?.footprint),
+            buildingId: building?.buildingId || '',
+            instanceId: building?.instanceId || '',
+          }))
+          .filter((item) => item.rect);
+
+        if (isMounted) {
+          setOpenedSectorsFromDb(openedArr.filter(Boolean));
+          setObstacleRectsFromDb(nextObstacleRects);
+          setBuildingRectsFromDb(nextBuildingRects);
+          setIsLoading(false);
+>>>>>>> theirs
         }
 
         settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
@@ -414,8 +482,20 @@ const SettlementGamePlanner = () => {
           setOpenedSectorsFromDb([]);
           setObstacleRectsFromDb([]);
           setBuildingRectsFromDb([]);
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
           setPlacedBuildingsFromDb([]);
           setPlanStepIndex(0);
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
           setIsLoading(false);
         }
       }
@@ -888,12 +968,28 @@ const SettlementGamePlanner = () => {
             </G>
           ))}
 
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
           {obstacleRectsFromDb
             .filter((rect) => {
               if (!activeDeleteStep || !isObstacleDeleteStep(activeDeleteStep)) return true;
               return !deleteTargets.has(rect.footprint);
             })
             .map((rect, idx) => (
+=======
+          {obstacleRectsFromDb.map((rect, idx) => (
+>>>>>>> theirs
+=======
+          {obstacleRectsFromDb.map((rect, idx) => (
+>>>>>>> theirs
+=======
+          {obstacleRectsFromDb.map((rect, idx) => (
+>>>>>>> theirs
+=======
+          {obstacleRectsFromDb.map((rect, idx) => (
+>>>>>>> theirs
             <Rect
               key={`g-obstacle-${idx}`}
               x={rect.x}
@@ -904,6 +1000,10 @@ const SettlementGamePlanner = () => {
             />
           ))}
 
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
           {buildingRectsFromDb
             .filter((building) => {
               if (!activeMoveStep) return true;
@@ -917,12 +1017,28 @@ const SettlementGamePlanner = () => {
               return !deleteTargets.has(building.footprint);
             })
             .map((building, idx) => (
+=======
+          {buildingRectsFromDb.map((building, idx) => (
+>>>>>>> theirs
+=======
+          {buildingRectsFromDb.map((building, idx) => (
+>>>>>>> theirs
+=======
+          {buildingRectsFromDb.map((building, idx) => (
+>>>>>>> theirs
+=======
+          {buildingRectsFromDb.map((building, idx) => (
+>>>>>>> theirs
             <Rect
               key={`g-building-${building.instanceId || idx}`}
               x={building.rect.x}
               y={building.rect.y}
               width={building.rect.width}
               height={building.rect.height}
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
               fill={hexToRgba(getBuildingColor(pack, building.buildingId), 0.9)}
               stroke="#000000"
               strokeWidth={1}
@@ -978,6 +1094,28 @@ const SettlementGamePlanner = () => {
               strokeWidth={1.5}
             />
           ) : null}
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+              fill={building.buildingId === 'town_hall' ? '#E3F2FD' : '#81D4FA'}
+              stroke="#0D47A1"
+              strokeWidth={1}
+            />
+          ))}
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
         </G>
       </Svg>
 
