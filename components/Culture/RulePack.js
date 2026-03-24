@@ -37,9 +37,9 @@ export const piratesRulePack = {
     standard_goods_production_v1: {
       roadsRequired: false,
       recipes: [
-        { durationMin: 300, costDoubloons: 1000, output: 5 },
-        { durationMin: 600, costDoubloons: 2000, output: 10 },
-        { durationMin: 1200, costDoubloons: 4000, output: 20 }
+        { durationSec: 18000, costDoubloons: 1000, output: 5 },
+        { durationSec: 36000, costDoubloons: 2000, output: 10 },
+        { durationSec: 72000, costDoubloons: 4000, output: 20 }
       ],
       randomBonus: { chance: 0.07, multiplier: 4 }
     }
@@ -215,7 +215,7 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'passive',
           storage: 'single_cycle',
-          recipes: [{ durationMin: 300, output: 129 }]
+          recipes: [{ durationSec: 18000, output: 129 }]
         }
       },
       {
@@ -233,7 +233,7 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'passive',
           storage: 'single_cycle',
-          recipes: [{ durationMin: 600, output: 543 }]
+          recipes: [{ durationSec: 36000, output: 543 }]
         }
       },
       {
@@ -251,7 +251,7 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'passive',
           storage: 'single_cycle',
-          recipes: [{ durationMin: 1200, output: 2165 }]
+          recipes: [{ durationSec: 72000, output: 2165 }]
         }
       }
     ],
@@ -272,12 +272,12 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'active',
           recipes: [
-            { durationMin: 5, output: 21 },
-            { durationMin: 15, output: 50 },
-            { durationMin: 60, output: 150 },
-            { durationMin: 300, output: 399 },
-            { durationMin: 600, output: 598 },
-            { durationMin: 1200, output: 1195 }
+            { durationSec: 300, output: 21 },
+            { durationSec: 900, output: 50 },
+            { durationSec: 3600, output: 150 },
+            { durationSec: 18000, output: 399 },
+            { durationSec: 36000, output: 598 },
+            { durationSec: 72000, output: 1195 }
           ]
         }
       },
@@ -296,12 +296,12 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'active',
           recipes: [
-            { durationMin: 5, output: 84 },
-            { durationMin: 15, output: 201 },
-            { durationMin: 60, output: 601 },
-            { durationMin: 300, output: 1601 },
-            { durationMin: 600, output: 2401 },
-            { durationMin: 1200, output: 4802 }
+            { durationSec: 300, output: 84 },
+            { durationSec: 900, output: 201 },
+            { durationSec: 3600, output: 601 },
+            { durationSec: 18000, output: 1601 },
+            { durationSec: 36000, output: 2401 },
+            { durationSec: 72000, output: 4802 }
           ]
         }
       },
@@ -320,12 +320,12 @@ export const piratesRulePack = {
           currency: 'doubloons',
           mode: 'active',
           recipes: [
-            { durationMin: 5, output: 120 },
-            { durationMin: 15, output: 288 },
-            { durationMin: 60, output: 863 },
-            { durationMin: 300, output: 2301 },
-            { durationMin: 600, output: 3151 },
-            { durationMin: 1200, output: 6901 }
+            { durationSec: 300, output: 120 },
+            { durationSec: 900, output: 288 },
+            { durationSec: 3600, output: 863 },
+            { durationSec: 18000, output: 2301 },
+            { durationSec: 36000, output: 3151 },
+            { durationSec: 72000, output: 6901 }
           ]
         }
       }
@@ -342,6 +342,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 36,
         diplomacyProvided: 0,
+        buildTimeSec: 3600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       },
@@ -355,6 +356,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 45,
         diplomacyProvided: 0,
+        buildTimeSec: 3600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       },
@@ -368,6 +370,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 27,
         diplomacyProvided: 0,
+        buildTimeSec: 3600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       },
@@ -381,6 +384,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 24,
         diplomacyProvided: 0,
+        buildTimeSec: 3600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       }
@@ -845,7 +849,7 @@ export const piratesRulePack = {
             },
             schedule: {
               mode: 'recurring',
-              everyMin: 300,
+              everySec: 18000,
               firstTrigger: 'immediate'
             },
             message: 'Час зібрати дублони з місць для гамака.'

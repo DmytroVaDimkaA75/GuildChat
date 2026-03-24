@@ -1005,6 +1005,25 @@ export default function MainContent() {
     }
   };
 
+  const clearCultureNotifications = async (settlementName) => {
+    try {
+      const displayed = await notifee.getDisplayedNotifications();
+      const cultureNotifications = displayed.filter(({ notification }) => {
+        const type = notification?.data?.type;
+        const notificationSettlementName = notification?.data?.settlementName;
+        if (type !== 'culture_build_ready') return false;
+        if (!settlementName) return true;
+        return String(notificationSettlementName) === String(settlementName);
+      });
+
+      await Promise.all(
+        cultureNotifications.map((item) => notifee.cancelDisplayedNotification(item.id))
+      );
+    } catch (error) {
+      console.log('❌ Помилка очищення culture-пушів:', error?.message || String(error));
+    }
+  };
+
   const handleNotificationTap = async (remoteMessage) => {
     const data = remoteMessage?.data || {};
     const messageType = data.type;
@@ -1013,6 +1032,24 @@ export default function MainContent() {
       await clearSectorNotifications();
       runWhenNavigationReady(() => {
         navigationRef.navigate('GBG', { screen: 'GBGScreen' });
+      });
+      return;
+    }
+
+    if (messageType === 'culture_build_ready') {
+      await clearCultureNotifications(data.settlementName);
+      runWhenNavigationReady(() => {
+        if (data.settlementName) {
+          navigationRef.navigate('culture', {
+            screen: 'SettlementGamePlanner',
+            params: {
+              settlementName: data.settlementName,
+            },
+          });
+          return;
+        }
+
+        navigationRef.navigate('culture', { screen: 'CulturalSettlements' });
       });
       return;
     }
@@ -1035,10 +1072,12 @@ export default function MainContent() {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         clearSectorNotifications();
+        clearCultureNotifications();
       }
     });
 
     clearSectorNotifications();
+    clearCultureNotifications();
 
     return () => subscription.remove();
   }, []);
@@ -1110,6 +1149,19 @@ export default function MainContent() {
           importance: AndroidImportance.HIGH,
         });
 
+        await notifee.createChannel({
+          id: 'culture_settlement',
+          name: 'Culture Settlement Notifications',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+        });
+
+        await notifee.createChannel({
+          id: 'culture_settlement_silent',
+          name: 'Culture Settlement Silent',
+          importance: AndroidImportance.HIGH,
+        });
+
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
           console.log("Your FCM Token is:", fcmToken);
@@ -1152,6 +1204,8 @@ export default function MainContent() {
             ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
             : messageType === 'gbg_build_plan'
               ? 'gbg_build'
+            : messageType === 'culture_build_ready'
+              ? (soundFlag ? 'culture_settlement' : 'culture_settlement_silent')
             : messageType === 'chat_message'
               ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
               : 'default';

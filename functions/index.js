@@ -176,6 +176,304 @@ const getSectorOwnerKey = (sectorData) => {
   return String(ownerValue);
 };
 
+const CULTURE_SETTLEMENT_LABELS = {
+  vikings: "Вікінги",
+  japanese: "Феодальна Японія",
+  egyptians: "Стародавній Єгипет",
+  aztecs: "Ацтеки",
+  mughals: "Імперія Моголів",
+  polynesia: "Полінезія",
+  pirates: "Піратське поселення",
+};
+
+const CULTURE_NOTIFICATION_TYPE = "culture_build_ready";
+
+const toPlainArray = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value && typeof value === "object") return Object.values(value).filter(Boolean);
+  return [];
+};
+
+const getCultureSettlementLabel = (settlementName) =>
+  CULTURE_SETTLEMENT_LABELS[String(settlementName || "")] || String(settlementName || "Поселення");
+
+const getCultureQueueKeyBase = (building, index) => {
+  const rawKey = building?.instanceId ? String(building.instanceId) : `idx_${index}`;
+  return rawKey.replace(/[.#$[\]/]/g, "_");
+};
+
+const buildCultureQueueEntry = ({
+  userId,
+  guildId,
+  settlement,
+  building,
+  index,
+  taskType,
+  notificationTime,
+  prevTask,
+}) => {
+  const startedAt = Number(building?.construction?.startedAt) || 0;
+  const buildTimeSec = Number(building?.construction?.buildTimeSec);
+  const category = String(building?.construction?.category || "");
+  const currency = String(building?.construction?.currency || "");
+  const passiveDurationSec = Number(building?.construction?.passiveDurationSec) || 0;
+  const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+
+  if (!Number.isFinite(notificationTime) || notificationTime <= 0) return null;
+
+  const instanceId = building?.instanceId ? String(building.instanceId) : `idx_${index}`;
+  const sameJob =
+    prevTask &&
+    Number(prevTask?.notificationTime) === notificationTime &&
+    String(prevTask?.taskType || "") === taskType;
+
+  return {
+    queueKey,
+    taskType,
+    userId: String(userId),
+    guildId: String(guildId),
+    settlementName: String(settlement?.settlementName || ""),
+    buildingId: String(building?.buildingId || building?.construction?.buildingId || ""),
+    buildingName: String(building?.construction?.buildingName || building?.buildingId || "Будівля"),
+    instanceId,
+    footprint: String(building?.footprint || ""),
+    category,
+    currency,
+    buildTimeSec,
+    passiveDurationSec,
+    startedAt,
+    endsAt: Number(building?.construction?.endsAt) || 0,
+    notificationTime,
+    status: sameJob && prevTask?.status === "sent" ? "sent" : "pending",
+    sentAt: sameJob && prevTask?.status === "sent" ? prevTask?.sentAt || null : null,
+    updatedAt: Date.now(),
+  };
+};
+
+const buildCultureQueueEntries = ({ userId, guildId, settlement, building, index, currentQueue }) => {
+  const constructionEndsAt = Number(building?.construction?.endsAt);
+  const buildTimeSec = Number(building?.construction?.buildTimeSec);
+  const category = String(building?.construction?.category || "");
+  const passiveDurationSec = Number(building?.construction?.passiveDurationSec) || 0;
+  const notifyBuildCompletion = building?.construction?.notifyBuildCompletion === true;
+
+  if (!Number.isFinite(constructionEndsAt) || constructionEndsAt <= 0) return [];
+
+  const entries = [];
+  const buildCompleteNotificationTime = Math.floor(constructionEndsAt / 1000);
+
+  if (notifyBuildCompletion && (category === "residential" || category === "goods")) {
+    const taskType = "build_complete";
+    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+    const task = buildCultureQueueEntry({
+      userId,
+      guildId,
+      settlement,
+      building,
+      index,
+      taskType,
+      notificationTime: buildCompleteNotificationTime,
+      prevTask: currentQueue?.[queueKey],
+    });
+    if (task) entries.push(task);
+  }
+
+  if (category === "residential" && Number.isFinite(buildTimeSec) && buildTimeSec > 0 && Number.isFinite(passiveDurationSec) && passiveDurationSec > 0) {
+    const taskType = "residential_collect";
+    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+    const task = buildCultureQueueEntry({
+      userId,
+      guildId,
+      settlement,
+      building,
+      index,
+      taskType,
+      notificationTime: Math.floor((constructionEndsAt + passiveDurationSec * 1000) / 1000),
+      prevTask: currentQueue?.[queueKey],
+    });
+    if (task) entries.push(task);
+  }
+
+  if (category === "coin" && Number.isFinite(buildTimeSec) && buildTimeSec > 0) {
+    const taskType = "coin_start_production";
+    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+    const task = buildCultureQueueEntry({
+      userId,
+      guildId,
+      settlement,
+      building,
+      index,
+      taskType,
+      notificationTime: buildCompleteNotificationTime,
+      prevTask: currentQueue?.[queueKey],
+    });
+    if (task) entries.push(task);
+  }
+
+  return entries;
+};
+
+const rebuildCultureNotificationQueue = async ({ db, userId, guildId }) => {
+  const [settlementSnap, cultureSnap, currentQueueSnap] = await Promise.all([
+    db.ref(`/users/${userId}/${guildId}/settlement`).once("value"),
+    db.ref(`/users/${userId}/${guildId}/culture`).once("value"),
+    db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`).once("value"),
+  ]);
+
+  const queueRef = db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`);
+  if (!settlementSnap.exists()) {
+    await queueRef.remove();
+    return null;
+  }
+
+  const culture = cultureSnap.exists() ? (cultureSnap.val() || {}) : {};
+  if (culture?.cultureAlarm !== true) {
+    await queueRef.remove();
+    return null;
+  }
+
+  const settlement = settlementSnap.val() || {};
+  const currentQueue = currentQueueSnap.exists() ? (currentQueueSnap.val() || {}) : {};
+  const placedBuildings = toPlainArray(settlement?.placedBuildings);
+  const nextQueue = {};
+
+  placedBuildings.forEach((building, index) => {
+    const tasks = buildCultureQueueEntries({
+      userId,
+      guildId,
+      settlement,
+      building,
+      index,
+      currentQueue,
+    });
+    tasks.forEach((task) => {
+      nextQueue[task.queueKey] = task;
+    });
+  });
+
+  await queueRef.set(Object.keys(nextQueue).length ? nextQueue : null);
+  return null;
+};
+
+const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task }) => {
+  const cultureSnap = await db.ref(`/users/${userId}/${guildId}/culture`).once("value");
+  const culture = cultureSnap.exists() ? (cultureSnap.val() || {}) : {};
+  if (culture?.cultureAlarm !== true) {
+    return db.ref(queuePath).remove();
+  }
+
+  const tokenSnap = await db.ref(`/users/${userId}/fcmToken`).once("value");
+  const token = tokenSnap.exists() ? tokenSnap.val() : null;
+  if (!token) {
+    return db.ref(queuePath).update({
+      status: "pending",
+      lastAttemptAt: Date.now(),
+      lastError: "no_token",
+    });
+  }
+
+  const nowMs = Date.now();
+  let soundBySchedule = true;
+  try {
+    const { timeZone, schedules } = await getUserScheduleForNotifications(userId);
+    soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
+  } catch (e) {
+    logger.error("[Culture] schedule check error:", e);
+    soundBySchedule = true;
+  }
+
+  const settlementLabel = getCultureSettlementLabel(task?.settlementName);
+  const buildingName = String(task?.buildingName || "Будівля");
+  const currency = String(task?.currency || "").trim();
+  const titleText = `🏝️ ${settlementLabel}`;
+  let bodyText = `${buildingName} завершив будівництво.`;
+
+  if (task?.taskType === "residential_collect") {
+    bodyText = `Зберіть ${currency || "ресурси"} з ${buildingName}`;
+  } else if (task?.taskType === "coin_start_production") {
+    bodyText = `Запустіть виробництво ${currency || "ресурсів"} в ${buildingName}`;
+  }
+
+  const payload = soundBySchedule
+    ? {
+        token,
+        data: {
+          type: CULTURE_NOTIFICATION_TYPE,
+          guildId: String(guildId),
+          settlementName: String(task?.settlementName || ""),
+          buildingId: String(task?.buildingId || ""),
+          buildingName,
+          title: titleText,
+          body: bodyText,
+          sound: "1",
+        },
+        android: {
+          priority: "high",
+          notification: {
+            title: titleText,
+            body: bodyText,
+            sound: "default",
+            channel_id: "culture_settlement",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title: titleText, body: bodyText },
+              sound: "default",
+              "content-available": 1,
+            },
+          },
+        },
+      }
+    : {
+        token,
+        data: {
+          type: CULTURE_NOTIFICATION_TYPE,
+          guildId: String(guildId),
+          settlementName: String(task?.settlementName || ""),
+          buildingId: String(task?.buildingId || ""),
+          buildingName,
+          title: titleText,
+          body: bodyText,
+          sound: "0",
+        },
+        android: {
+          priority: "high",
+          notification: {
+            title: titleText,
+            body: bodyText,
+            channel_id: "culture_settlement_silent",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title: titleText, body: bodyText },
+              "content-available": 1,
+            },
+          },
+        },
+      };
+
+  try {
+    await admin.messaging().send(payload);
+    return db.ref(queuePath).update({
+      status: "sent",
+      sentAt: admin.database.ServerValue.TIMESTAMP,
+      lastAttemptAt: Date.now(),
+      lastError: null,
+    });
+  } catch (e) {
+    logger.error("[Culture] send push error:", e);
+    return db.ref(queuePath).update({
+      status: "pending",
+      lastAttemptAt: Date.now(),
+      lastError: e?.message || "send_failed",
+    });
+  }
+};
+
 /**
  * =====================================================================
  * ✅ Schedule helpers (локальний час користувача)
@@ -627,6 +925,77 @@ exports.sendChatNotification = onValueCreated(
     if (!messageData) return null;
 
     await sendChatNotificationForMessage({ guildId, chatId, messageData, db: admin.database() });
+    return null;
+  }
+);
+
+exports.syncCultureNotifications = onValueWritten(
+  {
+    ref: "/users/{userId}/{guildId}/settlement",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const { userId, guildId } = event.params;
+    await rebuildCultureNotificationQueue({ db: admin.database(), userId, guildId });
+    return null;
+  }
+);
+
+exports.syncCultureNotificationsOnAlarmChange = onValueWritten(
+  {
+    ref: "/users/{userId}/{guildId}/culture/cultureAlarm",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const { userId, guildId } = event.params;
+    await rebuildCultureNotificationQueue({ db: admin.database(), userId, guildId });
+    return null;
+  }
+);
+
+exports.processCultureNotificationQueue = onSchedule(
+  { schedule: "every 1 minutes", region: "europe-west1", timeZone: "Europe/Kiev" },
+  async () => {
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const db = admin.database();
+    const guildsSnap = await db.ref("guilds").once("value");
+    if (!guildsSnap.exists()) return null;
+
+    const guildIds = Object.keys(guildsSnap.val() || {});
+    await Promise.all(
+      guildIds.map(async (guildId) => {
+        const membersSnap = await db.ref(`/guilds/${guildId}/guildUsers`).once("value");
+        if (!membersSnap.exists()) return;
+
+          const memberIds = Object.keys(membersSnap.val() || {});
+          await Promise.all(
+            memberIds.map(async (userId) => {
+            const queueRef = db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`);
+            const snapshot = await queueRef.orderByChild("notificationTime").endAt(nowInSeconds).once("value");
+            if (!snapshot.exists()) return;
+
+            const tasks = [];
+            snapshot.forEach((child) => {
+              const task = child.val();
+              if (task?.status === "pending") {
+                tasks.push(
+                  sendCulturePushAndMarkSent({
+                    db,
+                    userId,
+                    guildId,
+                    queuePath: `/users/${userId}/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
+                    task,
+                  })
+                );
+              }
+            });
+
+            await Promise.all(tasks);
+          })
+        );
+      })
+    );
+
     return null;
   }
 );
