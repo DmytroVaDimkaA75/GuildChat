@@ -197,6 +197,15 @@ const toPlainArray = (value) => {
 const getCultureSettlementLabel = (settlementName) =>
   CULTURE_SETTLEMENT_LABELS[String(settlementName || "")] || String(settlementName || "Поселення");
 
+const normalizeQueueComparable = (value) => JSON.stringify(value || null);
+
+const stripCultureNotificationQueue = (settlement) => {
+  if (!settlement || typeof settlement !== "object") return settlement || null;
+  const next = { ...settlement };
+  delete next.cultureNotificationQueue;
+  return next;
+};
+
 const getCultureQueueKeyBase = (building, index) => {
   const rawKey = building?.instanceId ? String(building.instanceId) : `idx_${index}`;
   return rawKey.replace(/[.#$[\]/]/g, "_");
@@ -246,7 +255,6 @@ const buildCultureQueueEntry = ({
     notificationTime,
     status: sameJob && prevTask?.status === "sent" ? "sent" : "pending",
     sentAt: sameJob && prevTask?.status === "sent" ? prevTask?.sentAt || null : null,
-    updatedAt: Date.now(),
   };
 };
 
@@ -350,6 +358,10 @@ const rebuildCultureNotificationQueue = async ({ db, userId, guildId }) => {
       nextQueue[task.queueKey] = task;
     });
   });
+
+  if (normalizeQueueComparable(currentQueue) === normalizeQueueComparable(Object.keys(nextQueue).length ? nextQueue : null)) {
+    return null;
+  }
 
   await queueRef.set(Object.keys(nextQueue).length ? nextQueue : null);
   return null;
@@ -936,6 +948,13 @@ exports.syncCultureNotifications = onValueWritten(
   },
   async (event) => {
     const { userId, guildId } = event.params;
+    const beforeSettlement = stripCultureNotificationQueue(event.data.before.exists() ? event.data.before.val() : null);
+    const afterSettlement = stripCultureNotificationQueue(event.data.after.exists() ? event.data.after.val() : null);
+
+    if (normalizeQueueComparable(beforeSettlement) === normalizeQueueComparable(afterSettlement)) {
+      return null;
+    }
+
     await rebuildCultureNotificationQueue({ db: admin.database(), userId, guildId });
     return null;
   }
