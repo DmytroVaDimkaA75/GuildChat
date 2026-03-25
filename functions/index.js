@@ -264,6 +264,7 @@ const buildCultureQueueEntries = ({ userId, guildId, settlement, building, index
   const category = String(building?.construction?.category || "");
   const passiveDurationSec = Number(building?.construction?.passiveDurationSec) || 0;
   const notifyBuildCompletion = building?.construction?.notifyBuildCompletion === true;
+  const notifications = building?.construction?.notifications || {};
 
   if (!Number.isFinite(constructionEndsAt) || constructionEndsAt <= 0) return [];
 
@@ -272,50 +273,56 @@ const buildCultureQueueEntries = ({ userId, guildId, settlement, building, index
 
   if (notifyBuildCompletion && (category === "residential" || category === "goods")) {
     const taskType = "build_complete";
-    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
-    const task = buildCultureQueueEntry({
-      userId,
-      guildId,
-      settlement,
-      building,
-      index,
-      taskType,
-      notificationTime: buildCompleteNotificationTime,
-      prevTask: currentQueue?.[queueKey],
-    });
-    if (task) entries.push(task);
+    if (!notifications?.[taskType]) {
+      const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+      const task = buildCultureQueueEntry({
+        userId,
+        guildId,
+        settlement,
+        building,
+        index,
+        taskType,
+        notificationTime: buildCompleteNotificationTime,
+        prevTask: currentQueue?.[queueKey],
+      });
+      if (task) entries.push(task);
+    }
   }
 
   if (category === "residential" && Number.isFinite(buildTimeSec) && buildTimeSec > 0 && Number.isFinite(passiveDurationSec) && passiveDurationSec > 0) {
     const taskType = "residential_collect";
-    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
-    const task = buildCultureQueueEntry({
-      userId,
-      guildId,
-      settlement,
-      building,
-      index,
-      taskType,
-      notificationTime: Math.floor((constructionEndsAt + passiveDurationSec * 1000) / 1000),
-      prevTask: currentQueue?.[queueKey],
-    });
-    if (task) entries.push(task);
+    if (!notifications?.[taskType]) {
+      const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+      const task = buildCultureQueueEntry({
+        userId,
+        guildId,
+        settlement,
+        building,
+        index,
+        taskType,
+        notificationTime: Math.floor((constructionEndsAt + passiveDurationSec * 1000) / 1000),
+        prevTask: currentQueue?.[queueKey],
+      });
+      if (task) entries.push(task);
+    }
   }
 
   if (category === "coin" && Number.isFinite(buildTimeSec) && buildTimeSec > 0) {
     const taskType = "coin_start_production";
-    const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
-    const task = buildCultureQueueEntry({
-      userId,
-      guildId,
-      settlement,
-      building,
-      index,
-      taskType,
-      notificationTime: buildCompleteNotificationTime,
-      prevTask: currentQueue?.[queueKey],
-    });
-    if (task) entries.push(task);
+    if (!notifications?.[taskType]) {
+      const queueKey = `${getCultureQueueKeyBase(building, index)}__${taskType}`;
+      const task = buildCultureQueueEntry({
+        userId,
+        guildId,
+        settlement,
+        building,
+        index,
+        taskType,
+        notificationTime: buildCompleteNotificationTime,
+        prevTask: currentQueue?.[queueKey],
+      });
+      if (task) entries.push(task);
+    }
   }
 
   return entries;
@@ -365,6 +372,31 @@ const rebuildCultureNotificationQueue = async ({ db, userId, guildId }) => {
 
   await queueRef.set(Object.keys(nextQueue).length ? nextQueue : null);
   return null;
+};
+
+const markConstructionTaskNotified = async ({ db, userId, guildId, instanceId, taskType }) => {
+  if (!instanceId || !taskType) return false;
+
+  const placedBuildingsRef = db.ref(`/users/${userId}/${guildId}/settlement/placedBuildings`);
+  const snapshot = await placedBuildingsRef.once("value");
+  if (!snapshot.exists()) return false;
+
+  let targetKey = null;
+  snapshot.forEach((child) => {
+    if (String(child.val()?.instanceId || "") === String(instanceId)) {
+      targetKey = child.key;
+      return true;
+    }
+    return false;
+  });
+
+  if (!targetKey) return false;
+
+  await placedBuildingsRef
+    .child(`${targetKey}/construction/notifications/${taskType}`)
+    .set(admin.database.ServerValue.TIMESTAMP);
+
+  return true;
 };
 
 const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task }) => {
@@ -470,12 +502,15 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task
 
   try {
     await admin.messaging().send(payload);
-    return db.ref(queuePath).update({
-      status: "sent",
-      sentAt: admin.database.ServerValue.TIMESTAMP,
-      lastAttemptAt: Date.now(),
-      lastError: null,
+    await markConstructionTaskNotified({
+      db,
+      userId,
+      guildId,
+      instanceId: task?.instanceId,
+      taskType: task?.taskType,
     });
+
+    return db.ref(queuePath).remove();
   } catch (e) {
     logger.error("[Culture] send push error:", e);
     return db.ref(queuePath).update({

@@ -311,7 +311,7 @@ const formatTaskText = (step, pack) => {
     return `Видалити перешкоду${targets.length ? ` (${targets.join(', ')})` : ''}`;
   }
   if (step.actionType === 'start_production') {
-    return `Запустити виробництво: ${buildingName}`;
+    return `Запустити виробництво в ${buildingName}`;
   }
   return step.description || step.id;
 };
@@ -515,14 +515,39 @@ const SettlementGamePlanner = () => {
       ? getStepTargetFootprints(currentStep).map(parseGridRange).filter(Boolean)
       : [];
 
+    let isCurrentStepReady = true;
+    let waitingText = '';
+    let displayTargetRects = currentStepTargetRects;
+
+    if (currentStep?.actionType === 'start_production') {
+      const targets = new Set(getStepTargetFootprints(currentStep));
+      const matchingBuildings = placedBuildingsFromDb.filter((building) => {
+        if (building?.buildingId !== currentStep.buildingId) return false;
+        const footprint = normalizeFootprint(building?.footprint);
+        return !targets.size || targets.has(footprint);
+      });
+
+      const allNotified =
+        matchingBuildings.length > 0 &&
+        matchingBuildings.every((building) => Number(building?.construction?.notifications?.build_complete) > 0);
+
+      if (!allNotified) {
+        isCurrentStepReady = false;
+        waitingText = 'Очікування завершення будівництва';
+        displayTargetRects = [];
+      }
+    }
+
     return {
       currentStep,
       completedCount,
       totalSteps: steps.length,
       isCompleted,
-      currentStepTargetRects,
+      currentStepTargetRects: displayTargetRects,
+      isCurrentStepReady,
+      waitingText,
     };
-  }, [effectiveStarterPlan, planStepIndex]);
+  }, [effectiveStarterPlan, planStepIndex, placedBuildingsFromDb]);
 
   useEffect(() => {
     const step = starterPlanProgress?.currentStep;
@@ -1052,18 +1077,22 @@ const SettlementGamePlanner = () => {
             ? 'Для цього поселення стартовий план не задано.'
             : starterPlanProgress?.isCompleted
             ? 'Стартовий план завершено.'
+            : !starterPlanProgress?.isCurrentStepReady
+            ? starterPlanProgress?.waitingText
             : formatTaskText(starterPlanProgress?.currentStep, pack)}
         </Text>
-        <TouchableOpacity
-          style={[
-            styles.doneButton,
-            (isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep) && styles.doneButtonDisabled,
-          ]}
-          disabled={isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep}
-          onPress={handleCompleteCurrentTask}
-        >
-          <Text style={styles.doneButtonText}>{isCompletingStep ? 'Збереження...' : 'Виконано'}</Text>
-        </TouchableOpacity>
+        {starterPlanProgress?.isCurrentStepReady ? (
+          <TouchableOpacity
+            style={[
+              styles.doneButton,
+              (isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep) && styles.doneButtonDisabled,
+            ]}
+            disabled={isCompletingStep || starterPlanProgress?.isCompleted || !starterPlanProgress?.currentStep}
+            onPress={handleCompleteCurrentTask}
+          >
+            <Text style={styles.doneButtonText}>{isCompletingStep ? 'Збереження...' : 'Виконано'}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
     </View>
