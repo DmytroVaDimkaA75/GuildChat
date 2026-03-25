@@ -189,11 +189,26 @@ const getBuildingCurrency = (pack, buildingId) => {
   return building?.coinOutput?.currency || null;
 };
 
+const getBuildingOutputLabel = (pack, buildingId) => {
+  const building = getBuildingDefinition(pack, buildingId);
+  return building?.coinOutput?.currency || building?.produces || null;
+};
+
 const getFirstCoinRecipeDurationSec = (pack, buildingId) => {
   const building = getBuildingDefinition(pack, buildingId);
   const recipes = Array.isArray(building?.coinOutput?.recipes) ? building.coinOutput.recipes : [];
   const firstDurationSec = Number(recipes?.[0]?.durationSec);
   return Number.isFinite(firstDurationSec) && firstDurationSec > 0 ? firstDurationSec : 0;
+};
+
+const getDefaultGoodsProductionDurationSec = (pack, buildingId) => {
+  const building = getBuildingDefinition(pack, buildingId);
+  const templateRef = building?.templateRef;
+  const recipes = Array.isArray(pack?.productionTemplates?.[templateRef]?.recipes)
+    ? pack.productionTemplates[templateRef].recipes
+    : [];
+  const firstDurationSec = Number(recipes?.[0]?.durationSec);
+  return Number.isFinite(firstDurationSec) && firstDurationSec > 0 ? firstDurationSec : 18000;
 };
 
 const isObstacleDeleteStep = (step) =>
@@ -518,6 +533,7 @@ const SettlementGamePlanner = () => {
     let isCurrentStepReady = true;
     let waitingText = '';
     let displayTargetRects = currentStepTargetRects;
+    let targetHighlightVariant = 'yellow';
 
     if (currentStep?.actionType === 'start_production') {
       const targets = new Set(getStepTargetFootprints(currentStep));
@@ -535,6 +551,8 @@ const SettlementGamePlanner = () => {
         isCurrentStepReady = false;
         waitingText = 'Очікування завершення будівництва';
         displayTargetRects = [];
+      } else {
+        targetHighlightVariant = 'green';
       }
     }
 
@@ -546,6 +564,7 @@ const SettlementGamePlanner = () => {
       currentStepTargetRects: displayTargetRects,
       isCurrentStepReady,
       waitingText,
+      targetHighlightVariant,
     };
   }, [effectiveStarterPlan, planStepIndex, placedBuildingsFromDb]);
 
@@ -775,6 +794,7 @@ const SettlementGamePlanner = () => {
         const buildingName = getBuildingDisplayName(pack, step.buildingId);
         const shouldTrackConstruction = shouldTrackConstructionTimers(pack, step.buildingId);
         const currency = getBuildingCurrency(pack, step.buildingId);
+        const outputLabel = getBuildingOutputLabel(pack, step.buildingId);
         const passiveDurationSec =
           category === 'residential' ? getFirstCoinRecipeDurationSec(pack, step.buildingId) : 0;
 
@@ -798,6 +818,7 @@ const SettlementGamePlanner = () => {
                   buildingName,
                   category,
                   currency: currency || null,
+                  outputLabel: outputLabel || null,
                   passiveDurationSec,
                   notifyBuildCompletion: shouldNotifyBuildCompletion(pack, step.buildingId),
                 }
@@ -850,6 +871,11 @@ const SettlementGamePlanner = () => {
       }
 
       if (step.actionType === 'start_production') {
+        const productionStartedAt = Date.now();
+        const defaultGoodsDurationSec =
+          step.buildingId ? getDefaultGoodsProductionDurationSec(pack, step.buildingId) : 18000;
+        const outputLabel = getBuildingOutputLabel(pack, step.buildingId);
+        const buildingName = getBuildingDisplayName(pack, step.buildingId);
         const targets = new Set(getStepTargetFootprints(step));
         nextPlacedBuildings = nextPlacedBuildings.map((building) => {
           if (building?.buildingId !== step.buildingId) return building;
@@ -858,7 +884,11 @@ const SettlementGamePlanner = () => {
             return {
               ...building,
               job: {
-                startedAt: Date.now(),
+                startedAt: productionStartedAt,
+                endsAt: productionStartedAt + defaultGoodsDurationSec * 1000,
+                durationSec: defaultGoodsDurationSec,
+                outputLabel: outputLabel || null,
+                buildingName,
               },
             };
           }
@@ -1027,8 +1057,16 @@ const SettlementGamePlanner = () => {
               y={rect.y}
               width={rect.width}
               height={rect.height}
-              fill="rgba(255, 235, 59, 0.2)"
-              stroke="#FFEB3B"
+              fill={
+                starterPlanProgress?.targetHighlightVariant === 'green'
+                  ? 'rgba(76, 175, 80, 0.2)'
+                  : 'rgba(255, 235, 59, 0.2)'
+              }
+              stroke={
+                starterPlanProgress?.targetHighlightVariant === 'green'
+                  ? '#4CAF50'
+                  : '#FFEB3B'
+              }
               strokeWidth={1.5}
             />
           ))}

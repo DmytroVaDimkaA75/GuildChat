@@ -342,7 +342,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 36,
         diplomacyProvided: 0,
-        buildTimeSec: 3600,
+        buildTimeSec: 600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       },
