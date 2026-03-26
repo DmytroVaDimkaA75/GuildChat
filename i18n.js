@@ -24,6 +24,13 @@ const deepMerge = (target, source) => {
 const ukTranslation = {
   welcome: "Ласкаво просимо",
   server: "Сервер",
+  cultureResources: {
+    fish: "рибу",
+    spice: "спеції",
+    rum: "ром",
+    cannons: "гармати",
+    doubloons: "дублони"
+  },
   roleSelection: {
     title: "Виберіть роль:",
     admin: "Адміністратор",
@@ -304,6 +311,13 @@ const ukTranslation = {
 const ruTranslation = {
   welcome: "Добро пожаловать",
   server: "Сервер",
+  cultureResources: {
+    fish: "рыбу",
+    spice: "специи",
+    rum: "ром",
+    cannons: "пушки",
+    doubloons: "дублоны"
+  },
   roleSelection: {
     title: "Выберите роль:",
     admin: "Администратор",
@@ -584,6 +598,13 @@ const ruTranslation = {
 const beTranslation = {
   welcome: "Сардэчна запрашаем",
   server: "Сервер",
+  cultureResources: {
+    fish: "рыбу",
+    spice: "спецыі",
+    rum: "ром",
+    cannons: "гарматы",
+    doubloons: "дублоны"
+  },
   roleSelection: {
     title: "Выберыце ролю:",
     admin: "Адміністратар",
@@ -864,6 +885,13 @@ const beTranslation = {
 const deTranslation = {
   welcome: "Willkommen",
   server: "Server",
+  cultureResources: {
+    fish: "Fisch",
+    spice: "Gewürze",
+    rum: "Rum",
+    cannons: "Kanonen",
+    doubloons: "Dublonen"
+  },
   roleSelection: {
     title: "Wählen Sie eine Rolle:",
     admin: "Administrator",
@@ -1144,6 +1172,13 @@ const deTranslation = {
 const enOverrides = {
   welcome: "Welcome",
   server: "Server",
+  cultureResources: {
+    fish: "fish",
+    spice: "spice",
+    rum: "rum",
+    cannons: "cannons",
+    doubloons: "doubloons"
+  },
   roleSelection: {
     title: "Choose a role:",
     admin: "Administrator",
@@ -1282,6 +1317,13 @@ const enOverrides = {
 const plOverrides = {
   welcome: "Witamy",
   server: "Serwer",
+  cultureResources: {
+    fish: "ryby",
+    spice: "przyprawy",
+    rum: "rum",
+    cannons: "armaty",
+    doubloons: "dublony"
+  },
   roleSelection: {
     title: "Wybierz rolę:",
     admin: "Administrator",

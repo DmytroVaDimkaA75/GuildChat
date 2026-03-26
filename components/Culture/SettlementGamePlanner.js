@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { ActivityIndicator, Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import MapSvg from './map.svg';
 import RULE_PACKS from './RulePack';
@@ -26,6 +27,7 @@ const BUILDING_COLOR = {
   diplomacy: '#6D9EEB',
   goods: '#E60A18',
 };
+const TOTAL_MINUTES = 24 * 60;
 
 const lettersToIndex = (letters) => {
   let idx = 0;
@@ -175,7 +177,8 @@ const getBuildingBuildTimeSec = (pack, buildingId) => {
 const shouldNotifyBuildCompletion = (pack, buildingId) => {
   const category = getBuildingCategory(pack, buildingId);
   const buildTimeSec = getBuildingBuildTimeSec(pack, buildingId);
-  return (category === 'residential' || category === 'goods') && buildTimeSec >= 3600;
+  if (category === 'goods') return buildTimeSec > 0;
+  return category === 'residential' && buildTimeSec >= 3600;
 };
 
 const shouldTrackConstructionTimers = (pack, buildingId) => {
@@ -209,6 +212,275 @@ const getDefaultGoodsProductionDurationSec = (pack, buildingId) => {
     : [];
   const firstDurationSec = Number(recipes?.[0]?.durationSec);
   return Number.isFinite(firstDurationSec) && firstDurationSec > 0 ? firstDurationSec : 18000;
+};
+
+const getGoodsProductionRecipes = (pack, buildingId) => {
+  const building = getBuildingDefinition(pack, buildingId);
+  const templateRef = building?.templateRef;
+  const recipes = Array.isArray(pack?.productionTemplates?.[templateRef]?.recipes)
+    ? pack.productionTemplates[templateRef].recipes
+    : [];
+
+  return recipes
+    .map((recipe) => ({
+      ...recipe,
+      durationSec: Number(recipe?.durationSec) || 0,
+    }))
+    .filter((recipe) => recipe.durationSec > 0)
+    .sort((a, b) => a.durationSec - b.durationSec);
+};
+
+const dayKeyToIndex = (key) => {
+  if (typeof key !== 'string') return null;
+  if (key.startsWith('d')) {
+    const n = Number(key.slice(1));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(key);
+  return Number.isFinite(n) ? n : null;
+};
+
+const weekKeyToIndex = (key) => {
+  if (typeof key !== 'string') return null;
+  if (key.startsWith('w')) {
+    const n = Number(key.slice(1));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(key);
+  return Number.isFinite(n) ? n : null;
+};
+
+const weeklyIndexToKey = (idx) => `d${idx}`;
+const rollingWeekIndexToKey = (idx) => `w${idx}`;
+const rollingDayIndexToKey = (idx) => `d${idx}`;
+
+const normalizeWeekly = (weeklyRaw) => {
+  const out = {};
+  if (!weeklyRaw) return out;
+
+  if (Array.isArray(weeklyRaw)) {
+    for (let i = 0; i < weeklyRaw.length; i += 1) {
+      const daySlots = weeklyRaw[i];
+      if (!Array.isArray(daySlots) || !daySlots.length) continue;
+      out[weeklyIndexToKey(i)] = daySlots;
+    }
+    return out;
+  }
+
+  if (typeof weeklyRaw === 'object') {
+    Object.keys(weeklyRaw).forEach((k) => {
+      const idx = dayKeyToIndex(k);
+      if (idx === null) return;
+      const daySlots = weeklyRaw[k];
+      if (!Array.isArray(daySlots) || !daySlots.length) return;
+      out[weeklyIndexToKey(idx)] = daySlots;
+    });
+  }
+
+  return out;
+};
+
+const normalizeRollingWeeks = (rollingWeeksRaw) => {
+  if (!rollingWeeksRaw || typeof rollingWeeksRaw !== 'object') return null;
+
+  const anchorAt = rollingWeeksRaw.anchorAt;
+  const weeksRaw = rollingWeeksRaw.weeks;
+  const weeksOut = {};
+
+  if (!weeksRaw || typeof weeksRaw !== 'object') {
+    return { anchorAt, weeks: weeksOut };
+  }
+
+  Object.keys(weeksRaw).forEach((wk) => {
+    const wIndex = weekKeyToIndex(wk);
+    if (wIndex === null) return;
+
+    const weekObj = weeksRaw[wk];
+    const daysRaw = weekObj?.days;
+    const wKey = rollingWeekIndexToKey(wIndex);
+    if (!weeksOut[wKey]) weeksOut[wKey] = { days: {} };
+
+    if (!daysRaw || typeof daysRaw !== 'object') return;
+
+    Object.keys(daysRaw).forEach((dk) => {
+      const dIndex = dayKeyToIndex(dk);
+      if (dIndex === null) return;
+
+      const slots = daysRaw[dk];
+      if (!Array.isArray(slots) || !slots.length) return;
+
+      const dKey = rollingDayIndexToKey(dIndex);
+      weeksOut[wKey].days[dKey] = slots;
+    });
+  });
+
+  return { anchorAt, weeks: weeksOut };
+};
+
+const getLocalParts = (utcMs, timeZone) => {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: timeZone || 'UTC',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const map = {};
+  parts.forEach((part) => {
+    map[part.type] = part.value;
+  });
+
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    weekdayShort: map.weekday,
+  };
+};
+
+const weekdayShortToMon0 = (value) => {
+  const map = {
+    Mon: 0,
+    Tue: 1,
+    Wed: 2,
+    Thu: 3,
+    Fri: 4,
+    Sat: 5,
+    Sun: 6,
+  };
+  return map[value] ?? null;
+};
+
+const localYmdToUtcMidnightMs = (year, month, day) => Date.UTC(year, month - 1, day);
+
+const isMinuteInsideSlots = (minuteOfDay, slots) => {
+  if (!Array.isArray(slots) || !slots.length) return false;
+  const minute = Math.max(0, Math.min(minuteOfDay, TOTAL_MINUTES));
+  for (const slot of slots) {
+    const start = Number(slot?.startMinutes);
+    const end = Number(slot?.endMinutes);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (minute >= start && minute < end) return true;
+  }
+  return false;
+};
+
+const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
+  if (!scheduleData) return true;
+
+  const tz = timeZone || 'UTC';
+  const parts = getLocalParts(utcMs, tz);
+  const dayIndex = weekdayShortToMon0(parts.weekdayShort);
+  if (dayIndex === null) return true;
+
+  const minuteOfDay = parts.hour * 60 + parts.minute;
+
+  if (scheduleData.weekly) {
+    const weekly = normalizeWeekly(scheduleData.weekly);
+    const slots = weekly[weeklyIndexToKey(dayIndex)] || [];
+    return isMinuteInsideSlots(minuteOfDay, slots);
+  }
+
+  if (scheduleData.rollingWeeks?.weeks) {
+    const rolling = normalizeRollingWeeks(scheduleData.rollingWeeks);
+    const anchorAt = Number(rolling?.anchorAt);
+    const weeks = rolling?.weeks || {};
+    if (!Number.isFinite(anchorAt)) return true;
+
+    const nowLocalMidUtc = localYmdToUtcMidnightMs(parts.year, parts.month, parts.day);
+    const anchorParts = getLocalParts(anchorAt * 1000, tz);
+    const anchorLocalMidUtc = localYmdToUtcMidnightMs(anchorParts.year, anchorParts.month, anchorParts.day);
+    const diffDays = Math.floor((nowLocalMidUtc - anchorLocalMidUtc) / (24 * 60 * 60 * 1000));
+    const weekIndex = Math.floor(diffDays / 7);
+    const dayInWeek = ((diffDays % 7) + 7) % 7;
+
+    const wKey = rollingWeekIndexToKey(weekIndex);
+    const dKey = rollingDayIndexToKey(dayInWeek);
+    const slots = weeks?.[wKey]?.days?.[dKey] || [];
+    return isMinuteInsideSlots(minuteOfDay, slots);
+  }
+
+  return true;
+};
+
+const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
+  if (!Array.isArray(schedules) || !schedules.length) return true;
+  return schedules.some((schedule) => isUserActiveNow(schedule, utcMs, timeZone));
+};
+
+const getPreferredSchedules = (setting) => {
+  const timeZone = setting?.timeZone || 'UTC';
+  const preferredId = setting?.notificationScheduleId || setting?.activeScheduleId || null;
+  const schedulesMap = setting?.schedules && typeof setting.schedules === 'object' ? setting.schedules : {};
+
+  if (preferredId && schedulesMap[preferredId]) {
+    return { timeZone, schedules: [schedulesMap[preferredId]] };
+  }
+
+  return {
+    timeZone,
+    schedules: Object.keys(schedulesMap)
+      .map((id) => schedulesMap[id])
+      .filter((item) => item && typeof item === 'object'),
+  };
+};
+
+const getRecommendedGoodsProductionDurationSec = ({
+  pack,
+  buildingId,
+  startAtMs,
+  schedules,
+  timeZone,
+}) => {
+  const recipes = getGoodsProductionRecipes(pack, buildingId);
+  if (!recipes.length) return 18000;
+
+  const recipe5h = recipes.find((recipe) => recipe.durationSec === 18000) || recipes[0];
+  const recipe10h = recipes.find((recipe) => recipe.durationSec === 36000) || null;
+  const fiveHourEndsAt = startAtMs + recipe5h.durationSec * 1000;
+
+  if (isUserActiveNowBySchedules(schedules, fiveHourEndsAt, timeZone)) {
+    return recipe5h.durationSec;
+  }
+
+  return recipe10h?.durationSec || recipe5h.durationSec;
+};
+
+const formatProductionDurationLabel = (durationSec) => {
+  const hours = Number(durationSec) / 3600;
+  if (!Number.isFinite(hours) || hours <= 0) return '';
+  if (Number.isInteger(hours)) return `${hours}-ти годинне`;
+  return `${hours}-годинне`;
+};
+
+const getLocalizedCultureResourceLabel = (resourceKey, t) => {
+  const normalizedKey = String(resourceKey || '').trim();
+  if (!normalizedKey) return '';
+  return t ? t(`cultureResources.${normalizedKey}`, { defaultValue: normalizedKey }) : normalizedKey;
+};
+
+const isConstructionCompleted = (building, nowMs) => {
+  const notifiedAt = Number(building?.construction?.notifications?.build_complete) || 0;
+  if (notifiedAt > 0) return true;
+  const endsAt = Number(building?.construction?.endsAt) || 0;
+  return endsAt > 0 && nowMs >= endsAt;
+};
+
+const isJobReadyToCollect = (building, nowMs) => {
+  const endsAt = Number(building?.job?.endsAt) || 0;
+  return endsAt > 0 && nowMs >= endsAt;
+};
+
+const isJobRunning = (building, nowMs) => {
+  const endsAt = Number(building?.job?.endsAt) || 0;
+  return endsAt > nowMs;
 };
 
 const isObstacleDeleteStep = (step) =>
@@ -306,7 +578,7 @@ const getBuildingDisplayName = (pack, buildingId) => {
   return buildingId;
 };
 
-const formatTaskText = (step, pack) => {
+const formatTaskText = (step, pack, t) => {
   if (!step) return 'Стартовий план завершено.';
   const buildingName = getBuildingDisplayName(pack, step.buildingId);
 
@@ -326,12 +598,135 @@ const formatTaskText = (step, pack) => {
     return `Видалити перешкоду${targets.length ? ` (${targets.join(', ')})` : ''}`;
   }
   if (step.actionType === 'start_production') {
+    const durationLabel = formatProductionDurationLabel(step?.recommendedProductionDurationSec);
+    const outputLabel = getLocalizedCultureResourceLabel(
+      step?.outputLabel || getBuildingOutputLabel(pack, step.buildingId),
+      t
+    );
+    if (durationLabel && outputLabel) {
+      return `Запустити ${durationLabel} виробництво ${outputLabel} в ${buildingName}`;
+    }
+    if (durationLabel) {
+      return `Запустити ${durationLabel} виробництво в ${buildingName}`;
+    }
     return `Запустити виробництво в ${buildingName}`;
+  }
+  if (step.actionType === 'collect') {
+    const outputLabel = getLocalizedCultureResourceLabel(step?.outputLabel, t);
+    return `Зібрати ${outputLabel || 'товари'} з ${buildingName}`;
   }
   return step.description || step.id;
 };
 
+const buildContinuousGoodsCycleState = ({ plan, pack, placedBuildings, nowMs }) => {
+  if (plan?.completion?.type !== 'first_goods_collect') return null;
+
+  const preferredCategory = String(plan?.completion?.fromBuildingCategory || 'goods');
+  const steps = Array.isArray(plan?.steps) ? [...plan.steps] : [];
+  const seedStep = [...steps].reverse().find(
+    (step) =>
+      step?.actionType === 'start_production' &&
+      getBuildingCategory(pack, step?.buildingId) === preferredCategory
+  );
+
+  if (!seedStep) return null;
+
+  const targets = new Set(getStepTargetFootprints(seedStep));
+  const matchingBuildings = placedBuildings.filter((building) => {
+    if (building?.buildingId !== seedStep.buildingId) return false;
+    const footprint = normalizeFootprint(building?.footprint);
+    return !targets.size || targets.has(footprint);
+  });
+
+  if (!matchingBuildings.length) return null;
+
+  const builtBuildings = matchingBuildings.filter((building) => isConstructionCompleted(building, nowMs));
+  if (builtBuildings.length !== matchingBuildings.length) {
+    return {
+      currentStep: {
+        ...seedStep,
+        id: `${seedStep.id}__wait_build`,
+        isSyntheticCycleStep: true,
+      },
+      completedCount: steps.length,
+      totalSteps: steps.length,
+      isCompleted: false,
+      currentStepTargetRects: [],
+      isCurrentStepReady: false,
+      waitingText: 'Очікування завершення будівництва',
+      targetHighlightVariant: 'yellow',
+      isSyntheticCycleStep: true,
+    };
+  }
+
+  const readyToCollect = builtBuildings.filter((building) => isJobReadyToCollect(building, nowMs));
+  if (readyToCollect.length > 0) {
+    const targetFootprints = readyToCollect
+      .map((building) => normalizeFootprint(building?.footprint))
+      .filter(Boolean);
+
+    return {
+      currentStep: {
+        id: `${seedStep.id}__collect`,
+        actionType: 'collect',
+        buildingId: seedStep.buildingId,
+        targetFootprints,
+        outputLabel: getBuildingOutputLabel(pack, seedStep.buildingId),
+        isSyntheticCycleStep: true,
+      },
+      completedCount: steps.length,
+      totalSteps: steps.length,
+      isCompleted: false,
+      currentStepTargetRects: targetFootprints.map(parseGridRange).filter(Boolean),
+      isCurrentStepReady: true,
+      waitingText: '',
+      targetHighlightVariant: 'green',
+      isSyntheticCycleStep: true,
+    };
+  }
+
+  if (builtBuildings.some((building) => isJobRunning(building, nowMs))) {
+    return {
+      currentStep: {
+        ...seedStep,
+        id: `${seedStep.id}__wait_job`,
+        isSyntheticCycleStep: true,
+      },
+      completedCount: steps.length,
+      totalSteps: steps.length,
+      isCompleted: false,
+      currentStepTargetRects: [],
+      isCurrentStepReady: false,
+      waitingText: 'Очікування завершення виробництва',
+      targetHighlightVariant: 'yellow',
+      isSyntheticCycleStep: true,
+    };
+  }
+
+  const targetFootprints = builtBuildings
+    .map((building) => normalizeFootprint(building?.footprint))
+    .filter(Boolean);
+
+  return {
+    currentStep: {
+      ...seedStep,
+      id: `${seedStep.id}__repeat`,
+      targetFootprints,
+      isSyntheticCycleStep: true,
+    },
+    completedCount: steps.length,
+    totalSteps: steps.length,
+    isCompleted: false,
+    currentStepTargetRects: targetFootprints.map(parseGridRange).filter(Boolean),
+    isCurrentStepReady: targetFootprints.length > 0,
+    waitingText: '',
+    targetHighlightVariant: 'green',
+    isSyntheticCycleStep: true,
+  };
+};
+
 const SettlementGamePlanner = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const route = useRoute();
   const settlementName = route.params?.settlementName;
@@ -348,6 +743,17 @@ const SettlementGamePlanner = () => {
   const [buildPreview, setBuildPreview] = useState(null);
   const [deletePreview, setDeletePreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
+  const [activitySchedules, setActivitySchedules] = useState([]);
+  const [activityTimeZone, setActivityTimeZone] = useState('UTC');
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     const handleDeleteSettlement = async () => {
@@ -384,6 +790,8 @@ const SettlementGamePlanner = () => {
 
   useEffect(() => {
     let isMounted = true;
+    let settingRef = null;
+    let onSettingValue = null;
     let settlementRef = null;
     let onValueHandler = null;
 
@@ -406,6 +814,18 @@ const SettlementGamePlanner = () => {
         if (isMounted) {
           setIdentity({ userId, guildId });
         }
+
+        settingRef = database().ref(`/users/${userId}/setting`);
+        onSettingValue = (snapshot) => {
+          const settingData = snapshot.exists() ? snapshot.val() || {} : {};
+          const { timeZone, schedules } = getPreferredSchedules(settingData);
+
+          if (isMounted) {
+            setActivityTimeZone(timeZone);
+            setActivitySchedules(schedules);
+          }
+        };
+        settingRef.on('value', onSettingValue);
 
         settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
         onValueHandler = (snapshot) => {
@@ -471,17 +891,22 @@ const SettlementGamePlanner = () => {
         console.error('Не вдалося завантажити дані settlement:', error);
         if (isMounted) {
           setOpenedSectorsFromDb([]);
-          setObstacleRectsFromDb([]);
-          setBuildingRectsFromDb([]);
-          setPlacedBuildingsFromDb([]);
-          setPlanStepIndex(0);
-          setIsLoading(false);
-        }
+            setObstacleRectsFromDb([]);
+            setBuildingRectsFromDb([]);
+            setPlacedBuildingsFromDb([]);
+            setActivitySchedules([]);
+            setActivityTimeZone('UTC');
+            setPlanStepIndex(0);
+            setIsLoading(false);
+          }
       }
     })();
 
     return () => {
       isMounted = false;
+      if (settingRef && onSettingValue) {
+        settingRef.off('value', onSettingValue);
+      }
       if (settlementRef && onValueHandler) {
         settlementRef.off('value', onValueHandler);
       }
@@ -517,6 +942,20 @@ const SettlementGamePlanner = () => {
     };
   }, [openedSectorsFromDb, pack]);
 
+  const getRecommendedStartProductionDurationSec = (step, startedAtMs = currentTimeMs) => {
+    if (!step?.buildingId || getBuildingCategory(pack, step.buildingId) !== 'goods') {
+      return getDefaultGoodsProductionDurationSec(pack, step?.buildingId);
+    }
+
+    return getRecommendedGoodsProductionDurationSec({
+      pack,
+      buildingId: step.buildingId,
+      startAtMs: startedAtMs,
+      schedules: activitySchedules,
+      timeZone: activityTimeZone,
+    });
+  };
+
   const starterPlanProgress = useMemo(() => {
     if (!effectiveStarterPlan) return null;
 
@@ -525,6 +964,33 @@ const SettlementGamePlanner = () => {
     const currentStep = safeIndex < steps.length ? steps[safeIndex] : null;
     const completedCount = safeIndex;
     const isCompleted = safeIndex >= steps.length;
+
+    if (isCompleted) {
+      const continuousCycleState = buildContinuousGoodsCycleState({
+        plan: effectiveStarterPlan,
+        pack,
+        placedBuildings: placedBuildingsFromDb,
+        nowMs: currentTimeMs,
+      });
+      if (continuousCycleState) {
+        const cycleStep = continuousCycleState.currentStep;
+        const recommendedDurationSec =
+          cycleStep?.actionType === 'start_production'
+            ? getRecommendedStartProductionDurationSec(cycleStep, currentTimeMs)
+            : null;
+        return {
+          ...continuousCycleState,
+          currentStep:
+            recommendedDurationSec && cycleStep
+              ? {
+                  ...cycleStep,
+                  recommendedProductionDurationSec: recommendedDurationSec,
+                  outputLabel: getBuildingOutputLabel(pack, cycleStep.buildingId),
+                }
+              : cycleStep,
+        };
+      }
+    }
 
     const currentStepTargetRects = currentStep
       ? getStepTargetFootprints(currentStep).map(parseGridRange).filter(Boolean)
@@ -543,11 +1009,11 @@ const SettlementGamePlanner = () => {
         return !targets.size || targets.has(footprint);
       });
 
-      const allNotified =
+      const allBuildingsCompleted =
         matchingBuildings.length > 0 &&
-        matchingBuildings.every((building) => Number(building?.construction?.notifications?.build_complete) > 0);
+        matchingBuildings.every((building) => isConstructionCompleted(building, currentTimeMs));
 
-      if (!allNotified) {
+      if (!allBuildingsCompleted) {
         isCurrentStepReady = false;
         waitingText = 'Очікування завершення будівництва';
         displayTargetRects = [];
@@ -556,8 +1022,21 @@ const SettlementGamePlanner = () => {
       }
     }
 
+    const recommendedDurationSec =
+      currentStep?.actionType === 'start_production'
+        ? getRecommendedStartProductionDurationSec(currentStep, currentTimeMs)
+        : null;
+    const displayStep =
+      recommendedDurationSec && currentStep
+        ? {
+            ...currentStep,
+            recommendedProductionDurationSec: recommendedDurationSec,
+            outputLabel: getBuildingOutputLabel(pack, currentStep.buildingId),
+          }
+        : currentStep;
+
     return {
-      currentStep,
+      currentStep: displayStep,
       completedCount,
       totalSteps: steps.length,
       isCompleted,
@@ -565,8 +1044,9 @@ const SettlementGamePlanner = () => {
       isCurrentStepReady,
       waitingText,
       targetHighlightVariant,
+      isSyntheticCycleStep: false,
     };
-  }, [effectiveStarterPlan, planStepIndex, placedBuildingsFromDb]);
+  }, [activitySchedules, activityTimeZone, currentTimeMs, effectiveStarterPlan, pack, planStepIndex, placedBuildingsFromDb]);
 
   useEffect(() => {
     const step = starterPlanProgress?.currentStep;
@@ -873,7 +1353,8 @@ const SettlementGamePlanner = () => {
       if (step.actionType === 'start_production') {
         const productionStartedAt = Date.now();
         const defaultGoodsDurationSec =
-          step.buildingId ? getDefaultGoodsProductionDurationSec(pack, step.buildingId) : 18000;
+          step?.recommendedProductionDurationSec ||
+          (step.buildingId ? getRecommendedStartProductionDurationSec(step, productionStartedAt) : 18000);
         const outputLabel = getBuildingOutputLabel(pack, step.buildingId);
         const buildingName = getBuildingDisplayName(pack, step.buildingId);
         const targets = new Set(getStepTargetFootprints(step));
@@ -881,8 +1362,23 @@ const SettlementGamePlanner = () => {
           if (building?.buildingId !== step.buildingId) return building;
           const footprint = normalizeFootprint(building?.footprint);
           if (!targets.size || targets.has(footprint)) {
+            const constructionEndsAt = Number(building?.construction?.endsAt) || 0;
+            const shouldMarkBuildComplete =
+              constructionEndsAt > 0 &&
+              productionStartedAt >= constructionEndsAt &&
+              !Number(building?.construction?.notifications?.build_complete);
+
             return {
               ...building,
+              construction: shouldMarkBuildComplete
+                ? {
+                    ...building.construction,
+                    notifications: {
+                      ...(building?.construction?.notifications || {}),
+                      build_complete: productionStartedAt,
+                    },
+                  }
+                : building?.construction || null,
               job: {
                 startedAt: productionStartedAt,
                 endsAt: productionStartedAt + defaultGoodsDurationSec * 1000,
@@ -896,10 +1392,25 @@ const SettlementGamePlanner = () => {
         });
       }
 
-      const nextStepIndex = Math.min(
-        starterPlanProgress.completedCount + 1,
-        starterPlanProgress.totalSteps
-      );
+      if (step.actionType === 'collect') {
+        const collectedAt = Date.now();
+        const targets = new Set(getStepTargetFootprints(step));
+        nextPlacedBuildings = nextPlacedBuildings.map((building) => {
+          if (building?.buildingId !== step.buildingId) return building;
+          const footprint = normalizeFootprint(building?.footprint);
+          if (targets.size && !targets.has(footprint)) return building;
+          if (!isJobReadyToCollect(building, collectedAt)) return building;
+
+          return {
+            ...building,
+            job: null,
+          };
+        });
+      }
+
+      const nextStepIndex = starterPlanProgress.isSyntheticCycleStep
+        ? starterPlanProgress.completedCount
+        : Math.min(starterPlanProgress.completedCount + 1, starterPlanProgress.totalSteps);
 
       await database().ref(settlementPath).update({
         placedBuildings: nextPlacedBuildings,
@@ -1117,7 +1628,7 @@ const SettlementGamePlanner = () => {
             ? 'Стартовий план завершено.'
             : !starterPlanProgress?.isCurrentStepReady
             ? starterPlanProgress?.waitingText
-            : formatTaskText(starterPlanProgress?.currentStep, pack)}
+            : formatTaskText(starterPlanProgress?.currentStep, pack, t)}
         </Text>
         {starterPlanProgress?.isCurrentStepReady ? (
           <TouchableOpacity

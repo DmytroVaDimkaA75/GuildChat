@@ -187,6 +187,7 @@ const CULTURE_SETTLEMENT_LABELS = {
 };
 
 const CULTURE_NOTIFICATION_TYPE = "culture_build_ready";
+const CULTURE_NOTIFICATION_BATCH_WINDOW_SEC = 60;
 
 const toPlainArray = (value) => {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -209,6 +210,110 @@ const stripCultureNotificationQueue = (settlement) => {
 const getCultureQueueKeyBase = (building, index) => {
   const rawKey = building?.instanceId ? String(building.instanceId) : `idx_${index}`;
   return rawKey.replace(/[.#$[\]/]/g, "_");
+};
+
+const getCultureNotificationGroupKey = (task) =>
+  [
+    String(task?.settlementName || ""),
+    String(task?.taskType || ""),
+    String(task?.buildingId || ""),
+    String(task?.buildingName || ""),
+    String(task?.currency || ""),
+  ].join("::");
+
+const buildCultureNotificationTexts = (task, batchCount = 1) => {
+  const settlementLabel = getCultureSettlementLabel(task?.settlementName);
+  const buildingName = String(task?.buildingName || "Будівля");
+  const currency = String(task?.currency || "").trim();
+  const titleText = `🏝️ ${settlementLabel}`;
+
+  if (task?.taskType === "residential_collect") {
+    return {
+      titleText,
+      bodyText:
+        batchCount > 1
+          ? `Зберіть ${currency || "ресурси"} з ${buildingName} (${batchCount})`
+          : `Зберіть ${currency || "ресурси"} з ${buildingName}`,
+    };
+  }
+
+  if (task?.taskType === "coin_start_production") {
+    return {
+      titleText,
+      bodyText:
+        batchCount > 1
+          ? `Запустіть виробництво ${currency || "ресурсів"} в ${buildingName} (${batchCount})`
+          : `Запустіть виробництво ${currency || "ресурсів"} в ${buildingName}`,
+    };
+  }
+
+  if (task?.taskType === "goods_collect_ready") {
+    return {
+      titleText,
+      bodyText:
+        batchCount > 1
+          ? `Зберіть ${currency || "товари"} з ${buildingName} (${batchCount})`
+          : `Зберіть ${currency || "товари"} з ${buildingName}`,
+    };
+  }
+
+  return {
+    titleText,
+    bodyText:
+      batchCount > 1
+        ? `Завершено будівництво ${buildingName} (${batchCount})`
+        : `${buildingName} завершив будівництво.`,
+  };
+};
+
+const clusterCultureNotificationTasks = (tasks, nowInSeconds) => {
+  const pendingTasks = tasks
+    .filter((task) => task?.status === "pending")
+    .sort((a, b) => Number(a?.notificationTime || 0) - Number(b?.notificationTime || 0));
+
+  const grouped = new Map();
+  pendingTasks.forEach((task) => {
+    const groupKey = getCultureNotificationGroupKey(task);
+    if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+    grouped.get(groupKey).push(task);
+  });
+
+  const dueClusters = [];
+
+  grouped.forEach((groupTasks) => {
+    let currentCluster = [];
+
+    groupTasks.forEach((task) => {
+      if (!currentCluster.length) {
+        currentCluster = [task];
+        return;
+      }
+
+      const prevTask = currentCluster[currentCluster.length - 1];
+      const prevTime = Number(prevTask?.notificationTime || 0);
+      const currentTime = Number(task?.notificationTime || 0);
+      if (currentTime - prevTime <= CULTURE_NOTIFICATION_BATCH_WINDOW_SEC) {
+        currentCluster.push(task);
+        return;
+      }
+
+      if (Number(currentCluster[0]?.notificationTime || 0) <= nowInSeconds &&
+          Number(currentCluster[currentCluster.length - 1]?.notificationTime || 0) <= nowInSeconds) {
+        dueClusters.push(currentCluster);
+      }
+      currentCluster = [task];
+    });
+
+    if (
+      currentCluster.length &&
+      Number(currentCluster[0]?.notificationTime || 0) <= nowInSeconds &&
+      Number(currentCluster[currentCluster.length - 1]?.notificationTime || 0) <= nowInSeconds
+    ) {
+      dueClusters.push(currentCluster);
+    }
+  });
+
+  return dueClusters;
 };
 
 const buildCultureQueueEntry = ({
@@ -268,7 +373,10 @@ const buildCultureQueueEntries = ({ userId, guildId, settlement, building, index
   const buildTimeSec = Number(building?.construction?.buildTimeSec);
   const category = String(building?.construction?.category || "");
   const passiveDurationSec = Number(building?.construction?.passiveDurationSec) || 0;
-  const notifyBuildCompletion = building?.construction?.notifyBuildCompletion === true;
+  const notifyBuildCompletion =
+    building?.construction?.notifyBuildCompletion === true ||
+    (category === "goods" && Number.isFinite(buildTimeSec) && buildTimeSec > 0) ||
+    (category === "residential" && Number.isFinite(buildTimeSec) && buildTimeSec >= 3600);
   const notifications = building?.construction?.notifications || {};
   const jobEndsAt = Number(building?.job?.endsAt);
   const jobNotifications = building?.job?.notifications || {};
@@ -425,21 +533,31 @@ const markBuildingTaskNotified = async ({ db, userId, guildId, instanceId, taskT
   return true;
 };
 
-const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task }) => {
+const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tasks }) => {
+  const safeTasks = Array.isArray(tasks) ? tasks.filter(Boolean) : [];
+  const safeQueuePaths = Array.isArray(queuePaths) ? queuePaths.filter(Boolean) : [];
+  const primaryTask = safeTasks[safeTasks.length - 1] || null;
+  if (!primaryTask || !safeQueuePaths.length) return null;
+
   const cultureSnap = await db.ref(`/users/${userId}/${guildId}/culture`).once("value");
   const culture = cultureSnap.exists() ? (cultureSnap.val() || {}) : {};
   if (culture?.cultureAlarm !== true) {
-    return db.ref(queuePath).remove();
+    return db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`).remove();
   }
 
   const tokenSnap = await db.ref(`/users/${userId}/fcmToken`).once("value");
   const token = tokenSnap.exists() ? tokenSnap.val() : null;
   if (!token) {
-    return db.ref(queuePath).update({
-      status: "pending",
-      lastAttemptAt: Date.now(),
-      lastError: "no_token",
-    });
+    await Promise.all(
+      safeQueuePaths.map((queuePath) =>
+        db.ref(queuePath).update({
+          status: "pending",
+          lastAttemptAt: Date.now(),
+          lastError: "no_token",
+        })
+      )
+    );
+    return null;
   }
 
   const nowMs = Date.now();
@@ -452,19 +570,9 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task
     soundBySchedule = true;
   }
 
-  const settlementLabel = getCultureSettlementLabel(task?.settlementName);
-  const buildingName = String(task?.buildingName || "Будівля");
-  const currency = String(task?.currency || "").trim();
-  const titleText = `🏝️ ${settlementLabel}`;
-  let bodyText = `${buildingName} завершив будівництво.`;
-
-  if (task?.taskType === "residential_collect") {
-    bodyText = `Зберіть ${currency || "ресурси"} з ${buildingName}`;
-  } else if (task?.taskType === "coin_start_production") {
-    bodyText = `Запустіть виробництво ${currency || "ресурсів"} в ${buildingName}`;
-  } else if (task?.taskType === "goods_collect_ready") {
-    bodyText = `Зберіть ${currency || "товари"} з ${buildingName}`;
-  }
+  const batchCount = safeTasks.length;
+  const { titleText, bodyText } = buildCultureNotificationTexts(primaryTask, batchCount);
+  const buildingName = String(primaryTask?.buildingName || "Будівля");
 
   const payload = soundBySchedule
     ? {
@@ -472,11 +580,12 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task
         data: {
           type: CULTURE_NOTIFICATION_TYPE,
           guildId: String(guildId),
-          settlementName: String(task?.settlementName || ""),
-          buildingId: String(task?.buildingId || ""),
+          settlementName: String(primaryTask?.settlementName || ""),
+          buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
           title: titleText,
           body: bodyText,
+          batchCount: String(batchCount),
           sound: "1",
         },
         android: {
@@ -503,11 +612,12 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task
         data: {
           type: CULTURE_NOTIFICATION_TYPE,
           guildId: String(guildId),
-          settlementName: String(task?.settlementName || ""),
-          buildingId: String(task?.buildingId || ""),
+          settlementName: String(primaryTask?.settlementName || ""),
+          buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
           title: titleText,
           body: bodyText,
+          batchCount: String(batchCount),
           sound: "0",
         },
         android: {
@@ -530,22 +640,33 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePath, task
 
   try {
     await admin.messaging().send(payload);
-    await markBuildingTaskNotified({
-      db,
-      userId,
-      guildId,
-      instanceId: task?.instanceId,
-      taskType: task?.taskType,
-    });
 
-    return db.ref(queuePath).remove();
+    await Promise.all(
+      safeTasks.map((task) =>
+        markBuildingTaskNotified({
+          db,
+          userId,
+          guildId,
+          instanceId: task?.instanceId,
+          taskType: task?.taskType,
+        })
+      )
+    );
+
+    await Promise.all(safeQueuePaths.map((queuePath) => db.ref(queuePath).remove()));
+    return null;
   } catch (e) {
     logger.error("[Culture] send push error:", e);
-    return db.ref(queuePath).update({
-      status: "pending",
-      lastAttemptAt: Date.now(),
-      lastError: e?.message || "send_failed",
-    });
+    await Promise.all(
+      safeQueuePaths.map((queuePath) =>
+        db.ref(queuePath).update({
+          status: "pending",
+          lastAttemptAt: Date.now(),
+          lastError: e?.message || "send_failed",
+        })
+      )
+    );
+    return null;
   }
 };
 
@@ -1053,26 +1174,32 @@ exports.processCultureNotificationQueue = onSchedule(
           await Promise.all(
             memberIds.map(async (userId) => {
             const queueRef = db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`);
-            const snapshot = await queueRef.orderByChild("notificationTime").endAt(nowInSeconds).once("value");
+            const snapshot = await queueRef.once("value");
             if (!snapshot.exists()) return;
 
-            const tasks = [];
+            const queueItems = [];
             snapshot.forEach((child) => {
-              const task = child.val();
-              if (task?.status === "pending") {
-                tasks.push(
-                  sendCulturePushAndMarkSent({
-                    db,
-                    userId,
-                    guildId,
-                    queuePath: `/users/${userId}/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
-                    task,
-                  })
-                );
-              }
+              queueItems.push({
+                ...child.val(),
+                queueKey: child.key,
+                queuePath: `/users/${userId}/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
+              });
             });
 
-            await Promise.all(tasks);
+            const dueClusters = clusterCultureNotificationTasks(queueItems, nowInSeconds);
+            if (!dueClusters.length) return;
+
+            await Promise.all(
+              dueClusters.map((cluster) =>
+                sendCulturePushAndMarkSent({
+                  db,
+                  userId,
+                  guildId,
+                  queuePaths: cluster.map((task) => task.queuePath),
+                  tasks: cluster,
+                })
+              )
+            );
           })
         );
       })
