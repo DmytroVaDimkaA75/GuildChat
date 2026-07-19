@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 import MapSvg from './map.svg';
 import RULE_PACKS from './RulePack';
+import SettlementMapGridHeaders, { getBoundsWithGridHeaders } from './SettlementMapGridHeaders';
 
 const COLORS = {
   background: '#121212',
@@ -760,18 +761,21 @@ const SettlementGamePlanner = () => {
   const [buildPreview, setBuildPreview] = useState(null);
   const [deletePreview, setDeletePreview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCultureTestingConfigLoading, setIsCultureTestingConfigLoading] = useState(true);
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const [activitySchedules, setActivitySchedules] = useState([]);
   const [activityTimeZone, setActivityTimeZone] = useState('UTC');
   const [cultureTestingConfig, setCultureTestingConfig] = useState({ timeScale: 1 });
 
   useEffect(() => {
+    setCurrentTimeMs(Date.now());
+    const refreshIntervalMs = cultureTestingConfig.timeScale > 1 ? 1000 : 30000;
     const intervalId = setInterval(() => {
       setCurrentTimeMs(Date.now());
-    }, 1000);
+    }, refreshIntervalMs);
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [cultureTestingConfig.timeScale]);
 
   useEffect(() => {
     const handleDeleteSettlement = async () => {
@@ -812,6 +816,7 @@ const SettlementGamePlanner = () => {
     let onSettingValue = null;
     let cultureTestingRef = null;
     let onCultureTestingValue = null;
+    let onCultureTestingError = null;
     let settlementRef = null;
     let onValueHandler = null;
 
@@ -819,6 +824,8 @@ const SettlementGamePlanner = () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
         const guildId = await AsyncStorage.getItem('guildId');
+        if (!isMounted) return;
+
         if (!userId || !guildId) {
           if (isMounted) {
             setOpenedSectorsFromDb([]);
@@ -826,6 +833,7 @@ const SettlementGamePlanner = () => {
             setBuildingRectsFromDb([]);
             setPlacedBuildingsFromDb([]);
             setCultureTestingConfig({ timeScale: 1 });
+            setIsCultureTestingConfigLoading(false);
             setPlanStepIndex(0);
             setIsLoading(false);
           }
@@ -853,9 +861,17 @@ const SettlementGamePlanner = () => {
           const testingData = snapshot.exists() ? snapshot.val() || {} : {};
           if (isMounted) {
             setCultureTestingConfig(normalizeCultureTestingConfig(testingData));
+            setIsCultureTestingConfigLoading(false);
           }
         };
-        cultureTestingRef.on('value', onCultureTestingValue);
+        onCultureTestingError = (error) => {
+          console.warn('Не вдалося завантажити culture testing config:', error);
+          if (isMounted) {
+            setCultureTestingConfig({ timeScale: 1 });
+            setIsCultureTestingConfigLoading(false);
+          }
+        };
+        cultureTestingRef.on('value', onCultureTestingValue, onCultureTestingError);
 
         settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
         onValueHandler = (snapshot) => {
@@ -927,6 +943,7 @@ const SettlementGamePlanner = () => {
             setActivitySchedules([]);
             setActivityTimeZone('UTC');
             setCultureTestingConfig({ timeScale: 1 });
+            setIsCultureTestingConfigLoading(false);
             setPlanStepIndex(0);
             setIsLoading(false);
           }
@@ -1485,9 +1502,13 @@ const SettlementGamePlanner = () => {
   };
 
   const bounds = useMemo(() => getRectsBounds(allRects), [allRects]);
-  const mapHeight = screenWidth * (bounds.height / bounds.width);
+  const mapBounds = useMemo(
+    () => getBoundsWithGridHeaders(bounds, TILE_SIZE),
+    [bounds],
+  );
+  const mapHeight = screenWidth * (mapBounds.height / mapBounds.width);
 
-  if (isLoading) {
+  if (isLoading || isCultureTestingConfigLoading) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" />
@@ -1513,7 +1534,7 @@ const SettlementGamePlanner = () => {
       <Svg
         width={screenWidth}
         height={mapHeight}
-        viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}
+        viewBox={`${mapBounds.x} ${mapBounds.y} ${mapBounds.width} ${mapBounds.height}`}
       >
         <Defs>
           <ClipPath id="gameAllowedClip">
@@ -1661,6 +1682,7 @@ const SettlementGamePlanner = () => {
             />
           ) : null}
         </G>
+        <SettlementMapGridHeaders bounds={bounds} tileSize={TILE_SIZE} />
       </Svg>
 
       <View style={styles.taskRow}>

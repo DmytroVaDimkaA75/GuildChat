@@ -1150,10 +1150,10 @@ export default function MainContent() {
         });
 
         await notifee.createChannel({
-          id: 'culture_settlement',
+          id: 'culture_settlement_kolokol',
           name: 'Culture Settlement Notifications',
           importance: AndroidImportance.HIGH,
-          sound: 'default',
+          sound: 'kolokol',
         });
 
         await notifee.createChannel({
@@ -1205,7 +1205,7 @@ export default function MainContent() {
             : messageType === 'gbg_build_plan'
               ? 'gbg_build'
             : messageType === 'culture_build_ready'
-              ? (soundFlag ? 'culture_settlement' : 'culture_settlement_silent')
+              ? (soundFlag ? 'culture_settlement_kolokol' : 'culture_settlement_silent')
             : messageType === 'chat_message'
               ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
               : 'default';

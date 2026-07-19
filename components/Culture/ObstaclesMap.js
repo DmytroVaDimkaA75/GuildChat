@@ -17,6 +17,7 @@ import database from '@react-native-firebase/database';
 
 import MapSvg from './map.svg';
 import RULE_PACKS from './RulePack';
+import SettlementMapGridHeaders, { getBoundsWithGridHeaders } from './SettlementMapGridHeaders';
 
 const COLORS = {
   background: '#121212',
@@ -97,7 +98,11 @@ const ObstaclesMap = () => {
   }, [settlementName]);
 
   const visibleBounds = useMemo(() => getRectsBounds(sectorRects), [sectorRects]);
-  const mapHeight = screenWidth * (visibleBounds.height / visibleBounds.width);
+  const mapBounds = useMemo(
+    () => getBoundsWithGridHeaders(visibleBounds, TILE_SIZE),
+    [visibleBounds],
+  );
+  const mapHeight = screenWidth * (mapBounds.height / mapBounds.width);
 
   const openSectorModal = (sector) => {
     setSelectedSector(sector);
@@ -268,7 +273,7 @@ const ObstaclesMap = () => {
         <Svg
           width={screenWidth}
           height={mapHeight}
-          viewBox={`${visibleBounds.x} ${visibleBounds.y} ${visibleBounds.width} ${visibleBounds.height}`}
+          viewBox={`${mapBounds.x} ${mapBounds.y} ${mapBounds.width} ${mapBounds.height}`}
         >
         <Defs>
           <ClipPath id="allowedSectorsClip">
@@ -330,19 +335,25 @@ const ObstaclesMap = () => {
           ))}
 
         </G>
+        <SettlementMapGridHeaders bounds={visibleBounds} tileSize={TILE_SIZE} />
         </Svg>
 
         <View style={StyleSheet.absoluteFill}>
           {nonStartOpenRects.map((rect, idx) => {
-            const x = ((rect.x - visibleBounds.x) / visibleBounds.width) * screenWidth;
-            const y = ((rect.y - visibleBounds.y) / visibleBounds.height) * mapHeight;
-            const width = (rect.width / visibleBounds.width) * screenWidth;
-            const height = (rect.height / visibleBounds.height) * mapHeight;
+            const x = ((rect.x - mapBounds.x) / mapBounds.width) * screenWidth;
+            const y = ((rect.y - mapBounds.y) / mapBounds.height) * mapHeight;
+            const width = (rect.width / mapBounds.width) * screenWidth;
+            const height = (rect.height / mapBounds.height) * mapHeight;
             return (
               <Pressable
                 key={`touch-${nonStartOpenSectors[idx]}`}
                 style={[styles.sectorTouch, { left: x, top: y, width, height }]}
-                hitSlop={4}
+                hitSlop={{
+                  top: rect.y > visibleBounds.y ? 4 : 0,
+                  left: rect.x > visibleBounds.x ? 4 : 0,
+                  right: 4,
+                  bottom: 4,
+                }}
                 onPress={() => openSectorModal(nonStartOpenSectors[idx])}
               />
             );

@@ -342,7 +342,7 @@ export const piratesRulePack = {
         workforceProvided: 0,
         workforceRequired: 36,
         diplomacyProvided: 0,
-        buildTimeSec: 600,
+        buildTimeSec: 3600,
         templateRef: 'standard_goods_production_v1',
         buildCostIgnored: true
       },
@@ -1080,11 +1080,11 @@ export const piratesRulePack = {
           description: 'Мати 1200 дипломатії, зібрати 12000 дублонів, 10 риби, 10 спецій, 10 рому, 10 гармат',
           requires: [
             { type: 'resource_threshold', resource: 'diplomacy', min: 1200 },
-            { type: 'resource_threshold', resource: 'doubloons', min: 12000 },
-            { type: 'resource_threshold', resource: 'fish', min: 10 },
-            { type: 'resource_threshold', resource: 'spice', min: 10 },
-            { type: 'resource_threshold', resource: 'rum', min: 10 },
-            { type: 'resource_threshold', resource: 'cannons', min: 10 }
+            { type: 'resource_collected', resource: 'doubloons', min: 12000 },
+            { type: 'resource_collected', resource: 'fish', min: 10 },
+            { type: 'resource_collected', resource: 'spice', min: 10 },
+            { type: 'resource_collected', resource: 'rum', min: 10 },
+            { type: 'resource_collected', resource: 'cannons', min: 10 }
           ],
           rewards: [],
           isFinal: true

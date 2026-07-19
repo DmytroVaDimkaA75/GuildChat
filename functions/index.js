@@ -593,8 +593,8 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           notification: {
             title: titleText,
             body: bodyText,
-            sound: "default",
-            channel_id: "culture_settlement",
+            sound: "kolokol",
+            channel_id: "culture_settlement_kolokol",
           },
         },
         apns: {
