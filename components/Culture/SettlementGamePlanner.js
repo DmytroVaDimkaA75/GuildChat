@@ -460,6 +460,23 @@ const formatProductionDurationLabel = (durationSec) => {
   return `${hours}-годинне`;
 };
 
+const normalizeCultureTestingConfig = (value) => {
+  const timeScale = Number(value?.timeScale);
+  return {
+    timeScale: Number.isFinite(timeScale) && timeScale > 1 ? timeScale : 1,
+  };
+};
+
+const scaleCultureDurationSec = (durationSec, testingConfig) => {
+  const safeDurationSec = Number(durationSec);
+  if (!Number.isFinite(safeDurationSec) || safeDurationSec <= 0) return 0;
+
+  const timeScale = Number(testingConfig?.timeScale) || 1;
+  if (timeScale <= 1) return safeDurationSec;
+
+  return Math.max(1, Math.round(safeDurationSec / timeScale));
+};
+
 const getLocalizedCultureResourceLabel = (resourceKey, t) => {
   const normalizedKey = String(resourceKey || '').trim();
   if (!normalizedKey) return '';
@@ -746,11 +763,12 @@ const SettlementGamePlanner = () => {
   const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const [activitySchedules, setActivitySchedules] = useState([]);
   const [activityTimeZone, setActivityTimeZone] = useState('UTC');
+  const [cultureTestingConfig, setCultureTestingConfig] = useState({ timeScale: 1 });
 
   useEffect(() => {
     const intervalId = setInterval(() => {
       setCurrentTimeMs(Date.now());
-    }, 30000);
+    }, 1000);
 
     return () => clearInterval(intervalId);
   }, []);
@@ -792,6 +810,8 @@ const SettlementGamePlanner = () => {
     let isMounted = true;
     let settingRef = null;
     let onSettingValue = null;
+    let cultureTestingRef = null;
+    let onCultureTestingValue = null;
     let settlementRef = null;
     let onValueHandler = null;
 
@@ -805,6 +825,7 @@ const SettlementGamePlanner = () => {
             setObstacleRectsFromDb([]);
             setBuildingRectsFromDb([]);
             setPlacedBuildingsFromDb([]);
+            setCultureTestingConfig({ timeScale: 1 });
             setPlanStepIndex(0);
             setIsLoading(false);
           }
@@ -826,6 +847,15 @@ const SettlementGamePlanner = () => {
           }
         };
         settingRef.on('value', onSettingValue);
+
+        cultureTestingRef = database().ref(`/users/${userId}/${guildId}/culture/testing`);
+        onCultureTestingValue = (snapshot) => {
+          const testingData = snapshot.exists() ? snapshot.val() || {} : {};
+          if (isMounted) {
+            setCultureTestingConfig(normalizeCultureTestingConfig(testingData));
+          }
+        };
+        cultureTestingRef.on('value', onCultureTestingValue);
 
         settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
         onValueHandler = (snapshot) => {
@@ -896,6 +926,7 @@ const SettlementGamePlanner = () => {
             setPlacedBuildingsFromDb([]);
             setActivitySchedules([]);
             setActivityTimeZone('UTC');
+            setCultureTestingConfig({ timeScale: 1 });
             setPlanStepIndex(0);
             setIsLoading(false);
           }
@@ -906,6 +937,9 @@ const SettlementGamePlanner = () => {
       isMounted = false;
       if (settingRef && onSettingValue) {
         settingRef.off('value', onSettingValue);
+      }
+      if (cultureTestingRef && onCultureTestingValue) {
+        cultureTestingRef.off('value', onCultureTestingValue);
       }
       if (settlementRef && onValueHandler) {
         settlementRef.off('value', onValueHandler);
@@ -1269,14 +1303,19 @@ const SettlementGamePlanner = () => {
           nextPlacedBuildings.map((building) => `${building?.buildingId || ''}|${normalizeFootprint(building?.footprint) || ''}`)
         );
         const buildStartedAt = Date.now();
-        const buildTimeSec = getBuildingBuildTimeSec(pack, step.buildingId);
+        const buildTimeSec = scaleCultureDurationSec(
+          getBuildingBuildTimeSec(pack, step.buildingId),
+          cultureTestingConfig
+        );
         const category = getBuildingCategory(pack, step.buildingId);
         const buildingName = getBuildingDisplayName(pack, step.buildingId);
         const shouldTrackConstruction = shouldTrackConstructionTimers(pack, step.buildingId);
         const currency = getBuildingCurrency(pack, step.buildingId);
         const outputLabel = getBuildingOutputLabel(pack, step.buildingId);
-        const passiveDurationSec =
-          category === 'residential' ? getFirstCoinRecipeDurationSec(pack, step.buildingId) : 0;
+        const passiveDurationSec = scaleCultureDurationSec(
+          category === 'residential' ? getFirstCoinRecipeDurationSec(pack, step.buildingId) : 0,
+          cultureTestingConfig
+        );
 
         targets.forEach((targetFootprint, idx) => {
           const key = `${step.buildingId}|${targetFootprint}`;
@@ -1352,9 +1391,13 @@ const SettlementGamePlanner = () => {
 
       if (step.actionType === 'start_production') {
         const productionStartedAt = Date.now();
-        const defaultGoodsDurationSec =
+        const plannedGoodsDurationSec =
           step?.recommendedProductionDurationSec ||
           (step.buildingId ? getRecommendedStartProductionDurationSec(step, productionStartedAt) : 18000);
+        const defaultGoodsDurationSec = scaleCultureDurationSec(
+          plannedGoodsDurationSec,
+          cultureTestingConfig
+        );
         const outputLabel = getBuildingOutputLabel(pack, step.buildingId);
         const buildingName = getBuildingDisplayName(pack, step.buildingId);
         const targets = new Set(getStepTargetFootprints(step));
