@@ -14,7 +14,7 @@ const styles = StyleSheet.create({
 
   text: {
     fontSize: 18,
-    color: "black",
+    color: "#f4f7fb",
     fontWeight: "bold",
   },
   win: {
@@ -23,7 +23,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: 'center',
     justifyContent: 'flex-start',
-    backgroundColor: "white",
+    backgroundColor: "#0f1115",
   },
 });
 

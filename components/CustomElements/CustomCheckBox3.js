@@ -7,7 +7,7 @@ const checkboxSize = 24; // Розмір квадрату чекбокса
 
 return (
 <TouchableOpacity onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-<View style={{ height: checkboxSize, width: checkboxSize, borderRadius: 4, borderWidth: checked ? 3 : 1, borderColor: '#007AFF', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+<View style={{ height: checkboxSize, width: checkboxSize, borderRadius: 4, borderWidth: checked ? 3 : 1, borderColor: '#4ea1ff', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1b1f2a' }}>
 {checked && (
 <Svg width={checkmarkSize} height={checkmarkSize} viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', top: checkmarkPositionY, left: checkmarkPositionX }}>
 {/* Зелена обводка */}

@@ -33,14 +33,14 @@ const SCREEN_HEIGHT = Dimensions.get("window").height;
 const MENU_WIDTH = 320; 
 
 const COLORS = {
-  background: "#0F0F0F",
-  surface: "#1C1C1E",
-  surfaceHighlight: "#2C2C2E",
-  primary: "#3498db",
-  textPrimary: "#FFFFFF",
-  textSecondary: "#A0A0A0",
-  danger: "#FF453A",
-  separator: "#2A2A2A"
+  background: "#0f1115",
+  surface: "#1b1f2a",
+  surfaceHighlight: "#2a2f3a",
+  primary: "#4ea1ff",
+  textPrimary: "#f4f7fb",
+  textSecondary: "#9aa3b2",
+  danger: "#ff5b5b",
+  separator: "#3a3f4a"
 };
 
 const menuOptions = [
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
         marginTop: 10,
     },
     sectionTitle: {
-        color: '#555',
+        color: COLORS.textSecondary,
         fontSize: 12,
         fontWeight: '700',
         textTransform: 'uppercase',
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     footerText: {
-        color: '#444',
+        color: COLORS.textSecondary,
         fontSize: 12,
         fontWeight: '500',
     }

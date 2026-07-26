@@ -8,7 +8,7 @@ import {
   DrawerContentScrollView,
   DrawerToggleButton
 } from '@react-navigation/drawer';
-import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -65,14 +65,27 @@ const navigationRef = createNavigationContainerRef();
 
 // --- ДИЗАЙН СИСТЕМА ---
 const COLORS = {
-  background: "#0F0F0F",
-  surface: "#1C1C1E",
-  surfaceHighlight: "#2C2C2E",
-  primary: "#3498db",
-  textPrimary: "#FFFFFF",
-  textSecondary: "#A0A0A0",
-  danger: "#FF453A",
-  separator: "#2A2A2A"
+  background: "#0f1115",
+  surface: "#1b1f2a",
+  surfaceHighlight: "#2a2f3a",
+  primary: "#4ea1ff",
+  textPrimary: "#f4f7fb",
+  textSecondary: "#9aa3b2",
+  danger: "#ff5b5b",
+  separator: "#3a3f4a"
+};
+
+const navigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: COLORS.primary,
+    background: COLORS.background,
+    card: COLORS.surface,
+    text: COLORS.textPrimary,
+    border: COLORS.separator,
+    notification: COLORS.danger,
+  },
 };
 
 const defaultHeaderOptions = {
@@ -876,7 +889,12 @@ function AppNavigator({ onReady }) {
   );
 
   return (
-    <NavigationContainer key={guildId} ref={navigationRef} onReady={onReady}>
+    <NavigationContainer
+      key={guildId}
+      ref={navigationRef}
+      theme={navigationTheme}
+      onReady={onReady}
+    >
       <Drawer.Navigator
         drawerContent={props => <CustomDrawerContent {...props} />}
         initialRouteName="GBG"
@@ -1373,7 +1391,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sectionTitle: {
-    color: '#555',
+    color: COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1425,7 +1443,7 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   footerText: {
-    color: '#444',
+    color: COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   }

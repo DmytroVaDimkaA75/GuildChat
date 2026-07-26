@@ -198,14 +198,15 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
     inputLabel: {
       fontSize: 16,
       marginBottom: 5,
-      color: "#333333",
+      color: "#f4f7fb",
     },
     input: {
       borderWidth: 1,
-      borderColor: "#e0e0e0",
+      borderColor: "#3a3f4a",
       padding: 10,
       borderRadius: 5,
-      backgroundColor: "#f2f2f2",
+      backgroundColor: "#1b1f2a",
+      color: "#f4f7fb",
     },
     placeholderText: {
       color: "#999999",
@@ -216,7 +217,7 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
       backgroundColor: "rgba(0, 0, 0, 0.5)",
     },
     modalContent: {
-      backgroundColor: "#fff",
+      backgroundColor: "#1b1f2a",
       padding: 20,
       borderTopLeftRadius: 10,
       borderTopRightRadius: 10,

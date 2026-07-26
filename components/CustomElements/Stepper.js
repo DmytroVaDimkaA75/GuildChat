@@ -74,12 +74,12 @@ const styles = StyleSheet.create({
     width: 50,
     height: 20,
     textAlign: 'center',
-    backgroundColor: '#fff',
-    borderColor: '#007AFF',
+    backgroundColor: '#1b1f2a',
+    borderColor: '#4ea1ff',
     borderLeftWidth: 1,
     borderRightWidth: 1,
     fontSize: 10,
-    color: '#000',
+    color: '#f4f7fb',
   },
 });
 

@@ -123,7 +123,7 @@ const ChatWindow = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#0f1115',
     justifyContent: 'space-between',
   },
   messagesList: {
@@ -137,27 +137,31 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   sentMessage: {
-    backgroundColor: '#dcf8c6',
+    backgroundColor: '#163a5f',
     alignSelf: 'flex-end',
   },
   receivedMessage: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1b1f2a',
     alignSelf: 'flex-start',
-    borderColor: '#e5e5e5',
+    borderColor: '#3a3f4a',
     borderWidth: 1,
   },
   messageText: {
+    color: '#f4f7fb',
     fontSize: 16,
   },
   inputContainer: {
     flexDirection: 'row',
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: '#3a3f4a',
+    backgroundColor: '#1b1f2a',
   },
   input: {
     flex: 1,
-    borderColor: '#ddd',
+    borderColor: '#3a3f4a',
+    backgroundColor: '#2a2f3a',
+    color: '#f4f7fb',
     borderWidth: 1,
     borderRadius: 4,
     padding: 8,

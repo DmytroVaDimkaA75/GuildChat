@@ -102,7 +102,7 @@ const ChatScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#0f1115',
   },
   content: {
     flex: 1,

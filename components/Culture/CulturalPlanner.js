@@ -1322,9 +1322,9 @@ useEffect(() => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16 },
-  title: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#0f1115', padding: 16 },
+  title: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#f4f7fb' },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f1115' },
   mapContainer: {
     alignSelf: 'center',
     marginBottom: 16,
@@ -1362,7 +1362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end'
   },
   modalContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1b1f2a',
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     padding: 16,
@@ -1402,4 +1402,3 @@ const styles = StyleSheet.create({
 });
 
 export default CulturalPlanner;
-

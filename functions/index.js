@@ -79,6 +79,53 @@ const chunkArray = (arr, size) => {
   return res;
 };
 
+const getPushWorldContext = async ({ db, guildId, userIds }) => {
+  const uniqueUserIds = Array.from(new Set((userIds || []).filter(Boolean).map(String)));
+  const result = new Map(uniqueUserIds.map((uid) => [uid, { hasMultipleGuilds: false, worldName: "" }]));
+  if (!guildId || !uniqueUserIds.length) return result;
+
+  const guildsSnap = await db.ref("/guilds").once("value");
+  if (!guildsSnap.exists()) return result;
+
+  const guilds = guildsSnap.val() || {};
+  const membershipCounts = new Map(uniqueUserIds.map((uid) => [uid, 0]));
+
+  Object.values(guilds).forEach((guild) => {
+    const guildUsers = guild?.guildUsers || {};
+    uniqueUserIds.forEach((uid) => {
+      if (Object.prototype.hasOwnProperty.call(guildUsers, uid)) {
+        membershipCounts.set(uid, (membershipCounts.get(uid) || 0) + 1);
+      }
+    });
+  });
+
+  const worldName = String(guilds?.[guildId]?.worldName || "").trim();
+  uniqueUserIds.forEach((uid) => {
+    result.set(uid, {
+      hasMultipleGuilds: (membershipCounts.get(uid) || 0) > 1,
+      worldName,
+    });
+  });
+
+  return result;
+};
+
+const addWorldNameToPushBody = (body, context) => {
+  if (!context?.hasMultipleGuilds || !context.worldName) return body;
+  return `${context.worldName}: ${body}`;
+};
+
+const sendMulticastWithoutRecipientLimit = async ({ tokens, ...payload }) => {
+  const uniqueTokens = Array.from(new Set((tokens || []).filter(Boolean)));
+  if (!uniqueTokens.length) return [];
+
+  return Promise.all(
+    chunkArray(uniqueTokens, 500).map((chunk) =>
+      admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload })
+    )
+  );
+};
+
 const getGuildMemberTokens = async (guildId) => {
   const membersSnap = await admin.database().ref(`/guilds/${guildId}/guildUsers`).once("value");
   if (!membersSnap.exists()) return [];
@@ -572,6 +619,8 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
 
   const batchCount = safeTasks.length;
   const { titleText, bodyText } = buildCultureNotificationTexts(primaryTask, batchCount);
+  const worldContexts = await getPushWorldContext({ db, guildId, userIds: [userId] });
+  const pushBodyText = addWorldNameToPushBody(bodyText, worldContexts.get(String(userId)));
   const buildingName = String(primaryTask?.buildingName || "Будівля");
 
   const payload = soundBySchedule
@@ -584,7 +633,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
           title: titleText,
-          body: bodyText,
+          body: pushBodyText,
           batchCount: String(batchCount),
           sound: "1",
         },
@@ -592,7 +641,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           priority: "high",
           notification: {
             title: titleText,
-            body: bodyText,
+            body: pushBodyText,
             sound: "kolokol",
             channel_id: "culture_settlement_kolokol",
           },
@@ -600,7 +649,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
         apns: {
           payload: {
             aps: {
-              alert: { title: titleText, body: bodyText },
+              alert: { title: titleText, body: pushBodyText },
               sound: "default",
               "content-available": 1,
             },
@@ -616,7 +665,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
           title: titleText,
-          body: bodyText,
+          body: pushBodyText,
           batchCount: String(batchCount),
           sound: "0",
         },
@@ -624,14 +673,14 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           priority: "high",
           notification: {
             title: titleText,
-            body: bodyText,
+            body: pushBodyText,
             channel_id: "culture_settlement_silent",
           },
         },
         apns: {
           payload: {
             aps: {
-              alert: { title: titleText, body: bodyText },
+              alert: { title: titleText, body: pushBodyText },
               "content-available": 1,
             },
           },
@@ -1054,60 +1103,47 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db
     })
   );
 
-  const soundTokens = userInfos.filter((x) => x.token && x.sound).map((x) => x.token);
-  const silentTokens = userInfos.filter((x) => x.token && !x.sound).map((x) => x.token);
-
   const titleText = senderName;
   const bodyText = messageText;
+  const worldContexts = await getPushWorldContext({ db, guildId, userIds: recipients });
+  const recipientGroups = new Map();
 
-  // ✅ 1) Зі звуком
-  if (soundTokens.length > 0) {
-    const payloadSound = {
-      data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "1" },
+  userInfos.filter((x) => x.token).forEach((info) => {
+    const body = addWorldNameToPushBody(bodyText, worldContexts.get(String(info.uid)));
+    const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
+    if (!recipientGroups.has(key)) recipientGroups.set(key, { sound: info.sound, body, tokens: [] });
+    recipientGroups.get(key).tokens.push(info.token);
+  });
+
+  await Promise.all(Array.from(recipientGroups.values()).map(async (group) => {
+    const payload = {
+      data: { chatId, guildId, title: titleText, body: group.body, type: "chat_message", sound: group.sound ? "1" : "0" },
       android: {
         priority: "high",
         notification: {
           title: titleText,
-          body: bodyText,
-          sound: "smeh_minonovhasms",
-          channel_id: "chat_messages",
+          body: group.body,
+          ...(group.sound ? { sound: "smeh_minonovhasms" } : {}),
+          channel_id: group.sound ? "chat_messages" : "chat_messages_silent",
         },
       },
       apns: {
-        payload: { aps: { alert: { title: titleText, body: bodyText }, sound: "default", "content-available": 1 } },
+        payload: {
+          aps: {
+            alert: { title: titleText, body: group.body },
+            ...(group.sound ? { sound: "default" } : {}),
+            "content-available": 1,
+          },
+        },
       },
     };
 
     try {
-      await admin.messaging().sendEachForMulticast({ tokens: soundTokens, ...payloadSound });
+      await sendMulticastWithoutRecipientLimit({ tokens: group.tokens, ...payload });
     } catch (e) {
-      logger.error("[sendChatNotification] sound send error:", e);
+      logger.error(`[sendChatNotification] ${group.sound ? "sound" : "silent"} send error:`, e);
     }
-  }
-
-  // ✅ 2) Тихо (без звуку)
-  if (silentTokens.length > 0) {
-    const payloadSilent = {
-      data: { chatId, guildId, title: titleText, body: bodyText, type: "chat_message", sound: "0" },
-      android: {
-        priority: "high",
-        notification: {
-          title: titleText,
-          body: bodyText,
-          channel_id: "chat_messages_silent",
-        },
-      },
-      apns: {
-        payload: { aps: { alert: { title: titleText, body: bodyText }, "content-available": 1 } },
-      },
-    };
-
-    try {
-      await admin.messaging().sendEachForMulticast({ tokens: silentTokens, ...payloadSilent });
-    } catch (e) {
-      logger.error("[sendChatNotification] silent send error:", e);
-    }
-  }
+  }));
 };
 
 exports.sendChatNotification = onValueCreated(
@@ -1488,15 +1524,21 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
     })
   );
 
-  const soundTokens = userInfos.filter((x) => x.token && x.sound).map((x) => x.token);
-  const silentTokens = userInfos.filter((x) => x.token && !x.sound).map((x) => x.token);
-
   const isAttack = army === "attack";
   const icon = isAttack ? "⚔️" : "🛡️";
   const actionText = isAttack ? "Атака!" : "Захист!";
 
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
+  const worldContexts = await getPushWorldContext({ db, guildId, userIds: memberIds });
+  const recipientGroups = new Map();
+
+  userInfos.filter((x) => x.token).forEach((info) => {
+    const body = addWorldNameToPushBody(messageText, worldContexts.get(String(info.uid)));
+    const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
+    if (!recipientGroups.has(key)) recipientGroups.set(key, { sound: info.sound, body, tokens: [] });
+    recipientGroups.get(key).tokens.push(info.token);
+  });
 
   // ✅ Telegram: ТІЛЬКИ “людський” текст (без guildId/sector/openTime)
   try {
@@ -1506,57 +1548,43 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
     logger.error("[TG] error while sending:", e);
   }
 
-  if (soundTokens.length > 0) {
-    const payloadSound = {
+  await Promise.all(Array.from(recipientGroups.values()).map(async (group) => {
+    const payload = {
       data: {
         screen: "GBG",
         sectorId: String(sectorId),
         title: titleText,
-        body: messageText,
+        body: group.body,
         type: "gbg_sector_open",
-        sound: "1",
+        sound: group.sound ? "1" : "0",
       },
       android: {
         priority: "high",
-        notification: { title: titleText, body: messageText, sound: "alert", channel_id: "gbg_sector" },
+        notification: {
+          title: titleText,
+          body: group.body,
+          ...(group.sound ? { sound: "alert" } : {}),
+          channel_id: group.sound ? "gbg_sector" : "gbg_sector_silent",
+        },
       },
       apns: {
-        payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } },
+        payload: {
+          aps: {
+            alert: { title: titleText, body: group.body },
+            ...(group.sound ? { sound: "default" } : {}),
+            "content-available": 1,
+          },
+        },
       },
     };
 
     try {
-      await admin.messaging().sendEachForMulticast({ tokens: soundTokens, ...payloadSound });
-      logger.log(`[PUSH SENT SOUND] ${sectorId} sent to ${soundTokens.length} users.`);
+      await sendMulticastWithoutRecipientLimit({ tokens: group.tokens, ...payload });
+      logger.log(`[PUSH SENT ${group.sound ? "SOUND" : "SILENT"}] ${sectorId} sent to ${group.tokens.length} users.`);
     } catch (e) {
-      logger.error("[GBG] sound send error:", e);
+      logger.error(`[GBG] ${group.sound ? "sound" : "silent"} send error:`, e);
     }
-  }
-
-  if (silentTokens.length > 0) {
-    const payloadSilent = {
-      data: {
-        screen: "GBG",
-        sectorId: String(sectorId),
-        title: titleText,
-        body: messageText,
-        type: "gbg_sector_open",
-        sound: "0",
-      },
-      android: {
-        priority: "high",
-        notification: { title: titleText, body: messageText, channel_id: "gbg_sector_silent" },
-      },
-      apns: { payload: { aps: { alert: { title: titleText, body: messageText }, "content-available": 1 } } },
-    };
-
-    try {
-      await admin.messaging().sendEachForMulticast({ tokens: silentTokens, ...payloadSilent });
-      logger.log(`[PUSH SENT SILENT] ${sectorId} sent to ${silentTokens.length} users.`);
-    } catch (e) {
-      logger.error("[GBG] silent send error:", e);
-    }
-  }
+  }));
 
   return db.ref(queuePath).update({
     status: "sent",
@@ -1890,12 +1918,12 @@ exports.processGbgSectorBuildChecks = onSchedule(
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
                   if (!token) return null;
 
-                  return token;
+                  return { uid, token };
                 })
               );
 
-              const tokens = Array.from(new Set(leaderInfos.filter(Boolean)));
-              if (!tokens.length) {
+              const recipients = leaderInfos.filter(Boolean);
+              if (!recipients.length) {
                 await db.ref(queuePath).remove();
                 return;
               }
@@ -1903,21 +1931,31 @@ exports.processGbgSectorBuildChecks = onSchedule(
               const plannedReadable = formatRecommendedBuildings(best.planned);
               const titleText = "🛠️ Рекомендовано побудувати";
               const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
+              const worldContexts = await getPushWorldContext({
+                db,
+                guildId,
+                userIds: recipients.map((info) => info.uid),
+              });
+              const groups = new Map();
+              recipients.forEach((info) => {
+                const body = addWorldNameToPushBody(messageText, worldContexts.get(String(info.uid)));
+                if (!groups.has(body)) groups.set(body, []);
+                groups.get(body).push(info.token);
+              });
 
-              const chunks = chunkArray(tokens, 500);
               await Promise.all(
-                chunks.map((chunk) =>
-                  admin.messaging().sendEachForMulticast({
-                    tokens: chunk,
+                Array.from(groups.entries()).map(([body, tokens]) =>
+                  sendMulticastWithoutRecipientLimit({
+                    tokens,
                     data: {
                       screen: "GBG",
                       type: "gbg_build_plan",
                       title: titleText,
-                      body: messageText,
+                      body,
                       guildId: String(guildId),
                       sectorId: String(sectorId),
                     },
-                    notification: { title: titleText, body: messageText },
+                    notification: { title: titleText, body },
                     android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
                     apns: { payload: { aps: { sound: "default" } } },
                   })
@@ -1965,29 +2003,40 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   if (!membersSnap.exists()) return { success: false };
 
   const memberIds = Object.keys(membersSnap.val());
-  const tokensPromises = memberIds.map((uid) => db.ref(`/users/${uid}/fcmToken`).once("value"));
-  const tokensSnaps = await Promise.all(tokensPromises);
-  const tokens = tokensSnaps.map((s) => s.val()).filter(Boolean);
+  const tokensPromises = memberIds.map(async (uid) => {
+    const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+    return tokenSnap.exists() && tokenSnap.val() ? { uid, token: tokenSnap.val() } : null;
+  });
+  const recipients = (await Promise.all(tokensPromises)).filter(Boolean);
 
-  if (tokens.length > 0) {
+  if (recipients.length > 0) {
     const titleText = "🆘 Потрібна допомога!";
     const messageText = "Терміново потрібна допомога на полях битв!";
+    const worldContexts = await getPushWorldContext({ db, guildId, userIds: memberIds });
+    const groups = new Map();
+    recipients.forEach((info) => {
+      const body = addWorldNameToPushBody(messageText, worldContexts.get(String(info.uid)));
+      if (!groups.has(body)) groups.set(body, []);
+      groups.get(body).push(info.token);
+    });
 
-    const payload = {
-      data: { screen: "GBG", title: titleText, body: messageText },
-      android: {
-        priority: "high",
-        notification: { title: titleText, body: messageText, sound: "default", channel_id: "default" },
-      },
-      apns: {
-        payload: { aps: { alert: { title: titleText, body: messageText }, sound: "default", "content-available": 1 } },
-      },
-    };
-    try {
-      await admin.messaging().sendEachForMulticast({ tokens, ...payload });
-    } catch (e) {
-      logger.error(e);
-    }
+    await Promise.all(Array.from(groups.entries()).map(async ([body, tokens]) => {
+      const payload = {
+        data: { screen: "GBG", title: titleText, body },
+        android: {
+          priority: "high",
+          notification: { title: titleText, body, sound: "default", channel_id: "default" },
+        },
+        apns: {
+          payload: { aps: { alert: { title: titleText, body }, sound: "default", "content-available": 1 } },
+        },
+      };
+      try {
+        await sendMulticastWithoutRecipientLimit({ tokens, ...payload });
+      } catch (e) {
+        logger.error(e);
+      }
+    }));
   }
   return { success: true };
 });

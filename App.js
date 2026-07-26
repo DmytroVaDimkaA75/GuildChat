@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { firebase } from '@react-native-firebase/app';
 import database from '@react-native-firebase/database';
 import messaging from '@react-native-firebase/messaging';
-import { NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -35,6 +35,18 @@ if (!firebase.apps.length) {
 }
 
 const Stack = createStackNavigator();
+const navigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: "#4ea1ff",
+    background: "#0f1115",
+    card: "#1b1f2a",
+    text: "#f4f7fb",
+    border: "#3a3f4a",
+    notification: "#ff5b5b",
+  },
+};
 
 const AppContent = () => {
   const [languageLoaded, setLanguageLoaded] = useState(false);
@@ -335,7 +347,7 @@ const AppContent = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator initialRouteName="RoleSelectionScreen">
         <Stack.Screen name="RoleSelectionScreen" options={{ headerShown: false }}>
           {props => (
@@ -385,5 +397,10 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center" }
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0f1115",
+  }
 });

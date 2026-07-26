@@ -203,10 +203,11 @@ const styles = StyleSheet.create({
     },
     input: {
       borderWidth: 1,
-      borderColor: "#e0e0e0",
+      borderColor: "#3a3f4a",
       padding: 10,
       borderRadius: 5,
-      backgroundColor: "#f2f2f2",
+      backgroundColor: "#1b1f2a",
+      color: "#f4f7fb",
       width: "100%",
     },
     button: {
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
       backgroundColor: "rgba(0, 0, 0, 0.5)",
     },
     modalContent: {
-      backgroundColor: "#fff",
+      backgroundColor: "#1b1f2a",
       padding: 20,
       borderTopLeftRadius: 10,
       borderTopRightRadius: 10,

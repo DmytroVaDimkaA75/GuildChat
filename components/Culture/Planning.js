@@ -2179,11 +2179,11 @@ const styles = StyleSheet.create({
   container: {
     alignSelf: 'center',
     alignItems: 'center', 
-    backgroundColor: '#fff',
+    backgroundColor: '#0f1115',
     justifyContent: 'center',
     overflow: 'hidden'
   },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f1115' }
 });
 
 export default Planning;

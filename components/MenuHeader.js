@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1b1f2a',
   },
   avatar: {
     width: 50,
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   },
   worldName: {
     fontSize: 14,
-    color: '#666',
+    color: '#9aa3b2',
   },
 });
 

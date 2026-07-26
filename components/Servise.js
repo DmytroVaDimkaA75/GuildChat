@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
       justifyContent: 'flex-end',
       alignItems: 'center',
       marginBottom: 20,
-      backgroundColor: "white"
+      backgroundColor: "#0f1115"
     },
     bonusContainer: {
       position: 'absolute',
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     },
     selectedBonusText: {
       fontSize: 20,
-      color: 'black',
+      color: '#f4f7fb',
       marginBottom: 10,
     },
     footer: {
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     modalContainer: {
-      backgroundColor: 'white',
+      backgroundColor: '#1b1f2a',
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       padding: 20,

@@ -115,10 +115,10 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 20,
-    color: '#333',
+    color: '#9aa3b2',
   },
   selectedText: {
-    color: '#007AFF',
+    color: '#4ea1ff',
     fontWeight: 'bold',
   },
   highlight: {

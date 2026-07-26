@@ -230,7 +230,7 @@ const CreateGroupScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0f1115',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   topSection: {
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
     fontSize: 16,
-    color: '#666',
+    color: '#9aa3b2',
   },
   membersList: {
     flex: 1,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   memberName: {
     fontSize: 16,
-    color: '#000',
+    color: '#f4f7fb',
   },
 });
 
