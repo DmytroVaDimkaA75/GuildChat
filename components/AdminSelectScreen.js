@@ -48,14 +48,34 @@ const AdminSelectScreen = ({
     const guildInfo = {
       guildName: clanCaption,
       worldName: selectedWorld,
-      setting: {
-        GBGGoal: true,
-      },
+      guildUsers: Object.fromEntries(
+        guildData.map((member) => {
+          const userId = member.linkUrl.split("/").pop();
+          return [
+            userId,
+            {
+              userName: member.name,
+              imageUrl: `https://foe.scoredb.io${member.imageUrl}`,
+            },
+          ];
+        })
+      ),
     };
 
     try {
-      // 3. Записываем данные гильдии
-      await guildRef.set(guildInfo);
+      const gbgGoalSnapshot = await guildRef
+        .child("setting/GBGGoal")
+        .once("value");
+      const guildUpdates = { ...guildInfo };
+      if (
+        !gbgGoalSnapshot.exists() ||
+        typeof gbgGoalSnapshot.val() !== "boolean"
+      ) {
+        guildUpdates["setting/GBGGoal"] = true;
+      }
+
+      // 3. Оновлюємо лише базові дані, не стираючи налаштування та контент гільдії
+      await guildRef.update(guildUpdates);
       console.log(`Дані гільдії оновлено для id: ${formattedGuildId}`);
 
       // 4. Оновлюємо / створюємо користувачів у Firebase
@@ -69,11 +89,6 @@ const AdminSelectScreen = ({
               imageUrl: imageUrl,
               role: userId === selectedUserId ? "guildLeader" : "member",
             },
-          };
-
-          const userGuildUserData = {
-            userName: member.name,
-            imageUrl: imageUrl,
           };
 
           // ИСПРАВЛЕНО: Правильный синтаксис
@@ -94,9 +109,6 @@ const AdminSelectScreen = ({
             };
             await userRef.set(userRootData);
           }
-
-          const userInGuildRef = database().ref(`guilds/${formattedGuildId}/guildUsers/${userId}`);
-          await userInGuildRef.set(userGuildUserData);
         })
       );
 

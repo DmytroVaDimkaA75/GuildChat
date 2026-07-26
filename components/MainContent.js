@@ -10,13 +10,19 @@ import {
 } from '@react-navigation/drawer';
 import { createNavigationContainerRef, DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Animated, AppState, Easing, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, Platform, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { GuildContext, GuildProvider } from '../GuildContext';
+import { GuildContext } from '../GuildContext';
 import i18n from "../i18n";
+import {
+  clearPendingNotificationRoute,
+  normalizeNotificationRoute,
+  readPendingNotificationRoute,
+  savePendingNotificationRoute,
+} from '../src/notifications/notificationRouting';
 import { syncGuildMembers } from '../src/utils/guildSync';
 
 // Импорт компонентов
@@ -62,6 +68,43 @@ import Profile from "./ico/menu/user.svg";
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
 const navigationRef = createNavigationContainerRef();
+const NOTIFICATION_ROUTE_VALIDATION_TIMEOUT_MS = 12000;
+
+const createPermanentNotificationRouteError = (message) => {
+  const error = new Error(message);
+  error.isPermanentNotificationRouteError = true;
+  return error;
+};
+
+const isPermanentNotificationRouteFailure = (error) => {
+  if (error?.isPermanentNotificationRouteError) return true;
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    code.includes('permission-denied') ||
+    code.includes('permission_denied') ||
+    message.includes('permission denied')
+  );
+};
+
+const withNotificationRouteTimeout = async (promise) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(
+        'Не вдалося перевірити доступ. Перевірте інтернет і натисніть сповіщення ще раз.'
+      );
+      error.code = 'notification-route/timeout';
+      reject(error);
+    }, NOTIFICATION_ROUTE_VALIDATION_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 
 // --- ДИЗАЙН СИСТЕМА ---
 const COLORS = {
@@ -575,7 +618,7 @@ function ProfileStack() {
 }
 
 // --- DRAWER CONTENT ---
-function CustomDrawerContent(props) {
+function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
   const { t } = useTranslation();
   const { guildId, setGuildId } = useContext(GuildContext);
   const [guildName, setGuildName] = useState('');
@@ -663,6 +706,7 @@ function CustomDrawerContent(props) {
 
   const handleGuildPress = async (newGuildId) => {
     try {
+      await onManualGuildSwitch?.();
       await AsyncStorage.setItem('guildId', newGuildId);
       setGuildId(newGuildId);
       setSelectedGuildId(newGuildId);
@@ -821,7 +865,7 @@ function CustomDrawerContent(props) {
   );
 }
 
-function AppNavigator({ onReady }) {
+function AppNavigator({ onReady, onManualGuildSwitch }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
@@ -856,37 +900,71 @@ function AppNavigator({ onReady }) {
     });
 
   React.useEffect(() => {
+    let cancelled = false;
+    const activeGuildId = String(guildId || "");
+
     const fetchRole = async () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
-        const guildId = await AsyncStorage.getItem('guildId');
-        if (!userId || !guildId) return;
-        const userRoleRef = database().ref(`users/${userId}/${guildId}/role`);
+        if (!userId || !activeGuildId) {
+          if (!cancelled) {
+            setHasLeaderAccess(false);
+            setIsTester(false);
+          }
+          return;
+        }
+
+        const userRoleRef = database().ref(
+          `users/${userId}/${activeGuildId}/role`
+        );
         const snap = await userRoleRef.once('value');
         const role = snap.exists() ? snap.val() : null;
         const canUseLeaderFeatures = role === 'guildLeader' || role === 'tester';
 
+        if (cancelled) return;
         setHasLeaderAccess(canUseLeaderFeatures);
         setIsTester(role === 'tester');
 
         if (canUseLeaderFeatures) {
-          await syncGuildMembers({
-            guildId,
+          syncGuildMembers({
+            guildId: activeGuildId,
             confirmDeletion,
             confirmAddition,
+          }).catch((error) => {
+            console.log(
+              '❌ Помилка синхронізації учасників гільдії:',
+              error?.message || String(error)
+            );
           });
         }
-      } catch (e) {
+      } catch (_error) {
+        if (cancelled) return;
         setHasLeaderAccess(false);
         setIsTester(false);
       }
     };
+
     fetchRole();
+    return () => {
+      cancelled = true;
+    };
   }, [guildId]);
 
-  const renderIcon = (IconComponent) => ({ color }) => (
-    <IconComponent width={24} height={24} fill={color} color={color} style={{ color: color }} />
-  );
+  const renderIcon = (IconComponent) => {
+    function DrawerIcon({ color }) {
+      return (
+        <IconComponent
+          width={24}
+          height={24}
+          fill={color}
+          color={color}
+          style={{ color }}
+        />
+      );
+    }
+
+    return DrawerIcon;
+  };
 
   return (
     <NavigationContainer
@@ -896,7 +974,12 @@ function AppNavigator({ onReady }) {
       onReady={onReady}
     >
       <Drawer.Navigator
-        drawerContent={props => <CustomDrawerContent {...props} />}
+        drawerContent={(props) => (
+          <CustomDrawerContent
+            {...props}
+            onManualGuildSwitch={onManualGuildSwitch}
+          />
+        )}
         initialRouteName="GBG"
         screenOptions={{
           drawerActiveTintColor: COLORS.primary,
@@ -931,16 +1014,14 @@ function AppNavigator({ onReady }) {
             drawerIconComponent: renderIcon(GB)
           }}
         />
-        {isTester && (
-          <Drawer.Screen
-            name="culture"
-            component={CultureStack}
-            options={{
-              drawerLabel: t("drawer.culture"),
-              drawerIconComponent: renderIcon(Boat)
-            }}
-          />
-        )}
+        <Drawer.Screen
+          name="culture"
+          component={CultureStack}
+          options={{
+            drawerLabel: isTester ? t("drawer.culture") : null,
+            drawerIconComponent: renderIcon(Boat)
+          }}
+        />
         <Drawer.Screen
           name="profile"
           component={ProfileStack}
@@ -965,31 +1046,69 @@ function AppNavigator({ onReady }) {
 }
 
 export default function MainContent() {
-  const pendingNavigationRef = useRef(null);
-  const [navigationReady, setNavigationReady] = useState(false);
-
-  const runWhenNavigationReady = (action) => {
-    if (navigationRef.isReady()) {
-      action();
-      return;
-    }
-    pendingNavigationRef.current = action;
-  };
+  const { guildId, switchGuild } = useContext(GuildContext);
+  const [readyGuildId, setReadyGuildId] = useState(null);
+  const [pendingNotificationRoute, setPendingNotificationRoute] = useState(null);
+  const guildIdRef = useRef(guildId);
+  const processingRouteKeysRef = useRef(new Set());
+  const handledRouteKeysRef = useRef(new Set());
+  const routeGenerationRef = useRef(0);
+  const activeNotificationRouteRef = useRef(null);
+  const guildSwitchChainRef = useRef(Promise.resolve());
+  const manualRouteCancellationEpochRef = useRef(0);
+  const manualRouteCancellationInProgressRef = useRef(false);
 
   useEffect(() => {
-    if (navigationReady && pendingNavigationRef.current) {
-      const action = pendingNavigationRef.current;
-      pendingNavigationRef.current = null;
-      action();
-    }
-  }, [navigationReady]);
+    guildIdRef.current = guildId;
+  }, [guildId]);
 
-  const clearSectorNotifications = async () => {
+  const switchToNotificationGuild = useCallback(
+    (targetGuildId, generation) => {
+      const normalizedTargetGuildId = String(targetGuildId || "");
+
+      const performSwitch = async () => {
+        if (generation !== routeGenerationRef.current) {
+          return { completed: false, switched: false };
+        }
+
+        const currentGuildId = String(guildIdRef.current || "");
+        if (!normalizedTargetGuildId || normalizedTargetGuildId === currentGuildId) {
+          return { completed: true, switched: false };
+        }
+
+        guildIdRef.current = normalizedTargetGuildId;
+        try {
+          await switchGuild(normalizedTargetGuildId);
+          return { completed: true, switched: true };
+        } catch (error) {
+          guildIdRef.current = currentGuildId;
+          throw error;
+        }
+      };
+
+      const result = guildSwitchChainRef.current.then(
+        performSwitch,
+        performSwitch
+      );
+      guildSwitchChainRef.current = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
+    },
+    [switchGuild]
+  );
+
+  const clearSectorNotifications = useCallback(async (targetGuildId = "") => {
     try {
       const displayed = await notifee.getDisplayedNotifications();
       const sectorNotifications = displayed.filter(({ notification }) => {
         const channelId = notification?.android?.channelId;
         const type = notification?.data?.type;
+        const notificationGuildId = String(notification?.data?.guildId || "");
+        if (targetGuildId && notificationGuildId !== String(targetGuildId)) {
+          return false;
+        }
         return (
           type === 'gbg_sector_open' ||
           channelId === 'gbg_sector' ||
@@ -1003,16 +1122,21 @@ export default function MainContent() {
     } catch (error) {
       console.log('❌ Помилка очищення секторних пушів:', error?.message || String(error));
     }
-  };
+  }, []);
 
-  const clearChatNotifications = async (chatId) => {
+  const clearChatNotifications = useCallback(async (chatId, targetGuildId = "") => {
     if (!chatId) return;
     try {
       const displayed = await notifee.getDisplayedNotifications();
       const chatNotifications = displayed.filter(({ notification }) => {
         const type = notification?.data?.type;
         const notificationChatId = notification?.data?.chatId;
-        return type === 'chat_message' && String(notificationChatId) === String(chatId);
+        const notificationGuildId = String(notification?.data?.guildId || "");
+        return (
+          type === 'chat_message' &&
+          String(notificationChatId) === String(chatId) &&
+          (!targetGuildId || notificationGuildId === String(targetGuildId))
+        );
       });
 
       await Promise.all(
@@ -1021,15 +1145,19 @@ export default function MainContent() {
     } catch (error) {
       console.log('❌ Помилка очищення чат-пушів:', error?.message || String(error));
     }
-  };
+  }, []);
 
-  const clearCultureNotifications = async (settlementName) => {
+  const clearCultureNotifications = useCallback(async (settlementName = "", targetGuildId = "") => {
     try {
       const displayed = await notifee.getDisplayedNotifications();
       const cultureNotifications = displayed.filter(({ notification }) => {
         const type = notification?.data?.type;
         const notificationSettlementName = notification?.data?.settlementName;
+        const notificationGuildId = String(notification?.data?.guildId || "");
         if (type !== 'culture_build_ready') return false;
+        if (targetGuildId && notificationGuildId !== String(targetGuildId)) {
+          return false;
+        }
         if (!settlementName) return true;
         return String(notificationSettlementName) === String(settlementName);
       });
@@ -1040,65 +1168,388 @@ export default function MainContent() {
     } catch (error) {
       console.log('❌ Помилка очищення culture-пушів:', error?.message || String(error));
     }
-  };
+  }, []);
 
-  const handleNotificationTap = async (remoteMessage) => {
-    const data = remoteMessage?.data || {};
-    const messageType = data.type;
+  const clearStoredNotificationRoute = useCallback(async (expectedRouteOrKey) => {
+    try {
+      return await clearPendingNotificationRoute(expectedRouteOrKey);
+    } catch (error) {
+      console.log(
+        '❌ Помилка очищення збереженого переходу зі сповіщення:',
+        error?.message || String(error)
+      );
+      return false;
+    }
+  }, []);
 
-    if (messageType === 'gbg_sector_open') {
-      await clearSectorNotifications();
-      runWhenNavigationReady(() => {
-        navigationRef.navigate('GBG', { screen: 'GBGScreen' });
-      });
+  const validateNotificationRoute = useCallback(async (route) => {
+    const userId = await AsyncStorage.getItem('userId');
+    if (!userId) {
+      throw createPermanentNotificationRouteError(
+        'Користувача не знайдено. Увійдіть у застосунок ще раз.'
+      );
+    }
+
+    if (!route.guildId) {
+      return { worldName: "" };
+    }
+
+    const membershipRef = database().ref(
+      `guilds/${route.guildId}/guildUsers/${userId}`
+    );
+    const worldNameRef = database().ref(`guilds/${route.guildId}/worldName`);
+    const requests = [
+      membershipRef.once('value'),
+      worldNameRef.once('value'),
+    ];
+
+    if (route.type === 'chat_message') {
+      requests.push(
+        database()
+          .ref(
+            `guilds/${route.guildId}/chats/${route.chatId}/members/${userId}`
+          )
+          .once('value')
+      );
+    } else if (route.type === 'culture_build_ready') {
+      requests.push(
+        database()
+          .ref(`users/${userId}/${route.guildId}/role`)
+          .once('value')
+      );
+    }
+
+    const [membershipSnap, worldNameSnap, routeAccessSnap] =
+      await withNotificationRouteTimeout(Promise.all(requests));
+
+    if (!membershipSnap.exists()) {
+      throw createPermanentNotificationRouteError(
+        'Ви більше не є учасником гільдії з цього сповіщення.'
+      );
+    }
+
+    if (route.type === 'chat_message') {
+      if (!routeAccessSnap?.exists()) {
+        throw createPermanentNotificationRouteError(
+          'Цей чат не існує або у вас більше немає до нього доступу.'
+        );
+      }
+    } else if (
+      route.type === 'culture_build_ready' &&
+      routeAccessSnap?.val() !== 'tester'
+    ) {
+      throw createPermanentNotificationRouteError(
+        'У вас немає доступу до культурних поселень у цьому світі.'
+      );
+    }
+
+    return {
+      worldName: worldNameSnap.exists() ? String(worldNameSnap.val() || "") : "",
+    };
+  }, []);
+
+  const queueNotificationRoute = useCallback(async (source, expectedEpoch = null) => {
+    if (
+      expectedEpoch !== null &&
+      (
+        expectedEpoch !== manualRouteCancellationEpochRef.current ||
+        manualRouteCancellationInProgressRef.current
+      )
+    ) {
       return;
     }
 
-    if (messageType === 'culture_build_ready') {
-      await clearCultureNotifications(data.settlementName);
-      runWhenNavigationReady(() => {
-        if (data.settlementName) {
-          navigationRef.navigate('culture', {
-            screen: 'SettlementGamePlanner',
+    const initialRoute = normalizeNotificationRoute(source);
+    if (!initialRoute) return;
+
+    const targetGuildId = initialRoute.guildId || String(guildIdRef.current || "");
+    const route = normalizeNotificationRoute({
+      ...initialRoute,
+      guildId: targetGuildId,
+    });
+    if (!route) return;
+
+    if (handledRouteKeysRef.current.has(route.key)) {
+      await clearStoredNotificationRoute(route.key);
+      return;
+    }
+
+    if (processingRouteKeysRef.current.has(route.key)) {
+      return;
+    }
+
+    const generation = routeGenerationRef.current + 1;
+    routeGenerationRef.current = generation;
+    processingRouteKeysRef.current.clear();
+    processingRouteKeysRef.current.add(route.key);
+    activeNotificationRouteRef.current = { ...route, generation };
+    setPendingNotificationRoute(null);
+
+    try {
+      await savePendingNotificationRoute(route);
+      if (generation !== routeGenerationRef.current) {
+        processingRouteKeysRef.current.delete(route.key);
+        if (activeNotificationRouteRef.current?.generation === generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        return;
+      }
+
+      const { worldName } = await validateNotificationRoute(route);
+      if (generation !== routeGenerationRef.current) {
+        processingRouteKeysRef.current.delete(route.key);
+        if (activeNotificationRouteRef.current?.generation === generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        return;
+      }
+
+      const switchResult = await switchToNotificationGuild(
+        route.guildId,
+        generation
+      );
+      if (
+        !switchResult.completed ||
+        generation !== routeGenerationRef.current
+      ) {
+        processingRouteKeysRef.current.delete(route.key);
+        if (activeNotificationRouteRef.current?.generation === generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        return;
+      }
+
+      setPendingNotificationRoute({ ...route, generation });
+
+      if (switchResult.switched && Platform.OS === 'android') {
+        ToastAndroid.show(
+          worldName
+            ? `Перемкнуто на ${worldName}`
+            : 'Перемкнуто на світ зі сповіщення',
+          ToastAndroid.SHORT
+        );
+      }
+    } catch (error) {
+      processingRouteKeysRef.current.delete(route.key);
+      if (generation !== routeGenerationRef.current) return;
+
+      setPendingNotificationRoute((current) =>
+        current?.generation === generation ? null : current
+      );
+      if (isPermanentNotificationRouteFailure(error)) {
+        if (activeNotificationRouteRef.current?.generation === generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        await clearStoredNotificationRoute(route);
+      }
+      Alert.alert(
+        'Не вдалося відкрити сповіщення',
+        error?.message || 'Перевірте доступ до світу та чату.'
+      );
+    }
+  }, [
+    clearStoredNotificationRoute,
+    switchToNotificationGuild,
+    validateNotificationRoute,
+  ]);
+
+  useEffect(() => {
+    const route = pendingNotificationRoute;
+    if (!route || !guildId || !readyGuildId) return;
+    if (route.generation !== routeGenerationRef.current) return;
+    if (String(route.guildId || guildId) !== String(guildId)) return;
+    if (String(readyGuildId) !== String(guildId)) return;
+    if (!navigationRef.isReady()) return;
+
+    let cancelled = false;
+    const processingRouteKeys = processingRouteKeysRef.current;
+
+    const openRoute = async () => {
+      try {
+        if (route.type === 'chat_message') {
+          navigationRef.navigate('ChatList', {
+            screen: 'ChatWindow',
             params: {
-              settlementName: data.settlementName,
+              chatId: route.chatId,
+              guildId: route.guildId,
+              messageId: route.messageId,
             },
           });
+          await clearChatNotifications(route.chatId, route.guildId);
+        } else if (
+          route.type === 'gbg_sector_open' ||
+          route.type === 'gbg_build_plan'
+        ) {
+          navigationRef.navigate('GBG', { screen: 'GBGScreen' });
+          await clearSectorNotifications(route.guildId);
+        } else if (route.type === 'culture_build_ready') {
+          if (route.settlementName) {
+            navigationRef.navigate('culture', {
+              screen: 'SettlementGamePlanner',
+              params: { settlementName: route.settlementName },
+            });
+          } else {
+            navigationRef.navigate('culture', {
+              screen: 'CulturalSettlements',
+            });
+          }
+          await clearCultureNotifications(
+            route.settlementName,
+            route.guildId
+          );
+        }
+
+        if (
+          cancelled ||
+          route.generation !== routeGenerationRef.current
+        ) {
+          processingRouteKeys.delete(route.key);
+          if (activeNotificationRouteRef.current?.generation === route.generation) {
+            activeNotificationRouteRef.current = null;
+          }
           return;
         }
 
-        navigationRef.navigate('culture', { screen: 'CulturalSettlements' });
-      });
-      return;
+        handledRouteKeysRef.current.add(route.key);
+        processingRouteKeys.delete(route.key);
+        if (activeNotificationRouteRef.current?.generation === route.generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        setPendingNotificationRoute((current) =>
+          current?.generation === route.generation ? null : current
+        );
+        await clearStoredNotificationRoute(route);
+      } catch (error) {
+        processingRouteKeys.delete(route.key);
+        if (activeNotificationRouteRef.current?.generation === route.generation) {
+          activeNotificationRouteRef.current = null;
+        }
+        if (
+          cancelled ||
+          route.generation !== routeGenerationRef.current
+        ) {
+          return;
+        }
+
+        setPendingNotificationRoute((current) =>
+          current?.generation === route.generation ? null : current
+        );
+        await clearStoredNotificationRoute(route);
+        Alert.alert(
+          'Не вдалося відкрити сповіщення',
+          error?.message || 'Спробуйте ще раз.'
+        );
+      }
+    };
+
+    openRoute();
+    return () => {
+      cancelled = true;
+      if (route.generation !== routeGenerationRef.current) {
+        processingRouteKeys.delete(route.key);
+      }
+    };
+  }, [
+    clearChatNotifications,
+    clearCultureNotifications,
+    clearSectorNotifications,
+    clearStoredNotificationRoute,
+    guildId,
+    pendingNotificationRoute,
+    readyGuildId,
+  ]);
+
+  const cancelNotificationRouteForManualSwitch = useCallback(async () => {
+    const cancellationCutoff = Date.now();
+    const routeToCancel = activeNotificationRouteRef.current;
+    manualRouteCancellationInProgressRef.current = true;
+    manualRouteCancellationEpochRef.current += 1;
+    routeGenerationRef.current += 1;
+    processingRouteKeysRef.current.clear();
+    activeNotificationRouteRef.current = null;
+    setPendingNotificationRoute(null);
+
+    let storedRouteToCancel = null;
+    try {
+      storedRouteToCancel = await readPendingNotificationRoute();
+    } catch (error) {
+      console.log(
+        '❌ Помилка читання переходу під час ручного перемикання:',
+        error?.message || String(error)
+      );
     }
 
-    if (messageType === 'chat_message') {
-      const chatId = data.chatId;
-      if (chatId) {
-        await clearChatNotifications(chatId);
-        runWhenNavigationReady(() => {
-          navigationRef.navigate('ChatList', {
-            screen: 'ChatWindow',
-            params: { chatId },
-          });
-        });
-      }
+    await guildSwitchChainRef.current;
+
+    const routesToCancel = [routeToCancel, storedRouteToCancel].filter(
+      (route, index, routes) =>
+        route &&
+        Number(route.createdAt || 0) <= cancellationCutoff &&
+        routes.findIndex(
+          (candidate) =>
+            candidate?.key === route.key &&
+            candidate?.createdAt === route.createdAt
+        ) === index
+    );
+
+    for (const route of routesToCancel) {
+      await clearStoredNotificationRoute(route);
     }
-  };
+    manualRouteCancellationInProgressRef.current = false;
+  }, [clearStoredNotificationRoute]);
+
+  const restorePendingNotificationRoute = useCallback(async () => {
+    if (manualRouteCancellationInProgressRef.current) return;
+    const expectedEpoch = manualRouteCancellationEpochRef.current;
+    try {
+      const storedRoute = await readPendingNotificationRoute();
+      if (
+        storedRoute &&
+        expectedEpoch === manualRouteCancellationEpochRef.current
+      ) {
+        await queueNotificationRoute(storedRoute, expectedEpoch);
+      }
+    } catch (error) {
+      console.log(
+        '❌ Помилка відновлення переходу зі сповіщення:',
+        error?.message || String(error)
+      );
+    }
+  }, [queueNotificationRoute]);
 
   useEffect(() => {
+    const retryTimers = new Set();
+    const restoreWithRetry = () => {
+      restorePendingNotificationRoute();
+      const timer = setTimeout(() => {
+        retryTimers.delete(timer);
+        restorePendingNotificationRoute();
+      }, 750);
+      retryTimers.add(timer);
+    };
+
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        clearSectorNotifications();
-        clearCultureNotifications();
+        restoreWithRetry();
+        clearSectorNotifications(String(guildIdRef.current || ""));
+        clearCultureNotifications("", String(guildIdRef.current || ""));
       }
     });
 
-    clearSectorNotifications();
-    clearCultureNotifications();
+    restoreWithRetry();
+    clearSectorNotifications(String(guildIdRef.current || ""));
+    clearCultureNotifications("", String(guildIdRef.current || ""));
 
-    return () => subscription.remove();
-  }, []);
+    return () => {
+      subscription.remove();
+      retryTimers.forEach((timer) => clearTimeout(timer));
+      retryTimers.clear();
+    };
+  }, [
+    clearCultureNotifications,
+    clearSectorNotifications,
+    restorePendingNotificationRoute,
+  ]);
 
   useEffect(() => {
     const resolveNotificationContent = (remoteMessage) => {
@@ -1113,6 +1564,77 @@ export default function MainContent() {
 
       return { title, body };
     };
+
+    const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(
+      (remoteMessage) => {
+        console.log(
+          'Notification caused app to open from background state:',
+          remoteMessage.notification
+        );
+        queueNotificationRoute(remoteMessage);
+      }
+    );
+
+    const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+        const notification = detail?.notification;
+        queueNotificationRoute({
+          ...(notification?.data || {}),
+          notificationEventId:
+            notification?.data?.notificationEventId ||
+            notification?.id ||
+            "",
+        });
+      }
+    });
+
+    const initialNotificationEpoch =
+      manualRouteCancellationEpochRef.current;
+
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log(
+            'Notification caused app to open from quit state:',
+            remoteMessage.notification
+          );
+          queueNotificationRoute(
+            remoteMessage,
+            initialNotificationEpoch
+          );
+        }
+      })
+      .catch((error) => {
+        console.log(
+          '❌ Помилка читання початкового FCM-сповіщення:',
+          error?.message || String(error)
+        );
+      });
+
+    notifee
+      .getInitialNotification()
+      .then((initialNotification) => {
+        if (initialNotification?.notification) {
+          const notification = initialNotification.notification;
+          queueNotificationRoute(
+            {
+              ...(notification.data || {}),
+              notificationEventId:
+                notification.data?.notificationEventId ||
+                notification.id ||
+                "",
+            },
+            initialNotificationEpoch
+          );
+        }
+      })
+      .catch((error) => {
+        console.log(
+          '❌ Помилка читання початкового Notifee-сповіщення:',
+          error?.message || String(error)
+        );
+      });
 
     const setupPushNotifications = async () => {
       const authStatus = await messaging().requestPermission();
@@ -1228,10 +1750,19 @@ export default function MainContent() {
               ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
               : 'default';
 
+        const notificationData = {
+          ...(remoteMessage?.data || {}),
+          notificationEventId: String(
+            remoteMessage?.data?.notificationEventId ||
+            remoteMessage?.messageId ||
+            Date.now()
+          ),
+        };
+
         await notifee.displayNotification({
           title,
           body,
-          data: remoteMessage?.data || {},
+          data: notificationData,
           android: {
             channelId: displayChannelId,
             importance: AndroidImportance.HIGH,
@@ -1240,45 +1771,31 @@ export default function MainContent() {
         });
       });
 
-      const unsubscribeOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
-        console.log('Notification caused app to open from background state:', remoteMessage.notification);
-        handleNotificationTap(remoteMessage);
-      });
-
-      messaging()
-        .getInitialNotification()
-        .then(remoteMessage => {
-          if (remoteMessage) {
-            console.log('Notification caused app to open from quit state:', remoteMessage.notification);
-            handleNotificationTap(remoteMessage);
-          }
-        });
-
-      const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
-        if (type === EventType.PRESS) {
-          handleNotificationTap({ data: detail?.notification?.data || {} });
-        }
-      });
-
-      return () => {
-        unsubscribeOnMessage();
-        unsubscribeOpenedApp();
-        unsubscribeNotifee();
-      };
+      return unsubscribeOnMessage;
     };
 
-    const cleanupPromise = setupPushNotifications();
+    const cleanupPromise = setupPushNotifications().catch((error) => {
+      console.log(
+        '❌ Помилка налаштування локальних сповіщень:',
+        error?.message || String(error)
+      );
+      return null;
+    });
+
     return () => {
+      unsubscribeOpenedApp();
+      unsubscribeNotifee();
       cleanupPromise?.then((cleanup) => cleanup?.());
     };
-  }, []);
+  }, [queueNotificationRoute]);
 
   return (
-    <GuildProvider>
-      <MenuProvider>
-        <AppNavigator onReady={() => setNavigationReady(true)} />
-      </MenuProvider>
-    </GuildProvider>
+    <MenuProvider>
+      <AppNavigator
+        onReady={() => setReadyGuildId(String(guildId || ""))}
+        onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
+      />
+    </MenuProvider>
   );
 }
 

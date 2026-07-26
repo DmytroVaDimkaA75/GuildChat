@@ -90,6 +90,14 @@ const ukTranslation = {
     bonusLabel: "Бонус: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Найближчим часом секторів немає",
+    sectorNotifications: {
+      muteTitle: "Не сигналізувати",
+      thirtyMinutes: "30 хвилин",
+      oneHour: "1 година",
+      threeHours: "3 години",
+      fiveHours: "5 годин",
+      saveFailed: "Не вдалося зберегти налаштування сповіщень."
+    },
     info: {
       title: "Суперники на мапі",
       empty: "Інформація відсутня",
@@ -296,6 +304,58 @@ const ukTranslation = {
   adminStack: {
     adminScreenTitle: "Налаштування гільдії"
   },
+  guildAdmin: {
+    telegram: {
+      title: "Telegram-сповіщення",
+      description: "Підключіть власний канал без Bot Token і Chat ID. Сповіщення надходитимуть лише для активної гільдії.",
+      loading: "Завантаження...",
+      disconnected: "Telegram-канал ще не підключено.",
+      connected: "Telegram підключено",
+      channelFallback: "Telegram-канал",
+      connect: "Підключити Telegram",
+      reconnect: "Підключити знову",
+      stepCreateChannel: "Створіть або виберіть канал у Telegram.",
+      stepAddBot: "Додайте спільного бота застосунку до каналу як адміністратора з правом публікувати повідомлення.",
+      stepPublishCommand: "Опублікуйте наведену нижче команду безпосередньо в цьому каналі.",
+      botLabel: "Бот",
+      addBot: "Додати бота до каналу",
+      commandLabel: "Команда для публікації",
+      copiedTitle: "Скопійовано",
+      copiedMessage: "Команду скопійовано в буфер обміну.",
+      waiting: "Очікуємо підтвердження від Telegram…",
+      expiresIn: "Код діє ще {{time}}",
+      codeExpired: "Термін дії коду завершився. Створіть новий код.",
+      newCode: "Створити новий код",
+      pendingCodeLost: "Для гільдії вже створювався код. З міркувань безпеки він не зберігається у відкритому вигляді — створіть новий.",
+      test: "Надіслати тест",
+      testSentTitle: "Telegram",
+      testSentMessage: "Тестове повідомлення надіслано в канал.",
+      testFailed: "Не вдалося надіслати тестове повідомлення.",
+      disconnect: "Від’єднати",
+      disconnectTitle: "Від’єднати Telegram?",
+      disconnectMessage: "Сповіщення цієї гільдії більше не надходитимуть у підключений канал.",
+      cancel: "Скасувати",
+      disconnectConfirm: "Від’єднати",
+      disconnectedTitle: "Telegram від’єднано",
+      disconnectedMessage: "Канал більше не прив’язаний до цієї гільдії. За потреби видаліть бота з каналу в Telegram.",
+      disconnectFailed: "Не вдалося від’єднати Telegram.",
+      setupFailed: "Не вдалося створити код підключення.",
+      errorTitle: "Помилка",
+      permissionDenied: "Підключати Telegram може лише адміністратор або тестер цієї гільдії.",
+      botNotConfigured: "Спільний Telegram-бот ще не налаштований розробником застосунку.",
+      webhookUnavailable: "Не вдалося визначити адресу Telegram webhook після розгортання функцій.",
+      botNotAdmin: "Бот не має прав адміністратора або права публікувати повідомлення в цьому каналі.",
+      alreadyBound: "Цей Telegram-канал уже прив’язаний до іншої гільдії.",
+      wrongBot: "Команду адресовано іншому Telegram-боту.",
+      connectionLost: "Бот більше не має доступу до каналу або права публікувати повідомлення.",
+      connectionError: "З’єднання з Telegram потребує відновлення",
+      bindingBusy: "Прив’язка вже обробляється. Зачекайте кілька секунд.",
+      tooSoon: "Зачекайте {{seconds}} с і повторіть спробу.",
+      telegramUnavailable: "Telegram тимчасово недоступний. Спробуйте пізніше.",
+      openBotFailed: "Не вдалося відкрити Telegram.",
+      genericError: "Не вдалося виконати дію. Перевірте інтернет і повторіть спробу."
+    }
+  },
   chatList: {
     title: "Повідомлення",
     privateLabel: "Приватний чат",
@@ -377,6 +437,14 @@ const ruTranslation = {
     bonusLabel: "Бонус: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "В ближайшее время нет секторов",
+    sectorNotifications: {
+      muteTitle: "Не уведомлять",
+      thirtyMinutes: "30 минут",
+      oneHour: "1 час",
+      threeHours: "3 часа",
+      fiveHours: "5 часов",
+      saveFailed: "Не удалось сохранить настройки уведомлений."
+    },
     info: {
       title: "Соперники на карте",
       empty: "Информация отсутствует",
@@ -583,6 +651,58 @@ const ruTranslation = {
   adminStack: {
     adminScreenTitle: "Настройки гильдии"
   },
+  guildAdmin: {
+    telegram: {
+      title: "Telegram-уведомления",
+      description: "Подключите свой канал без Bot Token и Chat ID. Уведомления будут приходить только для активной гильдии.",
+      loading: "Загрузка...",
+      disconnected: "Telegram-канал ещё не подключён.",
+      connected: "Telegram подключён",
+      channelFallback: "Telegram-канал",
+      connect: "Подключить Telegram",
+      reconnect: "Подключить снова",
+      stepCreateChannel: "Создайте или выберите канал в Telegram.",
+      stepAddBot: "Добавьте общего бота приложения в канал как администратора с правом публикации сообщений.",
+      stepPublishCommand: "Опубликуйте указанную ниже команду непосредственно в этом канале.",
+      botLabel: "Бот",
+      addBot: "Добавить бота в канал",
+      commandLabel: "Команда для публикации",
+      copiedTitle: "Скопировано",
+      copiedMessage: "Команда скопирована в буфер обмена.",
+      waiting: "Ожидаем подтверждения от Telegram…",
+      expiresIn: "Код действует ещё {{time}}",
+      codeExpired: "Срок действия кода истёк. Создайте новый код.",
+      newCode: "Создать новый код",
+      pendingCodeLost: "Для гильдии уже создавался код. В целях безопасности он не хранится в открытом виде — создайте новый.",
+      test: "Отправить тест",
+      testSentTitle: "Telegram",
+      testSentMessage: "Тестовое сообщение отправлено в канал.",
+      testFailed: "Не удалось отправить тестовое сообщение.",
+      disconnect: "Отключить",
+      disconnectTitle: "Отключить Telegram?",
+      disconnectMessage: "Уведомления этой гильдии больше не будут приходить в подключённый канал.",
+      cancel: "Отмена",
+      disconnectConfirm: "Отключить",
+      disconnectedTitle: "Telegram отключён",
+      disconnectedMessage: "Канал больше не связан с этой гильдией. При необходимости удалите бота из канала в Telegram.",
+      disconnectFailed: "Не удалось отключить Telegram.",
+      setupFailed: "Не удалось создать код подключения.",
+      errorTitle: "Ошибка",
+      permissionDenied: "Подключать Telegram может только администратор или тестер этой гильдии.",
+      botNotConfigured: "Общий Telegram-бот ещё не настроен разработчиком приложения.",
+      webhookUnavailable: "Не удалось определить адрес Telegram webhook после развёртывания функций.",
+      botNotAdmin: "У бота нет прав администратора или права публиковать сообщения в этом канале.",
+      alreadyBound: "Этот Telegram-канал уже связан с другой гильдией.",
+      wrongBot: "Команда адресована другому Telegram-боту.",
+      connectionLost: "У бота больше нет доступа к каналу или права публиковать сообщения.",
+      connectionError: "Соединение с Telegram нужно восстановить",
+      bindingBusy: "Привязка уже обрабатывается. Подождите несколько секунд.",
+      tooSoon: "Подождите {{seconds}} с и повторите попытку.",
+      telegramUnavailable: "Telegram временно недоступен. Попробуйте позже.",
+      openBotFailed: "Не удалось открыть Telegram.",
+      genericError: "Не удалось выполнить действие. Проверьте интернет и повторите попытку."
+    }
+  },
   chatList: {
     title: "Сообщения",
     privateLabel: "Приватный чат",
@@ -664,6 +784,14 @@ const beTranslation = {
     bonusLabel: "Бонус: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Бліжэйшым часам сектараў няма",
+    sectorNotifications: {
+      muteTitle: "Не апавяшчаць",
+      thirtyMinutes: "30 хвілін",
+      oneHour: "1 гадзіна",
+      threeHours: "3 гадзіны",
+      fiveHours: "5 гадзін",
+      saveFailed: "Не ўдалося захаваць налады апавяшчэнняў."
+    },
     info: {
       title: "Супернікі на мапе",
       empty: "Інфармацыя адсутнічае",
@@ -870,6 +998,58 @@ const beTranslation = {
   adminStack: {
     adminScreenTitle: "Налады гільдыі"
   },
+  guildAdmin: {
+    telegram: {
+      title: "Telegram-апавяшчэнні",
+      description: "Падключыце свой канал без Bot Token і Chat ID. Апавяшчэнні будуць прыходзіць толькі для актыўнай гільдыі.",
+      loading: "Загрузка...",
+      disconnected: "Telegram-канал яшчэ не падключаны.",
+      connected: "Telegram падключаны",
+      channelFallback: "Telegram-канал",
+      connect: "Падключыць Telegram",
+      reconnect: "Падключыць зноў",
+      stepCreateChannel: "Стварыце або выберыце канал у Telegram.",
+      stepAddBot: "Дадайце агульнага бота праграмы ў канал як адміністратара з правам публікаваць паведамленні.",
+      stepPublishCommand: "Апублікуйце прыведзеную ніжэй каманду непасрэдна ў гэтым канале.",
+      botLabel: "Бот",
+      addBot: "Дадаць бота ў канал",
+      commandLabel: "Каманда для публікацыі",
+      copiedTitle: "Скапіявана",
+      copiedMessage: "Каманда скапіявана ў буфер абмену.",
+      waiting: "Чакаем пацвярджэння ад Telegram…",
+      expiresIn: "Код дзейнічае яшчэ {{time}}",
+      codeExpired: "Тэрмін дзеяння кода скончыўся. Стварыце новы код.",
+      newCode: "Стварыць новы код",
+      pendingCodeLost: "Для гільдыі ўжо ствараўся код. З меркаванняў бяспекі ён не захоўваецца ў адкрытым выглядзе — стварыце новы.",
+      test: "Адправіць тэст",
+      testSentTitle: "Telegram",
+      testSentMessage: "Тэставае паведамленне адпраўлена ў канал.",
+      testFailed: "Не ўдалося адправіць тэставае паведамленне.",
+      disconnect: "Адключыць",
+      disconnectTitle: "Адключыць Telegram?",
+      disconnectMessage: "Апавяшчэнні гэтай гільдыі больш не будуць прыходзіць у падключаны канал.",
+      cancel: "Скасаваць",
+      disconnectConfirm: "Адключыць",
+      disconnectedTitle: "Telegram адключаны",
+      disconnectedMessage: "Канал больш не звязаны з гэтай гільдыяй. Пры неабходнасці выдаліце бота з канала ў Telegram.",
+      disconnectFailed: "Не ўдалося адключыць Telegram.",
+      setupFailed: "Не ўдалося стварыць код падключэння.",
+      errorTitle: "Памылка",
+      permissionDenied: "Падключаць Telegram можа толькі адміністратар або тэстар гэтай гільдыі.",
+      botNotConfigured: "Агульны Telegram-бот яшчэ не наладжаны распрацоўшчыкам праграмы.",
+      webhookUnavailable: "Не ўдалося вызначыць адрас Telegram webhook пасля разгортвання функцый.",
+      botNotAdmin: "Бот не мае правоў адміністратара або права публікаваць паведамленні ў гэтым канале.",
+      alreadyBound: "Гэты Telegram-канал ужо звязаны з іншай гільдыяй.",
+      wrongBot: "Каманда адрасавана іншаму Telegram-боту.",
+      connectionLost: "Бот больш не мае доступу да канала або права публікаваць паведамленні.",
+      connectionError: "Злучэнне з Telegram трэба аднавіць",
+      bindingBusy: "Прывязка ўжо апрацоўваецца. Пачакайце некалькі секунд.",
+      tooSoon: "Пачакайце {{seconds}} с і паўтарыце спробу.",
+      telegramUnavailable: "Telegram часова недаступны. Паспрабуйце пазней.",
+      openBotFailed: "Не ўдалося адкрыць Telegram.",
+      genericError: "Не ўдалося выканаць дзеянне. Праверце інтэрнэт і паўтарыце спробу."
+    }
+  },
   chatList: {
     title: "Паведамленні",
     privateLabel: "Прыватны чат",
@@ -951,6 +1131,14 @@ const deTranslation = {
     bonusLabel: "Bonus: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Keine Sektoren in Kürze",
+    sectorNotifications: {
+      muteTitle: "Nicht benachrichtigen",
+      thirtyMinutes: "30 Minuten",
+      oneHour: "1 Stunde",
+      threeHours: "3 Stunden",
+      fiveHours: "5 Stunden",
+      saveFailed: "Benachrichtigungseinstellungen konnten nicht gespeichert werden."
+    },
     info: {
       title: "Gegner auf der Karte",
       empty: "Keine Informationen verfügbar",
@@ -1157,6 +1345,23 @@ const deTranslation = {
   adminStack: {
     adminScreenTitle: "Gildeneinstellungen"
   },
+  guildAdmin: {
+    telegram: {
+      title: "Telegram-Benachrichtigungen",
+      description: "Geben Sie die Chat-ID des Kanals oder der Gruppe für diese Gilde ein. Benachrichtigungen anderer Gilden werden nicht hierher gesendet.",
+      placeholder: "-1001234567890 oder @channel",
+      hint: "Fügen Sie den Bot als Kanaladministrator hinzu. Leeren und speichern Sie das Feld, um Telegram zu deaktivieren.",
+      save: "Speichern",
+      disable: "Telegram deaktivieren",
+      savedTitle: "Telegram",
+      savedMessage: "Der Kanal wurde mit der aktiven Gilde verknüpft.",
+      disabledMessage: "Telegram-Benachrichtigungen sind für diese Gilde deaktiviert.",
+      invalidTitle: "Ungültige Chat-ID",
+      invalidMessage: "Geben Sie eine numerische Chat-ID (z. B. -100...) oder den @Benutzernamen des Kanals ein.",
+      errorTitle: "Fehler",
+      saveFailed: "Die Telegram-Einstellungen konnten nicht gespeichert werden."
+    }
+  },
   chatList: {
     title: "Nachrichten",
     privateLabel: "Privater Chat",
@@ -1194,6 +1399,23 @@ const enOverrides = {
     guildNotFoundTitle: "Guild not found",
     guildNotFoundMessage: "Guild with ID {{guildId}} was not found in the selected world on this server.",
     timeoutError: "Request timed out"
+  },
+  guildAdmin: {
+    telegram: {
+      title: "Telegram notifications",
+      description: "Enter the channel or group Chat ID for this guild. Notifications from other guilds will not be sent here.",
+      placeholder: "-1001234567890 or @channel",
+      hint: "Add the bot as a channel administrator. Clear and save the field to disable Telegram.",
+      save: "Save",
+      disable: "Disable Telegram",
+      savedTitle: "Telegram",
+      savedMessage: "The channel is linked to the active guild.",
+      disabledMessage: "Telegram notifications are disabled for this guild.",
+      invalidTitle: "Invalid Chat ID",
+      invalidMessage: "Enter a numeric Chat ID (for example, -100...) or the channel @username.",
+      errorTitle: "Error",
+      saveFailed: "Could not save Telegram settings."
+    }
   },
   userSettings: {
     requestAccessCode: "Ask the guild leader for the access code",
@@ -1236,6 +1458,14 @@ const enOverrides = {
     bonusLabel: "Bonus: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "No sectors expected soon",
+    sectorNotifications: {
+      muteTitle: "Do not notify",
+      thirtyMinutes: "30 minutes",
+      oneHour: "1 hour",
+      threeHours: "3 hours",
+      fiveHours: "5 hours",
+      saveFailed: "Could not save notification settings."
+    },
     info: {
       title: "Opponents on the map",
       empty: "No information available",
@@ -1340,6 +1570,23 @@ const plOverrides = {
     guildNotFoundMessage: "Gildia z ID {{guildId}} nie została znaleziona w wybranym świecie na tym serwerze.",
     timeoutError: "Przekroczono czas oczekiwania"
   },
+  guildAdmin: {
+    telegram: {
+      title: "Powiadomienia Telegram",
+      description: "Wprowadź Chat ID kanału lub grupy dla tej gildii. Powiadomienia innych gildii nie będą tutaj wysyłane.",
+      placeholder: "-1001234567890 lub @channel",
+      hint: "Dodaj bota jako administratora kanału. Wyczyść i zapisz pole, aby wyłączyć Telegram.",
+      save: "Zapisz",
+      disable: "Wyłącz Telegram",
+      savedTitle: "Telegram",
+      savedMessage: "Kanał został powiązany z aktywną gildią.",
+      disabledMessage: "Powiadomienia Telegram są wyłączone dla tej gildii.",
+      invalidTitle: "Nieprawidłowy Chat ID",
+      invalidMessage: "Wprowadź numeryczny Chat ID (np. -100...) lub @username kanału.",
+      errorTitle: "Błąd",
+      saveFailed: "Nie udało się zapisać ustawień Telegram."
+    }
+  },
   userSettings: {
     requestAccessCode: "Poproś lidera gildii o kod dostępu",
     accessCodePlaceholder: "Kod dostępu",
@@ -1381,6 +1628,14 @@ const plOverrides = {
     bonusLabel: "Premia: {{value}}{{time}}",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "W najbliższym czasie brak sektorów",
+    sectorNotifications: {
+      muteTitle: "Nie powiadamiaj",
+      thirtyMinutes: "30 minut",
+      oneHour: "1 godzina",
+      threeHours: "3 godziny",
+      fiveHours: "5 godzin",
+      saveFailed: "Nie udało się zapisać ustawień powiadomień."
+    },
     info: {
       title: "Przeciwnicy na mapie",
       empty: "Brak informacji",

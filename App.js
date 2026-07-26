@@ -1,4 +1,3 @@
-import notifee, { AndroidImportance } from '@notifee/react-native';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { firebase } from '@react-native-firebase/app';
 import database from '@react-native-firebase/database';
@@ -6,7 +5,7 @@ import messaging from '@react-native-firebase/messaging';
 import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DarkThemeColors } from "./constants/theme";
@@ -57,9 +56,6 @@ const AppContent = () => {
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // ✅ щоб не створювати канал багато разів
-  const channelReadyRef = useRef(false);
-
   useEffect(() => {
     const initLanguage = async () => {
       try {
@@ -83,28 +79,6 @@ const AppContent = () => {
       }
     };
     initLanguage();
-  }, []);
-
-  useEffect(() => {
-    const ensureAndroidChannel = async () => {
-      try {
-        if (Platform.OS !== 'android') return;
-        if (channelReadyRef.current) return;
-
-        await notifee.createChannel({
-          id: 'default',
-          name: 'Default Channel',
-          importance: AndroidImportance.HIGH,
-        });
-
-        channelReadyRef.current = true;
-        console.log('✅ Канал notifee "default" створено/оновлено.');
-      } catch (e) {
-        console.log('❌ Помилка створення каналу notifee:', e?.message || String(e));
-      }
-    };
-
-    ensureAndroidChannel();
   }, []);
 
   useEffect(() => {
@@ -171,39 +145,7 @@ const AppContent = () => {
       }
     });
 
-    // ✅ Foreground handler (безпечний для data-only)
-    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-      try {
-        const title =
-          remoteMessage?.notification?.title ||
-          remoteMessage?.data?.title ||
-          '';
-
-        const body =
-          remoteMessage?.notification?.body ||
-          remoteMessage?.data?.body ||
-          '';
-
-        console.log('✅ Foreground message data:', remoteMessage?.data || {});
-
-        // Якщо це data-only без тексту — не показуємо
-        if (!title && !body) return;
-
-        // На Android — показ через notifee
-        await notifee.displayNotification({
-          title,
-          body,
-          android: {
-            channelId: 'default',
-          },
-        });
-      } catch (e) {
-        console.log('❌ onMessage error:', e?.message || String(e));
-      }
-    });
-
     return () => {
-      unsubscribeForeground();
       unsubscribeTokenRefresh();
     };
   }, []);
@@ -315,7 +257,7 @@ const AppContent = () => {
   }, [guildId]);
 
   const fetchUserData = async () => {
-    setLoading(true);
+    if (!checked) setLoading(true);
     try {
       const userId = await AsyncStorage.getItem("userId");
       if (guildId && userId) {
@@ -326,7 +268,7 @@ const AppContent = () => {
       }
     } catch (error) {
       console.error("Помилка завантаження даних користувача:", error);
-      setUserData(false);
+      if (!checked) setUserData(false);
     } finally {
       setLoading(false);
       setChecked(true);
@@ -344,7 +286,7 @@ const AppContent = () => {
   if (!checked) return null;
 
   if (userData) {
-    return <MainContent key={guildId} />;
+    return <MainContent />;
   }
 
   return (

@@ -6,8 +6,19 @@ import database from '@react-native-firebase/database';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Animated,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
+import TelegramSettings from './TelegramSettings';
 
 const AdminMain = () => {
   const [userName, setUserName] = useState('');
@@ -71,11 +82,13 @@ const AdminMain = () => {
   useFocusEffect(
     React.useCallback(() => {
       let userNameRef, worldNameRef, guildNameRef, gbgGoalRef;
+      let disposed = false;
       
       const fetchInitialData = async () => {
         try {
           const userId = await AsyncStorage.getItem('userId');
           const guildId = await AsyncStorage.getItem('guildId');
+          if (disposed) return;
 
           if (userId) {
             userNameRef = database().ref(`/users/${userId}/userName`);
@@ -160,6 +173,7 @@ const AdminMain = () => {
       fetchUpgradeBranches();
 
       return () => {
+        disposed = true;
         if (userNameRef) userNameRef.off('value');
         if (worldNameRef) worldNameRef.off('value');
         if (guildNameRef) guildNameRef.off('value');
@@ -421,6 +435,8 @@ const AdminMain = () => {
           </View>
         )}
       </View>
+
+      <TelegramSettings />
       
       <View style={styles.divider} />
       <View style={styles.section}>

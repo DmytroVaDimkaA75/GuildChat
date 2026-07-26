@@ -1,9 +1,14 @@
 const { onValueCreated, onValueWritten } = require("firebase-functions/v2/database");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const {
+  createTelegramBindingFunctions,
+  isValidTelegramBinding,
+  telegramApiRequest,
+} = require("./telegramBinding");
 
 admin.initializeApp();
 
@@ -13,7 +18,93 @@ admin.initializeApp();
  * =====================================================================
  */
 const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
-const TELEGRAM_CHAT_ID = defineSecret("TELEGRAM_CHAT_ID");
+const TELEGRAM_CHAT_ID_PATTERN = /^(?:-?[1-9]\d{0,17}|@[A-Za-z][A-Za-z0-9_]{4,31})$/;
+
+const normalizeTelegramChatId = (value) => {
+  const chatId = String(value || "").trim();
+  return TELEGRAM_CHAT_ID_PATTERN.test(chatId) ? chatId : "";
+};
+
+const getGuildTelegramChatId = async ({ db, guildId }) => {
+  if (!guildId) return "";
+
+  try {
+    const snapshot = await db
+      .ref(`/telegramBot/guildBindings/${guildId}`)
+      .once("value");
+    const binding = snapshot.exists() ? snapshot.val() || {} : null;
+    const token = TELEGRAM_BOT_TOKEN.value();
+
+    if (!isValidTelegramBinding({ token, guildId, binding })) {
+      if (binding) {
+        logger.warn("[TG] Ignoring invalid guild Telegram binding", {
+          guildId: String(guildId),
+        });
+      }
+      return "";
+    }
+
+    const chatId = normalizeTelegramChatId(binding.chatId);
+    if (!chatId) {
+      logger.warn("[TG] Invalid Chat ID in verified binding", {
+        guildId: String(guildId),
+      });
+      return "";
+    }
+
+    return chatId;
+  } catch (error) {
+    logger.error("[TG] Could not load guild Telegram settings", {
+      guildId: String(guildId),
+      error: error?.message || String(error),
+    });
+    return "";
+  }
+};
+
+const markGuildTelegramBindingError = async ({
+  guildId,
+  chatId,
+  errorCode,
+}) => {
+  if (!guildId || !chatId) return;
+
+  try {
+    const bindingRef = admin
+      .database()
+      .ref(`/telegramBot/guildBindings/${guildId}`);
+    const snapshot = await bindingRef.once("value");
+    const binding = snapshot.exists() ? snapshot.val() || {} : null;
+    if (
+      !binding ||
+      String(binding.chatId || "") !== String(chatId) ||
+      binding.status !== "connected"
+    ) {
+      return;
+    }
+
+    await Promise.all([
+      bindingRef.update({
+        status: "error",
+        errorCode,
+        updatedAt: admin.database.ServerValue.TIMESTAMP,
+      }),
+      admin
+        .database()
+        .ref(`/guilds/${guildId}/setting/telegram`)
+        .update({
+          status: "error",
+          errorCode,
+          updatedAt: admin.database.ServerValue.TIMESTAMP,
+        }),
+    ]);
+  } catch (error) {
+    logger.error("[TG] Could not mark binding as unavailable", {
+      guildId: String(guildId),
+      error: error?.message || String(error),
+    });
+  }
+};
 
 /**
  * =====================================================================
@@ -22,46 +113,90 @@ const TELEGRAM_CHAT_ID = defineSecret("TELEGRAM_CHAT_ID");
  * - No external libs required on Node 18+
  * =====================================================================
  */
-const sendTelegramMessage = async ({ text, parseMode = "HTML" }) => {
+const sendTelegramMessage = async ({
+  chatId,
+  text,
+  parseMode = "HTML",
+  guildId = "",
+  notificationType = "unknown",
+}) => {
   const token = TELEGRAM_BOT_TOKEN.value();
-  const chatId = TELEGRAM_CHAT_ID.value();
+  const normalizedChatId = normalizeTelegramChatId(chatId);
 
-  if (!token || !chatId) {
-    logger.warn("[TG] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID");
+  if (!token) {
+    logger.warn("[TG] Missing TELEGRAM_BOT_TOKEN");
+    return false;
+  }
+
+  if (!normalizedChatId) {
+    if (String(chatId || "").trim()) {
+      logger.warn("[TG] Invalid Telegram Chat ID", {
+        guildId: String(guildId),
+        notificationType,
+      });
+    }
     return false;
   }
 
   try {
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const body = {
-      chat_id: String(chatId),
-      text: String(text || ""),
-      parse_mode: parseMode,
-      disable_web_page_preview: true,
-    };
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+    const result = await telegramApiRequest({
+      token,
+      method: "sendMessage",
+      body: {
+        chat_id: normalizedChatId,
+        text: String(text || ""),
+        parse_mode: parseMode,
+        disable_web_page_preview: true,
+      },
     });
 
-    const json = await res.json().catch(() => null);
-
-    if (!res.ok || !json?.ok) {
+    if (!result.ok) {
       logger.error("[TG] sendMessage failed:", {
-        status: res.status,
-        response: json,
+        guildId: String(guildId),
+        notificationType,
+        status: result.status,
+        description: String(
+          result.description || "Unknown Telegram error"
+        ),
       });
+
+      if ((result.status === 400 || result.status === 403) && guildId) {
+        await markGuildTelegramBindingError({
+          guildId: String(guildId),
+          chatId: normalizedChatId,
+          errorCode:
+            result.status === 403
+              ? "BOT_ACCESS_LOST"
+              : "CHANNEL_UNAVAILABLE",
+        });
+      }
       return false;
     }
 
     return true;
   } catch (e) {
-    logger.error("[TG] sendMessage error:", e);
+    logger.error("[TG] sendMessage error:", {
+      guildId: String(guildId),
+      notificationType,
+      error: e?.message || String(e),
+    });
     return false;
   }
 };
+
+const telegramBindingFunctions = createTelegramBindingFunctions({
+  admin,
+  logger,
+  onCall,
+  onRequest,
+  telegramBotToken: TELEGRAM_BOT_TOKEN,
+});
+
+exports.createTelegramBindingCode =
+  telegramBindingFunctions.createBindingCode;
+exports.testTelegramGuildConnection = telegramBindingFunctions.testBinding;
+exports.disconnectTelegramGuild = telegramBindingFunctions.disconnectBinding;
+exports.telegramWebhook = telegramBindingFunctions.telegramWebhook;
 
 /**
  * =====================================================================
@@ -622,6 +757,10 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
   const worldContexts = await getPushWorldContext({ db, guildId, userIds: [userId] });
   const pushBodyText = addWorldNameToPushBody(bodyText, worldContexts.get(String(userId)));
   const buildingName = String(primaryTask?.buildingName || "Будівля");
+  const notificationEventId = String(
+    safeQueuePaths[safeQueuePaths.length - 1] ||
+    `${guildId}:${userId}:${primaryTask?.instanceId || ""}:${primaryTask?.taskType || ""}`
+  );
 
   const payload = soundBySchedule
     ? {
@@ -632,6 +771,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           settlementName: String(primaryTask?.settlementName || ""),
           buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
+          notificationEventId,
           title: titleText,
           body: pushBodyText,
           batchCount: String(batchCount),
@@ -664,6 +804,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           settlementName: String(primaryTask?.settlementName || ""),
           buildingId: String(primaryTask?.buildingId || ""),
           buildingName,
+          notificationEventId,
           title: titleText,
           body: pushBodyText,
           batchCount: String(batchCount),
@@ -1059,11 +1200,14 @@ exports.onGbgSectorOwnerChange = onValueWritten(
  * =====================================================================
  */
 
-const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db }) => {
+const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, messageData, db }) => {
+  const normalizedGuildId = String(guildId || "");
+  const normalizedChatId = String(chatId || "");
+  const normalizedMessageId = String(messageId || "");
   const senderId = messageData.senderId;
   const messageText = messageData.text || "Отправлено изображение";
 
-  const chatRef = db.ref(`/guilds/${guildId}/chats/${chatId}`);
+  const chatRef = db.ref(`/guilds/${normalizedGuildId}/chats/${normalizedChatId}`);
   const chatSnapshot = await chatRef.once("value");
   const chatData = chatSnapshot.val();
   if (!chatData || !chatData.members) return;
@@ -1105,7 +1249,7 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db
 
   const titleText = senderName;
   const bodyText = messageText;
-  const worldContexts = await getPushWorldContext({ db, guildId, userIds: recipients });
+  const worldContexts = await getPushWorldContext({ db, guildId: normalizedGuildId, userIds: recipients });
   const recipientGroups = new Map();
 
   userInfos.filter((x) => x.token).forEach((info) => {
@@ -1117,7 +1261,15 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageData, db
 
   await Promise.all(Array.from(recipientGroups.values()).map(async (group) => {
     const payload = {
-      data: { chatId, guildId, title: titleText, body: group.body, type: "chat_message", sound: group.sound ? "1" : "0" },
+      data: {
+        chatId: normalizedChatId,
+        guildId: normalizedGuildId,
+        messageId: normalizedMessageId,
+        title: titleText,
+        body: group.body,
+        type: "chat_message",
+        sound: group.sound ? "1" : "0",
+      },
       android: {
         priority: "high",
         notification: {
@@ -1152,11 +1304,13 @@ exports.sendChatNotification = onValueCreated(
     region: "europe-west1",
   },
   async (event) => {
-    const { guildId, chatId } = event.params;
+    const guildId = String(event.params.guildId || "");
+    const chatId = String(event.params.chatId || "");
+    const messageId = String(event.params.messageId || "");
     const messageData = event.data.val();
     if (!messageData) return null;
 
-    await sendChatNotificationForMessage({ guildId, chatId, messageData, db: admin.database() });
+    await sendChatNotificationForMessage({ guildId, chatId, messageId, messageData, db: admin.database() });
     return null;
   }
 );
@@ -1284,15 +1438,18 @@ exports.sendScheduledMessages = onSchedule(
 
 async function moveMessageToChat({ guildId, messageId, messageData, db }) {
   const { chatId, text, senderId } = messageData;
-  if (!guildId) return null;
-  if (!chatId) {
-    return db.ref(`/guilds/${guildId}/scheduledMessages/${messageId}`).update({ status: "error" });
+  const normalizedGuildId = String(guildId || "");
+  const normalizedChatId = String(chatId || "");
+  const scheduledMessageId = String(messageId || "");
+  if (!normalizedGuildId) return null;
+  if (!normalizedChatId) {
+    return db.ref(`/guilds/${normalizedGuildId}/scheduledMessages/${scheduledMessageId}`).update({ status: "error" });
   }
-  const chatMessagesRef = db.ref(`/guilds/${guildId}/chats/${chatId}/messages`);
+  const chatMessagesRef = db.ref(`/guilds/${normalizedGuildId}/chats/${normalizedChatId}/messages`);
+  const chatMessageRef = chatMessagesRef.push();
   const finalMessage = { senderId, text, status: "sent", timestamp: admin.database.ServerValue.TIMESTAMP };
-  await chatMessagesRef.push(finalMessage);
-  await sendChatNotificationForMessage({ guildId, chatId, messageData, db });
-  return db.ref(`/guilds/${guildId}/scheduledMessages/${messageId}`).remove();
+  await chatMessageRef.set(finalMessage);
+  return db.ref(`/guilds/${normalizedGuildId}/scheduledMessages/${scheduledMessageId}`).remove();
 }
 
 /**
@@ -1443,7 +1600,7 @@ exports.processGbgNotificationQueue = onSchedule(
     schedule: "every 1 minutes",
     region: "europe-west1",
     timeZone: "Europe/Kiev",
-    secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
+    secrets: [TELEGRAM_BOT_TOKEN],
   },
   async () => {
     const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -1459,18 +1616,32 @@ exports.processGbgNotificationQueue = onSchedule(
 
       if (!snapshot.exists()) return;
 
-      const promises = [];
+      const pendingTasks = [];
       snapshot.forEach((child) => {
         const task = child.val();
         const taskId = child.key;
         const queuePath = `/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`;
 
         if (task.status === "pending") {
-          promises.push(sendPushAndMarkSent({ taskId, task, db, queuePath }));
+          pendingTasks.push({ taskId, task, queuePath });
         }
       });
 
-      await Promise.all(promises);
+      if (!pendingTasks.length) return;
+      const telegramChatId = await getGuildTelegramChatId({ db, guildId });
+
+      await Promise.all(
+        pendingTasks.map(({ taskId, task, queuePath }) =>
+          sendPushAndMarkSent({
+            guildId,
+            telegramChatId,
+            taskId,
+            task,
+            db,
+            queuePath,
+          })
+        )
+      );
     });
 
     await Promise.all(guildPromises);
@@ -1478,8 +1649,32 @@ exports.processGbgNotificationQueue = onSchedule(
   }
 );
 
-async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
-  const { guildId, sectorId, army, openTime } = task;
+async function sendPushAndMarkSent({
+  guildId: queueGuildId,
+  telegramChatId,
+  taskId,
+  task,
+  db,
+  queuePath,
+}) {
+  const {
+    guildId: taskGuildId,
+    sectorId,
+    army,
+    openTime,
+  } = task;
+  const guildId = String(queueGuildId || taskGuildId || "");
+  if (!guildId) {
+    logger.warn("[GBG] Notification task has no guildId", { taskId });
+    return db.ref(queuePath).remove();
+  }
+  if (taskGuildId && String(taskGuildId) !== guildId) {
+    logger.warn("[GBG] Queue/task guildId mismatch; using queue guild", {
+      taskId,
+      queueGuildId: guildId,
+      taskGuildId: String(taskGuildId),
+    });
+  }
   const nowInSeconds = Math.floor(Date.now() / 1000);
 
   if (openTime > nowInSeconds + 180) {
@@ -1507,7 +1702,22 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
 
   const userInfos = await Promise.all(
     memberIds.map(async (uid) => {
-      const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+      const [tokenSnap, muteUntilSnap] = await Promise.all([
+        db.ref(`/users/${uid}/fcmToken`).once("value"),
+        db
+          .ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`)
+          .once("value"),
+      ]);
+
+      const rawMuteUntil = muteUntilSnap.val();
+      const muteUntil =
+        typeof rawMuteUntil === "number" && Number.isFinite(rawMuteUntil)
+          ? rawMuteUntil
+          : 0;
+      if (muteUntil > nowMs) {
+        return { uid, token: null, sound: false, muted: true };
+      }
+
       const token = tokenSnap.exists() ? tokenSnap.val() : null;
       if (!token) return { uid, token: null, sound: false };
 
@@ -1530,7 +1740,8 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
 
   const titleText = `${icon} Поле битви`;
   const messageText = `${icon} Сектор ${sectorId} скоро відкриється! (${actionText})`;
-  const worldContexts = await getPushWorldContext({ db, guildId, userIds: memberIds });
+  const notifiableUserIds = userInfos.filter((info) => info.token).map((info) => info.uid);
+  const worldContexts = await getPushWorldContext({ db, guildId, userIds: notifiableUserIds });
   const recipientGroups = new Map();
 
   userInfos.filter((x) => x.token).forEach((info) => {
@@ -1541,18 +1752,32 @@ async function sendPushAndMarkSent({ taskId, task, db, queuePath }) {
   });
 
   // ✅ Telegram: ТІЛЬКИ “людський” текст (без guildId/sector/openTime)
-  try {
-    const tgText = `<b>${titleText}</b>\n${messageText}\n`;
-    await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
-  } catch (e) {
-    logger.error("[TG] error while sending:", e);
+  if (telegramChatId) {
+    try {
+      const tgText = `<b>${titleText}</b>\n${messageText}\n`;
+      await sendTelegramMessage({
+        chatId: telegramChatId,
+        text: tgText,
+        parseMode: "HTML",
+        guildId,
+        notificationType: "gbg_sector_open",
+      });
+    } catch (e) {
+      logger.error("[TG] error while sending:", {
+        guildId,
+        notificationType: "gbg_sector_open",
+        error: e?.message || String(e),
+      });
+    }
   }
 
   await Promise.all(Array.from(recipientGroups.values()).map(async (group) => {
     const payload = {
       data: {
         screen: "GBG",
+        guildId: String(guildId),
         sectorId: String(sectorId),
+        notificationEventId: String(taskId),
         title: titleText,
         body: group.body,
         type: "gbg_sector_open",
@@ -1792,7 +2017,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
     region: "europe-west1",
     timeZone: "Europe/Kiev",
     // ✅ TG SECRETS: щоб Telegram працював у цьому scheduler
-    secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID],
+    secrets: [TELEGRAM_BOT_TOKEN],
   },
   async () => {
     const nowSec = Math.floor(Date.now() / 1000);
@@ -1864,10 +2089,15 @@ exports.processGbgSectorBuildChecks = onSchedule(
               }
 
               const treasury = resourcesSnap.exists() ? (resourcesSnap.val() || {}) : {};
+              const guildSetting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
               const mapName = mapSnap.exists() ? mapSnap.val() : "volcano_archipelago";
               const mapBaseDefense = getMapBaseDefense(mapName);
               const victoryPoints = Number(sector.victoryPoints || 0);
-              const gbgGoal = !!(settingSnap.exists() ? settingSnap.val()?.GBGGoal : false);
+              const gbgGoal = !!guildSetting.GBGGoal;
+              const telegramChatId = await getGuildTelegramChatId({
+                db,
+                guildId,
+              });
 
               const variants = buildSectorConstructionVariants({ freeSlots, options: availableBuildingOptions, treasury });
               if (!variants.length) {
@@ -1902,12 +2132,9 @@ exports.processGbgSectorBuildChecks = onSchedule(
                 }
               }
 
-              if (!membersSnap.exists()) {
-                await db.ref(queuePath).remove();
-                return;
-              }
-
-              const memberIds = Object.keys(membersSnap.val() || {});
+              const memberIds = membersSnap.exists()
+                ? Object.keys(membersSnap.val() || {})
+                : [];
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
                   const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
@@ -1923,56 +2150,77 @@ exports.processGbgSectorBuildChecks = onSchedule(
               );
 
               const recipients = leaderInfos.filter(Boolean);
-              if (!recipients.length) {
-                await db.ref(queuePath).remove();
-                return;
-              }
-
               const plannedReadable = formatRecommendedBuildings(best.planned);
               const titleText = "🛠️ Рекомендовано побудувати";
               const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
-              const worldContexts = await getPushWorldContext({
-                db,
-                guildId,
-                userIds: recipients.map((info) => info.uid),
-              });
-              const groups = new Map();
-              recipients.forEach((info) => {
-                const body = addWorldNameToPushBody(messageText, worldContexts.get(String(info.uid)));
-                if (!groups.has(body)) groups.set(body, []);
-                groups.get(body).push(info.token);
-              });
+              if (recipients.length) {
+                const worldContexts = await getPushWorldContext({
+                  db,
+                  guildId,
+                  userIds: recipients.map((info) => info.uid),
+                });
+                const groups = new Map();
+                recipients.forEach((info) => {
+                  const body = addWorldNameToPushBody(
+                    messageText,
+                    worldContexts.get(String(info.uid))
+                  );
+                  if (!groups.has(body)) groups.set(body, []);
+                  groups.get(body).push(info.token);
+                });
 
-              await Promise.all(
-                Array.from(groups.entries()).map(([body, tokens]) =>
-                  sendMulticastWithoutRecipientLimit({
-                    tokens,
-                    data: {
-                      screen: "GBG",
-                      type: "gbg_build_plan",
-                      title: titleText,
-                      body,
-                      guildId: String(guildId),
-                      sectorId: String(sectorId),
-                    },
-                    notification: { title: titleText, body },
-                    android: { priority: "high", notification: { channel_id: "gbg_build", sound: "build" } },
-                    apns: { payload: { aps: { sound: "default" } } },
-                  })
-                )
-              );
+                await Promise.all(
+                  Array.from(groups.entries()).map(([body, tokens]) =>
+                    sendMulticastWithoutRecipientLimit({
+                      tokens,
+                      data: {
+                        screen: "GBG",
+                        type: "gbg_build_plan",
+                        title: titleText,
+                        body,
+                        guildId: String(guildId),
+                        sectorId: String(sectorId),
+                        notificationEventId: String(taskId),
+                      },
+                      notification: { title: titleText, body },
+                      android: {
+                        priority: "high",
+                        notification: {
+                          channel_id: "gbg_build",
+                          sound: "build",
+                        },
+                      },
+                      apns: {
+                        payload: { aps: { sound: "default" } },
+                      },
+                    })
+                  )
+                );
+              }
 
-              // ✅ TG BUILD PLAN: дублюємо в Telegram (без технічних полів)
-              try {
-                const tgText =
-                  `<b>${titleText}</b>\n` +
-                  `Сектор <b>${sectorId}</b>\n` +
-                  `Рекомендовано побудувати:\n` +
-                  `${plannedReadable}`;
+              // ✅ TG BUILD PLAN: дублюємо в Telegram гільдії (без технічних полів)
+              if (String(telegramChatId || "").trim()) {
+                try {
+                  const tgText =
+                    `<b>${titleText}</b>\n` +
+                    `Сектор <b>${sectorId}</b>\n` +
+                    `Рекомендовано побудувати:\n` +
+                    `${plannedReadable}`;
 
-                await sendTelegramMessage({ text: tgText, parseMode: "HTML" });
-              } catch (e) {
-                logger.error("[TG] build plan send error:", e);
+                  await sendTelegramMessage({
+                    chatId: telegramChatId,
+                    text: tgText,
+                    parseMode: "HTML",
+                    guildId,
+                    notificationType: "gbg_build_plan",
+                  });
+                } catch (e) {
+                  logger.error("[TG] build plan send error:", {
+                    guildId,
+                    notificationType: "gbg_build_plan",
+                    error: e?.message || String(e),
+                  });
+                }
               }
 
               await db.ref(queuePath).remove();

@@ -1,4 +1,4 @@
-import { faFire, faVolumeHigh } from "@fortawesome/free-solid-svg-icons";
+import { faFire, faVolumeHigh, faVolumeXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from "@react-native-firebase/database";
@@ -11,6 +11,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -110,6 +111,15 @@ const MAP_DIMENSIONS = {
 const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipelago: WATERFALL_NEIGHBORS };
 const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
 const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: "Вулканічний архіпелаг", waterfall_archipelago: "Архіпелаг Водоспадів" };
+const SECTOR_NOTIFICATION_MUTE_OPTIONS = [
+  { key: "thirtyMinutes", durationMs: 30 * 60 * 1000 },
+  { key: "oneHour", durationMs: 60 * 60 * 1000 },
+  { key: "threeHours", durationMs: 3 * 60 * 60 * 1000 },
+  { key: "fiveHours", durationMs: 5 * 60 * 60 * 1000 },
+];
+
+const getSectorNotificationMutePath = (userId, guildId) =>
+  `users/${userId}/setting/notificationMutes/gbgSectorOpen/${guildId}`;
 
 const STAFF_SECTOR_SPLIT_REGEX = /[,\s;|\/\\]+/;
 const BUILDING_BONUS_MAP = {
@@ -388,6 +398,10 @@ const GVG = () => {
   const [battlesGuildId, setBattlesGuildId] = useState(null);
   const [battlesUserId, setBattlesUserId] = useState(null);
   const [battlesRaw, setBattlesRaw] = useState(null);
+  const [sectorMuteMenuVisible, setSectorMuteMenuVisible] = useState(false);
+  const [sectorOpenMutedUntil, setSectorOpenMutedUntil] = useState(0);
+  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(null);
+  const [isSavingSectorMute, setIsSavingSectorMute] = useState(false);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
@@ -395,6 +409,112 @@ const GVG = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
   const { t } = useTranslation();
+  const serverNowMs = currentTime * 1000 + (serverTimeOffsetMs ?? 0);
+  const areSectorNotificationsMuted =
+    Number(sectorOpenMutedUntil) > serverNowMs;
+
+  useEffect(() => {
+    const offsetRef = database().ref(".info/serverTimeOffset");
+    const handleOffset = (snapshot) => {
+      const offset = snapshot.val();
+      if (typeof offset === "number" && Number.isFinite(offset)) {
+        setServerTimeOffsetMs(offset);
+      }
+    };
+
+    offsetRef.on("value", handleOffset);
+    return () => offsetRef.off("value", handleOffset);
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let muteRef = null;
+    let handleMuteValue = null;
+
+    setSectorOpenMutedUntil(0);
+    setSectorMuteMenuVisible(false);
+
+    (async () => {
+      const userId = await AsyncStorage.getItem("userId");
+      const storedGuildId = await AsyncStorage.getItem("guildId");
+      const effectiveGuildId = guildId || storedGuildId;
+      if (disposed || !userId || !effectiveGuildId) return;
+
+      muteRef = database().ref(
+        getSectorNotificationMutePath(userId, effectiveGuildId)
+      );
+      handleMuteValue = (snapshot) => {
+        if (disposed) return;
+        const muteUntil = snapshot.val();
+        setSectorOpenMutedUntil(
+          typeof muteUntil === "number" && Number.isFinite(muteUntil)
+            ? muteUntil
+            : 0
+        );
+      };
+      muteRef.on("value", handleMuteValue);
+    })().catch((error) => {
+      console.log(
+        "Не вдалося завантажити паузу секторних сповіщень:",
+        error?.message || String(error)
+      );
+    });
+
+    return () => {
+      disposed = true;
+      if (muteRef && handleMuteValue) {
+        muteRef.off("value", handleMuteValue);
+      }
+    };
+  }, [guildId]);
+
+  const handleSectorMuteDuration = async (durationMs) => {
+    if (isSavingSectorMute) return;
+    setIsSavingSectorMute(true);
+
+    try {
+      const userId = await AsyncStorage.getItem("userId");
+      const storedGuildId = await AsyncStorage.getItem("guildId");
+      const effectiveGuildId = guildId || storedGuildId;
+      if (!userId || !effectiveGuildId) {
+        Alert.alert(
+          t("gbgScreen.errors.title"),
+          t("gbgScreen.errors.guildNotFound")
+        );
+        return;
+      }
+
+      let effectiveServerTimeOffsetMs = serverTimeOffsetMs;
+      if (effectiveServerTimeOffsetMs === null) {
+        const offsetSnapshot = await database()
+          .ref(".info/serverTimeOffset")
+          .once("value");
+        const offset = offsetSnapshot.val();
+        if (typeof offset !== "number" || !Number.isFinite(offset)) {
+          throw new Error("server-time-unavailable");
+        }
+        effectiveServerTimeOffsetMs = offset;
+        setServerTimeOffsetMs(offset);
+      }
+
+      const muteUntil = Math.round(
+        Date.now() + effectiveServerTimeOffsetMs + durationMs
+      );
+      await database()
+        .ref(getSectorNotificationMutePath(userId, effectiveGuildId))
+        .set(muteUntil);
+
+      setSectorOpenMutedUntil(muteUntil);
+      setSectorMuteMenuVisible(false);
+    } catch {
+      Alert.alert(
+        t("gbgScreen.errors.title"),
+        t("gbgScreen.sectorNotifications.saveFailed")
+      );
+    } finally {
+      setIsSavingSectorMute(false);
+    }
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -537,12 +657,38 @@ const GVG = () => {
         fontWeight: "bold",
       },
       headerRight: () => (
-        <TouchableOpacity style={styles.infoButton} onPress={() => {}} activeOpacity={0.8}>
-          <FontAwesomeIcon icon={faVolumeHigh} size={22} color="#E0E0E0" />
+        <TouchableOpacity
+          style={styles.infoButton}
+          onPress={() => setSectorMuteMenuVisible(true)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={t(
+            "gbgScreen.sectorNotifications.muteTitle"
+          )}
+        >
+          <FontAwesomeIcon
+            icon={
+              areSectorNotificationsMuted
+                ? faVolumeXmark
+                : faVolumeHigh
+            }
+            size={22}
+            color={
+              areSectorNotificationsMuted ? "#9AA0A6" : "#E0E0E0"
+            }
+          />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, mapTitle, isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
+  }, [
+    navigation,
+    mapTitle,
+    isMapLoaded,
+    isSectorDataLoaded,
+    areOpponentsLoaded,
+    areSectorNotificationsMuted,
+    t,
+  ]);
 
   const renderMapPaths = () => {
     const data = MAP_DATA[mapKey] || {};
@@ -1130,6 +1276,69 @@ const GVG = () => {
         </View>
       )}
 
+      <Modal
+        visible={sectorMuteMenuVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!isSavingSectorMute) setSectorMuteMenuVisible(false);
+        }}
+      >
+        <View style={styles.sectorMuteOverlay}>
+          <BlurView
+            style={StyleSheet.absoluteFill}
+            blurType="dark"
+            blurAmount={5}
+          />
+          <TouchableOpacity
+            style={styles.sectorMuteBackdrop}
+            activeOpacity={1}
+            onPress={() => {
+              if (!isSavingSectorMute) setSectorMuteMenuVisible(false);
+            }}
+          >
+            <View
+              style={styles.sectorMuteCard}
+              onStartShouldSetResponder={() => true}
+            >
+              <Text style={styles.sectorMuteTitle}>
+                {t("gbgScreen.sectorNotifications.muteTitle")}
+              </Text>
+
+              {SECTOR_NOTIFICATION_MUTE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.sectorMuteOption,
+                    isSavingSectorMute && styles.sectorMuteOptionDisabled,
+                  ]}
+                  disabled={isSavingSectorMute}
+                  activeOpacity={0.75}
+                  onPress={() =>
+                    handleSectorMuteDuration(option.durationMs)
+                  }
+                >
+                  <Text style={styles.sectorMuteOptionText}>
+                    {t(
+                      `gbgScreen.sectorNotifications.${option.key}`
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              {isSavingSectorMute && (
+                <ActivityIndicator
+                  style={styles.sectorMuteLoader}
+                  size="small"
+                  color="#4ea1ff"
+                />
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -1197,6 +1406,54 @@ const styles = StyleSheet.create({
   menuIcon: { marginRight: 10 },
   menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
   disabledText: { color: "#6a737c" },
+  sectorMuteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  sectorMuteBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  sectorMuteCard: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 18,
+    backgroundColor: "rgba(30,30,30,0.98)",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  sectorMuteTitle: {
+    marginBottom: 12,
+    color: "#F4F7FB",
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  sectorMuteOption: {
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    paddingHorizontal: 16,
+    backgroundColor: "#2A2F3A",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  sectorMuteOptionDisabled: {
+    opacity: 0.5,
+  },
+  sectorMuteOptionText: {
+    color: "#F4F7FB",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  sectorMuteLoader: {
+    marginTop: 14,
+  },
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
   battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },

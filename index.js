@@ -1,10 +1,31 @@
 import messaging from "@react-native-firebase/messaging";
+import notifee, { EventType } from "@notifee/react-native";
 import { AppRegistry, NativeModules } from "react-native";
 import App from "./App";
 import { name as appName } from "./app.json";
 
 import { processWidgetRemoteMessage, recordWidgetFcmReceipt } from "./components/GBG/widgetCache";
 import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRefresh";
+import {
+  normalizeNotificationRoute,
+  savePendingNotificationRoute,
+} from "./src/notifications/notificationRouting";
+
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  if (type !== EventType.PRESS && type !== EventType.ACTION_PRESS) return;
+
+  const notification = detail?.notification;
+  const route = normalizeNotificationRoute({
+    ...(notification?.data || {}),
+    notificationEventId:
+      notification?.data?.notificationEventId ||
+      notification?.id ||
+      "",
+  });
+  if (route) {
+    await savePendingNotificationRoute(route);
+  }
+});
 
 AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
   try {

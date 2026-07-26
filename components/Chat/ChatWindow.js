@@ -1094,18 +1094,31 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 };
 
 const ChatWindow = ({ route, navigation }) => {
-  const { chatId } = route.params || {};
+  const {
+    chatId,
+    guildId: routeGuildId,
+    messageId: initialMessageId,
+  } = route.params || {};
   const [groups, setGroups] = useState([]); // групи по датах
 
   useEffect(() => {
     if (!chatId) return;
     const clearChatNotifications = async () => {
       try {
+        const targetGuildId =
+          routeGuildId || (await AsyncStorage.getItem('guildId'));
+        if (!targetGuildId) return;
+
         const displayed = await notifee.getDisplayedNotifications();
         const chatNotifications = displayed.filter(({ notification }) => {
           const type = notification?.data?.type;
           const notificationChatId = notification?.data?.chatId;
-          return type === 'chat_message' && String(notificationChatId) === String(chatId);
+          const notificationGuildId = notification?.data?.guildId;
+          return (
+            type === 'chat_message' &&
+            String(notificationChatId) === String(chatId) &&
+            String(notificationGuildId) === String(targetGuildId)
+          );
         });
 
         await Promise.all(
@@ -1117,7 +1130,7 @@ const ChatWindow = ({ route, navigation }) => {
     };
 
     clearChatNotifications();
-  }, [chatId]);
+  }, [chatId, routeGuildId]);
   const [chatType, setChatType] = useState('private');
   const [headerUserId, setHeaderUserId] = useState(null);
   const [headerUser, setHeaderUser] = useState(null);
@@ -1134,7 +1147,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
 
   const [userId, setUserId] = useState(null);
-  const [guildId, setGuildId] = useState(null);
+  const [guildId, setGuildId] = useState(routeGuildId || null);
   const [locale, setLocale] = useState(uk);
   const [localeCode, setLocaleCode] = useState('uk');
   const [isChatMember, setIsChatMember] = useState(false);
@@ -1200,6 +1213,7 @@ const ChatWindow = ({ route, navigation }) => {
   const audioPlaybackRef = useRef(null);
   const recordingMeteringsRef = useRef([]);
   const processedRead = useRef(new Set());
+  const initialMessageHandledRef = useRef("");
   const insets = useSafeAreaInsets();
 
   const handleToggleChatSound = useCallback(async () => {
@@ -1266,11 +1280,11 @@ const ChatWindow = ({ route, navigation }) => {
   useEffect(() => {
     (async () => {
       const uid = await AsyncStorage.getItem('userId');
-      const gid = await AsyncStorage.getItem('guildId');
+      const gid = routeGuildId || (await AsyncStorage.getItem('guildId'));
       setUserId(uid);
       setGuildId(gid);
     })();
-  }, []);
+  }, [routeGuildId]);
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -1524,19 +1538,53 @@ const ChatWindow = ({ route, navigation }) => {
   const scrollToMessage = useCallback(
     (messageId) => {
       const index = messageIndexMap[messageId];
-      if (index === undefined || index === null) return;
+      if (index === undefined || index === null || !flatListRef.current) {
+        return false;
+      }
 
       try {
-        flatListRef.current?.scrollToIndex({
+        flatListRef.current.scrollToIndex({
           index,
           animated: true,
           viewPosition: 0.5
         });
         highlightMessage(messageId);
-      } catch (e) {}
+        return true;
+      } catch (_error) {
+        return false;
+      }
     },
     [messageIndexMap, highlightMessage]
   );
+
+  useEffect(() => {
+    if (!initialMessageId) return;
+    if (initialMessageHandledRef.current === String(initialMessageId)) return;
+    if (messageIndexMap[initialMessageId] === undefined) return;
+
+    let cancelled = false;
+    let timer;
+    let attempts = 0;
+
+    const tryInitialScroll = () => {
+      if (cancelled) return;
+      if (scrollToMessage(initialMessageId)) {
+        initialMessageHandledRef.current = String(initialMessageId);
+        return;
+      }
+
+      attempts += 1;
+      if (attempts < 5) {
+        timer = setTimeout(tryInitialScroll, 200);
+      }
+    };
+
+    timer = setTimeout(tryInitialScroll, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [initialMessageId, messageIndexMap, scrollToMessage]);
 
   const onScrollToIndexFailed = useCallback((info) => {
     try {

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules } from "react-native";
 
@@ -7,6 +7,14 @@ export const GuildContext = createContext();
 export const GuildProvider = ({ children }) => {
   const [guildId, setGuildId] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false); // додатковий стан для відстеження, чи завантажено значення
+
+  const switchGuild = useCallback(async (nextGuildId) => {
+    const normalizedGuildId = nextGuildId ? String(nextGuildId) : "";
+    if (!normalizedGuildId) return false;
+    await AsyncStorage.setItem("guildId", normalizedGuildId);
+    setGuildId(normalizedGuildId);
+    return true;
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem("guildId")
@@ -37,7 +45,7 @@ export const GuildProvider = ({ children }) => {
   }
 
   return (
-    <GuildContext.Provider value={{ guildId, setGuildId }}>
+    <GuildContext.Provider value={{ guildId, setGuildId, switchGuild }}>
       {children}
     </GuildContext.Provider>
   );
