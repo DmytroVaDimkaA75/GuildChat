@@ -16,6 +16,7 @@ import database from "@react-native-firebase/database";
 import { useTranslation } from "react-i18next";
 import CryptoJS from "react-native-crypto-js";
 import { GuildContext } from "../GuildContext";
+import { DarkThemeColors } from "../constants/theme";
 // ИСПРАВЛЕНО: Правильный импорт и название функции
 import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
@@ -218,12 +219,15 @@ const styles = StyleSheet.create({
     container: {
       flex: 1,
       padding: 20,
+      width: "100%",
+      backgroundColor: DarkThemeColors.background,
     },
     title: {
       fontSize: 20,
       fontWeight: "bold",
       textAlign: "center",
       marginBottom: 20,
+      color: DarkThemeColors.text,
     },
     itemButton: {
       marginBottom: 10,
@@ -234,7 +238,9 @@ const styles = StyleSheet.create({
       paddingHorizontal: 15,
       paddingVertical: 10,
       borderRadius: 5,
-      backgroundColor: "#64B5F6",
+      backgroundColor: DarkThemeColors.surfaceElevated,
+      borderColor: DarkThemeColors.border,
+      borderWidth: 1,
       marginBottom: 10,
       elevation: 2,
       shadowColor: "#000",
@@ -255,16 +261,18 @@ const styles = StyleSheet.create({
     },
     name: {
       fontSize: 16,
-      color: "#fff",
+      color: DarkThemeColors.text,
     },
     modalContainer: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: DarkThemeColors.overlay,
     },
     modalContent: {
-      backgroundColor: "#1b1f2a",
+      backgroundColor: DarkThemeColors.surface,
+      borderColor: DarkThemeColors.border,
+      borderWidth: 1,
       padding: 20,
       borderRadius: 10,
       alignItems: "center",
@@ -279,10 +287,12 @@ const styles = StyleSheet.create({
       fontSize: 18,
       fontWeight: "bold",
       marginBottom: 20,
+      color: DarkThemeColors.text,
     },
     confirmationText: {
       fontSize: 16,
       marginBottom: 10,
+      color: DarkThemeColors.textSecondary,
     },
     buttonContainer: {
       flexDirection: "row",
@@ -290,13 +300,13 @@ const styles = StyleSheet.create({
       marginTop: 20,
     },
     button: {
-      backgroundColor: "#2196F3",
+      backgroundColor: DarkThemeColors.primary,
       padding: 10,
       borderRadius: 5,
       marginHorizontal: 5,
     },
     buttonText: {
-      color: "white",
+      color: DarkThemeColors.text,
       textAlign: "center",
     },
     errorText: {

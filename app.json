@@ -3,11 +3,16 @@
     "name": "FoEChat",
     "slug": "guildchat",
     "version": "1.0.1",
+    "userInterfaceStyle": "dark",
     "icon": "./assets/foechat.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0f1115"
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#0f1115",
+      "barStyle": "light-content"
     },
     "android": {
       "adaptiveIcon": {

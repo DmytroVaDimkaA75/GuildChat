@@ -1,96 +1,39 @@
-[debug] [2026-07-24T21:19:17.643Z] ----------------------------------------------------------------------
-[debug] [2026-07-24T21:19:17.646Z] Command:       /usr/local/share/nvm/versions/node/v20.19.4/bin/node /home/codespace/nvm/current/bin/firebase functions:log --only syncGbgNotifications,processGbgNotificationQueue,scheduleGbgSectorBuildCheck,processGbgSectorBuildChecks --lines 80
-[debug] [2026-07-24T21:19:17.646Z] CLI Version:   15.5.1
-[debug] [2026-07-24T21:19:17.647Z] Platform:      linux
-[debug] [2026-07-24T21:19:17.647Z] Node Version:  v20.19.4
-[debug] [2026-07-24T21:19:17.647Z] Time:          Fri Jul 24 2026 21:19:17 GMT+0000 (Coordinated Universal Time)
-[debug] [2026-07-24T21:19:17.647Z] ----------------------------------------------------------------------
+[debug] [2026-07-26T09:49:51.497Z] ----------------------------------------------------------------------
+[debug] [2026-07-26T09:49:51.700Z] Command:       /usr/local/share/nvm/versions/node/v20.19.4/bin/node /home/codespace/nvm/current/bin/firebase database:get /greatBuildings --project guildchat-5d8c1 --shallow
+[debug] [2026-07-26T09:49:51.700Z] CLI Version:   15.5.1
+[debug] [2026-07-26T09:49:51.701Z] Platform:      linux
+[debug] [2026-07-26T09:49:51.701Z] Node Version:  v20.19.4
+[debug] [2026-07-26T09:49:51.701Z] Time:          Sun Jul 26 2026 09:49:51 GMT+0000 (Coordinated Universal Time)
+[debug] [2026-07-26T09:49:51.701Z] ----------------------------------------------------------------------
 [debug] 
-[debug] [2026-07-24T21:19:17.649Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
-[debug] [2026-07-24T21:19:18.366Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2026-07-24T21:19:18.367Z] > authorizing via signed-in user (vadimkaa75@gmail.com)
-[debug] [2026-07-24T21:19:18.368Z] [iam] checking project guildchat-5d8c1 for permissions ["firebase.projects.get","logging.logEntries.list","logging.logs.list"]
-[debug] [2026-07-24T21:19:18.368Z] Checked if tokens are valid: false, expires at: 1784475286385
-[debug] [2026-07-24T21:19:18.369Z] Checked if tokens are valid: false, expires at: 1784475286385
-[debug] [2026-07-24T21:19:18.369Z] > refreshing access token with scopes: []
-[debug] [2026-07-24T21:19:18.370Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
-[debug] [2026-07-24T21:19:18.371Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2026-07-24T21:19:18.436Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
-[debug] [2026-07-24T21:19:18.436Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
-[debug] [2026-07-24T21:19:18.442Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions [none]
-[debug] [2026-07-24T21:19:18.442Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions  x-goog-user-project=guildchat-5d8c1
-[debug] [2026-07-24T21:19:18.442Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions {"permissions":["firebase.projects.get","logging.logEntries.list","logging.logs.list"]}
-[debug] [2026-07-24T21:19:18.623Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
-[debug] [2026-07-24T21:19:18.624Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
-[debug] [2026-07-24T21:19:19.085Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions 200
-[debug] [2026-07-24T21:19:19.085Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions {"permissions":["firebase.projects.get","logging.logEntries.list","logging.logs.list"]}
-[debug] [2026-07-24T21:19:19.086Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:19:19.086Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:19:19.087Z] >>> [apiv2][query] POST https://logging.googleapis.com/v2/entries:list [none]
-[debug] [2026-07-24T21:19:19.087Z] >>> [apiv2][body] POST https://logging.googleapis.com/v2/entries:list {"resourceNames":["projects/guildchat-5d8c1"],"filter":"resource.type=\"cloud_function\" OR (resource.type=\"cloud_run_revision\" AND labels.\"goog-managed-by\"=\"cloudfunctions\")\n(resource.labels.function_name=\"syncGbgNotifications\" OR resource.labels.service_name=\"syncGbgNotifications\" OR resource.labels.function_name=\"processGbgNotificationQueue\" OR resource.labels.service_name=\"processGbgNotificationQueue\" OR resource.labels.function_name=\"scheduleGbgSectorBuildCheck\" OR resource.labels.service_name=\"scheduleGbgSectorBuildCheck\" OR resource.labels.function_name=\"processGbgSectorBuildChecks\" OR resource.labels.service_name=\"processGbgSectorBuildChecks\")","orderBy":"timestamp desc","pageSize":"80"}
-[debug] [2026-07-24T21:19:20.102Z] <<< [apiv2][status] POST https://logging.googleapis.com/v2/entries:list 200
-[debug] [2026-07-24T21:25:11.760Z] ----------------------------------------------------------------------
-[debug] [2026-07-24T21:25:11.762Z] Command:       /usr/local/share/nvm/versions/node/v20.19.4/bin/node /home/codespace/nvm/current/bin/firebase functions:log --only processGbgNotificationQueue,processGbgSectorBuildChecks --lines 500
-[debug] [2026-07-24T21:25:11.762Z] CLI Version:   15.5.1
-[debug] [2026-07-24T21:25:11.762Z] Platform:      linux
-[debug] [2026-07-24T21:25:11.762Z] Node Version:  v20.19.4
-[debug] [2026-07-24T21:25:11.762Z] Time:          Fri Jul 24 2026 21:25:11 GMT+0000 (Coordinated Universal Time)
-[debug] [2026-07-24T21:25:11.762Z] ----------------------------------------------------------------------
-[debug] 
-[debug] [2026-07-24T21:25:12.037Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2026-07-24T21:25:12.038Z] > authorizing via signed-in user (vadimkaa75@gmail.com)
-[debug] [2026-07-24T21:25:12.038Z] [iam] checking project guildchat-5d8c1 for permissions ["firebase.projects.get","logging.logEntries.list","logging.logs.list"]
-[debug] [2026-07-24T21:25:12.040Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:12.040Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:12.041Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions [none]
-[debug] [2026-07-24T21:25:12.042Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions  x-goog-user-project=guildchat-5d8c1
-[debug] [2026-07-24T21:25:12.042Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions {"permissions":["firebase.projects.get","logging.logEntries.list","logging.logs.list"]}
-[debug] [2026-07-24T21:25:12.082Z] *** [apiv2] error from fetch(https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions, {"headers":{},"method":"POST","body":"{\"permissions\":[\"firebase.projects.get\",\"logging.logEntries.list\",\"logging.logs.list\"]}"}): FetchError: request to https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions failed, reason: getaddrinfo EAI_AGAIN cloudresourcemanager.googleapis.com
-[debug] [2026-07-24T21:25:12.083Z] [iam] error while checking permissions, command may fail: Failed to make request to https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions
-[debug] [2026-07-24T21:25:12.083Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:12.083Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:12.083Z] >>> [apiv2][query] POST https://logging.googleapis.com/v2/entries:list [none]
-[debug] [2026-07-24T21:25:12.084Z] >>> [apiv2][body] POST https://logging.googleapis.com/v2/entries:list {"resourceNames":["projects/guildchat-5d8c1"],"filter":"resource.type=\"cloud_function\" OR (resource.type=\"cloud_run_revision\" AND labels.\"goog-managed-by\"=\"cloudfunctions\")\n(resource.labels.function_name=\"processGbgNotificationQueue\" OR resource.labels.service_name=\"processGbgNotificationQueue\" OR resource.labels.function_name=\"processGbgSectorBuildChecks\" OR resource.labels.service_name=\"processGbgSectorBuildChecks\")","orderBy":"timestamp desc","pageSize":"500"}
-[debug] [2026-07-24T21:25:12.087Z] *** [apiv2] error from fetch(https://logging.googleapis.com/v2/entries:list, {"headers":{},"method":"POST","body":"{\"resourceNames\":[\"projects/guildchat-5d8c1\"],\"filter\":\"resource.type=\\\"cloud_function\\\" OR (resource.type=\\\"cloud_run_revision\\\" AND labels.\\\"goog-managed-by\\\"=\\\"cloudfunctions\\\")\\n(resource.labels.function_name=\\\"processGbgNotificationQueue\\\" OR resource.labels.service_name=\\\"processGbgNotificationQueue\\\" OR resource.labels.function_name=\\\"processGbgSectorBuildChecks\\\" OR resource.labels.service_name=\\\"processGbgSectorBuildChecks\\\")\",\"orderBy\":\"timestamp desc\",\"pageSize\":\"500\"}"}): FetchError: request to https://logging.googleapis.com/v2/entries:list failed, reason: getaddrinfo EAI_AGAIN logging.googleapis.com
-[error] 
-[error] Error: Failed to list log entries Failed to retrieve log entries from Google Cloud.
-[debug] [2026-07-24T21:25:12.354Z] Error: EROFS: read-only file system, open '/home/codespace/.config/configstore/firebase-tools.json.4061691477'
-    at Object.openSync (node:fs:574:18)
-    at Function.writeFileSync [as sync] (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/node_modules/write-file-atomic/index.js:205:13)
-    at set all [as all] (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/node_modules/configstore/index.js:61:20)
-    at Configstore.delete (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/node_modules/configstore/index.js:101:12)
-    at process.<anonymous> (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/lib/bin/cli.js:65:45)
-    at process.emit (node:events:536:35)
-    at process.exit (node:internal/process/per_thread:184:15)
-    at Timeout._onTimeout (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/lib/errorOut.js:20:17)
-    at listOnTimeout (node:internal/timers:581:17)
-    at process.processTimers (node:internal/timers:519:7)
-[error] 
-[error] Error: An unexpected error has occurred.
-[debug] [2026-07-24T21:25:18.746Z] ----------------------------------------------------------------------
-[debug] [2026-07-24T21:25:18.748Z] Command:       /usr/local/share/nvm/versions/node/v20.19.4/bin/node /home/codespace/nvm/current/bin/firebase database:get /guilds --shallow
-[debug] [2026-07-24T21:25:18.748Z] CLI Version:   15.5.1
-[debug] [2026-07-24T21:25:18.748Z] Platform:      linux
-[debug] [2026-07-24T21:25:18.748Z] Node Version:  v20.19.4
-[debug] [2026-07-24T21:25:18.748Z] Time:          Fri Jul 24 2026 21:25:18 GMT+0000 (Coordinated Universal Time)
-[debug] [2026-07-24T21:25:18.748Z] ----------------------------------------------------------------------
-[debug] 
-[debug] [2026-07-24T21:25:23.514Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
-[debug] [2026-07-24T21:25:23.515Z] > authorizing via signed-in user (vadimkaa75@gmail.com)
-[debug] [2026-07-24T21:25:23.516Z] [iam] checking project guildchat-5d8c1 for permissions ["firebase.projects.get","firebasedatabase.instances.get"]
-[debug] [2026-07-24T21:25:23.517Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:23.518Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:23.519Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions [none]
-[debug] [2026-07-24T21:25:23.520Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions  x-goog-user-project=guildchat-5d8c1
-[debug] [2026-07-24T21:25:23.520Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions {"permissions":["firebase.projects.get","firebasedatabase.instances.get"]}
-[debug] [2026-07-24T21:25:23.561Z] *** [apiv2] error from fetch(https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions, {"headers":{},"method":"POST","body":"{\"permissions\":[\"firebase.projects.get\",\"firebasedatabase.instances.get\"]}"}): FetchError: request to https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions failed, reason: getaddrinfo EAI_AGAIN cloudresourcemanager.googleapis.com
-[debug] [2026-07-24T21:25:23.561Z] [iam] error while checking permissions, command may fail: Failed to make request to https://cloudresourcemanager.googleapis.com/v1/projects/guildchat-5d8c1:testIamPermissions
-[debug] [2026-07-24T21:25:23.562Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:23.562Z] Checked if tokens are valid: true, expires at: 1784931557436
-[debug] [2026-07-24T21:25:23.563Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 [none]
-[debug] [2026-07-24T21:25:23.569Z] *** [apiv2] error from fetch(https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1, {"headers":{},"method":"GET","signal":{"reason":""}}): FetchError: request to https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 failed, reason: getaddrinfo EAI_AGAIN firebase.googleapis.com
-[debug] [2026-07-24T21:25:23.569Z] Failed to make request to https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 (original: request to https://firebase.googleapis.com/v1beta1/projects/guildchat-5d8c1 failed, reason: getaddrinfo EAI_AGAIN firebase.googleapis.com)
-[debug] [2026-07-24T21:25:23.570Z] FirebaseError: Failed to get Firebase project guildchat-5d8c1. Please make sure the project exists and your account has permission to access it.
+[debug] [2026-07-26T09:49:54.183Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-07-26T09:49:54.185Z] > authorizing via signed-in user (vadimkaa75@gmail.com)
+[debug] [2026-07-26T09:49:54.185Z] [iam] checking project guildchat-5d8c1 for permissions ["firebase.projects.get","firebasedatabase.instances.get"]
+[debug] [2026-07-26T09:49:54.187Z] Checked if tokens are valid: false, expires at: 1785057771163
+[debug] [2026-07-26T09:49:54.187Z] Checked if tokens are valid: false, expires at: 1785057771163
+[debug] [2026-07-26T09:49:54.187Z] > refreshing access token with scopes: []
+[debug] [2026-07-26T09:49:54.190Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-07-26T09:49:54.191Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-07-26T09:49:54.250Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------c4ffed4dea7feb6084600f7b","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: getaddrinfo EAI_AGAIN www.googleapis.com
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-07-26T09:49:54.252Z] [iam] error while checking permissions, command may fail: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-07-26T09:49:54.252Z] Checked if tokens are valid: false, expires at: 1785057771163
+[debug] [2026-07-26T09:49:54.253Z] Checked if tokens are valid: false, expires at: 1785057771163
+[debug] [2026-07-26T09:49:54.253Z] > refreshing access token with scopes: []
+[debug] [2026-07-26T09:49:54.254Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-07-26T09:49:54.254Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-07-26T09:49:54.260Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------7ca9bd0ec4a61d39f286128a","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: getaddrinfo EAI_AGAIN www.googleapis.com
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-07-26T09:49:54.260Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-07-26T09:49:54.262Z] FirebaseError: Failed to get Firebase project guildchat-5d8c1. Please make sure the project exists and your account has permission to access it.
     at getFirebaseProject (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/lib/management/projects.js:384:15)
     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
     at async getDefaultDatabaseInstance (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/lib/getDefaultDatabaseInstance.js:6:28)
@@ -98,7 +41,7 @@
     at async /usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/lib/command.js:264:17
 [error] 
 [error] Error: Failed to get details for project: guildchat-5d8c1.
-[debug] [2026-07-24T21:25:23.836Z] Error: EROFS: read-only file system, open '/home/codespace/.config/configstore/firebase-tools.json.87589820'
+[debug] [2026-07-26T09:49:54.538Z] Error: EROFS: read-only file system, open '/home/codespace/.config/configstore/firebase-tools.json.87589820'
     at Object.openSync (node:fs:574:18)
     at Function.writeFileSync [as sync] (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/node_modules/write-file-atomic/index.js:205:13)
     at set all [as all] (/usr/local/share/nvm/versions/node/v20.19.4/lib/node_modules/firebase-tools/node_modules/configstore/index.js:61:20)

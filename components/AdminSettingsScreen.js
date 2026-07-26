@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { parseData } from "../parser";
 import { parseDataNew } from "../worldParser";
 import { parseGuildData } from "../guildParser";
+import { DarkThemeColors } from "../constants/theme";
 import AdminSelectScreen from "./AdminSelectScreen";
 
 const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
@@ -163,13 +164,13 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
     container: {
       flex: 1,
       padding: 20,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: DarkThemeColors.background,
       alignItems: "center",
       justifyContent: "center",
     },
     contentContainer: {},
     button: {
-      backgroundColor: "#29ABE2",
+      backgroundColor: DarkThemeColors.primary,
       paddingHorizontal: 20,
       paddingVertical: 12,
       borderRadius: 5,
@@ -177,10 +178,10 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
       alignItems: "center",
     },
     selectedButton: {
-      backgroundColor: "#0088CC",
+      backgroundColor: DarkThemeColors.primary,
     },
     disabledButton: {
-      backgroundColor: "#B0B0B0",
+      backgroundColor: DarkThemeColors.surfaceElevated,
       paddingHorizontal: 20,
       paddingVertical: 12,
       borderRadius: 5,
@@ -188,7 +189,7 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
       alignItems: "center",
     },
     buttonText: {
-      color: "white",
+      color: DarkThemeColors.text,
       fontSize: 16,
       fontWeight: "500",
     },
@@ -198,26 +199,26 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
     inputLabel: {
       fontSize: 16,
       marginBottom: 5,
-      color: "#f4f7fb",
+      color: DarkThemeColors.text,
     },
     input: {
       borderWidth: 1,
-      borderColor: "#3a3f4a",
+      borderColor: DarkThemeColors.border,
       padding: 10,
       borderRadius: 5,
-      backgroundColor: "#1b1f2a",
-      color: "#f4f7fb",
+      backgroundColor: DarkThemeColors.surface,
+      color: DarkThemeColors.text,
     },
     placeholderText: {
-      color: "#999999",
+      color: DarkThemeColors.textSecondary,
     },
     modalContainer: {
       flex: 1,
       justifyContent: "flex-end",
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: DarkThemeColors.overlay,
     },
     modalContent: {
-      backgroundColor: "#1b1f2a",
+      backgroundColor: DarkThemeColors.surface,
       padding: 20,
       borderTopLeftRadius: 10,
       borderTopRightRadius: 10,
@@ -227,13 +228,14 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
       fontSize: 20,
       fontWeight: "bold",
       marginBottom: 10,
+      color: DarkThemeColors.text,
     },
     modalButton: {
-      backgroundColor: "#29ABE2",
+      backgroundColor: DarkThemeColors.primary,
       padding: 10,
       borderRadius: 5,
       marginBottom: 10,
-      borderColor: "white",
+      borderColor: DarkThemeColors.border,
       borderWidth: 1,
       flexDirection: "row",
       alignItems: "center",
@@ -242,7 +244,7 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
       justifyContent: "flex-start",
     },
     modalButtonText: {
-      color: "white",
+      color: DarkThemeColors.text,
       fontSize: 16,
       fontWeight: "bold",
       textAlign: "center",
@@ -307,6 +309,7 @@ const AdminSettingsScreen = ({ selectedOption, onCountryPress, fetch }) => {
               onChangeText={handleGuildIdChange}
               value={guildId}
               placeholder={t("adminSettings.guildIdPlaceholder")}
+              placeholderTextColor={DarkThemeColors.textSecondary}
               keyboardType="numeric"
               maxLength={5}
             />

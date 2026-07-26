@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { GuildContext } from "../GuildContext";
+import { DarkThemeColors } from "../constants/theme";
 import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
 const UserSettingsScreen = ({ fetch }) => {
@@ -141,6 +142,7 @@ const UserSettingsScreen = ({ fetch }) => {
           onChangeText={setPassword}
           value={password}
           placeholder={t("userSettings.accessCodePlaceholder")}
+          placeholderTextColor={DarkThemeColors.textSecondary}
         />
       </View>
       <TouchableOpacity style={styles.button} onPress={apply}>
@@ -186,16 +188,19 @@ const UserSettingsScreen = ({ fetch }) => {
 
 const styles = StyleSheet.create({
     container: {
+      flex: 1,
       padding: 40,
       width: "100%",
       justifyContent: "center",
       alignItems: "center",
+      backgroundColor: DarkThemeColors.background,
     },
     title: {
       fontSize: 24,
       fontWeight: "bold",
       marginBottom: 20,
       textAlign: "center",
+      color: DarkThemeColors.text,
     },
     inputContainer: {
       marginBottom: 10,
@@ -203,15 +208,15 @@ const styles = StyleSheet.create({
     },
     input: {
       borderWidth: 1,
-      borderColor: "#3a3f4a",
+      borderColor: DarkThemeColors.border,
       padding: 10,
       borderRadius: 5,
-      backgroundColor: "#1b1f2a",
-      color: "#f4f7fb",
+      backgroundColor: DarkThemeColors.surface,
+      color: DarkThemeColors.text,
       width: "100%",
     },
     button: {
-      backgroundColor: "#29ABE2",
+      backgroundColor: DarkThemeColors.primary,
       paddingHorizontal: 20,
       paddingVertical: 12,
       borderRadius: 5,
@@ -220,17 +225,17 @@ const styles = StyleSheet.create({
       width: "100%",
     },
     buttonText: {
-      color: "#FFFFFF",
+      color: DarkThemeColors.text,
       fontSize: 16,
       fontWeight: "bold",
     },
     modalContainer: {
       flex: 1,
       justifyContent: "flex-end",
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: DarkThemeColors.overlay,
     },
     modalContent: {
-      backgroundColor: "#1b1f2a",
+      backgroundColor: DarkThemeColors.surface,
       padding: 20,
       borderTopLeftRadius: 10,
       borderTopRightRadius: 10,
@@ -240,19 +245,20 @@ const styles = StyleSheet.create({
       fontSize: 20,
       fontWeight: "bold",
       marginBottom: 10,
+      color: DarkThemeColors.text,
     },
     modalButton: {
-      backgroundColor: "#29ABE2",
+      backgroundColor: DarkThemeColors.primary,
       padding: 10,
       borderRadius: 5,
       marginBottom: 10,
-      borderColor: "white",
+      borderColor: DarkThemeColors.border,
       borderWidth: 1,
       flexDirection: "row",
       alignItems: "center",
     },
     modalButtonText: {
-      color: "white",
+      color: DarkThemeColors.text,
       fontSize: 16,
       fontWeight: "bold",
       textAlign: "center",

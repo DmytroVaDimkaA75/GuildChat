@@ -8,6 +8,7 @@ import {
   Dimensions,
 } from "react-native";
 import { useTranslation } from "react-i18next";
+import { DarkThemeColors } from "../constants/theme";
 
 const RoleSelectionScreen = ({ navigation, selectedOption, onCountryPress }) => {
   const { t } = useTranslation();
@@ -15,7 +16,7 @@ const RoleSelectionScreen = ({ navigation, selectedOption, onCountryPress }) => 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: DarkThemeColors.background,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -23,19 +24,19 @@ const RoleSelectionScreen = ({ navigation, selectedOption, onCountryPress }) => 
       fontSize: 24,
       fontWeight: "bold",
       marginBottom: 30,
-      color: "#222222",
+      color: DarkThemeColors.text,
     },
     button: {
-      backgroundColor: "#0088CC",
+      backgroundColor: DarkThemeColors.primary,
       paddingHorizontal: 20,
       paddingVertical: 15,
-      borderRadius: 5,
+      borderRadius: 8,
       marginBottom: 15,
       alignItems: "center",
       width: Dimensions.get("window").width * 0.65,
     },
     selectedButton: {
-      backgroundColor: "#006699",
+      backgroundColor: DarkThemeColors.surfaceElevated,
     },
     buttonText: {
       color: "#FFFFFF",

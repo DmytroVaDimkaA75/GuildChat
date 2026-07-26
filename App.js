@@ -7,8 +7,9 @@ import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DarkThemeColors } from "./constants/theme";
 import { GuildContext, GuildProvider } from "./GuildContext";
 import i18n from "./i18n";
 import { parsePlayerBlock } from "./parsePlayerBlock";
@@ -39,12 +40,12 @@ const navigationTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    primary: "#4ea1ff",
-    background: "#0f1115",
-    card: "#1b1f2a",
-    text: "#f4f7fb",
-    border: "#3a3f4a",
-    notification: "#ff5b5b",
+    primary: DarkThemeColors.primary,
+    background: DarkThemeColors.background,
+    card: DarkThemeColors.surface,
+    text: DarkThemeColors.text,
+    border: DarkThemeColors.border,
+    notification: DarkThemeColors.danger,
   },
 };
 
@@ -390,6 +391,7 @@ export default function App() {
   return (
     <GuildProvider>
       <SafeAreaProvider>
+        <StatusBar barStyle="light-content" backgroundColor={DarkThemeColors.background} />
         <AppContent />
       </SafeAreaProvider>
     </GuildProvider>
@@ -401,6 +403,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0f1115",
+    backgroundColor: DarkThemeColors.background,
   }
 });
