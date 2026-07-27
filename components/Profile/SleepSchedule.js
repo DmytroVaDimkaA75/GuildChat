@@ -17,7 +17,10 @@ import AlarmClockIcon from "../ico/alarm-clock.svg";
 import BedIcon from "../ico/bed.svg";
 
 const TOTAL_MINUTES = 24 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const ROLLING_ANCHOR_AT = 1767484800;
+const ROLLING_ANCHOR_DATE = "2026-01-04";
+const ROLLING_SCHEDULE_VERSION = 2;
 
 const THEME = {
   background: "#121212",
@@ -97,6 +100,106 @@ const normalizeTimeInput = (value) => {
 
 const createRangeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+const getDeviceTimeZone = () =>
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+const getCalendarOrdinalForTimestamp = (timestampMs, timeZone) => {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timeZone || "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const values = {};
+  formatter.formatToParts(new Date(timestampMs)).forEach((part) => {
+    values[part.type] = part.value;
+  });
+  return Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day)
+  );
+};
+
+const dateKeyToCalendarOrdinal = (dateKey) => {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+};
+
+const calendarOrdinalToDateKey = (ordinal) => {
+  const date = new Date(ordinal);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(date.getUTCDate()).padStart(2, "0")}`;
+};
+
+const getZonedLocalMidnightMs = (dateKey, timeZone) => {
+  const desiredLocalAsUtc = dateKeyToCalendarOrdinal(dateKey);
+  let candidate = desiredLocalAsUtc;
+
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timeZone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    const values = {};
+    formatter.formatToParts(new Date(candidate)).forEach((part) => {
+      values[part.type] = part.value;
+    });
+    const rawHour = Number(values.hour);
+    const representedLocalAsUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      rawHour === 24 ? 0 : rawHour,
+      Number(values.minute)
+    );
+    const correction = representedLocalAsUtc - desiredLocalAsUtc;
+    candidate -= correction;
+    if (correction === 0) break;
+  }
+
+  return candidate;
+};
+
+const getLegacyRollingDiffDays = (dateKey, anchorAt, timeZone) =>
+  Math.floor(
+    (getZonedLocalMidnightMs(dateKey, timeZone) -
+      Number(anchorAt) * 1000) /
+      DAY_MS
+  );
+
+const legacyRollingDiffDaysToDateKey = (
+  diffDays,
+  anchorAt,
+  timeZone
+) => {
+  const anchorOrdinal = getCalendarOrdinalForTimestamp(
+    Number(anchorAt) * 1000,
+    timeZone
+  );
+
+  for (let offset = -3; offset <= 3; offset += 1) {
+    const candidateKey = calendarOrdinalToDateKey(
+      anchorOrdinal + (diffDays + offset) * DAY_MS
+    );
+    if (
+      getLegacyRollingDiffDays(candidateKey, anchorAt, timeZone) ===
+      diffDays
+    ) {
+      return candidateKey;
+    }
+  }
+
+  return calendarOrdinalToDateKey(anchorOrdinal + diffDays * DAY_MS);
+};
+
 const daysOfWeek = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 const monthNames = [
   "Січень",
@@ -175,11 +278,13 @@ const normalizeWeeklyToDKeys = (weeklyRaw) => {
 const normalizeRollingWeeksKeys = (rollingWeeksRaw) => {
   if (!rollingWeeksRaw || typeof rollingWeeksRaw !== "object") return null;
   const anchorAt = rollingWeeksRaw.anchorAt || ROLLING_ANCHOR_AT;
+  const anchorDate = rollingWeeksRaw.anchorDate || "";
+  const version = Number(rollingWeeksRaw.version) || 1;
   const weeksRaw = rollingWeeksRaw.weeks;
 
   const weeksOut = {};
   if (!weeksRaw || typeof weeksRaw !== "object") {
-    return { anchorAt, weeks: weeksOut };
+    return { anchorAt, anchorDate, version, weeks: weeksOut };
   }
 
   Object.keys(weeksRaw).forEach((wk) => {
@@ -203,7 +308,7 @@ const normalizeRollingWeeksKeys = (rollingWeeksRaw) => {
     });
   });
 
-  return { anchorAt, weeks: weeksOut };
+  return { anchorAt, anchorDate, version, weeks: weeksOut };
 };
 
 const SleepSchedule = () => {
@@ -416,7 +521,10 @@ const SleepSchedule = () => {
   };
 
   // week/month selection
-  const [selectedDays, setSelectedDays] = useState([1, 2, 3, 4, 5]);
+  const [selectedDays, setSelectedDays] = useState([0, 1, 2, 3, 4]);
+  const [notificationTimeZone, setNotificationTimeZone] = useState(
+    getDeviceTimeZone
+  );
   const [viewMode, setViewMode] = useState("week");
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -426,6 +534,33 @@ const SleepSchedule = () => {
 
   const [startTimeInput, setStartTimeInput] = useState(formatTimeFromAngle(greenStartAngle));
   const [endTimeInput, setEndTimeInput] = useState(formatTimeFromAngle(greenEndAngle));
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadNotificationTimeZone = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("userId");
+        if (!userId) return;
+        const snapshot = await database()
+          .ref(`users/${userId}/setting/timeZone`)
+          .once("value");
+        const storedTimeZone = snapshot.exists()
+          ? String(snapshot.val() || "").trim()
+          : "";
+        if (isActive && storedTimeZone) {
+          setNotificationTimeZone(storedTimeZone);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    loadNotificationTimeZone();
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const toggleDay = (idx) => {
     setSelectedDays((prev) => (prev.includes(idx) ? prev.filter((d0) => d0 !== idx) : [...prev, idx]));
@@ -532,8 +667,15 @@ const SleepSchedule = () => {
   };
 
   const buildRollingWeeksSchedule = (startMinutes, endMinutes, scheduleId) => {
-    const rollingWeeks = { anchorAt: ROLLING_ANCHOR_AT, weeks: {} };
-    const anchorDate = new Date(ROLLING_ANCHOR_AT * 1000);
+    const rollingWeeks = {
+      anchorAt: ROLLING_ANCHOR_AT,
+      anchorDate: ROLLING_ANCHOR_DATE,
+      version: ROLLING_SCHEDULE_VERSION,
+      weeks: {},
+    };
+    const anchorOrdinal = dateKeyToCalendarOrdinal(
+      ROLLING_ANCHOR_DATE
+    );
 
     const addSlot = (weekIndex, dayIndex, slot) => {
       const wKey = rollingWeekKey(weekIndex); // w0,w1...
@@ -546,10 +688,8 @@ const SleepSchedule = () => {
 
     selectedDates.forEach((dateKey) => {
       const rangeId = createRangeId();
-      const [year, month, day] = dateKey.split("-").map(Number);
-      const date = new Date(year, month - 1, day);
-
-      const diffDays = Math.floor((date - anchorDate) / (24 * 60 * 60 * 1000));
+      const dateOrdinal = dateKeyToCalendarOrdinal(dateKey);
+      const diffDays = Math.round((dateOrdinal - anchorOrdinal) / DAY_MS);
       const weekIndex = Math.floor(diffDays / 7);
       const dayIndex = ((diffDays % 7) + 7) % 7;
 
@@ -639,7 +779,9 @@ const SleepSchedule = () => {
               setGreenEndAngle(endAngle);
             }
 
-            const anchorDate = new Date((rollingNormalized.anchorAt || ROLLING_ANCHOR_AT) * 1000);
+            const anchorOrdinal = rollingNormalized.anchorDate
+              ? dateKeyToCalendarOrdinal(rollingNormalized.anchorDate)
+              : null;
             const dateKeys = new Set();
 
             weeksEntries.forEach(([wKey, week]) => {
@@ -655,14 +797,17 @@ const SleepSchedule = () => {
                 if (!hasPrimarySlot) return;
 
                 const diffDays = wIndex * 7 + dIndex;
-                const date = new Date(anchorDate);
-                date.setDate(anchorDate.getDate() + diffDays);
-
-                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-                  date.getDate()
-                ).padStart(2, "0")}`;
-
-                dateKeys.add(dateKey);
+                dateKeys.add(
+                  anchorOrdinal !== null
+                    ? calendarOrdinalToDateKey(
+                        anchorOrdinal + diffDays * DAY_MS
+                      )
+                    : legacyRollingDiffDaysToDateKey(
+                        diffDays,
+                        rollingNormalized.anchorAt || ROLLING_ANCHOR_AT,
+                        notificationTimeZone
+                      )
+                );
               });
             });
 
@@ -688,7 +833,7 @@ const SleepSchedule = () => {
       isActive = false;
       if (scheduleRef) scheduleRef.off();
     };
-  }, [scheduleIdParam]);
+  }, [notificationTimeZone, scheduleIdParam]);
 
   // ---- SAVE ----
   const handleSave = async () => {
@@ -711,7 +856,20 @@ const SleepSchedule = () => {
           ? { weekly: buildWeeklySchedule(startMinutes, endMinutes, scheduleId) }
           : { rollingWeeks: buildRollingWeeksSchedule(startMinutes, endMinutes, scheduleId) };
 
-      await scheduleRef.set(schedulePayload);
+      await Promise.all([
+        scheduleRef.set(schedulePayload),
+        database()
+          .ref(`users/${userId}/setting/timeZone`)
+          .transaction((currentTimeZone) => {
+            if (
+              typeof currentTimeZone === "string" &&
+              currentTimeZone.trim()
+            ) {
+              return undefined;
+            }
+            return notificationTimeZone || getDeviceTimeZone();
+          }),
+      ]);
       navigation.navigate("AddSchedule");
     } catch (e) {
       console.error(e);
@@ -721,7 +879,15 @@ const SleepSchedule = () => {
   // expose save to header
   useEffect(() => {
     navigation.setParams?.({ handleSave });
-  }, [greenStartAngle, greenEndAngle, selectedDays, selectedDates, viewMode, scheduleIdParam]);
+  }, [
+    greenStartAngle,
+    greenEndAngle,
+    selectedDays,
+    selectedDates,
+    viewMode,
+    notificationTimeZone,
+    scheduleIdParam,
+  ]);
 
   return (
     <View style={styles.container}>

@@ -189,6 +189,22 @@ const registerPushDevice = (registration) => {
   return queuedRegistration;
 };
 
+const getDeviceTimeZone = () => {
+  const calendarTimeZone =
+    Localization.getCalendars?.()?.[0]?.timeZone || "";
+  const intlTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const timeZone = String(calendarTimeZone || intlTimeZone).trim();
+  if (!timeZone) return "";
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return timeZone;
+  } catch (_error) {
+    return "";
+  }
+};
+
 // ✅ Ініціалізація Firebase (як у тебе було)
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
@@ -241,6 +257,35 @@ const AppContent = () => {
     };
     initLanguage();
   }, []);
+
+  useEffect(() => {
+    const ensureNotificationTimeZone = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("userId");
+        const timeZone = getDeviceTimeZone();
+        if (!userId || !timeZone) return;
+
+        await database()
+          .ref(`users/${userId}/setting/timeZone`)
+          .transaction((currentTimeZone) => {
+            if (
+              typeof currentTimeZone === "string" &&
+              currentTimeZone.trim()
+            ) {
+              return undefined;
+            }
+            return timeZone;
+          });
+      } catch (error) {
+        console.log(
+          "❌ Не вдалося автоматично зберегти часовий пояс:",
+          error?.message || String(error)
+        );
+      }
+    };
+
+    ensureNotificationTimeZone();
+  }, [guildId]);
 
   useEffect(() => {
     const setupPushNotifications = async () => {

@@ -28,6 +28,7 @@ export const normalizeNotificationRoute = (source) => {
       "chat_message",
       "gbg_sector_open",
       "gbg_build_plan",
+      "gbg_help",
       "culture_build_ready",
     ].includes(type)
   ) {

@@ -11,6 +11,36 @@ const BOT_USERNAME_PATTERN = /^[A-Za-z0-9_]{5,32}$/;
 const BIND_COMMAND_PATTERN =
   /^\/bind(?:@([A-Za-z0-9_]{5,32}))?\s+([A-HJ-NP-Z2-9]{12})\s*$/i;
 
+const BINDING_FEEDBACK = {
+  PERMISSION_DENIED:
+    "❌ Ви більше не маєте прав адміністратора цієї гільдії. " +
+    "Створіть код з облікового запису адміністратора.",
+  WRONG_BOT:
+    "❌ Команду адресовано іншому боту. Скопіюйте актуальну команду " +
+    "з налаштувань гільдії.",
+  BOT_NOT_ADMIN:
+    "❌ Бот не має права публікувати повідомлення в цьому каналі. " +
+    "Додайте його як адміністратора з правом публікації та повторіть команду.",
+  CHANNEL_ALREADY_BOUND:
+    "❌ Цей канал уже прив’язаний до іншої гільдії.",
+  BOT_ACCESS_LOST:
+    "❌ Telegram заборонив боту доступ до каналу. Перевірте права бота " +
+    "та повторіть команду.",
+  CHANNEL_UNAVAILABLE:
+    "❌ Telegram не дозволив перевірити цей канал. Переконайтеся, що бот " +
+    "доданий до нього як адміністратор.",
+  TELEGRAM_RATE_LIMITED:
+    "❌ Telegram тимчасово обмежив запити. Зачекайте хвилину та повторіть команду.",
+  TELEGRAM_UNAVAILABLE:
+    "❌ Telegram зараз недоступний. Спробуйте повторити команду трохи пізніше.",
+  INTERNAL_ERROR:
+    "❌ Не вдалося завершити прив’язку через внутрішню помилку. " +
+    "Створіть новий код і спробуйте ще раз.",
+};
+
+const getBindingFeedback = (errorCode) =>
+  BINDING_FEEDBACK[errorCode] || BINDING_FEEDBACK.INTERNAL_ERROR;
+
 const normalizePathSegment = (value) => {
   const normalized = String(value || "").trim();
   return FIREBASE_PATH_SEGMENT_PATTERN.test(normalized) ? normalized : "";
@@ -207,6 +237,56 @@ const createTelegramBindingFunctions = ({
 }) => {
   const db = () => admin.database();
 
+  const runTransactionWithLoadedValue = async (ref, updateValue) => {
+    let valueListener;
+    let cancelListener;
+    let initialValueReceived = false;
+    const initialSnapshot = await new Promise((resolve, reject) => {
+      valueListener = (snapshot) => {
+        if (initialValueReceived) return;
+        initialValueReceived = true;
+        resolve(snapshot);
+      };
+      cancelListener = (error) => {
+        if (initialValueReceived) return;
+        initialValueReceived = true;
+        reject(error);
+      };
+      ref.on("value", valueListener, cancelListener);
+    });
+
+    try {
+      const result = await ref.transaction(updateValue);
+      return { initialSnapshot, result };
+    } finally {
+      ref.off("value", valueListener);
+    }
+  };
+
+  const sendBindingFeedback = async ({
+    token,
+    chatId,
+    text,
+    updateId = "",
+  }) => {
+    const result = await telegramApiRequest({
+      token,
+      method: "sendMessage",
+      body: {
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      },
+    });
+    if (!result.ok) {
+      logger.warn("[TG Binding] Could not send binding feedback", {
+        updateId: String(updateId),
+        status: result.status,
+        errorCode: result.errorCode,
+      });
+    }
+  };
+
   const verifyGuildAdmin = async ({ guildId, userId }) => {
     const normalizedGuildId = normalizePathSegment(guildId);
     const normalizedUserId = normalizePathSegment(userId);
@@ -290,7 +370,12 @@ const createTelegramBindingFunctions = ({
       body: {
         url: webhookUrl,
         secret_token: createTelegramWebhookSecret(token),
-        allowed_updates: ["message", "channel_post"],
+        allowed_updates: [
+          "message",
+          "channel_post",
+          "edited_message",
+          "edited_channel_post",
+        ],
         drop_pending_updates: false,
       },
     });
@@ -320,42 +405,49 @@ const createTelegramBindingFunctions = ({
   }) => {
     const now = Date.now();
     const pendingRef = db().ref(`/telegramBot/pendingByGuild/${guildId}`);
-    await pendingRef.transaction((current) => {
-      if (
-        !current ||
-        current.requestId !== requestId ||
-        current.codeHash !== codeHash
-      ) {
-        return;
-      }
+    await runTransactionWithLoadedValue(
+      pendingRef,
+      (current) => {
+        if (
+          !current ||
+          current.requestId !== requestId ||
+          current.codeHash !== codeHash
+        ) {
+          return;
+        }
 
-      if (!keepCode) return null;
-      return {
-        ...current,
-        status: "error",
-        errorCode,
-        lastUpdateId: String(updateId || ""),
-        updatedAt: now,
-        processingExpiresAt: null,
-      };
-    });
+        if (!keepCode) return null;
+        return {
+          ...current,
+          status: "error",
+          errorCode,
+          lastUpdateId: String(updateId || ""),
+          updatedAt: now,
+          processingExpiresAt: null,
+        };
+      }
+    );
 
     const codeRef = db().ref(`/telegramBot/bindingCodes/${codeHash}`);
-    await codeRef.transaction((current) => {
-      if (!current || current.requestId !== requestId) return;
-      if (!keepCode) return null;
-      return {
-        ...current,
-        status: "pending",
-        errorCode,
-        updatedAt: now,
-        processingExpiresAt: null,
-      };
-    });
-
-    const publicPendingRef = db().ref(
-      `/guilds/${guildId}/setting/telegram/pendingBinding`
+    await runTransactionWithLoadedValue(
+      codeRef,
+      (current) => {
+        if (!current || current.requestId !== requestId) return;
+        if (!keepCode) return null;
+        return {
+          ...current,
+          status: "pending",
+          errorCode,
+          updatedAt: now,
+          processingExpiresAt: null,
+        };
+      }
     );
+
+    const publicTelegramRef = db().ref(
+      `/guilds/${guildId}/setting/telegram`
+    );
+    const publicPendingRef = publicTelegramRef.child("pendingBinding");
     const publicSnapshot = await publicPendingRef.once("value");
     const publicPending = publicSnapshot.exists()
       ? publicSnapshot.val() || {}
@@ -368,7 +460,12 @@ const createTelegramBindingFunctions = ({
           updatedAt: now,
         });
       } else {
-        await publicPendingRef.remove();
+        await publicTelegramRef.update({
+          status: "error",
+          errorCode,
+          updatedAt: now,
+          pendingBinding: null,
+        });
       }
     }
   };
@@ -400,30 +497,98 @@ const createTelegramBindingFunctions = ({
   };
 
   const processBindingUpdate = async ({ update, token }) => {
-    const message = update?.channel_post || update?.message;
-    if (!message || !message.chat) return;
+    const message =
+      update?.channel_post ||
+      update?.message ||
+      update?.edited_channel_post ||
+      update?.edited_message;
+    const updateId = String(update?.update_id ?? "");
+    if (!message || !message.chat) {
+      logger.info("[TG Binding] Update has no supported message", {
+        updateId,
+      });
+      return;
+    }
 
     const chatType = String(message.chat.type || "");
-    if (!["channel", "supergroup", "group"].includes(chatType)) return;
-
-    const command = parseTelegramBindCommand(message.text);
-    if (!command) return;
-
     const chatId = normalizeTelegramNumericChatId(message.chat.id);
     if (!chatId) return;
+    const rawText = String(message.text || message.caption || "").trim();
+    if (!["channel", "supergroup", "group"].includes(chatType)) {
+      if (/^\/bind(?:@[A-Za-z0-9_]{5,32})?(?:\s|$)/i.test(rawText)) {
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text:
+            "❌ Команду /bind потрібно опублікувати безпосередньо в каналі " +
+            "або групі, яку ви хочете прив’язати.",
+        });
+      }
+      return;
+    }
+
+    const command = parseTelegramBindCommand(rawText);
+    if (!command) {
+      if (/^\/bind(?:@[A-Za-z0-9_]{5,32})?(?:\s|$)/i.test(rawText)) {
+        logger.info("[TG Binding] Malformed bind command", {
+          updateId,
+          chatType,
+        });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text:
+            "❌ Неправильний формат команди. Скопіюйте повну команду " +
+            "/bind з актуальним 12-символьним кодом із застосунку.",
+        });
+      }
+      return;
+    }
 
     const codeHash = hashTelegramBindingCode(command.code);
+    logger.info("[TG Binding] Bind command received", {
+      updateId,
+      chatType,
+      codeHashPrefix: codeHash.slice(0, 12),
+    });
     const codeRef = db().ref(`/telegramBot/bindingCodes/${codeHash}`);
     const codeSnapshot = await codeRef.once("value");
-    if (!codeSnapshot.exists()) return;
+    if (!codeSnapshot.exists()) {
+      logger.info("[TG Binding] Binding code not found", {
+        updateId,
+        chatType,
+      });
+      await sendBindingFeedback({
+        token,
+        chatId,
+        updateId,
+        text:
+          "❌ Код не знайдено або термін його дії вже завершився. " +
+          "Створіть новий код у налаштуваннях гільдії та вставте команду ще раз.",
+      });
+      return;
+    }
 
     const codeData = codeSnapshot.val() || {};
     const guildId = normalizePathSegment(codeData.guildId);
     const userId = normalizePathSegment(codeData.requestedBy);
     const requestId = String(codeData.requestId || "");
-    const updateId = String(update?.update_id ?? "");
     const now = Date.now();
-    if (!guildId || !userId || !requestId) return;
+    if (!guildId || !userId || !requestId) {
+      logger.error("[TG Binding] Binding code record is invalid", {
+        updateId,
+        codeHashPrefix: codeHash.slice(0, 12),
+      });
+      await sendBindingFeedback({
+        token,
+        chatId,
+        updateId,
+        text: getBindingFeedback("INTERNAL_ERROR"),
+      });
+      return;
+    }
 
     if (Number(codeData.expiresAt || 0) <= now) {
       await setPendingError({
@@ -434,32 +599,68 @@ const createTelegramBindingFunctions = ({
         errorCode: "CODE_EXPIRED",
         keepCode: false,
       });
+      await sendBindingFeedback({
+        token,
+        chatId,
+        updateId,
+        text:
+          "❌ Термін дії коду завершився. Створіть новий код у " +
+          "налаштуваннях гільдії та вставте команду ще раз.",
+      });
       return;
     }
 
     const pendingRef = db().ref(`/telegramBot/pendingByGuild/${guildId}`);
-    const claimResult = await pendingRef.transaction((current) => {
-      if (
-        !current ||
-        current.codeHash !== codeHash ||
-        current.requestId !== requestId ||
-        !["pending", "error"].includes(current.status) ||
-        Number(current.expiresAt || 0) <= now
-      ) {
-        return;
-      }
+    // A transaction updater is initially called from RTDB's local cache. A
+    // cold Cloud Function has no value there, so an updater that rejects
+    // `null` aborts before contacting the server. Keep a value listener active
+    // until the transaction finishes so the first value is the server state.
+    const { result: claimResult } = await runTransactionWithLoadedValue(
+      pendingRef,
+      (current) => {
+        if (
+          !current ||
+          current.codeHash !== codeHash ||
+          current.requestId !== requestId ||
+          !["pending", "error"].includes(current.status) ||
+          Number(current.expiresAt || 0) <= now
+        ) {
+          return;
+        }
 
-      return {
-        ...current,
-        status: "processing",
-        errorCode: null,
+        return {
+          ...current,
+          status: "processing",
+          errorCode: null,
+          updateId,
+          chatId,
+          processingStartedAt: now,
+          processingExpiresAt: now + TELEGRAM_PROCESSING_TTL_MS,
+        };
+      }
+    );
+    if (!claimResult.committed) {
+      const current = claimResult.snapshot?.val() || null;
+      logger.warn("[TG Binding] Binding claim transaction rejected", {
+        guildId,
         updateId,
+        codeHashPrefix: codeHash.slice(0, 12),
+        pendingExists: Boolean(current),
+        sameCode: current?.codeHash === codeHash,
+        sameRequest: current?.requestId === requestId,
+        pendingStatus: String(current?.status || ""),
+      });
+      await sendBindingFeedback({
+        token,
         chatId,
-        processingStartedAt: now,
-        processingExpiresAt: now + TELEGRAM_PROCESSING_TTL_MS,
-      };
-    });
-    if (!claimResult.committed) return;
+        updateId,
+        text:
+          current?.status === "processing"
+            ? "ℹ️ Прив’язка цього каналу вже обробляється. Зачекайте кілька секунд."
+            : "❌ Стан коду змінився під час прив’язки. Створіть новий код і повторіть команду.",
+      });
+      return;
+    }
 
     try {
       await codeRef.update({
@@ -480,6 +681,12 @@ const createTelegramBindingFunctions = ({
           errorCode: permission.error,
           keepCode: false,
         });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback(permission.error),
+        });
         return;
       }
 
@@ -493,6 +700,12 @@ const createTelegramBindingFunctions = ({
           requestId,
           updateId,
           errorCode: "TELEGRAM_UNAVAILABLE",
+        });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback("TELEGRAM_UNAVAILABLE"),
         });
         return;
       }
@@ -508,6 +721,12 @@ const createTelegramBindingFunctions = ({
           updateId,
           errorCode: "WRONG_BOT",
         });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback("WRONG_BOT"),
+        });
         return;
       }
 
@@ -517,12 +736,19 @@ const createTelegramBindingFunctions = ({
         body: { chat_id: chatId, user_id: botId },
       });
       if (!memberResult.ok) {
+        const errorCode = mapTelegramApiError(memberResult);
         await setPendingError({
           guildId,
           codeHash,
           requestId,
           updateId,
-          errorCode: mapTelegramApiError(memberResult),
+          errorCode,
+        });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback(errorCode),
         });
         return;
       }
@@ -542,6 +768,12 @@ const createTelegramBindingFunctions = ({
           requestId,
           updateId,
           errorCode: "BOT_NOT_ADMIN",
+        });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback("BOT_NOT_ADMIN"),
         });
         return;
       }
@@ -569,6 +801,12 @@ const createTelegramBindingFunctions = ({
           requestId,
           updateId,
           errorCode: "CHANNEL_ALREADY_BOUND",
+        });
+        await sendBindingFeedback({
+          token,
+          chatId,
+          updateId,
+          text: getBindingFeedback("CHANNEL_ALREADY_BOUND"),
         });
         return;
       }
@@ -673,6 +911,12 @@ const createTelegramBindingFunctions = ({
           guildId,
           status: confirmationResult.status,
         });
+      } else {
+        logger.info("[TG Binding] Channel connected", {
+          guildId,
+          updateId,
+          chatType,
+        });
       }
     } catch (error) {
       logger.error("[TG Binding] Could not process bind command", {
@@ -691,6 +935,18 @@ const createTelegramBindingFunctions = ({
           guildId,
           updateId,
           error: resetError?.message || String(resetError),
+        });
+      });
+      await sendBindingFeedback({
+        token,
+        chatId,
+        updateId,
+        text: getBindingFeedback("INTERNAL_ERROR"),
+      }).catch((feedbackError) => {
+        logger.error("[TG Binding] Could not send internal-error feedback", {
+          guildId,
+          updateId,
+          error: feedbackError?.message || String(feedbackError),
         });
       });
     }

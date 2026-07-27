@@ -10,6 +10,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +51,7 @@ const TelegramSettings = () => {
   const [action, setAction] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const activeGuildRef = useRef('');
 
   useFocusEffect(
     useCallback(() => {
@@ -58,6 +60,7 @@ const TelegramSettings = () => {
 
       setIsLoading(true);
       setBinding(null);
+      activeGuildRef.current = '';
 
       const subscribe = async () => {
         try {
@@ -69,6 +72,7 @@ const TelegramSettings = () => {
 
           const guildId = String(contextGuildId || storedGuildId || '').trim();
           const normalizedUserId = String(userId || '').trim();
+          activeGuildRef.current = guildId;
           setActiveGuildId(guildId);
           setCurrentUserId(normalizedUserId);
 
@@ -94,7 +98,6 @@ const TelegramSettings = () => {
                 );
                 if (
                   previous?.requestId &&
-                  pendingRequestId &&
                   previous.requestId !== pendingRequestId
                 ) {
                   return null;
@@ -107,6 +110,7 @@ const TelegramSettings = () => {
               if (disposed) return;
               console.error('Помилка завантаження Telegram-налаштувань:', error);
               setTelegramSetting(null);
+              setBinding(null);
               setIsLoading(false);
             }
           );
@@ -114,6 +118,7 @@ const TelegramSettings = () => {
           if (disposed) return;
           console.error('Помилка ініціалізації Telegram-налаштувань:', error);
           setTelegramSetting(null);
+          setBinding(null);
           setIsLoading(false);
         }
       };
@@ -122,6 +127,7 @@ const TelegramSettings = () => {
 
       return () => {
         disposed = true;
+        activeGuildRef.current = '';
         if (settingRef) settingRef.off('value');
       };
     }, [contextGuildId])
@@ -201,6 +207,7 @@ const TelegramSettings = () => {
 
   const handleCreateBinding = async () => {
     if (action || !activeGuildId || !currentUserId) return;
+    const requestGuildId = activeGuildId;
     setAction('prepare');
     try {
       const result = await callTelegramFunction(
@@ -214,6 +221,7 @@ const TelegramSettings = () => {
         showFunctionError(result, 'guildAdmin.telegram.setupFailed');
         return;
       }
+      if (activeGuildRef.current !== requestGuildId) return;
 
       setBinding({
         requestId: String(result.requestId || ''),
@@ -414,14 +422,68 @@ const TelegramSettings = () => {
             </TouchableOpacity>
           </View>
         </>
-      ) : binding && !isCodeExpired ? (
+      ) : hasConnectionError ? (
         <>
           <View style={styles.statusRow}>
-            <ActivityIndicator size="small" color="#4ea1ff" />
-            <Text style={styles.waitingText}>
-              {t('guildAdmin.telegram.waiting')}
+            <View style={[styles.statusDot, styles.statusDotError]} />
+            <Text style={styles.errorText}>
+              {t('guildAdmin.telegram.connectionError')}
             </Text>
           </View>
+          <Text style={styles.channelTitle}>{channelLabel}</Text>
+          <Text style={styles.warningText}>
+            {getErrorMessage(telegramSetting?.errorCode)}
+          </Text>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                styles.flexButton,
+                action && styles.disabledButton,
+              ]}
+              onPress={handleCreateBinding}
+              disabled={!!action}
+              activeOpacity={0.8}
+            >
+              {renderActionContent(
+                'prepare',
+                'guildAdmin.telegram.reconnect'
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.dangerButton,
+                styles.flexButton,
+                action && styles.disabledButton,
+              ]}
+              onPress={handleDisconnect}
+              disabled={!!action}
+              activeOpacity={0.8}
+            >
+              {renderActionContent(
+                'disconnect',
+                'guildAdmin.telegram.disconnect'
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : binding && !isCodeExpired ? (
+        <>
+          {pendingBinding?.errorCode ? (
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, styles.statusDotError]} />
+              <Text style={styles.errorText}>
+                {getErrorMessage(pendingBinding.errorCode)}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.statusRow}>
+              <ActivityIndicator size="small" color="#4ea1ff" />
+              <Text style={styles.waitingText}>
+                {t('guildAdmin.telegram.waiting')}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.stepRow}>
             <View style={styles.stepNumber}>
@@ -479,12 +541,6 @@ const TelegramSettings = () => {
               time: formatRemainingTime(remainingMs),
             })}
           </Text>
-
-          {!!pendingBinding?.errorCode && (
-            <Text style={styles.errorText}>
-              {getErrorMessage(pendingBinding.errorCode)}
-            </Text>
-          )}
         </>
       ) : binding && isCodeExpired ? (
         <>
@@ -530,51 +586,6 @@ const TelegramSettings = () => {
               'guildAdmin.telegram.newCode'
             )}
           </TouchableOpacity>
-        </>
-      ) : hasConnectionError ? (
-        <>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, styles.statusDotError]} />
-            <Text style={styles.errorText}>
-              {t('guildAdmin.telegram.connectionError')}
-            </Text>
-          </View>
-          <Text style={styles.channelTitle}>{channelLabel}</Text>
-          <Text style={styles.warningText}>
-            {getErrorMessage(telegramSetting?.errorCode)}
-          </Text>
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                styles.flexButton,
-                action && styles.disabledButton,
-              ]}
-              onPress={handleCreateBinding}
-              disabled={!!action}
-              activeOpacity={0.8}
-            >
-              {renderActionContent(
-                'prepare',
-                'guildAdmin.telegram.reconnect'
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.dangerButton,
-                styles.flexButton,
-                action && styles.disabledButton,
-              ]}
-              onPress={handleDisconnect}
-              disabled={!!action}
-              activeOpacity={0.8}
-            >
-              {renderActionContent(
-                'disconnect',
-                'guildAdmin.telegram.disconnect'
-              )}
-            </TouchableOpacity>
-          </View>
         </>
       ) : (
         <>

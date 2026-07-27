@@ -1,5 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
+import notifee, {
+  AndroidDefaults,
+  AndroidImportance,
+  EventType,
+} from '@notifee/react-native';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from '@react-native-firebase/database';
 import messaging from '@react-native-firebase/messaging';
@@ -1111,8 +1115,11 @@ export default function MainContent() {
         }
         return (
           type === 'gbg_sector_open' ||
+          type === 'gbg_build_plan' ||
+          type === 'gbg_help' ||
           channelId === 'gbg_sector' ||
-          channelId === 'gbg_sector_silent'
+          channelId === 'gbg_sector_silent' ||
+          channelId === 'gbg_build'
         );
       });
 
@@ -1378,7 +1385,8 @@ export default function MainContent() {
           await clearChatNotifications(route.chatId, route.guildId);
         } else if (
           route.type === 'gbg_sector_open' ||
-          route.type === 'gbg_build_plan'
+          route.type === 'gbg_build_plan' ||
+          route.type === 'gbg_help'
         ) {
           navigationRef.navigate('GBG', { screen: 'GBGScreen' });
           await clearSectorNotifications(route.guildId);
@@ -1663,7 +1671,9 @@ export default function MainContent() {
         await notifee.createChannel({
           id: 'gbg_sector_silent',
           name: 'GBG Sector Silent',
-          importance: AndroidImportance.HIGH,
+          importance: AndroidImportance.LOW,
+          vibration: false,
+          lights: false,
         });
 
         // ✅ Канал рекомендацій забудови ПБГ
@@ -1686,7 +1696,9 @@ export default function MainContent() {
         await notifee.createChannel({
           id: 'chat_messages_silent',
           name: 'Chat Messages Silent',
-          importance: AndroidImportance.HIGH,
+          importance: AndroidImportance.LOW,
+          vibration: false,
+          lights: false,
         });
 
         await notifee.createChannel({
@@ -1699,7 +1711,9 @@ export default function MainContent() {
         await notifee.createChannel({
           id: 'culture_settlement_silent',
           name: 'Culture Settlement Silent',
-          importance: AndroidImportance.HIGH,
+          importance: AndroidImportance.LOW,
+          vibration: false,
+          lights: false,
         });
 
         const fcmToken = await messaging().getToken();
@@ -1760,12 +1774,22 @@ export default function MainContent() {
 
         // ✅ sound flag приходить з сервера: "1" або "0"
         const soundFlag = remoteMessage?.data?.sound === '1';
+        const scheduleAwareMessage = [
+          'gbg_sector_open',
+          'gbg_build_plan',
+          'gbg_help',
+          'culture_build_ready',
+          'chat_message',
+        ].includes(messageType);
+        const displaySilently = scheduleAwareMessage && !soundFlag;
 
         const displayChannelId =
           messageType === 'gbg_sector_open'
             ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
             : messageType === 'gbg_build_plan'
-              ? 'gbg_build'
+              ? (soundFlag ? 'gbg_build' : 'gbg_sector_silent')
+            : messageType === 'gbg_help'
+              ? (soundFlag ? 'gbg_sector' : 'gbg_sector_silent')
             : messageType === 'culture_build_ready'
               ? (soundFlag ? 'culture_settlement_kolokol' : 'culture_settlement_silent')
             : messageType === 'chat_message'
@@ -1787,7 +1811,12 @@ export default function MainContent() {
           data: notificationData,
           android: {
             channelId: displayChannelId,
-            importance: AndroidImportance.HIGH,
+            importance: displaySilently
+              ? AndroidImportance.LOW
+              : AndroidImportance.HIGH,
+            defaults: displaySilently
+              ? [AndroidDefaults.LIGHTS]
+              : [AndroidDefaults.ALL],
             pressAction: { id: 'default' },
           },
         });

@@ -29,6 +29,7 @@ const BUILDING_COLOR = {
   goods: '#E60A18',
 };
 const TOTAL_MINUTES = 24 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const lettersToIndex = (letters) => {
   let idx = 0;
@@ -289,7 +290,12 @@ const normalizeRollingWeeks = (rollingWeeksRaw) => {
   const weeksOut = {};
 
   if (!weeksRaw || typeof weeksRaw !== 'object') {
-    return { anchorAt, weeks: weeksOut };
+    return {
+      anchorAt,
+      anchorDate: rollingWeeksRaw.anchorDate,
+      version: rollingWeeksRaw.version,
+      weeks: weeksOut,
+    };
   }
 
   Object.keys(weeksRaw).forEach((wk) => {
@@ -315,19 +321,27 @@ const normalizeRollingWeeks = (rollingWeeksRaw) => {
     });
   });
 
-  return { anchorAt, weeks: weeksOut };
+  return {
+    anchorAt,
+    anchorDate: rollingWeeksRaw.anchorDate,
+    version: rollingWeeksRaw.version,
+    weeks: weeksOut,
+  };
 };
 
 const getLocalParts = (utcMs, timeZone) => {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: timeZone || 'UTC',
+  const dtf = new Intl.DateTimeFormat('en-GB', {
+    timeZone:
+      timeZone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      'UTC',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   });
 
   const parts = dtf.formatToParts(new Date(utcMs));
@@ -340,7 +354,7 @@ const getLocalParts = (utcMs, timeZone) => {
     year: Number(map.year),
     month: Number(map.month),
     day: Number(map.day),
-    hour: Number(map.hour),
+    hour: Number(map.hour) === 24 ? 0 : Number(map.hour),
     minute: Number(map.minute),
     weekdayShort: map.weekday,
   };
@@ -361,6 +375,43 @@ const weekdayShortToMon0 = (value) => {
 
 const localYmdToUtcMidnightMs = (year, month, day) => Date.UTC(year, month - 1, day);
 
+const dateKeyToUtcMidnightMs = (dateKey) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ''));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = localYmdToUtcMidnightMs(year, month, day);
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return timestamp;
+};
+
+const getZonedLocalMidnightMs = (year, month, day, timeZone) => {
+  const desiredLocalAsUtc = localYmdToUtcMidnightMs(year, month, day);
+  let candidate = desiredLocalAsUtc;
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    const parts = getLocalParts(candidate, timeZone);
+    const representedLocalAsUtc = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute
+    );
+    const correction = representedLocalAsUtc - desiredLocalAsUtc;
+    candidate -= correction;
+    if (correction === 0) break;
+  }
+  return candidate;
+};
+
 const isMinuteInsideSlots = (minuteOfDay, slots) => {
   if (!Array.isArray(slots) || !slots.length) return false;
   const minute = Math.max(0, Math.min(minuteOfDay, TOTAL_MINUTES));
@@ -374,12 +425,12 @@ const isMinuteInsideSlots = (minuteOfDay, slots) => {
 };
 
 const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
-  if (!scheduleData) return true;
+  if (!scheduleData) return false;
 
   const tz = timeZone || 'UTC';
   const parts = getLocalParts(utcMs, tz);
   const dayIndex = weekdayShortToMon0(parts.weekdayShort);
-  if (dayIndex === null) return true;
+  if (dayIndex === null) return false;
 
   const minuteOfDay = parts.hour * 60 + parts.minute;
 
@@ -393,12 +444,30 @@ const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
     const rolling = normalizeRollingWeeks(scheduleData.rollingWeeks);
     const anchorAt = Number(rolling?.anchorAt);
     const weeks = rolling?.weeks || {};
-    if (!Number.isFinite(anchorAt)) return true;
+    if (!Number.isFinite(anchorAt)) return false;
 
-    const nowLocalMidUtc = localYmdToUtcMidnightMs(parts.year, parts.month, parts.day);
-    const anchorParts = getLocalParts(anchorAt * 1000, tz);
-    const anchorLocalMidUtc = localYmdToUtcMidnightMs(anchorParts.year, anchorParts.month, anchorParts.day);
-    const diffDays = Math.floor((nowLocalMidUtc - anchorLocalMidUtc) / (24 * 60 * 60 * 1000));
+    const anchorDateUtc = dateKeyToUtcMidnightMs(rolling?.anchorDate);
+    const diffDays =
+      anchorDateUtc !== null
+        ? Math.round(
+            (localYmdToUtcMidnightMs(
+              parts.year,
+              parts.month,
+              parts.day
+            ) -
+              anchorDateUtc) /
+              DAY_MS
+          )
+        : Math.floor(
+            (getZonedLocalMidnightMs(
+              parts.year,
+              parts.month,
+              parts.day,
+              tz
+            ) -
+              anchorAt * 1000) /
+              DAY_MS
+          );
     const weekIndex = Math.floor(diffDays / 7);
     const dayInWeek = ((diffDays % 7) + 7) % 7;
 
@@ -408,7 +477,7 @@ const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
     return isMinuteInsideSlots(minuteOfDay, slots);
   }
 
-  return true;
+  return false;
 };
 
 const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
@@ -417,7 +486,10 @@ const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
 };
 
 const getPreferredSchedules = (setting) => {
-  const timeZone = setting?.timeZone || 'UTC';
+  const timeZone =
+    setting?.timeZone ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    'UTC';
   const preferredId = setting?.notificationScheduleId || setting?.activeScheduleId || null;
   const schedulesMap = setting?.schedules && typeof setting.schedules === 'object' ? setting.schedules : {};
 

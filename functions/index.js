@@ -10,6 +10,9 @@ const {
   normalizeTelegramNumericChatId,
   telegramApiRequest,
 } = require("./telegramBinding");
+const {
+  isUserActiveNowBySchedules,
+} = require("./notificationSchedule");
 
 admin.initializeApp();
 
@@ -1318,13 +1321,12 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
   }
 
   const nowMs = Date.now();
-  let soundBySchedule = true;
+  let soundBySchedule = false;
   try {
-    const { timeZone, schedules } = await getUserScheduleForNotifications(userId);
-    soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
+    soundBySchedule = await shouldNotificationPlaySound(userId, nowMs);
   } catch (e) {
     logger.error("[Culture] schedule check error:", e);
-    soundBySchedule = true;
+    soundBySchedule = false;
   }
 
   const batchCount = safeTasks.length;
@@ -1358,7 +1360,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
             title: titleText,
             body: pushBodyText,
             sound: "kolokol",
-            channel_id: "culture_settlement_kolokol",
+            channelId: "culture_settlement_kolokol",
           },
         },
         apns: {
@@ -1390,7 +1392,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
           notification: {
             title: titleText,
             body: pushBodyText,
-            channel_id: "culture_settlement_silent",
+            channelId: "culture_settlement_silent",
           },
         },
         apns: {
@@ -1445,205 +1447,13 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
  * =====================================================================
  */
 
-const TOTAL_MINUTES = 24 * 60;
-
-const dayKeyToIndex = (key) => {
-  if (typeof key !== "string") return null;
-  if (key.startsWith("d")) {
-    const n = Number(key.slice(1));
-    return Number.isFinite(n) ? n : null;
-  }
-  const n = Number(key);
-  return Number.isFinite(n) ? n : null;
-};
-
-const weekKeyToIndex = (key) => {
-  if (typeof key !== "string") return null;
-  if (key.startsWith("w")) {
-    const n = Number(key.slice(1));
-    return Number.isFinite(n) ? n : null;
-  }
-  const n = Number(key);
-  return Number.isFinite(n) ? n : null;
-};
-
-const weeklyIndexToKey = (idx) => `d${idx}`;
-const rollingWeekIndexToKey = (idx) => `w${idx}`;
-const rollingDayIndexToKey = (idx) => `d${idx}`;
-
-const normalizeWeekly = (weeklyRaw) => {
-  const out = {};
-  if (!weeklyRaw) return out;
-
-  // legacy array: [null, [...], ...]
-  if (Array.isArray(weeklyRaw)) {
-    for (let i = 0; i < weeklyRaw.length; i += 1) {
-      const daySlots = weeklyRaw[i];
-      if (!Array.isArray(daySlots) || !daySlots.length) continue;
-      out[weeklyIndexToKey(i)] = daySlots;
-    }
-    return out;
-  }
-
-  // object: {"1":[...]} or {"d1":[...]}
-  if (typeof weeklyRaw === "object") {
-    Object.keys(weeklyRaw).forEach((k) => {
-      const idx = dayKeyToIndex(k);
-      if (idx === null) return;
-      const daySlots = weeklyRaw[k];
-      if (!Array.isArray(daySlots) || !daySlots.length) return;
-      out[weeklyIndexToKey(idx)] = daySlots;
-    });
-  }
-
-  return out;
-};
-
-const normalizeRollingWeeks = (rollingWeeksRaw) => {
-  if (!rollingWeeksRaw || typeof rollingWeeksRaw !== "object") return null;
-
-  const anchorAt = rollingWeeksRaw.anchorAt;
-  const weeksRaw = rollingWeeksRaw.weeks;
-
-  const weeksOut = {};
-  if (!weeksRaw || typeof weeksRaw !== "object") {
-    return { anchorAt, weeks: weeksOut };
-  }
-
-  Object.keys(weeksRaw).forEach((wk) => {
-    const wIndex = weekKeyToIndex(wk);
-    if (wIndex === null) return;
-
-    const weekObj = weeksRaw[wk];
-    const daysRaw = weekObj?.days;
-
-    const wKey = rollingWeekIndexToKey(wIndex);
-    if (!weeksOut[wKey]) weeksOut[wKey] = { days: {} };
-
-    if (!daysRaw || typeof daysRaw !== "object") return;
-
-    Object.keys(daysRaw).forEach((dk) => {
-      const dIndex = dayKeyToIndex(dk);
-      if (dIndex === null) return;
-
-      const slots = daysRaw[dk];
-      if (!Array.isArray(slots) || !slots.length) return;
-
-      const dKey = rollingDayIndexToKey(dIndex);
-      weeksOut[wKey].days[dKey] = slots;
-    });
-  });
-
-  return { anchorAt, weeks: weeksOut };
-};
-
-// Отримуємо локальні частини дати/часу у заданій TZ (без сторонніх бібліотек)
-const getLocalParts = (utcMs, timeZone) => {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: timeZone || "UTC",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  const parts = dtf.formatToParts(new Date(utcMs));
-  const map = {};
-  parts.forEach((p) => {
-    map[p.type] = p.value;
-  });
-
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-    weekdayShort: map.weekday, // Mon Tue ...
-  };
-};
-
-// Mon..Sun => 0..6 (Пн=0 ... Нд=6) — як у твоєму UI
-const weekdayShortToMon0 = (w) => {
-  const m = {
-    Mon: 0,
-    Tue: 1,
-    Wed: 2,
-    Thu: 3,
-    Fri: 4,
-    Sat: 5,
-    Sun: 6,
-  };
-  return m[w] ?? null;
-};
-
-const localYmdToUtcMidnightMs = (y, m, d) => Date.UTC(y, m - 1, d);
-
-const isMinuteInsideSlots = (minuteOfDay, slots) => {
-  if (!Array.isArray(slots) || !slots.length) return false;
-  const m = Math.max(0, Math.min(minuteOfDay, TOTAL_MINUTES));
-  for (const s of slots) {
-    const a = Number(s?.startMinutes);
-    const b = Number(s?.endMinutes);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-    if (m >= a && m < b) return true;
-  }
-  return false;
-};
-
-const isUserActiveNow = (scheduleData, utcMs, timeZone) => {
-  if (!scheduleData) return true; // якщо розкладу нема — не блокуємо звук
-
-  const tz = timeZone || "UTC";
-  const parts = getLocalParts(utcMs, tz);
-  const dayIndex = weekdayShortToMon0(parts.weekdayShort);
-  if (dayIndex === null) return true;
-
-  const minuteOfDay = parts.hour * 60 + parts.minute;
-
-  // WEEKLY
-  if (scheduleData.weekly) {
-    const weekly = normalizeWeekly(scheduleData.weekly);
-    const slots = weekly[weeklyIndexToKey(dayIndex)] || [];
-    return isMinuteInsideSlots(minuteOfDay, slots);
-  }
-
-  // ROLLING WEEKS
-  if (scheduleData.rollingWeeks?.weeks) {
-    const rolling = normalizeRollingWeeks(scheduleData.rollingWeeks);
-    const anchorAt = Number(rolling?.anchorAt);
-    const weeks = rolling?.weeks || {};
-    if (!Number.isFinite(anchorAt)) return true;
-
-    // diffDays рахуємо по локальній даті у tz
-    const nowLocalMidUtc = localYmdToUtcMidnightMs(parts.year, parts.month, parts.day);
-
-    const anchorParts = getLocalParts(anchorAt * 1000, tz);
-    const anchorLocalMidUtc = localYmdToUtcMidnightMs(anchorParts.year, anchorParts.month, anchorParts.day);
-
-    const diffDays = Math.floor((nowLocalMidUtc - anchorLocalMidUtc) / (24 * 60 * 60 * 1000));
-    const weekIndex = Math.floor(diffDays / 7);
-    const dayInWeek = ((diffDays % 7) + 7) % 7;
-
-    const wKey = rollingWeekIndexToKey(weekIndex);
-    const dKey = rollingDayIndexToKey(dayInWeek);
-
-    const slots = weeks?.[wKey]?.days?.[dKey] || [];
-    return isMinuteInsideSlots(minuteOfDay, slots);
-  }
-
-  return true;
-};
-
 // Витягуємо TZ + розклад користувача
 const getUserScheduleForNotifications = async (uid) => {
   const settingSnap = await admin.database().ref(`/users/${uid}/setting`).once("value");
   const setting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
 
-  const timeZone = setting.timeZone || "UTC";
+  const timeZone =
+    typeof setting.timeZone === "string" ? setting.timeZone.trim() : "";
   const preferredId = setting.notificationScheduleId || setting.activeScheduleId || null;
 
   const schedulesSnap = await admin.database().ref(`/users/${uid}/setting/schedules`).once("value");
@@ -1664,9 +1474,23 @@ const getUserScheduleForNotifications = async (uid) => {
   return { timeZone, schedules };
 };
 
-const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
-  if (!Array.isArray(schedules) || !schedules.length) return true;
-  return schedules.some((schedule) => isUserActiveNow(schedule, utcMs, timeZone));
+const shouldNotificationPlaySound = async (uid, utcMs = Date.now()) => {
+  const { timeZone, schedules } =
+    await getUserScheduleForNotifications(uid);
+
+  // Без графіка зберігаємо попередню поведінку: звук дозволений.
+  if (!schedules.length) return true;
+
+  // Якщо користувач налаштував графік, але TZ невідома, UTC не вгадуємо:
+  // помилка не повинна будити користувача в його локальний час сну.
+  if (!timeZone) {
+    logger.warn("[NotificationSchedule] Missing time zone; using silent", {
+      uid: String(uid),
+    });
+    return false;
+  }
+
+  return isUserActiveNowBySchedules(schedules, utcMs, timeZone);
 };
 
 /**
@@ -1789,13 +1613,12 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, mess
       if (!chatSoundEnabled) return { uid, token, sound: false };
 
       // ✅ якщо графік дозволяє -> зі звуком
-      let soundBySchedule = true;
+      let soundBySchedule = false;
       try {
-        const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
-        soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
+        soundBySchedule = await shouldNotificationPlaySound(uid, nowMs);
       } catch (e) {
         logger.error("[sendChatNotification] schedule check error:", e);
-        soundBySchedule = true;
+        soundBySchedule = false;
       }
 
       return { uid, token, sound: !!soundBySchedule };
@@ -1831,7 +1654,7 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, mess
           title: titleText,
           body: group.body,
           ...(group.sound ? { sound: "smeh_minonovhasms" } : {}),
-          channel_id: group.sound ? "chat_messages" : "chat_messages_silent",
+          channelId: group.sound ? "chat_messages" : "chat_messages_silent",
         },
       },
       apns: {
@@ -2268,13 +2091,12 @@ async function sendPushAndMarkSent({
       const token = tokenSnap.exists() ? tokenSnap.val() : null;
       if (!token) return { uid, token: null, sound: false };
 
-      let soundBySchedule = true;
+      let soundBySchedule = false;
       try {
-        const { timeZone, schedules } = await getUserScheduleForNotifications(uid);
-        soundBySchedule = isUserActiveNowBySchedules(schedules, nowMs, timeZone);
+        soundBySchedule = await shouldNotificationPlaySound(uid, nowMs);
       } catch (e) {
         logger.error("[GBG] schedule check error:", e);
-        soundBySchedule = true;
+        soundBySchedule = false;
       }
 
       return { uid, token, sound: !!soundBySchedule };
@@ -2336,7 +2158,7 @@ async function sendPushAndMarkSent({
           title: titleText,
           body: group.body,
           ...(group.sound ? { sound: "alert" } : {}),
-          channel_id: group.sound ? "gbg_sector" : "gbg_sector_silent",
+          channelId: group.sound ? "gbg_sector" : "gbg_sector_silent",
         },
       },
       apns: {
@@ -2682,17 +2504,34 @@ exports.processGbgSectorBuildChecks = onSchedule(
               const memberIds = membersSnap.exists()
                 ? Object.keys(membersSnap.val() || {})
                 : [];
+              const nowMs = Date.now();
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
-                  const roleSnap = await db.ref(`/users/${uid}/${guildId}/role`).once("value");
+                  const [roleSnap, tokenSnap] = await Promise.all([
+                    db.ref(`/users/${uid}/${guildId}/role`).once("value"),
+                    db.ref(`/users/${uid}/fcmToken`).once("value"),
+                  ]);
                   const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
                   if (role !== "guildLeader" && role !== "tester") return null;
 
-                  const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
                   if (!token) return null;
 
-                  return { uid, token };
+                  let soundBySchedule = false;
+                  try {
+                    soundBySchedule = await shouldNotificationPlaySound(
+                      uid,
+                      nowMs
+                    );
+                  } catch (error) {
+                    logger.error(
+                      "[GBG_BUILD_CHECK] schedule check error:",
+                      error
+                    );
+                    soundBySchedule = false;
+                  }
+
+                  return { uid, token, sound: !!soundBySchedule };
                 })
               );
 
@@ -2712,33 +2551,51 @@ exports.processGbgSectorBuildChecks = onSchedule(
                     messageText,
                     worldContexts.get(String(info.uid))
                   );
-                  if (!groups.has(body)) groups.set(body, []);
-                  groups.get(body).push(info.token);
+                  const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
+                  if (!groups.has(key)) {
+                    groups.set(key, {
+                      sound: info.sound,
+                      body,
+                      tokens: [],
+                    });
+                  }
+                  groups.get(key).tokens.push(info.token);
                 });
 
                 await Promise.all(
-                  Array.from(groups.entries()).map(([body, tokens]) =>
+                  Array.from(groups.values()).map((group) =>
                     sendMulticastWithoutRecipientLimit({
-                      tokens,
+                      tokens: group.tokens,
                       data: {
                         screen: "GBG",
                         type: "gbg_build_plan",
                         title: titleText,
-                        body,
+                        body: group.body,
                         guildId: String(guildId),
                         sectorId: String(sectorId),
                         notificationEventId: String(taskId),
+                        sound: group.sound ? "1" : "0",
                       },
-                      notification: { title: titleText, body },
+                      notification: {
+                        title: titleText,
+                        body: group.body,
+                      },
                       android: {
                         priority: "high",
                         notification: {
-                          channel_id: "gbg_build",
-                          sound: "build",
+                          channelId: group.sound
+                            ? "gbg_build"
+                            : "gbg_sector_silent",
+                          ...(group.sound ? { sound: "build" } : {}),
                         },
                       },
                       apns: {
-                        payload: { aps: { sound: "default" } },
+                        payload: {
+                          aps: {
+                            ...(group.sound ? { sound: "default" } : {}),
+                            "content-available": 1,
+                          },
+                        },
                       },
                     })
                   )
@@ -2798,9 +2655,21 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   if (!membersSnap.exists()) return { success: false };
 
   const memberIds = Object.keys(membersSnap.val());
+  const nowMs = Date.now();
   const tokensPromises = memberIds.map(async (uid) => {
     const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
-    return tokenSnap.exists() && tokenSnap.val() ? { uid, token: tokenSnap.val() } : null;
+    const token = tokenSnap.exists() ? tokenSnap.val() : null;
+    if (!token) return null;
+
+    let soundBySchedule = false;
+    try {
+      soundBySchedule = await shouldNotificationPlaySound(uid, nowMs);
+    } catch (error) {
+      logger.error("[GBG_HELP] schedule check error:", error);
+      soundBySchedule = false;
+    }
+
+    return { uid, token, sound: !!soundBySchedule };
   });
   const recipients = (await Promise.all(tokensPromises)).filter(Boolean);
 
@@ -2811,23 +2680,51 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
     const groups = new Map();
     recipients.forEach((info) => {
       const body = addWorldNameToPushBody(messageText, worldContexts.get(String(info.uid)));
-      if (!groups.has(body)) groups.set(body, []);
-      groups.get(body).push(info.token);
+      const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          sound: info.sound,
+          body,
+          tokens: [],
+        });
+      }
+      groups.get(key).tokens.push(info.token);
     });
 
-    await Promise.all(Array.from(groups.entries()).map(async ([body, tokens]) => {
+    await Promise.all(Array.from(groups.values()).map(async (group) => {
       const payload = {
-        data: { screen: "GBG", title: titleText, body },
+        data: {
+          screen: "GBG",
+          type: "gbg_help",
+          guildId: String(guildId),
+          title: titleText,
+          body: group.body,
+          sound: group.sound ? "1" : "0",
+        },
         android: {
           priority: "high",
-          notification: { title: titleText, body, sound: "default", channel_id: "default" },
+          notification: {
+            title: titleText,
+            body: group.body,
+            channelId: group.sound ? "gbg_sector" : "gbg_sector_silent",
+            ...(group.sound ? { sound: "alert" } : {}),
+          },
         },
         apns: {
-          payload: { aps: { alert: { title: titleText, body }, sound: "default", "content-available": 1 } },
+          payload: {
+            aps: {
+              alert: { title: titleText, body: group.body },
+              ...(group.sound ? { sound: "default" } : {}),
+              "content-available": 1,
+            },
+          },
         },
       };
       try {
-        await sendMulticastWithoutRecipientLimit({ tokens, ...payload });
+        await sendMulticastWithoutRecipientLimit({
+          tokens: group.tokens,
+          ...payload,
+        });
       } catch (e) {
         logger.error(e);
       }
