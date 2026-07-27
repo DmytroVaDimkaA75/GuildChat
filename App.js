@@ -6,7 +6,16 @@ import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as Localization from "expo-localization";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, AppState, PermissionsAndroid, Platform, StatusBar, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  AppState,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DarkThemeColors } from "./constants/theme";
 import { GuildContext, GuildProvider } from "./GuildContext";
@@ -26,6 +35,158 @@ const firebaseConfig = {
   storageBucket: "guildchat-5d8c1.appspot.com",
   messagingSenderId: "220187331504",
   appId: "1:220187331504:web:d7929f971088bf2d946475"
+};
+
+const WIDGET_INSTALLATION_ID_KEY = "widgetInstallationId";
+const WIDGET_SUBSCRIPTION_GUILD_KEY = "widgetSubscriptionGuildId";
+const WIDGET_SUBSCRIPTION_USER_KEY = "widgetSubscriptionUserId";
+let widgetInstallationIdPromise = null;
+let pushDeviceRegistrationQueue = Promise.resolve();
+
+const getOrCreateWidgetInstallationId = () => {
+  if (!widgetInstallationIdPromise) {
+    widgetInstallationIdPromise = (async () => {
+      const storedId = await AsyncStorage.getItem(WIDGET_INSTALLATION_ID_KEY);
+      if (storedId) return storedId;
+
+      const generatedId = [
+        "installation",
+        Platform.OS,
+        Date.now().toString(36),
+        Math.random().toString(36).slice(2, 12),
+      ].join("_");
+      await AsyncStorage.setItem(WIDGET_INSTALLATION_ID_KEY, generatedId);
+      return generatedId;
+    })().catch((error) => {
+      widgetInstallationIdPromise = null;
+      throw error;
+    });
+  }
+  return widgetInstallationIdPromise;
+};
+
+const registerPushDeviceOnce = async ({
+  token,
+  guildId: explicitGuildId = null,
+}) => {
+  const normalizedToken = String(token || "").trim();
+  if (!normalizedToken) return;
+
+  const [
+    userId,
+    storedGuildId,
+    storedInstallationId,
+    previousGuildId,
+    previousUserId,
+  ] = await Promise.all([
+    AsyncStorage.getItem("userId"),
+    AsyncStorage.getItem("guildId"),
+    AsyncStorage.getItem(WIDGET_INSTALLATION_ID_KEY),
+    AsyncStorage.getItem(WIDGET_SUBSCRIPTION_GUILD_KEY),
+    AsyncStorage.getItem(WIDGET_SUBSCRIPTION_USER_KEY),
+  ]);
+
+  if (!userId) {
+    if (storedInstallationId && (previousGuildId || previousUserId)) {
+      const cleanupUpdates = {};
+      if (previousGuildId) {
+        cleanupUpdates[
+          `widgetSubscriptions/${previousGuildId}/${storedInstallationId}`
+        ] = null;
+      }
+      if (previousUserId) {
+        cleanupUpdates[
+          `users/${previousUserId}/devices/${storedInstallationId}`
+        ] = null;
+      }
+      await database().ref().update(cleanupUpdates);
+
+      if (previousUserId) {
+        await database()
+          .ref(`users/${previousUserId}/fcmToken`)
+          .transaction((currentToken) =>
+            String(currentToken || "").trim() === normalizedToken
+              ? null
+              : currentToken
+          );
+      }
+    }
+    await AsyncStorage.multiRemove([
+      WIDGET_SUBSCRIPTION_GUILD_KEY,
+      WIDGET_SUBSCRIPTION_USER_KEY,
+    ]);
+    return;
+  }
+
+  const hasExplicitGuildId =
+    explicitGuildId !== null && explicitGuildId !== undefined;
+  const guildId = String(
+    hasExplicitGuildId ? explicitGuildId || "" : storedGuildId || ""
+  ).trim();
+  const widgetGuildId = Platform.OS === "android" ? guildId : "";
+  const installationId =
+    storedInstallationId || await getOrCreateWidgetInstallationId();
+
+  const now = database.ServerValue.TIMESTAMP;
+  const updates = {
+    [`users/${userId}/fcmToken`]: normalizedToken,
+    [`users/${userId}/devices/${installationId}/fcmToken`]: normalizedToken,
+    [`users/${userId}/devices/${installationId}/platform`]: Platform.OS,
+    [`users/${userId}/devices/${installationId}/updatedAt`]: now,
+  };
+
+  if (previousUserId && previousUserId !== userId) {
+    updates[`users/${previousUserId}/devices/${installationId}`] = null;
+  }
+  if (
+    previousGuildId &&
+    (previousGuildId !== widgetGuildId ||
+      (previousUserId && previousUserId !== userId))
+  ) {
+    updates[`widgetSubscriptions/${previousGuildId}/${installationId}`] = null;
+  }
+
+  if (widgetGuildId) {
+    updates[`users/${userId}/devices/${installationId}/widgetGuildId`] =
+      widgetGuildId;
+    updates[`widgetSubscriptions/${widgetGuildId}/${installationId}`] = {
+      userId,
+      fcmToken: normalizedToken,
+      platform: Platform.OS,
+      updatedAt: now,
+    };
+  } else {
+    updates[`users/${userId}/devices/${installationId}/widgetGuildId`] = null;
+  }
+
+  await database().ref().update(updates);
+  if (previousUserId && previousUserId !== userId) {
+    await database()
+      .ref(`users/${previousUserId}/fcmToken`)
+      .transaction((currentToken) =>
+        String(currentToken || "").trim() === normalizedToken
+          ? null
+          : currentToken
+      );
+  }
+  await AsyncStorage.setItem(WIDGET_SUBSCRIPTION_USER_KEY, userId);
+  if (widgetGuildId) {
+    await AsyncStorage.setItem(
+      WIDGET_SUBSCRIPTION_GUILD_KEY,
+      widgetGuildId
+    );
+  } else {
+    await AsyncStorage.removeItem(WIDGET_SUBSCRIPTION_GUILD_KEY);
+  }
+};
+
+const registerPushDevice = (registration) => {
+  const queuedRegistration = pushDeviceRegistrationQueue.then(
+    () => registerPushDeviceOnce(registration),
+    () => registerPushDeviceOnce(registration)
+  );
+  pushDeviceRegistrationQueue = queuedRegistration.catch(() => {});
+  return queuedRegistration;
 };
 
 // ✅ Ініціалізація Firebase (як у тебе було)
@@ -114,16 +275,11 @@ const AppContent = () => {
           }
         }
 
-        // ✅ Отримати і зберегти FCM токен
+        // Реєструємо токен і для звичайних push, і для віджета цього пристрою.
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
-          console.log("✅ FCM Token:", fcmToken);
-
-          const currentUserId = await AsyncStorage.getItem('userId');
-          if (currentUserId) {
-            await database().ref(`/users/${currentUserId}/fcmToken`).set(fcmToken);
-            console.log('✅ FCM токен збережено в БД');
-          }
+          await registerPushDevice({ token: fcmToken });
+          console.log("✅ FCM токен пристрою зареєстровано");
         }
       } catch (error) {
         console.error("❌ Помилка налаштування push:", error);
@@ -135,9 +291,8 @@ const AppContent = () => {
     // ✅ Оновлення токена (важливо)
     const unsubscribeTokenRefresh = messaging().onTokenRefresh(async (newToken) => {
       try {
-        const currentUserId = await AsyncStorage.getItem('userId');
-        if (currentUserId && newToken) {
-          await database().ref(`/users/${currentUserId}/fcmToken`).set(newToken);
+        if (newToken) {
+          await registerPushDevice({ token: newToken });
           console.log('✅ FCM токен оновлено в БД');
         }
       } catch (e) {
@@ -149,6 +304,41 @@ const AppContent = () => {
       unsubscribeTokenRefresh();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const bindWidgetToActiveGuild = async () => {
+      try {
+        const bridge = NativeModules?.GbgWidgetBridge;
+        if (bridge && typeof bridge.setGuildId === "function") {
+          await bridge.setGuildId(String(guildId || ""));
+        }
+
+        const token = await messaging().getToken();
+        if (!cancelled && token) {
+          await registerPushDevice({
+            token,
+            guildId: String(guildId || ""),
+          });
+          console.log(
+            guildId
+              ? "✅ Віджет підписано на активну гільдію"
+              : "✅ Підписку віджета очищено"
+          );
+        }
+      } catch (error) {
+        console.error(
+          "❌ Не вдалося оновити підписку віджета:",
+          error?.message || String(error)
+        );
+      }
+    };
+
+    bindWidgetToActiveGuild();
+    return () => {
+      cancelled = true;
+    };
+  }, [guildId]);
 
   useEffect(() => {
     let presenceRef;

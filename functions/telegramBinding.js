@@ -461,15 +461,15 @@ const createTelegramBindingFunctions = ({
     });
     if (!claimResult.committed) return;
 
-    await codeRef.update({
-      status: "processing",
-      updateId,
-      chatId,
-      processingStartedAt: now,
-      processingExpiresAt: now + TELEGRAM_PROCESSING_TTL_MS,
-    });
-
     try {
+      await codeRef.update({
+        status: "processing",
+        updateId,
+        chatId,
+        processingStartedAt: now,
+        processingExpiresAt: now + TELEGRAM_PROCESSING_TTL_MS,
+      });
+
       const permission = await verifyGuildAdmin({ guildId, userId });
       if (!permission.ok) {
         await setPendingError({
@@ -762,9 +762,12 @@ const createTelegramBindingFunctions = ({
         : {};
       const lockResult = await pendingRef.transaction((current) => {
         const processingExpiresAt = Number(current?.processingExpiresAt || 0);
+        const lockExpiresAt = Number(current?.lockExpiresAt || 0);
         if (
-          current?.status === "processing" &&
-          processingExpiresAt > now
+          (current?.status === "processing" &&
+            processingExpiresAt > now) ||
+          (["rotating", "disconnecting"].includes(current?.status) &&
+            lockExpiresAt > now)
         ) {
           return;
         }
@@ -928,16 +931,36 @@ const createTelegramBindingFunctions = ({
       }
 
       const { guildId } = permission;
-      const [bindingSnapshot, pendingSnapshot] = await Promise.all([
-        db().ref(`/telegramBot/guildBindings/${guildId}`).once("value"),
-        db().ref(`/telegramBot/pendingByGuild/${guildId}`).once("value"),
-      ]);
+      const now = Date.now();
+      const pendingRef = db().ref(`/telegramBot/pendingByGuild/${guildId}`);
+      const disconnectClaim = await pendingRef.transaction((current) => {
+        const processingExpiresAt = Number(current?.processingExpiresAt || 0);
+        const lockExpiresAt = Number(current?.lockExpiresAt || 0);
+        if (
+          (current?.status === "processing" &&
+            processingExpiresAt > now) ||
+          (current?.status === "rotating" && lockExpiresAt > now)
+        ) {
+          return;
+        }
+        return {
+          ...(current || {}),
+          status: "disconnecting",
+          disconnectId: crypto.randomUUID(),
+          lockExpiresAt: now + 30000,
+        };
+      });
+      if (!disconnectClaim.committed) {
+        return { success: false, error: "BINDING_BUSY" };
+      }
+
+      const bindingSnapshot = await db()
+        .ref(`/telegramBot/guildBindings/${guildId}`)
+        .once("value");
       const binding = bindingSnapshot.exists()
         ? bindingSnapshot.val() || {}
         : {};
-      const pending = pendingSnapshot.exists()
-        ? pendingSnapshot.val() || {}
-        : {};
+      const pending = disconnectClaim.snapshot?.val() || {};
       const updates = {
         [`/telegramBot/guildBindings/${guildId}`]: null,
         [`/telegramBot/pendingByGuild/${guildId}`]: null,
@@ -977,6 +1000,7 @@ const createTelegramBindingFunctions = ({
       region: "europe-west1",
       secrets: [telegramBotToken],
       cors: false,
+      invoker: "public",
     },
     async (request, response) => {
       const token = telegramBotToken.value();

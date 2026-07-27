@@ -405,6 +405,9 @@ const GVG = () => {
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
+  const mapDataGuildIdRef = useRef("");
+  const opponentDataGuildIdRef = useRef("");
+  const sectorDataGuildIdRef = useRef("");
   const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const listFadeAnim = useRef(new Animated.Value(0)).current;
@@ -546,6 +549,7 @@ const GVG = () => {
   useEffect(() => {
     let mapRef;
     let onMapUpdate;
+    mapDataGuildIdRef.current = "";
     setIsMapLoaded(false);
     setCurrentMap(null);
     setIsSectorDataLoaded(false);
@@ -559,6 +563,7 @@ const GVG = () => {
       }
       mapRef = database().ref(`guilds/${id}/GBG/map`);
       onMapUpdate = (snap) => {
+        mapDataGuildIdRef.current = String(id);
         let nextMap = DEFAULT_MAP_KEY;
         if (snap.exists()) {
           const value = snap.val();
@@ -578,6 +583,7 @@ const GVG = () => {
   useEffect(() => {
     let opponentsRef;
     let onOpponentsUpdate;
+    opponentDataGuildIdRef.current = "";
     setAreOpponentsLoaded(false);
     setOpponentList([]);
     setOpponentMapById({});
@@ -592,6 +598,7 @@ const GVG = () => {
       }
       opponentsRef = database().ref(`guilds/${id}/GBG/opponents`);
       onOpponentsUpdate = (snap) => {
+        opponentDataGuildIdRef.current = String(id);
         if (snap.exists()) {
           const raw = snap.val() || {};
           const byId = {};
@@ -731,6 +738,7 @@ const GVG = () => {
   };
 
   useEffect(() => {
+    sectorDataGuildIdRef.current = "";
     if (!isMapLoaded) return;
     setSectorStaff({});
     setSectorSchedule([]);
@@ -754,6 +762,7 @@ const GVG = () => {
       }
       sectorsRef = database().ref(`guilds/${id}/GBG/sectors`);
       onSectorsUpdate = (snap) => {
+        sectorDataGuildIdRef.current = String(id);
         setSectorSnapshot(snap.exists() ? snap.val() : null);
         setIsSectorDataLoaded(true);
       };
@@ -955,6 +964,15 @@ const GVG = () => {
   useEffect(() => {
     // Пишемо next5 в кеш, коли є sectorSchedule (реальні дані)
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    const sourceGuildId = String(guildId || "");
+    if (
+      !sourceGuildId ||
+      mapDataGuildIdRef.current !== sourceGuildId ||
+      opponentDataGuildIdRef.current !== sourceGuildId ||
+      sectorDataGuildIdRef.current !== sourceGuildId
+    ) {
+      return;
+    }
 
     const next5 = (sectorSchedule || []).slice(0, 5).map((item) => ({
       sectorId: item.name,
@@ -971,32 +989,48 @@ const GVG = () => {
     }));
 
     const json = JSON.stringify(next5);
-    if (json === lastNext5JsonRef.current) return;
-    lastNext5JsonRef.current = json;
+    const cacheSignature = `${sourceGuildId}\u0000${json}`;
+    if (cacheSignature === lastNext5JsonRef.current) return;
+    lastNext5JsonRef.current = cacheSignature;
 
     (async () => {
       try {
-        await writeNext5ToCache(next5);
+        await writeNext5ToCache(next5, { guildId: sourceGuildId });
       } catch (e) {}
     })();
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, sectorSchedule]);
+  }, [areOpponentsLoaded, guildId, isMapLoaded, isSectorDataLoaded, sectorSchedule]);
 
   useEffect(() => {
     // Пишемо map_state + map_xml в кеш, коли є кольори/персонал/мапа
     if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) return;
+    const sourceGuildId = String(guildId || "");
+    if (
+      !sourceGuildId ||
+      mapDataGuildIdRef.current !== sourceGuildId ||
+      opponentDataGuildIdRef.current !== sourceGuildId ||
+      sectorDataGuildIdRef.current !== sourceGuildId
+    ) {
+      return;
+    }
 
     const colorsStaffJson = JSON.stringify({ sectorColors, sectorStaff });
-    if (lastMapKeyRef.current === mapKey && lastMapColorsStaffJsonRef.current === colorsStaffJson) return;
+    const guildMapKey = `${sourceGuildId}\u0000${mapKey}`;
+    if (lastMapKeyRef.current === guildMapKey && lastMapColorsStaffJsonRef.current === colorsStaffJson) return;
 
-    lastMapKeyRef.current = mapKey;
+    lastMapKeyRef.current = guildMapKey;
     lastMapColorsStaffJsonRef.current = colorsStaffJson;
 
     (async () => {
       try {
-        await writeFullMapToCache({ mapKey, sectorColors, sectorStaff });
+        await writeFullMapToCache({
+          mapKey,
+          sectorColors,
+          sectorStaff,
+          guildId: sourceGuildId,
+        });
       } catch (e) {}
     })();
-  }, [areOpponentsLoaded, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
+  }, [areOpponentsLoaded, guildId, isMapLoaded, isSectorDataLoaded, mapKey, sectorColors, sectorStaff]);
 
   const openBattlesModal = async () => {
     setStatsTab("participants");

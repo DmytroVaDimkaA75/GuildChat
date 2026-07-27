@@ -7,5 +7,6 @@ import android.content.Intent
 class GbgWidgetBootReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     GbgWidgetRefreshScheduler.ensureScheduled(context)
+    GbgWidgetRefreshScheduler.enqueueImmediate(context)
   }
 }

@@ -12,7 +12,7 @@ import { createNavigationContainerRef, DarkTheme, NavigationContainer } from '@r
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Animated, AppState, Easing, Image, Platform, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, NativeModules, Platform, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext } from '../GuildContext';
@@ -1719,16 +1719,38 @@ export default function MainContent() {
 
         // ✅ data-only widget refresh: оновлюємо кеш віджета без нотифікації
         if (remoteMessage?.data?.type === 'gbg_widget_refresh') {
+          const notificationGuildId = String(
+            remoteMessage?.data?.guildId || ''
+          );
+          const activeGuildId = String(guildIdRef.current || '');
+          if (
+            notificationGuildId &&
+            activeGuildId &&
+            notificationGuildId !== activeGuildId
+          ) {
+            return;
+          }
+
           await recordWidgetFcmReceipt({
             type: 'gbg_widget_refresh',
             scope: 'foreground',
             data: remoteMessage?.data || {},
           });
-          await refreshGbgWidgetCacheFromFirebase({
-            guildId: remoteMessage?.data?.guildId ? String(remoteMessage.data.guildId) : null,
-            reason: 'fcm-foreground',
-            sectorId: remoteMessage?.data?.sectorId ? String(remoteMessage.data.sectorId) : '',
-          });
+
+          const nativeBridge = NativeModules?.GbgWidgetBridge;
+          if (
+            Platform.OS === 'android' &&
+            nativeBridge &&
+            typeof nativeBridge.enqueueRefresh === 'function'
+          ) {
+            await nativeBridge.enqueueRefresh();
+          } else {
+            await refreshGbgWidgetCacheFromFirebase({
+              guildId: activeGuildId || notificationGuildId || null,
+              reason: 'fcm-foreground',
+              sectorId: remoteMessage?.data?.sectorId ? String(remoteMessage.data.sectorId) : '',
+            });
+          }
           return;
         }
 

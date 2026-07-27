@@ -12,13 +12,25 @@ import org.json.JSONObject
 
 class GBGTop5SectorsWidgetProvider : AppWidgetProvider() {
 
+  override fun onEnabled(context: Context) {
+    super.onEnabled(context)
+    GbgWidgetRefreshScheduler.ensureScheduled(context)
+    GbgWidgetRefreshScheduler.enqueueImmediate(context)
+  }
+
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
     GbgWidgetRefreshScheduler.ensureScheduled(context)
+    GbgWidgetRefreshScheduler.enqueueImmediate(context)
     for (appWidgetId in appWidgetIds) {
       val views = RemoteViews(context.packageName, R.layout.widget_gbg_top5_sectors)
       render(context, views)
       appWidgetManager.updateAppWidget(appWidgetId, views)
     }
+  }
+
+  override fun onDisabled(context: Context) {
+    super.onDisabled(context)
+    GbgWidgetRefreshScheduler.cancelIfNoWidgets(context)
   }
 
   companion object {

@@ -43,12 +43,18 @@ const styleObjToSvgStyle = (styleObj) => {
   return parts.join(";");
 };
 
-const propsToAttrs = (props) => {
-  if (!props || typeof props !== "object") return "";
+const propsToAttrs = (props, canonicalId = "") => {
+  const source = props && typeof props === "object" ? props : {};
+  if (!canonicalId && Object.keys(source).length === 0) return "";
   const allowed = ["id"];
   return allowed
-    .filter((k) => props[k] !== undefined && props[k] !== null)
-    .map((k) => `${k}="${escapeXmlAttr(props[k])}"`)
+    .map((key) => {
+      const value = key === "id" && canonicalId ? canonicalId : source[key];
+      return value !== undefined && value !== null
+        ? `${key}="${escapeXmlAttr(value)}"`
+        : "";
+    })
+    .filter(Boolean)
     .join(" ");
 };
 
@@ -114,19 +120,19 @@ export const buildGbgMapSvgStringFromState = ({ mapKey, sectorColors, sectorStaf
 
       if (fill?.d) {
         parts.push(
-          `<path ${propsToAttrs(fill?.props)} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(fillStyle))}" />`
+          `<path ${propsToAttrs(fill?.props, `f${sectorId}`)} d="${escapeXmlAttr(fill.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(fillStyle))}" />`
         );
       }
 
       if (text?.d) {
         parts.push(
-          `<path ${propsToAttrs(text?.props)} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(textStyle))}" />`
+          `<path ${propsToAttrs(text?.props, `t${sectorId}`)} d="${escapeXmlAttr(text.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(textStyle))}" />`
         );
       }
 
       if (icon?.d) {
         parts.push(
-          `<path ${propsToAttrs(icon?.props)} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(iconStyle))}" />`
+          `<path ${propsToAttrs(icon?.props, `i${sectorId}`)} d="${escapeXmlAttr(icon.d)}" style="${escapeXmlAttr(styleObjToSvgStyle(iconStyle))}" />`
         );
       }
 

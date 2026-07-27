@@ -1,10 +1,11 @@
 {
   "name": "newguildchat",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
+    "generate:widget-maps": "node ./scripts/generate-widget-map-templates.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

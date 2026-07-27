@@ -2,6 +2,7 @@ package com.vadimkaa75.guildchat.widgets
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -14,7 +15,6 @@ import com.caverock.androidsvg.SVG
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
 
 class GBGMapWidgetProvider : AppWidgetProvider() {
 
@@ -22,20 +22,30 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
 
         if (intent.action == ACTION_REFRESH) {
-            // ✅ ЄДИНА логіка — міняємо текст
             val appWidgetManager = AppWidgetManager.getInstance(context)
-            val views = RemoteViews(context.packageName, R.layout.widget_gbg_map)
-
-            views.setTextViewText(
-                R.id.widgetUpdatedAt,
-                "Для отримання більш актуальних даних відвідайте додаток"
-            )
-
             val widgetIds = appWidgetManager.getAppWidgetIds(
-                intent.component
+                ComponentName(context, GBGMapWidgetProvider::class.java)
             )
-            appWidgetManager.updateAppWidget(widgetIds, views)
+            val hasGuild = !GbgWidgetPrefs.getGuildId(context).isNullOrBlank()
+            widgetIds.forEach { widgetId ->
+                val views = RemoteViews(context.packageName, R.layout.widget_gbg_map)
+                render(context, views)
+                views.setTextViewText(
+                    R.id.widgetUpdatedAt,
+                    if (hasGuild) "Оновлення…" else "Оберіть гільдію в застосунку"
+                )
+                appWidgetManager.updateAppWidget(widgetId, views)
+            }
+            if (!hasGuild) return
+            GbgWidgetRefreshScheduler.ensureScheduled(context)
+            GbgWidgetRefreshScheduler.enqueueImmediate(context)
         }
+    }
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        GbgWidgetRefreshScheduler.ensureScheduled(context)
+        GbgWidgetRefreshScheduler.enqueueImmediate(context)
     }
 
     override fun onUpdate(
@@ -43,11 +53,18 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        GbgWidgetRefreshScheduler.ensureScheduled(context)
+        GbgWidgetRefreshScheduler.enqueueImmediate(context)
         for (appWidgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_gbg_map)
             render(context, views)
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        GbgWidgetRefreshScheduler.cancelIfNoWidgets(context)
     }
 
     companion object {
@@ -61,13 +78,7 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
                 buildRefreshPendingIntent(context)
             )
 
-            val updatedAt = GbgWidgetPrefs.getUpdatedAt(context)
-            val timeStr = if (updatedAt > 0) {
-                SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                    .format(Date(updatedAt))
-            } else "—"
-
-            views.setTextViewText(R.id.widgetUpdatedAt, "Оновлено: $timeStr")
+            renderUpdatedAt(context, views)
 
             val svgRaw = GbgWidgetPrefs.getMapSvg(context)
             val bitmap = renderSvgToBitmap(svgRaw)
@@ -84,6 +95,16 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
                     "Немає даних мапи"
                 )
             }
+        }
+
+        fun renderUpdatedAt(context: Context, views: RemoteViews) {
+            val updatedAt = GbgWidgetPrefs.getUpdatedAt(context)
+            val timeStr = if (updatedAt > 0) {
+                SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                    .format(Date(updatedAt))
+            } else "—"
+
+            views.setTextViewText(R.id.widgetUpdatedAt, "Оновлено: $timeStr")
         }
 
         private fun renderSvgToBitmap(svgRaw: String): Bitmap? {

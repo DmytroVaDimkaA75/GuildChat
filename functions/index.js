@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 const {
   createTelegramBindingFunctions,
   isValidTelegramBinding,
+  normalizeTelegramNumericChatId,
   telegramApiRequest,
 } = require("./telegramBinding");
 
@@ -18,12 +19,7 @@ admin.initializeApp();
  * =====================================================================
  */
 const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
-const TELEGRAM_CHAT_ID_PATTERN = /^(?:-?[1-9]\d{0,17}|@[A-Za-z][A-Za-z0-9_]{4,31})$/;
-
-const normalizeTelegramChatId = (value) => {
-  const chatId = String(value || "").trim();
-  return TELEGRAM_CHAT_ID_PATTERN.test(chatId) ? chatId : "";
-};
+const normalizeTelegramChatId = normalizeTelegramNumericChatId;
 
 const getGuildTelegramChatId = async ({ db, guildId }) => {
   if (!guildId) return "";
@@ -202,11 +198,17 @@ exports.telegramWebhook = telegramBindingFunctions.telegramWebhook;
  * =====================================================================
  * ✅ Widget refresh helpers (data-only, без показу нотифікацій)
  * - НЕ конфліктує з існуючими експортами
- * - Є cooldown, щоб не шмаляти кожні 1-2 секунди
+ * - Snapshot + debounce/collapse не створюють шквал push-подій
  * =====================================================================
  */
 
-const WIDGET_REFRESH_COOLDOWN_MS = 20000; // 20s (можеш змінити)
+const WIDGET_PUSH_TTL_MS = 60 * 1000;
+const WIDGET_PUSH_DEBOUNCE_MS = 2500;
+const WIDGET_PUSH_MIN_INTERVAL_MS = 5000;
+const INVALID_FCM_TOKEN_CODES = new Set([
+  "messaging/invalid-registration-token",
+  "messaging/registration-token-not-registered",
+]);
 
 const chunkArray = (arr, size) => {
   const res = [];
@@ -261,92 +263,208 @@ const sendMulticastWithoutRecipientLimit = async ({ tokens, ...payload }) => {
   );
 };
 
-const getGuildMemberTokens = async (guildId) => {
-  const membersSnap = await admin.database().ref(`/guilds/${guildId}/guildUsers`).once("value");
-  if (!membersSnap.exists()) return [];
-
-  const memberIds = Object.keys(membersSnap.val() || {});
-  if (!memberIds.length) return [];
-
-  const tokenSnaps = await Promise.all(
-    memberIds.map((uid) => admin.database().ref(`/users/${uid}/fcmToken`).once("value"))
-  );
-
-  const tokens = tokenSnaps.map((s) => (s.exists() ? s.val() : null)).filter(Boolean);
-  return Array.from(new Set(tokens));
+const normalizeFcmToken = (value) => {
+  const token = String(value || "").trim();
+  return token.length >= 20 ? token : "";
 };
 
-/**
- * ✅ Анти-спам: не частіше ніж раз на WIDGET_REFRESH_COOLDOWN_MS для guildId
- */
-const acquireWidgetCooldown = async (guildId) => {
-  const ref = admin.database().ref(`/guilds/${guildId}/GBG/_meta/widgetRefreshLastSent`);
-  const now = Date.now();
+const getGuildWidgetRecipients = async (guildId) => {
+  if (!guildId) return [];
 
-  try {
-    const result = await ref.transaction((prev) => {
-      const prevMs = typeof prev === "number" ? prev : 0;
-      if (now - prevMs < WIDGET_REFRESH_COOLDOWN_MS) {
-        return; // abort
-      }
-      return now;
+  const db = admin.database();
+  const [membersSnap, subscriptionsSnap] = await Promise.all([
+    db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+    db.ref(`/widgetSubscriptions/${guildId}`).once("value"),
+  ]);
+  const memberIds = Object.keys(membersSnap.val() || {});
+  const memberSet = new Set(memberIds.map(String));
+  if (!memberSet.size) return [];
+
+  const recipientsByToken = new Map();
+  const addRecipient = ({ token, userId, cleanupPaths }) => {
+    const normalizedToken = normalizeFcmToken(token);
+    const normalizedUserId = String(userId || "");
+    if (!normalizedToken || !memberSet.has(normalizedUserId)) return;
+
+    const existing = recipientsByToken.get(normalizedToken) || {
+      token: normalizedToken,
+      userIds: new Set(),
+      cleanupPaths: new Set(),
+    };
+    existing.userIds.add(normalizedUserId);
+    (cleanupPaths || []).filter(Boolean).forEach((path) => {
+      existing.cleanupPaths.add(path);
     });
+    recipientsByToken.set(normalizedToken, existing);
+  };
 
-    return !!result.committed;
-  } catch (e) {
-    // Якщо транзакція не вдалася — краще не спамити
-    logger.error("[WidgetCooldown] transaction error:", e);
-    return false;
-  }
+  const subscriptions = subscriptionsSnap.val() || {};
+  Object.entries(subscriptions).forEach(([installationId, subscription]) => {
+    if (!subscription || typeof subscription !== "object") return;
+    if (
+      subscription.platform &&
+      String(subscription.platform).toLowerCase() !== "android"
+    ) {
+      return;
+    }
+    const userId = String(subscription.userId || "");
+    addRecipient({
+      token: subscription.fcmToken,
+      userId,
+      cleanupPaths: [
+        `/widgetSubscriptions/${guildId}/${installationId}`,
+        userId ? `/users/${userId}/devices/${installationId}` : "",
+        userId ? `/users/${userId}/fcmToken` : "",
+      ],
+    });
+  });
+
+  // Старі версії застосунку мають лише один users/{uid}/fcmToken. Якщо цей
+  // token уже належить новому device record, його активну гільдію визначає
+  // widgetSubscriptions. Інший token вважаємо окремим legacy-пристроєм.
+  const legacyUsers = await Promise.all(
+    memberIds.map(async (uid) => {
+      const [devicesSnap, tokenSnap] = await Promise.all([
+        db.ref(`/users/${uid}/devices`).once("value"),
+        db.ref(`/users/${uid}/fcmToken`).once("value"),
+      ]);
+      return {
+        devices: devicesSnap.val() || {},
+        token: tokenSnap.val(),
+      };
+    })
+  );
+  legacyUsers.forEach((userData, index) => {
+    const userId = String(memberIds[index]);
+    const devices =
+      userData.devices && typeof userData.devices === "object"
+        ? userData.devices
+        : {};
+    const token = normalizeFcmToken(userData.token);
+    const deviceTokens = new Set(
+      Object.values(devices)
+        .map((device) => normalizeFcmToken(device?.fcmToken))
+        .filter(Boolean)
+    );
+    if (!token || deviceTokens.has(token)) return;
+
+    addRecipient({
+      token,
+      userId,
+      cleanupPaths: [`/users/${userId}/fcmToken`],
+    });
+  });
+
+  return Array.from(recipientsByToken.values());
+};
+
+const removeInvalidWidgetRecipient = async (recipient) => {
+  const token = normalizeFcmToken(recipient?.token);
+  const cleanupPaths = Array.from(recipient?.cleanupPaths || []);
+  if (!token || !cleanupPaths.length) return;
+
+  await Promise.all(
+    cleanupPaths.map(async (path) => {
+      try {
+        await admin.database().ref(path).transaction((current) => {
+          const currentToken =
+            current && typeof current === "object"
+              ? normalizeFcmToken(current.fcmToken)
+              : normalizeFcmToken(current);
+          return currentToken === token ? null : current;
+        });
+      } catch (error) {
+        logger.warn("[WidgetRefresh] Could not remove invalid token", {
+          path,
+          error: error?.message || String(error),
+        });
+      }
+    })
+  );
 };
 
 /**
  * ✅ Надсилає data-only повідомлення всім членам гільдії.
  * Важливо: payload БЕЗ android.notification / aps.alert => користувач не бачить пуш.
  */
-const sendWidgetRefreshToGuild = async ({ guildId, reason = "", sectorId = "" }) => {
+const sendWidgetRefreshToGuild = async ({
+  guildId,
+  snapshotVersion = Date.now(),
+}) => {
   if (!guildId) return;
 
-  const ok = await acquireWidgetCooldown(guildId);
-  if (!ok) return;
-
-  const tokens = await getGuildMemberTokens(guildId);
-  if (!tokens.length) return;
+  const recipients = await getGuildWidgetRecipients(guildId);
+  if (!recipients.length) return;
 
   const dataPayload = {
     type: "gbg_widget_refresh",
     guildId: String(guildId),
-    reason: String(reason || ""),
-    sectorId: String(sectorId || ""),
-    ts: String(Date.now()),
+    snapshotVersion: String(snapshotVersion || Date.now()),
   };
 
-  const chunks = chunkArray(tokens, 500);
+  const chunks = chunkArray(recipients, 500);
 
-  for (const chunk of chunks) {
+  for (const recipientChunk of chunks) {
     try {
-      // ✅ data-only multicast
       const response = await admin.messaging().sendEachForMulticast({
-        tokens: chunk,
+        tokens: recipientChunk.map((recipient) => recipient.token),
         data: dataPayload,
-        android: { priority: "high" },
+        android: {
+          priority: "high",
+          ttl: WIDGET_PUSH_TTL_MS,
+          collapseKey: `gbg_widget_${String(guildId).slice(0, 48)}`,
+        },
         apns: {
           payload: { aps: { "content-available": 1 } },
-          headers: { "apns-priority": "5" },
+          headers: {
+            "apns-priority": "5",
+            "apns-collapse-id": `gbg_widget_${String(guildId).slice(0, 48)}`,
+            "apns-expiration": String(
+              Math.floor((Date.now() + WIDGET_PUSH_TTL_MS) / 1000)
+            ),
+          },
         },
       });
 
       if (response) {
         logger.info("[WidgetRefresh] multicast result", {
           guildId: String(guildId),
-          reason: String(reason || ""),
-          sectorId: String(sectorId || ""),
+          snapshotVersion: String(snapshotVersion || ""),
           successCount: response.successCount,
           failureCount: response.failureCount,
         });
+
+        const retryableFailures = [];
+        await Promise.all(
+          response.responses.map(async (result, index) => {
+            if (result.success) return;
+            const code = result.error?.code || "";
+            if (INVALID_FCM_TOKEN_CODES.has(code)) {
+              await removeInvalidWidgetRecipient(recipientChunk[index]);
+              return;
+            }
+            retryableFailures.push({
+              code,
+              message: result.error?.message || "Unknown FCM error",
+            });
+          })
+        );
+
+        // Невалідний token видаляємо й не повторюємо. Решта помилок можуть
+        // бути тимчасовими, тому дозволяємо retry:true повторити event.
+        if (retryableFailures.length) {
+          throw new Error(
+            `Widget FCM failed for ${retryableFailures.length} recipient(s): ` +
+              retryableFailures
+                .slice(0, 3)
+                .map((failure) => failure.code || failure.message)
+                .join(", ")
+          );
+        }
       }
     } catch (e) {
       logger.error("[WidgetRefresh] sendEachForMulticast error:", e);
+      throw e;
     }
   }
 };
@@ -356,6 +474,463 @@ const getSectorOwnerKey = (sectorData) => {
   const ownerValue = sectorData.owner ?? sectorData.ownerId;
   if (ownerValue === undefined || ownerValue === null) return null;
   return String(ownerValue);
+};
+
+const createWidgetNeighborMap = (raw) =>
+  Object.fromEntries(
+    String(raw || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((entry) => {
+        const [sectorId, neighborsRaw = ""] = entry.split(":");
+        return [
+          sectorId,
+          neighborsRaw.split(",").filter(Boolean),
+        ];
+      })
+  );
+
+const WIDGET_VOLCANIC_NEIGHBORS = createWidgetNeighborMap(`
+A1M:B1O,D1B,A2S,A2T
+A2S:A1M,A2T,D2T,A3V,A3X
+A2T:A1M,A2S,B2S,A3Y,A3Z
+A3V:A2S,A3X,D3Z,A4A,A4B
+A3X:A2S,A3V,A3Y,A4C,A4D
+A3Y:A2T,A3X,A3Z,A4E,A4F
+A3Z:A2T,A3Y,B3V,A4G,A4H
+A4A:A3V,A4B,D4H
+A4B:A3V,A4A,A4C
+A4C:A3X,A4B,A4D
+A4D:A3X,A4C,A4E
+A4E:A3Y,A4D,A4F
+A4F:A3Y,A4E,A4G
+A4G:A3Z,A4F,A4H
+A4H:A3Z,A4G,B4A
+B1O:A1M,C1N,B2S,B2T
+B2S:B1O,A2T,B2T,B3V,B3X
+B2T:B1O,B2S,C2S,B3Y,B3Z
+B3V:B2S,A3Z,B3X,B4A,B4B
+B3X:B2S,B3V,B3Y,B4C,B4D
+B3Y:B2T,B3X,B3Z,B4E,B4F
+B3Z:B2T,B3Y,C3V,B4G,B4H
+B4A:B3V,A4H,B4B
+B4B:B3V,B4A,B4C
+B4C:B3X,B4B,B4D
+B4D:B3X,B4C,B4E
+B4E:B3Y,B4D,B4F
+B4F:B3Y,B4E,B4G
+B4G:B3Z,B4F,B4H
+B4H:B3Z,B4G,C4A
+C1N:B1O,D1B,C2S,C2T
+C2S:C1N,B2T,C2T,C3V,C3X
+C2T:C1N,C2S,D2S,C3Y,C3Z
+C3V:C2S,B3Z,C3X,C4A,C4B
+C3X:C2S,C3V,C3Y,C4C,C4D
+C3Y:C2T,C3X,C3Z,C4E,C4F
+C3Z:C2T,C3Y,D3V,C4G,C4H
+C4A:C3V,B4H,C4B
+C4B:C3V,C4A,C4C
+C4C:C3X,C4B,C4D
+C4D:C3X,C4C,C4E
+C4E:C3Y,C4D,C4F
+C4F:C3Y,C4E,C4G
+C4G:C3Z,C4F,C4H
+C4H:C3Z,C4G,D4A
+D1B:A1M,C1N,D2S,D2T
+D2S:D1B,C2T,D2T,D3V,D3X
+D2T:D1B,A2S,D2S,D3Y,D3Z
+D3V:D2S,C3Z,D3X,D4A,D4B
+D3X:D2S,D3V,D3Y,D4C,D4D
+D3Y:D2T,D3X,D3Z,D4E,D4F
+D3Z:D2T,A3V,D3Y,D4G,D4H
+D4A:D3V,C4H,D4B
+D4B:D3V,D4A,D4C
+D4C:D3X,D4B,D4D
+D4D:D3X,D4C,D4E
+D4E:D3Y,D4D,D4F
+D4F:D3Y,D4E,D4G
+D4G:D3Z,D4F,D4H
+D4H:D3Z,A4A,D4G
+`);
+
+const WIDGET_WATERFALL_NEIGHBORS = createWidgetNeighborMap(`
+C5D:C4C,D4A,C5C,D5A
+D5A:D4A,C5D,D5B
+A4A:A3A,A4B,F4C,A5A,A5B,F5D
+A5A:A4A,A5B,F5D
+A3A:A2A,A3B,F3B,A4A,A4B,F4C
+A2A:X1X,B2A,F2A,A3A,A3B,F3B
+X1X:A2A,B2A,C2A,D2A,E2A,F2A
+D2A:X1X,C2A,E2A,C3B,D3A,D3B
+D3A:D2A,C3B,D3B,C4C,D4A,D4B
+C2A:X1X,B2A,D2A,B3B,C3A,C3B
+B2A:X1X,A2A,C2A,A3B,B3A,B3B
+F2A:X1X,A2A,E2A,E3B,F3A,F3B
+E2A:X1X,D2A,F2A,D3B,E3A,E3B
+D3B:D2A,E2A,D3A,E3A,D4B,D4C
+F3A:F2A,E3B,F3B,E4C,F4A,F4B
+E3B:E2A,F2A,E3A,F3A,E4B,E4C
+E3A:E2A,D3B,E3B,D4C,E4A,E4B
+A3B:A2A,B2A,A3A,B3A,A4B,A4C
+C3B:C2A,D2A,C3A,D3A,C4B,C4C
+B3A:B2A,A3B,B3B,A4C,B4A,B4B
+B3B:B2A,C2A,B3A,C3A,B4B,B4C
+C3A:C2A,B3B,C3B,B4C,C4A,C4B
+F3B:A2A,F2A,A3A,F3A,F4B,F4C
+A4B:A3A,A3B,A4A,A4C,A5B,A5C
+C4C:C3B,D3A,C4B,D4A,C5C,C5D
+A4C:A3B,B3A,A4B,B4A,A5C,A5D
+C4B:C3A,C3B,C4A,C4C,C5B,C5C
+B4A:B3A,A4C,B4B,A5D,B5A,B5B
+B4B:B3A,B3B,B4A,B4C,B5B,B5C
+B4C:B3B,C3A,B4B,C4A,B5C,B5D
+C4A:C3A,B4C,C4B,B5D,C5A,C5B
+F4C:A3A,F3B,A4A,F4B,F5C,F5D
+D4B:D3A,D3B,D4A,D4C,D5B,D5C
+F4B:F3A,F3B,F4A,F4C,F5B,F5C
+D4C:D3B,E3A,D4B,E4A,D5C,D5D
+F4A:F3A,E4C,F4B,E5D,F5A,F5B
+E4C:E3B,F3A,E4B,F4A,E5C,E5D
+E4B:E3A,E3B,E4A,E4C,E5B,E5C
+E4A:E3A,D4C,E4B,D5D,E5A,E5B
+D4A:D3A,C4C,D4B,C5D,D5A,D5B
+A5B:A4A,A4B,A5A,A5C
+A5C:A4B,A4C,A5B,A5D
+C5C:C4B,C4C,C5B,C5D
+A5D:A4C,B4A,A5C,B5A
+C5B:C4A,C4B,C5A,C5C
+B5A:B4A,A5D,B5B
+B5B:B4A,B4B,B5A,B5C
+B5C:B4B,B4C,B5B,B5D
+B5D:B4C,C4A,B5C,C5A
+C5A:C4A,B5D,C5B
+F5D:A4A,F4C,A5A,F5C
+D5B:D4A,D4B,D5A,D5C
+F5C:F4B,F4C,F5B,F5D
+D5C:D4B,D4C,D5B,D5D
+F5B:F4A,F4B,F5A,F5C
+D5D:D4C,E4A,D5C,E5A
+F5A:F4A,E5D,F5B
+E5D:E4C,F4A,E5C,F5A
+E5C:E4B,E4C,E5B,E5D
+E5B:E4A,E4B,E5A,E5C
+E5A:E4A,D5D,E5B
+`);
+
+const WIDGET_MAP_NEIGHBORS = {
+  volcanic_archipelago: WIDGET_VOLCANIC_NEIGHBORS,
+  waterfall_archipelago: WIDGET_WATERFALL_NEIGHBORS,
+};
+
+const normalizeWidgetMapKey = (value) =>
+  String(value || "").toLowerCase() === "waterfall_archipelago"
+    ? "waterfall_archipelago"
+    : "volcanic_archipelago";
+
+const normalizeWidgetColor = (value) => {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(color)
+    ? color
+    : "#FFFFFF";
+};
+
+const parseWidgetStaffSectors = (rawValue) => {
+  const result = new Set();
+  const add = (value) => {
+    const normalized = String(value ?? "").trim().toUpperCase();
+    if (normalized) result.add(normalized);
+  };
+
+  if (Array.isArray(rawValue)) {
+    rawValue.forEach((value) => {
+      if (typeof value === "string") {
+        value.split(/[,\s;|/\\]+/).forEach(add);
+      } else {
+        add(value);
+      }
+    });
+  } else if (typeof rawValue === "string") {
+    rawValue.split(/[,\s;|/\\]+/).forEach(add);
+  } else if (rawValue !== undefined && rawValue !== null) {
+    add(rawValue);
+  }
+  return result;
+};
+
+const getWidgetSectorBuildings = (sector) => {
+  const raw = sector?.buildings;
+  if (Array.isArray(raw)) return raw;
+  return raw && typeof raw === "object" ? Object.values(raw) : [];
+};
+
+const calculateWidgetSectorBonus = ({
+  sectorId,
+  sectors,
+  shortGuildId,
+  neighbors,
+}) => {
+  const bonuses = [];
+  (neighbors[sectorId] || []).forEach((neighborId) => {
+    const neighbor = sectors[neighborId];
+    if (
+      !neighbor ||
+      typeof neighbor !== "object" ||
+      getSectorOwnerKey(neighbor) !== shortGuildId
+    ) {
+      return;
+    }
+
+    getWidgetSectorBuildings(neighbor).forEach((building) => {
+      if (!building || typeof building !== "object") return;
+      const state = String(building.state || "").toLowerCase();
+      if (state !== "active" && state !== "building") return;
+
+      const attackBonus = Number(
+        getBuildingBonusesById(building.name).attackBonus
+      );
+      if (!Number.isFinite(attackBonus) || attackBonus <= 0) return;
+
+      if (state === "active") {
+        bonuses.push({ bonus: attackBonus, readyAt: 0 });
+        return;
+      }
+      const readyAt = Number(building.readyAt);
+      if (Number.isFinite(readyAt) && readyAt > 0) {
+        bonuses.push({ bonus: attackBonus, readyAt });
+      }
+    });
+  });
+
+  if (!bonuses.length) return { value: 100, readyAt: 0 };
+  const total = bonuses.reduce((sum, item) => sum + item.bonus, 0);
+  if (total <= 80) {
+    return {
+      value: 100 - total,
+      readyAt: bonuses.reduce(
+        (latest, item) => Math.max(latest, item.readyAt),
+        0
+      ),
+    };
+  }
+
+  let accumulated = 0;
+  let readyAt = 0;
+  [...bonuses]
+    .sort((a, b) => a.readyAt - b.readyAt)
+    .some((item) => {
+      accumulated += item.bonus;
+      readyAt = item.readyAt;
+      return accumulated >= 80;
+    });
+  return { value: 20, readyAt };
+};
+
+const buildWidgetSnapshot = ({
+  guildId,
+  mapValue,
+  sectorsValue,
+  opponentsValue,
+}) => {
+  const mapKey = normalizeWidgetMapKey(mapValue);
+  const neighbors = WIDGET_MAP_NEIGHBORS[mapKey];
+  const sectorIds = Object.keys(neighbors);
+  const sectors =
+    sectorsValue && typeof sectorsValue === "object" ? sectorsValue : {};
+  const opponents =
+    opponentsValue && typeof opponentsValue === "object"
+      ? opponentsValue
+      : {};
+  const opponentColors = {};
+  const opponentStaff = new Set();
+
+  Object.entries(opponents).forEach(([key, opponent]) => {
+    if (!opponent || typeof opponent !== "object") return;
+    const ownerId = String(opponent.id ?? key);
+    opponentColors[ownerId] = normalizeWidgetColor(opponent.sectorColor);
+    parseWidgetStaffSectors(opponent.staff).forEach((sectorId) => {
+      opponentStaff.add(sectorId);
+    });
+  });
+
+  const sectorColors = {};
+  const sectorStaff = {};
+  sectorIds.forEach((sectorId) => {
+    const sector = sectors[sectorId];
+    let color = "#FFFFFF";
+    let staff = false;
+
+    if (sector && typeof sector === "object") {
+      const ownerId = getSectorOwnerKey(sector);
+      color = normalizeWidgetColor(sector.color);
+      if (ownerId !== null) {
+        color =
+          ownerId !== "0"
+            ? opponentColors[ownerId] || color
+            : "#FFFFFF";
+      }
+      staff = Boolean(sector.staff);
+    } else if (typeof sector === "string") {
+      color = normalizeWidgetColor(sector);
+    }
+
+    sectorColors[sectorId] = color;
+    if (staff || opponentStaff.has(sectorId)) {
+      sectorStaff[sectorId] = true;
+    }
+  });
+
+  const shortGuildId = String(guildId).split("_").pop();
+  const ownSectorIds = sectorIds.filter(
+    (sectorId) => getSectorOwnerKey(sectors[sectorId]) === shortGuildId
+  );
+  const ownSectorSet = new Set(ownSectorIds);
+  const adjacentSectorIds = new Set();
+  ownSectorIds.forEach((sectorId) => {
+    (neighbors[sectorId] || []).forEach((neighborId) => {
+      if (!ownSectorSet.has(neighborId)) adjacentSectorIds.add(neighborId);
+    });
+  });
+
+  const next5 = Array.from(adjacentSectorIds)
+    .map((sectorId) => {
+      const sector = sectors[sectorId];
+      if (!sector || typeof sector !== "object") return null;
+      const openTime = Number(sector.openTime);
+      if (!Number.isFinite(openTime) || openTime <= 0) return null;
+
+      const armyValue = String(sector.army || "").trim().toLowerCase();
+      const bonus = calculateWidgetSectorBonus({
+        sectorId,
+        sectors,
+        shortGuildId,
+        neighbors,
+      });
+      return {
+        sectorId,
+        openTime,
+        army:
+          armyValue === "attack" || armyValue === "defense"
+            ? armyValue
+            : "",
+        bonusValue: bonus.value,
+        bonusReadyAt: bonus.readyAt,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.openTime - b.openTime)
+    .slice(0, 5);
+
+  return {
+    schemaVersion: 1,
+    guildId: String(guildId),
+    mapKey,
+    next5,
+    sectorColors,
+    sectorStaff,
+    updatedAt: Date.now(),
+  };
+};
+
+const rebuildWidgetSnapshot = async (guildId) => {
+  if (!guildId) return null;
+  const gbgRef = admin.database().ref(`/guilds/${guildId}/GBG`);
+
+  // map/sectors/opponents мають бути з одного RTDB revision. Транзакція на
+  // їхньому найменшому спільному предку автоматично перерахує snapshot, якщо
+  // будь-яка з цих гілок зміниться під час побудови.
+  const result = await gbgRef.transaction((currentValue) => {
+    const current =
+      currentValue && typeof currentValue === "object"
+        ? currentValue
+        : {};
+    const snapshot = buildWidgetSnapshot({
+      guildId,
+      mapValue: current.map,
+      sectorsValue: current.sectors,
+      opponentsValue: current.opponents,
+    });
+
+    return {
+      ...current,
+      widgetSnapshot: snapshot,
+    };
+  });
+
+  if (!result.committed) return null;
+  const snapshot = result.snapshot.child("widgetSnapshot");
+  return snapshot.exists() ? snapshot.val() : null;
+};
+
+const rebuildAndQueueWidgetRefresh = async (guildId, eventId = "") => {
+  if (!guildId) return;
+  const requestId =
+    String(eventId || "").trim() ||
+    [Date.now(), Math.random().toString(36).slice(2, 10)].join("_");
+  const requestRef = admin
+    .database()
+    .ref(`/widgetRefreshState/${guildId}/request`);
+
+  const requestResult = await requestRef.transaction((current) => {
+    if (current?.requestId === requestId && current?.sentAt) return;
+    return {
+      requestId,
+      requestedAt: admin.database.ServerValue.TIMESTAMP,
+    };
+  });
+  if (!requestResult.committed) return;
+
+  // Trailing-edge debounce: тільки остання подія будує узгоджений snapshot.
+  await new Promise((resolve) => setTimeout(resolve, WIDGET_PUSH_DEBOUNCE_MS));
+  const latestRequestSnap = await requestRef.once("value");
+  const latestRequest = latestRequestSnap.val() || {};
+  if (latestRequest.requestId !== requestId) return;
+
+  const lastSentRef = admin
+    .database()
+    .ref(`/widgetRefreshState/${guildId}/lastSentAt`);
+  const acquireSendSlot = () => {
+    const now = Date.now();
+    return lastSentRef.transaction((previous) => {
+      const previousMs = Number(previous) || 0;
+      if (now - previousMs < WIDGET_PUSH_MIN_INTERVAL_MS) return;
+      return now;
+    });
+  };
+
+  let sendSlot = await acquireSendSlot();
+  if (!sendSlot.committed) {
+    const previousMs = Number(sendSlot.snapshot.val()) || 0;
+    const waitMs = Math.max(
+      0,
+      WIDGET_PUSH_MIN_INTERVAL_MS - (Date.now() - previousMs)
+    );
+    await new Promise((resolve) => setTimeout(resolve, waitMs + 50));
+
+    const stillLatestSnap = await requestRef.once("value");
+    if (stillLatestSnap.val()?.requestId !== requestId) return;
+    sendSlot = await acquireSendSlot();
+    if (!sendSlot.committed) return;
+  }
+
+  const snapshot = await rebuildWidgetSnapshot(guildId);
+  if (!snapshot) return;
+
+  const requestAfterBuildSnap = await requestRef.once("value");
+  if (requestAfterBuildSnap.val()?.requestId !== requestId) return;
+
+  await sendWidgetRefreshToGuild({
+    guildId,
+    snapshotVersion: snapshot.updatedAt,
+  });
+
+  await requestRef.transaction((current) => {
+    if (!current || current.requestId !== requestId) return current;
+    return {
+      ...current,
+      sentAt: Date.now(),
+    };
+  });
 };
 
 const CULTURE_SETTLEMENT_LABELS = {
@@ -1096,60 +1671,19 @@ const isUserActiveNowBySchedules = (schedules, utcMs, timeZone) => {
 
 /**
  * =====================================================================
- * ✅ 1) Callable тест для кнопки “Тест data-only”
- * =====================================================================
- */
-exports.sendWidgetDataOnlyTest = onCall({ region: "europe-west1" }, async (request) => {
-  const { userId, guildId } = request.data || {};
-  if (!userId) return { success: false, error: "userId is required" };
-
-  const tokenSnap = await admin.database().ref(`/users/${userId}/fcmToken`).once("value");
-  const token = tokenSnap.exists() ? tokenSnap.val() : null;
-
-  if (!token) return { success: false, error: "No fcmToken for this user" };
-
-  try {
-    await admin.messaging().send({
-      token,
-      data: {
-        type: "gbg_widget_refresh",
-        guildId: guildId ? String(guildId) : "",
-        reason: "manual_test",
-        sectorId: "",
-        ts: String(Date.now()),
-      },
-      android: { priority: "high" },
-      apns: {
-        payload: { aps: { "content-available": 1 } },
-        headers: { "apns-priority": "5" },
-      },
-    });
-
-    return { success: true };
-  } catch (e) {
-    logger.error("[sendWidgetDataOnlyTest] error:", e);
-    return { success: false, error: "send failed" };
-  }
-});
-
-/**
- * =====================================================================
- * ✅ 2) Тригери на opponents / map / owner change
+ * ✅ Тригери на opponents / map / sectors
  * =====================================================================
  */
 exports.onGbgOpponentsWrite = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/opponents",
     region: "europe-west1",
+    retry: true,
   },
   async (event) => {
     const guildId = String(event.params.guildId || "");
-
-    if (guildId && !String(guildId).includes("10821")) {
-      return null;
-    }
-
-    await sendWidgetRefreshToGuild({ guildId, reason: "opponents_write", sectorId: "" });
+    if (!guildId) return null;
+    await rebuildAndQueueWidgetRefresh(guildId, event.id);
     return null;
   }
 );
@@ -1158,38 +1692,59 @@ exports.onGbgMapWrite = onValueWritten(
   {
     ref: "/guilds/{guildId}/GBG/map",
     region: "europe-west1",
+    retry: true,
   },
   async (event) => {
     const guildId = String(event.params.guildId || "");
-
-    if (guildId && !String(guildId).includes("10821")) {
-      return null;
-    }
-
-    await sendWidgetRefreshToGuild({ guildId, reason: "map_write", sectorId: "" });
+    if (!guildId) return null;
+    await rebuildAndQueueWidgetRefresh(guildId, event.id);
     return null;
   }
 );
 
 exports.onGbgSectorOwnerChange = onValueWritten(
   {
-    ref: "/guilds/{guildId}/GBG/sectors/{sectorId}",
+    ref: "/guilds/{guildId}/GBG/sectors",
     region: "europe-west1",
+    retry: true,
   },
   async (event) => {
     const guildId = String(event.params.guildId || "");
-    const sectorId = String(event.params.sectorId || "");
     if (!guildId) return null;
 
-    const beforeData = event.data?.before?.exists() ? event.data.before.val() : null;
-    const afterData = event.data?.after?.exists() ? event.data.after.val() : null;
+    await rebuildAndQueueWidgetRefresh(guildId, event.id);
+    return null;
+  }
+);
 
-    const beforeOwner = getSectorOwnerKey(beforeData);
-    const afterOwner = getSectorOwnerKey(afterData);
+exports.ensureGbgWidgetSnapshotForSubscription = onValueCreated(
+  {
+    ref: "/widgetSubscriptions/{guildId}/{installationId}",
+    region: "europe-west1",
+    retry: true,
+  },
+  async (event) => {
+    const guildId = String(event.params.guildId || "");
+    const subscription = event.data?.val() || {};
+    const userId = String(subscription.userId || "");
+    if (!guildId || !userId) return null;
 
-    if (beforeOwner === afterOwner) return null;
+    const snapshotRef = admin
+      .database()
+      .ref(`/guilds/${guildId}/GBG/widgetSnapshot`);
+    const [existingSnapshot, membershipSnapshot] = await Promise.all([
+      snapshotRef.once("value"),
+      admin
+        .database()
+        .ref(`/guilds/${guildId}/guildUsers/${userId}`)
+        .once("value"),
+    ]);
+    if (!membershipSnapshot.exists()) return null;
+    if (existingSnapshot.exists()) return null;
 
-    await sendWidgetRefreshToGuild({ guildId, reason: "sector_owner_change", sectorId });
+    // Спочатку створюємо snapshot, потім надсилаємо один debounced FCM.
+    // Це закриває race, коли native worker стартував ще до onCreate trigger.
+    await rebuildAndQueueWidgetRefresh(guildId, event.id);
     return null;
   }
 );
@@ -1581,14 +2136,6 @@ exports.syncGbgNotifications = onValueWritten(
 
     if (Object.keys(updates).length > 0) {
       await db.ref().update(updates);
-    }
-
-    // ✅ Тихий refresh віджета (data-only)
-    try {
-      const sectorId = String(event.params.sectorId || "");
-      await sendWidgetRefreshToGuild({ guildId, reason: "sector_write", sectorId });
-    } catch (e) {
-      logger.error("[WidgetRefresh] inside syncGbgNotifications error:", e);
     }
 
     return null;

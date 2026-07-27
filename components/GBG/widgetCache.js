@@ -38,9 +38,10 @@ const setUpdatedAt = async () => {
   await AsyncStorage.setItem(KEYS.updatedAt, String(Date.now()));
 };
 
-export const writeNext5ToCache = async (list) => {
+export const writeNext5ToCache = async (list, { guildId = "" } = {}) => {
   const safe = Array.isArray(list) ? list : [];
   const json = JSON.stringify(safe);
+  const sourceGuildId = String(guildId || "").trim();
 
   await AsyncStorage.setItem(KEYS.next5, json);
   await setUpdatedAt();
@@ -49,15 +50,22 @@ export const writeNext5ToCache = async (list) => {
   try {
     const bridge = getWidgetBridge();
     if (bridge && typeof bridge.setNext5 === "function") {
-      await bridge.setNext5(json);
+      await bridge.setNext5(json, sourceGuildId);
     }
   } catch (e) {}
 
   await requestWidgetRefresh();
 };
 
-export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff }) => {
+export const writeFullMapToCache = async ({
+  mapKey,
+  sectorColors,
+  sectorStaff,
+  guildId = "",
+}) => {
+  const sourceGuildId = String(guildId || "").trim();
   const state = {
+    guildId: sourceGuildId || null,
     mapKey: mapKey || getDefaultMapKey(),
     sectorColors: sectorColors && typeof sectorColors === "object" ? sectorColors : {},
     sectorStaff: sectorStaff && typeof sectorStaff === "object" ? sectorStaff : {},
@@ -75,6 +83,7 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
 
   // ✅ Легкий meta-json для віджета (стабільно, швидко)
   const meta = {
+    guildId: sourceGuildId || null,
     mapKey: state.mapKey,
     updatedAt: Date.now(),
     sectorsCount: Object.keys(state.sectorColors || {}).length,
@@ -84,10 +93,10 @@ export const writeFullMapToCache = async ({ mapKey, sectorColors, sectorStaff })
   try {
     const bridge = getWidgetBridge();
     if (bridge && typeof bridge.setMapMeta === "function") {
-      await bridge.setMapMeta(JSON.stringify(meta));
+      await bridge.setMapMeta(JSON.stringify(meta), sourceGuildId);
     }
     if (bridge && typeof bridge.setMapSvg === "function") {
-      await bridge.setMapSvg(xml);
+      await bridge.setMapSvg(xml, sourceGuildId);
     }
   } catch (e) {}
 
@@ -153,12 +162,17 @@ export const processWidgetRemoteMessage = async (remoteMessage) => {
     try { payload = payloadRaw ? JSON.parse(payloadRaw) : null; } catch (e) { payload = null; }
 
     if (kind === "widget_gbg_next5") {
-      await writeNext5ToCache(Array.isArray(payload) ? payload : []);
+      await writeNext5ToCache(Array.isArray(payload) ? payload : [], {
+        guildId: payload?.guildId || data.guildId || "",
+      });
       return true;
     }
 
     if (kind === "widget_gbg_map_full") {
-      await writeFullMapToCache(payload || {});
+      await writeFullMapToCache({
+        ...(payload || {}),
+        guildId: payload?.guildId || data.guildId || "",
+      });
       return true;
     }
 

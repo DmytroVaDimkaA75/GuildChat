@@ -15,6 +15,12 @@ const WATERFALL_SVG_HEIGHT = 164.52901;
 
 const DEFAULT_MAP_KEY = 'volcanic_archipelago';
 
+const normalizeWidgetMapKey = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'volcano_archipelago') return DEFAULT_MAP_KEY;
+  return MAP_DIMENSIONS[raw] ? raw : DEFAULT_MAP_KEY;
+};
+
 const MAP_DIMENSIONS = {
   [DEFAULT_MAP_KEY]: { width: VOLCANIC_SVG_WIDTH, height: VOLCANIC_SVG_HEIGHT },
   waterfall_archipelago: { width: WATERFALL_SVG_WIDTH, height: WATERFALL_SVG_HEIGHT },
@@ -100,7 +106,6 @@ const getBuildingsWithBonuses = (entry) => {
     ? rawBuildings
     : (rawBuildings && typeof rawBuildings === 'object' ? Object.values(rawBuildings) : []);
   if (buildings.length === 0) return [];
-  const isStaffSector = !!entry.staff;
 
   return buildings.reduce((list, building) => {
     if (!building || typeof building !== 'object') return list;
@@ -226,7 +231,7 @@ const resolveGuildId = async (guildId) => {
     try {
       const nativeId = await bridge.getGuildId();
       if (nativeId) return String(nativeId);
-    } catch (e) {}
+    } catch (_error) {}
   }
 
   return null;
@@ -237,20 +242,54 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
   const gid = await resolveGuildId(guildId);
   if (!gid) return;
 
-  // 2) mapKey
+  // 2) Швидкий серверний snapshot: один read замість повного обходу ПБГ.
+  // Старі версії backend автоматично підуть у fallback нижче.
+  try {
+    const snapshot = await database()
+      .ref(`guilds/${gid}/GBG/widgetSnapshot`)
+      .once('value');
+    if (snapshot.exists()) {
+      const value = snapshot.val() || {};
+      const snapshotGuildId = String(value.guildId || gid);
+      if (snapshotGuildId === String(gid)) {
+        await writeNext5ToCache(
+          Array.isArray(value.next5)
+            ? value.next5
+            : Object.values(value.next5 || {}),
+          { guildId: gid }
+        );
+        await writeFullMapToCache({
+          mapKey: normalizeWidgetMapKey(value.mapKey),
+          sectorColors:
+            value.sectorColors && typeof value.sectorColors === 'object'
+              ? value.sectorColors
+              : {},
+          sectorStaff:
+            value.sectorStaff && typeof value.sectorStaff === 'object'
+              ? value.sectorStaff
+              : {},
+          guildId: gid,
+        });
+        return;
+      }
+    }
+  } catch (_error) {
+    // Fallback нижче зберігає сумісність, якщо snapshot ще не створено.
+  }
+
+  // 3) mapKey
   let mapKey = DEFAULT_MAP_KEY;
   try {
     const snap = await database().ref(`guilds/${gid}/GBG/map`).once('value');
     if (snap.exists()) {
-      const v = snap.val();
-      if (typeof v === 'string' && MAP_DIMENSIONS[v]) mapKey = v;
+      mapKey = normalizeWidgetMapKey(snap.val());
     }
-  } catch (e) {}
+  } catch (_error) {}
 
   const mapDimensions = MAP_DIMENSIONS[mapKey] || MAP_DIMENSIONS[DEFAULT_MAP_KEY];
   const mapData = MAP_DATA[mapKey] || {};
 
-  // 3) Тягнемо sectors + opponents
+  // 4) Тягнемо sectors + opponents
   const [sectorsSnap, opponentsSnap] = await Promise.all([
     database().ref(`guilds/${gid}/GBG/sectors`).once('value'),
     database().ref(`guilds/${gid}/GBG/opponents`).once('value'),
@@ -344,7 +383,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
   const next5 = schedule.slice(0, 5);
 
   // 7) Пишемо кеш: next5 + повна мапа (xml/state)
-  await writeNext5ToCache(next5);
+  await writeNext5ToCache(next5, { guildId: gid });
 
   await writeFullMapToCache({
     mapKey,
@@ -352,6 +391,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
     mapData,
     sectorColors,
     sectorStaff,
+    guildId: gid,
   });
 
   // Можеш залишити для локального дебагу, але не треба у проді:

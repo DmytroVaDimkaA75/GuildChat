@@ -1,8 +1,8 @@
 import messaging from "@react-native-firebase/messaging";
 import notifee, { EventType } from "@notifee/react-native";
+import { registerRootComponent } from "expo";
 import { AppRegistry, NativeModules } from "react-native";
 import App from "./App";
-import { name as appName } from "./app.json";
 
 import { processWidgetRemoteMessage, recordWidgetFcmReceipt } from "./components/GBG/widgetCache";
 import { refreshGbgWidgetCacheFromFirebase } from "./components/GBG/gbgWidgetRefresh";
@@ -10,6 +10,65 @@ import {
   normalizeNotificationRoute,
   savePendingNotificationRoute,
 } from "./src/notifications/notificationRouting";
+
+const normalizeGuildId = (value) => String(value || "").trim();
+
+const getPersistedWidgetGuildId = async () => {
+  const bridge = NativeModules?.GbgWidgetBridge;
+  if (!bridge || typeof bridge.getGuildId !== "function") return "";
+
+  try {
+    return normalizeGuildId(await bridge.getGuildId());
+  } catch (_error) {
+    return "";
+  }
+};
+
+const enqueueNativeWidgetRefresh = async () => {
+  const bridge = NativeModules?.GbgWidgetBridge;
+  if (!bridge || typeof bridge.enqueueRefresh !== "function") return false;
+
+  try {
+    await bridge.enqueueRefresh();
+    return true;
+  } catch (_error) {
+    return false;
+  }
+};
+
+const getRemoteMessageGuildId = (data) => {
+  const directGuildId = normalizeGuildId(data?.guildId);
+  if (directGuildId) return directGuildId;
+
+  const payloadRaw = data?.payload || data?.json;
+  if (!payloadRaw) return "";
+
+  try {
+    const payload =
+      typeof payloadRaw === "string" ? JSON.parse(payloadRaw) : payloadRaw;
+    return normalizeGuildId(payload?.guildId);
+  } catch (_error) {
+    return "";
+  }
+};
+
+const resolveWidgetMessageTarget = async (data) => {
+  const persistedGuildId = await getPersistedWidgetGuildId();
+  const messageGuildId = getRemoteMessageGuildId(data);
+
+  if (
+    persistedGuildId &&
+    messageGuildId &&
+    persistedGuildId !== messageGuildId
+  ) {
+    return { allowed: false, guildId: persistedGuildId };
+  }
+
+  return {
+    allowed: true,
+    guildId: persistedGuildId || messageGuildId || null,
+  };
+};
 
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type !== EventType.PRESS && type !== EventType.ACTION_PRESS) return;
@@ -29,21 +88,22 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
   try {
-    const bridge = NativeModules?.GbgWidgetBridge;
-    let guildId = null;
-    if (bridge && typeof bridge.getGuildId === "function") {
-      try {
-        guildId = await bridge.getGuildId();
-      } catch (e) {}
-    }
+    const guildId = (await getPersistedWidgetGuildId()) || null;
     await refreshGbgWidgetCacheFromFirebase({ guildId, reason: "periodic-worker" });
-  } catch (e) {}
+  } catch (_error) {}
 });
 
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
     const data = remoteMessage?.data || {};
     const recordType = String(data.kind || data.type || "");
+    const isWidgetMessage =
+      recordType.startsWith("widget_") || recordType === "gbg_widget_refresh";
+    const widgetTarget = isWidgetMessage
+      ? await resolveWidgetMessageTarget(data)
+      : { allowed: true, guildId: null };
+    if (!widgetTarget.allowed) return;
+
     if (recordType) {
       await recordWidgetFcmReceipt({ type: recordType, scope: "background", data });
     }
@@ -55,13 +115,16 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     // 2) Якщо сервер прислав лише тригер (підтягнути з Firebase)
     const messageType = String(data.type || "");
     if (messageType === "gbg_widget_refresh") {
-      await refreshGbgWidgetCacheFromFirebase({
-        guildId: data.guildId ? String(data.guildId) : null,
-        reason: "fcm-trigger",
-        sectorId: data.sectorId ? String(data.sectorId) : "",
-      });
+      const enqueuedNatively = await enqueueNativeWidgetRefresh();
+      if (!enqueuedNatively) {
+        await refreshGbgWidgetCacheFromFirebase({
+          guildId: widgetTarget.guildId,
+          reason: "fcm-trigger",
+          sectorId: data.sectorId ? String(data.sectorId) : "",
+        });
+      }
     }
-  } catch (e) {}
+  } catch (_error) {}
 });
 
-AppRegistry.registerComponent(appName, () => App);
+registerRootComponent(App);

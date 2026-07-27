@@ -167,6 +167,7 @@ const TelegramSettings = () => {
           return t('guildAdmin.telegram.wrongBot');
         case 'BOT_ACCESS_LOST':
         case 'CHANNEL_UNAVAILABLE':
+        case 'NOT_CONNECTED':
           return t('guildAdmin.telegram.connectionLost');
         case 'CODE_EXPIRED':
           return t('guildAdmin.telegram.codeExpired');
