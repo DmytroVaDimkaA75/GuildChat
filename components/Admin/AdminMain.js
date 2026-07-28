@@ -313,6 +313,21 @@ const AdminMain = () => {
         <Text style={styles.userName}>{guildName}</Text>
       </View>
 
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('GuildTasks')}
+        style={styles.tasksEntry}
+      >
+        <View style={styles.tasksEntryIcon}>
+          <Ionicons name="clipboard-outline" size={25} color="#4ea1ff" />
+        </View>
+        <View style={styles.tasksEntryText}>
+          <Text style={styles.tasksEntryTitle}>Завдання гільдії</Text>
+          <Text style={styles.tasksEntrySubtitle}>Створення, виконавці та прогрес</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#9aa3b2" />
+      </TouchableOpacity>
+
       <View style={styles.section}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={styles.sectionTitle}>Члени гільдії</Text>
@@ -514,6 +529,39 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+  },
+  tasksEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 14,
+    padding: 15,
+    backgroundColor: '#1b1f2a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#3a3f4a',
+  },
+  tasksEntryIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(78,161,255,0.14)',
+  },
+  tasksEntryText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tasksEntryTitle: {
+    color: '#f4f7fb',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  tasksEntrySubtitle: {
+    color: '#9aa3b2',
+    fontSize: 12,
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 16,

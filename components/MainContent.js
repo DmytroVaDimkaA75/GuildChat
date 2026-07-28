@@ -31,11 +31,14 @@ import { syncGuildMembers } from '../src/utils/guildSync';
 
 // Импорт компонентов
 import AdminMain from './Admin/AdminMain';
+import GuildTasksScreen from './Admin/GuildTasksScreen';
 import ChatScreen from "./Chat/ChatScreen";
 import ChatWindow from './Chat/ChatWindow';
 import CreateGroupScreen from './Chat/CreateGroupScreen';
 import GuildMembersList from "./Chat/GuildMemberList";
 import NewGroupChat from "./Chat/NewGroupChat";
+import CommunityChannelsScreen from './Community/CommunityChannelsScreen';
+import CommunityScreen from './Community/CommunityScreen';
 import CulturalPlanner from './Culture/CulturalPlanner';
 import CulturalSettlements from './Culture/CulturalSettlements';
 import CulturalOptions from './Culture/CulturalOptions';
@@ -207,6 +210,33 @@ function ChatStack() {
   );
 }
 
+function CommunityStack() {
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="CommunityHome"
+        component={CommunityScreen}
+        options={{
+          title: 'Спільнота',
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        }}
+      />
+      <Stack.Screen
+        name="CommunityChannels"
+        component={CommunityChannelsScreen}
+        options={({ navigation }) => ({
+          title: 'Спільнота',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
+        })}
+      />
+    </Stack.Navigator>
+  );
+}
+
 function GBGStack() {
   const { t } = useTranslation();
   return (
@@ -337,6 +367,18 @@ function AdmintStack() {
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
           headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
           headerShadowVisible: false,
+        })}
+      />
+      <Stack.Screen
+        name="GuildTasks"
+        component={GuildTasksScreen}
+        options={({ navigation }) => ({
+          title: 'Завдання',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
         })}
       />
     </Stack.Navigator>
@@ -1000,6 +1042,16 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           options={{
             drawerLabel: t("drawer.chatLabel"),
             drawerIconComponent: renderIcon(Chat)
+          }}
+        />
+        <Drawer.Screen
+          name="Community"
+          component={CommunityStack}
+          options={{
+            drawerLabel: 'Спільнота',
+            drawerIconComponent: ({ color }) => (
+              <MaterialIcons name="groups" size={25} color={color} />
+            )
           }}
         />
         <Drawer.Screen
