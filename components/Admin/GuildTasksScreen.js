@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
+  AppState,
   Modal,
   Pressable,
   ScrollView,
@@ -10,48 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GuildContext } from '../../GuildContext';
 import { DarkThemeColors as C } from '../../constants/theme';
+import { getActiveAutomaticTasks } from '../../src/tasks/automaticTasks';
 
-const seedTasks = [
-  {
-    id: 'treasury',
-    title: 'Зібрати товари для скарбниці',
-    audience: 'Уся гільдія',
-    filter: 'Гільдія',
-    status: 'Активне',
-    due: 'До 30 липня',
-    progress: 68,
-    progressLabel: '68%',
-    reward: '+500 XP',
-    icon: 'treasure-chest',
-    color: '#4ea1ff',
-  },
-  {
-    id: 'gvg',
-    title: 'Підготувати сектор до ПБГ',
-    audience: 'Блок: Варта',
-    filter: 'Блоки',
-    status: 'Високий пріоритет',
-    due: 'Сьогодні, 20:00',
-    progress: 57,
-    progressLabel: '4 з 7',
-    icon: 'sword-cross',
-    color: '#ff6b4a',
-  },
-  {
-    id: 'members',
-    title: 'Оновити список учасників',
-    audience: 'Офіцери',
-    filter: 'Мої',
-    status: 'Заплановано',
-    due: '1 серпня',
-    progress: 0,
-    progressLabel: '',
-    icon: 'account-group',
-    color: '#8b65d6',
-  },
-];
+const seedTasks = [];
 
 const filters = ['Усі', 'Гільдія', 'Блоки', 'Мої'];
 
@@ -60,6 +26,7 @@ const statusColors = {
   'Високий пріоритет': '#ff6b4a',
   Заплановано: '#e7aa32',
   Виконано: '#55c878',
+  Автоматичне: '#8b65d6',
 };
 
 function SummaryItem({ icon, color, label, value }) {
@@ -81,6 +48,7 @@ function TaskCard({ task, onToggleDone }) {
   return (
     <TouchableOpacity
       activeOpacity={0.82}
+      disabled={task.automatic}
       onPress={() => onToggleDone(task.id)}
       style={styles.card}
     >
@@ -90,6 +58,9 @@ function TaskCard({ task, onToggleDone }) {
         </View>
         <View style={styles.cardHeading}>
           <Text style={styles.taskTitle}>{task.title}</Text>
+          {!!task.description && (
+            <Text style={styles.taskDescription}>{task.description}</Text>
+          )}
           <View style={styles.metaRow}>
             <Ionicons name="people-outline" size={17} color={C.textSecondary} />
             <Text style={styles.metaText}>{task.audience}</Text>
@@ -129,29 +100,61 @@ function TaskCard({ task, onToggleDone }) {
 }
 
 export default function GuildTasksScreen() {
+  const { guildId } = useContext(GuildContext) || {};
   const [tasks, setTasks] = useState(seedTasks);
+  const [nowMs, setNowMs] = useState(Date.now());
   const [filter, setFilter] = useState('Усі');
   const [query, setQuery] = useState('');
   const [createVisible, setCreateVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [audience, setAudience] = useState('Уся гільдія');
 
+  useEffect(() => {
+    const refreshNow = () => setNowMs(Date.now());
+    refreshNow();
+
+    const timer = setInterval(() => setNowMs(Date.now()), 60 * 1000);
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refreshNow();
+    });
+
+    return () => {
+      clearInterval(timer);
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setNowMs(Date.now());
+    }, [])
+  );
+
+  const allTasks = useMemo(
+    () => [...getActiveAutomaticTasks(nowMs, guildId), ...tasks],
+    [guildId, nowMs, tasks]
+  );
+
   const visibleTasks = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('uk');
-    return tasks.filter((task) => {
+    return allTasks.filter((task) => {
       const matchesFilter = filter === 'Усі' || task.filter === filter;
       const matchesQuery = !normalized
         || task.title.toLocaleLowerCase('uk').includes(normalized)
         || task.audience.toLocaleLowerCase('uk').includes(normalized);
       return matchesFilter && matchesQuery;
     });
-  }, [filter, query, tasks]);
+  }, [allTasks, filter, query]);
 
   const counts = useMemo(() => ({
-    active: tasks.filter((task) => task.status === 'Активне' || task.status === 'Високий пріоритет').length,
-    overdue: tasks.filter((task) => task.status === 'Прострочено').length,
-    done: tasks.filter((task) => task.status === 'Виконано').length,
-  }), [tasks]);
+    active: allTasks.filter((task) => (
+      task.status === 'Активне'
+      || task.status === 'Високий пріоритет'
+      || task.status === 'Автоматичне'
+    )).length,
+    overdue: allTasks.filter((task) => task.status === 'Прострочено').length,
+    done: allTasks.filter((task) => task.status === 'Виконано').length,
+  }), [allTasks]);
 
   const toggleDone = (id) => {
     setTasks((current) => current.map((task) => (
@@ -228,7 +231,9 @@ export default function GuildTasksScreen() {
           ))}
         </ScrollView>
 
-        <Text style={styles.hint}>Натисніть завдання, щоб позначити його виконаним</Text>
+        {!!tasks.length && (
+          <Text style={styles.hint}>Натисніть завдання, щоб позначити його виконаним</Text>
+        )}
 
         {visibleTasks.map((task) => (
           <TaskCard key={task.id} task={task} onToggleDone={toggleDone} />
@@ -331,6 +336,7 @@ const styles = StyleSheet.create({
   taskIcon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   cardHeading: { flex: 1, marginHorizontal: 12 },
   taskTitle: { color: C.text, fontSize: 17, fontWeight: '750', lineHeight: 22 },
+  taskDescription: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 7 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 7 },
   metaText: { color: C.textSecondary, fontSize: 13 },
   detailsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 14 },

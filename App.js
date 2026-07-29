@@ -16,7 +16,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { DarkThemeColors } from "./constants/theme";
 import { GuildContext, GuildProvider } from "./GuildContext";
 import i18n from "./i18n";
@@ -569,13 +569,19 @@ export default function App() {
     <GuildProvider>
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor={DarkThemeColors.background} />
-        <AppContent />
+        <SafeAreaView style={styles.appSafeArea} edges={['bottom']}>
+          <AppContent />
+        </SafeAreaView>
       </SafeAreaProvider>
     </GuildProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  appSafeArea: {
+    flex: 1,
+    backgroundColor: DarkThemeColors.background,
+  },
   container: {
     flex: 1,
     alignItems: "center",

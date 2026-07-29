@@ -21,7 +21,7 @@
       },
       "package": "com.vadimkaa75.guildchat",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 2,
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": ["RECORD_AUDIO"]
     },
@@ -32,6 +32,7 @@
     },
     "plugins": [
       "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       "expo-localization",
       "expo-router"
     ],

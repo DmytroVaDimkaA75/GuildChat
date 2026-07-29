@@ -61,7 +61,7 @@ import {
   TouchableWithoutFeedback
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, MenuOption, MenuOptions, MenuProvider, MenuTrigger } from 'react-native-popup-menu';
 import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
@@ -660,121 +660,35 @@ const FormattedText = ({ text, mentionNameSet }) => {
   return <Text style={styles.messageText}>{renderFormattedParts(parts)}</Text>;
 };
 
-// ---- кеш для метаданих лінків (щоб не робити зайвих запитів) ----
-const __linkMetaCache = new Map();
-
+// Не завантажуємо довільні URL на пристрій заради превʼю. React Native
+// буферизує тіло fetch-відповіді в памʼяті, тому велике посилання може
+// завершити застосунок з OutOfMemoryError.
 const useLinkMeta = (url) => {
-  const [meta, setMeta] = useState(() => {
-    const key = String(url || '');
-    return __linkMetaCache.get(key) || null;
-  });
-
-  useEffect(() => {
-    const u = String(url || '');
-    if (!u) return;
-
-    const cached = __linkMetaCache.get(u);
-    if (cached) {
-      setMeta(cached);
-      return;
-    }
-
-    let alive = true;
-
-    const run = async () => {
-      try {
-        const res = await fetch(u);
-        const html = await res.text();
-
-        if (!alive) return;
-
-        const title = html.match(/<title>(.*?)<\/title>/i)?.[1] || '';
-        const ogTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1] || '';
-        const ogDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i)?.[1] || '';
-        const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1] || '';
-
-        const data = {
-          title: (ogTitle || title || '').trim(),
-          description: (ogDesc || '').trim(),
-          image: (ogImage || '').trim()
-        };
-
-        __linkMetaCache.set(u, data);
-        setMeta(data);
-      } catch (e) {
-        if (!alive) return;
-        const fallback = { title: '', description: '', image: '' };
-        __linkMetaCache.set(u, fallback);
-        setMeta(fallback);
-      }
-    };
-
-    run();
-
-    return () => {
-      alive = false;
+  return useMemo(() => {
+    const safeUrl = String(url || '');
+    return {
+      title: safeUrl ? getHostLabel(safeUrl) : '',
+      description: '',
+      image: ''
     };
   }, [url]);
-
-  return meta;
 };
 
 const LinkPreviewCard = ({ url }) => {
-  const [previewData, setPreviewData] = useState(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchPreview = async () => {
-      try {
-        const res = await fetch(url);
-        const html = await res.text();
-        if (!isMounted) return;
-
-        const title = html.match(/<title>(.*?)<\/title>/i)?.[1] || url;
-        const ogTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1];
-        const ogDesc = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i)?.[1];
-        const ogImage = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)?.[1];
-
-        setPreviewData({
-          title: (ogTitle || title || url).trim(),
-          description: isYouTubeURL(url) ? '' : (ogDesc || '').trim(),
-          image: isYouTubeURL(url) ? null : ogImage || null
-        });
-      } catch (e) {
-        if (isMounted) setPreviewData({ title: url, description: '', image: null });
-      }
-    };
-    fetchPreview();
-    return () => {
-      isMounted = false;
-    };
-  }, [url]);
-
-  if (!previewData)
-    return (
-      <Text style={{ color: '#3498db', textDecorationLine: 'underline' }} onPress={() => Linking.openURL(url)}>
-        {url}
-      </Text>
-    );
-
   const badgeIcon = isYouTubeURL(url) ? faYoutube : isDocsURL(url) ? getDocsIcon(url) : faLink;
+  const hostLabel = getHostLabel(url);
 
   return (
     <TouchableOpacity style={styles.linkPreviewContainer} onPress={() => Linking.openURL(url)} activeOpacity={0.9}>
-      {previewData.image && <Image source={{ uri: previewData.image }} style={styles.linkPreviewImage} resizeMode="cover" />}
-
       <View style={styles.linkPreviewTextContainer}>
         <Text style={styles.linkPreviewTitle} numberOfLines={1}>
-          {previewData.title}
+          {hostLabel}
         </Text>
-        {previewData.description ? (
-          <Text style={styles.linkPreviewDescription} numberOfLines={2}>
-            {previewData.description}
-          </Text>
-        ) : null}
+        <Text style={styles.linkPreviewDescription} numberOfLines={1}>
+          {url}
+        </Text>
       </View>
 
-      {/* ✅ монохромна іконка */}
       <View style={styles.mediaIconBadgeMono}>
         <FontAwesomeIcon icon={badgeIcon} size={14} color="#FFF" />
       </View>
@@ -1214,7 +1128,6 @@ const ChatWindow = ({ route, navigation }) => {
   const recordingMeteringsRef = useRef([]);
   const processedRead = useRef(new Set());
   const initialMessageHandledRef = useRef("");
-  const insets = useSafeAreaInsets();
 
   const handleToggleChatSound = useCallback(async () => {
     if (!chatId || !guildId || !userId || !isChatMemberRef.current) return;
@@ -2025,7 +1938,8 @@ const ChatWindow = ({ route, navigation }) => {
     [flatData]
   );
 
-  const keyboardOffset = insets.bottom;
+  // The application root already reserves the bottom safe area.
+  const keyboardOffset = 0;
 
   return (
     <MenuProvider>
@@ -2492,7 +2406,6 @@ const ChatWindow = ({ route, navigation }) => {
               />
             </View>
 
-            <View style={{ height: insets.bottom, backgroundColor: '#1c1c1e' }} />
           </View>
         </KeyboardAvoidingView>
 
