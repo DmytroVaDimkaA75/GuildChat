@@ -1,6 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import database from '@react-native-firebase/database';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   Modal,
   Pressable,
@@ -14,6 +17,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GuildContext } from '../../GuildContext';
+import { canAccessGuildTasks } from '../../constants/roles';
 import { DarkThemeColors as C } from '../../constants/theme';
 import { getActiveAutomaticTasks } from '../../src/tasks/automaticTasks';
 
@@ -99,9 +103,10 @@ function TaskCard({ task, onToggleDone }) {
   );
 }
 
-export default function GuildTasksScreen() {
+export default function GuildTasksScreen({ navigation }) {
   const { guildId } = useContext(GuildContext) || {};
   const [tasks, setTasks] = useState(seedTasks);
+  const [accessState, setAccessState] = useState('checking');
   const [nowMs, setNowMs] = useState(Date.now());
   const [filter, setFilter] = useState('Усі');
   const [query, setQuery] = useState('');
@@ -128,6 +133,54 @@ export default function GuildTasksScreen() {
     React.useCallback(() => {
       setNowMs(Date.now());
     }, [])
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      let roleRef = null;
+      let roleListener = null;
+
+      const verifyDeveloperAccess = async () => {
+        setAccessState('checking');
+        try {
+          const userId = await AsyncStorage.getItem('userId');
+          if (!active) return;
+          if (!userId || !guildId) {
+            if (active) setAccessState('denied');
+            return;
+          }
+
+          roleRef = database().ref(`users/${userId}/${guildId}/role`);
+          roleListener = (roleSnapshot) => {
+            if (!active) return;
+            const role = roleSnapshot.exists() ? roleSnapshot.val() : null;
+            setAccessState(
+              canAccessGuildTasks(role) ? 'allowed' : 'denied'
+            );
+          };
+          roleRef.on(
+            'value',
+            roleListener,
+            (error) => {
+              console.error('Не вдалося перевірити доступ до завдань:', error);
+              if (active) setAccessState('denied');
+            }
+          );
+        } catch (error) {
+          console.error('Не вдалося перевірити доступ до завдань:', error);
+          if (active) setAccessState('denied');
+        }
+      };
+
+      verifyDeveloperAccess();
+      return () => {
+        active = false;
+        if (roleRef && roleListener) {
+          roleRef.off('value', roleListener);
+        }
+      };
+    }, [guildId])
   );
 
   const allTasks = useMemo(
@@ -182,6 +235,35 @@ export default function GuildTasksScreen() {
     setTitle('');
     setCreateVisible(false);
   };
+
+  if (accessState !== 'allowed') {
+    return (
+      <SafeAreaView edges={['bottom']} style={styles.screen}>
+        <View style={styles.accessState}>
+          {accessState === 'checking' ? (
+            <>
+              <ActivityIndicator size="large" color={C.primary} />
+              <Text style={styles.accessText}>Перевірка доступу…</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="lock-closed-outline" size={42} color={C.textSecondary} />
+              <Text style={styles.accessTitle}>Доступ обмежено</Text>
+              <Text style={styles.accessText}>
+                Завдання доступні лише користувачам із роллю «Розробник».
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation?.goBack()}
+                style={styles.accessButton}
+              >
+                <Text style={styles.accessButtonText}>Повернутися</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.screen}>
@@ -299,6 +381,37 @@ export default function GuildTasksScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.background },
+  accessState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  accessTitle: {
+    color: C.text,
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 14,
+  },
+  accessText: {
+    color: C.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  accessButton: {
+    backgroundColor: C.primary,
+    borderRadius: 12,
+    marginTop: 22,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+  },
+  accessButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   content: { padding: 16, paddingBottom: 108 },
   summary: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

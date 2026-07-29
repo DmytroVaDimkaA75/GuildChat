@@ -8,6 +8,11 @@ const TELEGRAM_TEST_COOLDOWN_MS = 30 * 1000;
 const TELEGRAM_PROCESSING_TTL_MS = 2 * 60 * 1000;
 const FIREBASE_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{1,180}$/;
 const BOT_USERNAME_PATTERN = /^[A-Za-z0-9_]{5,32}$/;
+const TELEGRAM_GUILD_ADMIN_ROLES = new Set([
+  "guildLeader",
+  "tester",
+  "developer",
+]);
 const BIND_COMMAND_PATTERN =
   /^\/bind(?:@([A-Za-z0-9_]{5,32}))?\s+([A-HJ-NP-Z2-9]{12})\s*$/i;
 
@@ -45,6 +50,9 @@ const normalizePathSegment = (value) => {
   const normalized = String(value || "").trim();
   return FIREBASE_PATH_SEGMENT_PATTERN.test(normalized) ? normalized : "";
 };
+
+const canManageTelegramGuild = (role) =>
+  TELEGRAM_GUILD_ADMIN_ROLES.has(String(role || ""));
 
 const normalizeTelegramNumericChatId = (value) => {
   const normalized = String(value ?? "").trim();
@@ -306,7 +314,7 @@ const createTelegramBindingFunctions = ({
 
     if (
       !memberSnapshot.exists() ||
-      (role !== "guildLeader" && role !== "tester")
+      !canManageTelegramGuild(role)
     ) {
       return { ok: false, error: "PERMISSION_DENIED" };
     }
@@ -1299,6 +1307,7 @@ const createTelegramBindingFunctions = ({
 };
 
 module.exports = {
+  canManageTelegramGuild,
   createTelegramBindingCode,
   createTelegramBindingFunctions,
   createTelegramBindingProof,

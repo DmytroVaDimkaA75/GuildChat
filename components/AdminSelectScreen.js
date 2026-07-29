@@ -1,6 +1,7 @@
 import { useContext, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Modal,
@@ -13,9 +14,11 @@ import {
 // ИСПРАВЛЕНО: Правильный импорт
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import database from "@react-native-firebase/database";
+import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
 import CryptoJS from "react-native-crypto-js";
 import { GuildContext } from "../GuildContext";
+import { USER_ROLES } from "../constants/roles";
 import { DarkThemeColors } from "../constants/theme";
 // ИСПРАВЛЕНО: Правильный импорт и название функции
 import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
@@ -31,6 +34,8 @@ const AdminSelectScreen = ({
   const { t } = useTranslation();
   const [selectedMember, setSelectedMember] = useState(null);
   const [imageLoadingStates, setImageLoadingStates] = useState({});
+  const [isCreating, setIsCreating] = useState(false);
+  const [pendingAccount, setPendingAccount] = useState(null);
   const { setGuildId } = useContext(GuildContext);
 
   const handleItemPress = (item) => {
@@ -38,7 +43,7 @@ const AdminSelectScreen = ({
   };
 
   const handleConfirm = async () => {
-    if (!selectedMember) return;
+    if (!selectedMember || isCreating) return;
 
     const selectedUserId = selectedMember.linkUrl.split("/").pop();
     const formattedGuildId = `${uril}_${guildId}`;
@@ -63,6 +68,7 @@ const AdminSelectScreen = ({
     };
 
     try {
+      setIsCreating(true);
       const gbgGoalSnapshot = await guildRef
         .child("setting/GBGGoal")
         .once("value");
@@ -79,7 +85,7 @@ const AdminSelectScreen = ({
       console.log(`Дані гільдії оновлено для id: ${formattedGuildId}`);
 
       // 4. Оновлюємо / створюємо користувачів у Firebase
-      await Promise.all(
+      const userAccounts = await Promise.all(
         guildData.map(async (member) => {
           const userId = member.linkUrl.split("/").pop();
           const imageUrl = `https://foe.scoredb.io${member.imageUrl}`;
@@ -87,53 +93,111 @@ const AdminSelectScreen = ({
           const userGuildData = {
             [formattedGuildId]: {
               imageUrl: imageUrl,
-              role: userId === selectedUserId ? "guildLeader" : "member",
+              role:
+                userId === selectedUserId
+                  ? USER_ROLES.GUILD_LEADER
+                  : USER_ROLES.MEMBER,
             },
           };
 
-          // ИСПРАВЛЕНО: Правильный синтаксис
           const userRef = database().ref(`users/${userId}`);
           const snapshot = await userRef.once('value');
-          
-          if (snapshot.exists()) {
-            await userRef.update(userGuildData);
-          } else {
-            const encryptedUserId = CryptoJS.AES.encrypt(
+          const existingUser = snapshot.exists() ? snapshot.val() || {} : {};
+          const existingAccessCode =
+            typeof existingUser.password === "string"
+              ? existingUser.password.trim()
+              : "";
+          const accessCode =
+            existingAccessCode ||
+            CryptoJS.AES.encrypt(
               userId,
               "your-encryption-key"
             ).toString();
-            const userRootData = {
-              userName: member.name,
-              password: encryptedUserId,
-              ...userGuildData,
-            };
-            await userRef.set(userRootData);
-          }
+
+          await userRef.update({
+            ...(!snapshot.exists() ? { userName: member.name } : {}),
+            ...(!existingAccessCode ? { password: accessCode } : {}),
+            ...userGuildData,
+          });
+
+          return { userId, accessCode };
         })
       );
+      const creatorAccount = userAccounts.find(
+        ({ userId }) => userId === selectedUserId
+      );
+      if (!creatorAccount?.accessCode) {
+        throw new Error("Не вдалося створити код доступу власника гільдії");
+      }
 
       console.log("Запрашиваю FCM токен і кешую перед збереженням облікового запису...");
       await cachePushToken();
-
-      await AsyncStorage.setItem("guildId", formattedGuildId);
-      await AsyncStorage.setItem("userId", selectedUserId);
-      setGuildId(formattedGuildId);
-      
-      // ІСПРАВЛЕНО: Вызов правильной функции без лишнего аргумента
       await uploadPushToken(selectedUserId);
 
-      if (typeof fetch === "function") {
-        fetch();
-      }
       setSelectedMember(null);
-
+      setPendingAccount({
+        accessCode: creatorAccount.accessCode,
+        guildId: formattedGuildId,
+        userId: selectedUserId,
+      });
     } catch (error) {
       console.error("Помилка при оновленні даних:", error);
+      Alert.alert(
+        t("adminSelect.creationErrorTitle"),
+        t("adminSelect.creationErrorMessage")
+      );
+    } finally {
+      setIsCreating(false);
     }
   };
 
   const handleCancel = () => {
+    if (isCreating) return;
     setSelectedMember(null);
+  };
+
+  const handleCopyAccessCode = async () => {
+    if (!pendingAccount?.accessCode) return;
+    try {
+      await Clipboard.setStringAsync(pendingAccount.accessCode);
+      Alert.alert(
+        t("adminSelect.accessCodeCopiedTitle"),
+        t("adminSelect.accessCodeCopiedMessage")
+      );
+    } catch (error) {
+      console.error("Не вдалося скопіювати код доступу:", error);
+      Alert.alert(
+        t("adminSelect.creationErrorTitle"),
+        t("adminSelect.copyAccessCodeError")
+      );
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!pendingAccount || isCreating) return;
+    setIsCreating(true);
+    const account = pendingAccount;
+    try {
+      await AsyncStorage.multiSet([
+        ["guildId", account.guildId],
+        ["userId", account.userId],
+      ]);
+      setPendingAccount(null);
+      setIsCreating(false);
+      setGuildId(account.guildId);
+      if (typeof fetch === "function") {
+        Promise.resolve(fetch(account.guildId)).catch((error) => {
+          console.error("Не вдалося оновити стан облікового запису:", error);
+        });
+      }
+    } catch (error) {
+      console.error("Не вдалося завершити створення облікового запису:", error);
+      Alert.alert(
+        t("adminSelect.creationErrorTitle"),
+        t("adminSelect.creationErrorMessage")
+      );
+      setIsCreating(false);
+    }
   };
 
   const renderItem = ({ item }) => {
@@ -210,15 +274,74 @@ const AdminSelectScreen = ({
                   {t("adminSelect.confirmationText")}
                 </Text>
                 <View style={styles.buttonContainer}>
-                  <TouchableOpacity onPress={handleConfirm} style={styles.button}>
-                    <Text style={styles.buttonText}>{t("adminSelect.confirmButton")}</Text>
+                  <TouchableOpacity
+                    disabled={isCreating}
+                    onPress={handleConfirm}
+                    style={styles.button}
+                  >
+                    {isCreating ? (
+                      <ActivityIndicator color={DarkThemeColors.text} />
+                    ) : (
+                      <Text style={styles.buttonText}>
+                        {t("adminSelect.confirmButton")}
+                      </Text>
+                    )}
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={handleCancel} style={styles.button}>
+                  <TouchableOpacity
+                    disabled={isCreating}
+                    onPress={handleCancel}
+                    style={styles.button}
+                  >
                     <Text style={styles.buttonText}>{t("adminSelect.cancelButton")}</Text>
                   </TouchableOpacity>
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(pendingAccount)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, styles.accessCodeModal]}>
+            <Text style={styles.accessCodeTitle}>
+              {t("adminSelect.accessCodeTitle")}
+            </Text>
+            <Text style={styles.accessCodeMessage}>
+              {t("adminSelect.accessCodeMessage")}
+            </Text>
+            <Text style={styles.accessCodeLabel}>
+              {t("adminSelect.accessCodeLabel")}
+            </Text>
+            <Text selectable style={styles.accessCode}>
+              {pendingAccount?.accessCode}
+            </Text>
+            <TouchableOpacity
+              onPress={handleCopyAccessCode}
+              style={[styles.button, styles.accessCodeButton]}
+            >
+              <Text style={styles.buttonText}>
+                {t("adminSelect.copyAccessCode")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={isCreating}
+              onPress={handleContinue}
+              style={[styles.button, styles.accessCodeButton]}
+            >
+              {isCreating ? (
+                <ActivityIndicator color={DarkThemeColors.text} />
+              ) : (
+                <Text style={styles.buttonText}>
+                  {t("adminSelect.continueButton")}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -288,6 +411,49 @@ const styles = StyleSheet.create({
       padding: 20,
       borderRadius: 10,
       alignItems: "center",
+    },
+    accessCodeModal: {
+      width: "90%",
+      maxWidth: 440,
+    },
+    accessCodeTitle: {
+      color: DarkThemeColors.text,
+      fontSize: 20,
+      fontWeight: "bold",
+      marginBottom: 12,
+      textAlign: "center",
+    },
+    accessCodeMessage: {
+      color: DarkThemeColors.textSecondary,
+      fontSize: 15,
+      lineHeight: 21,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+    accessCodeLabel: {
+      alignSelf: "flex-start",
+      color: DarkThemeColors.textSecondary,
+      fontSize: 13,
+      marginBottom: 6,
+    },
+    accessCode: {
+      alignSelf: "stretch",
+      backgroundColor: DarkThemeColors.surfaceElevated,
+      borderColor: DarkThemeColors.border,
+      borderRadius: 8,
+      borderWidth: 1,
+      color: DarkThemeColors.text,
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 16,
+      padding: 12,
+      textAlign: "center",
+    },
+    accessCodeButton: {
+      alignSelf: "stretch",
+      marginBottom: 8,
+      minHeight: 44,
+      justifyContent: "center",
     },
     modalImage: {
       width: 100,

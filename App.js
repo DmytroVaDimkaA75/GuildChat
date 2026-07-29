@@ -491,11 +491,15 @@ const AppContent = () => {
     checkAndLogWorldData();
   }, [guildId]);
 
-  const fetchUserData = async () => {
+  const fetchUserData = async (guildIdOverride = null) => {
+    const activeGuildId =
+      typeof guildIdOverride === "string" && guildIdOverride.trim()
+        ? guildIdOverride.trim()
+        : guildId;
     if (!checked) setLoading(true);
     try {
       const userId = await AsyncStorage.getItem("userId");
-      if (guildId && userId) {
+      if (activeGuildId && userId) {
         const snapshot = await database().ref(`users/${userId}`).once('value');
         setUserData(snapshot.exists());
       } else {

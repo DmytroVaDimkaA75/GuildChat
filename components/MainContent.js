@@ -20,6 +20,11 @@ import { Alert, Animated, AppState, Easing, Image, NativeModules, Platform, Stat
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext } from '../GuildContext';
+import {
+  canAccessGuildTasks,
+  hasLeaderFeatures,
+  hasTesterFeatures,
+} from '../constants/roles';
 import i18n from "../i18n";
 import {
   clearPendingNotificationRoute,
@@ -70,6 +75,7 @@ import Boat from "./ico/boat.svg";
 import Chat from "./ico/menu/chat.svg";
 import GVG from "./ico/menu/GVG.svg";
 import GB from "./ico/menu/GB.svg";
+import Community from "./ico/menu/people.svg";
 import Profile from "./ico/menu/user.svg";
 
 const Stack = createStackNavigator();
@@ -355,32 +361,37 @@ function GBStack() {
   );
 }
 
-function AdmintStack() {
+function AdmintStack({ canAccessTasks = false }) {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
         name="AdminScreen"
-        component={AdminMain}
         options={() => ({
           title: t("adminStack.adminScreenTitle"),
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
           headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
           headerShadowVisible: false,
         })}
-      />
-      <Stack.Screen
-        name="GuildTasks"
-        component={GuildTasksScreen}
-        options={({ navigation }) => ({
-          title: 'Завдання',
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-          ),
-        })}
-      />
+      >
+        {(props) => (
+          <AdminMain {...props} canAccessTasks={canAccessTasks} />
+        )}
+      </Stack.Screen>
+      {canAccessTasks && (
+        <Stack.Screen
+          name="GuildTasks"
+          component={GuildTasksScreen}
+          options={({ navigation }) => ({
+            title: 'Завдання',
+            headerLeft: () => (
+              <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
+                <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            ),
+          })}
+        />
+      )}
     </Stack.Navigator>
   );
 }
@@ -915,7 +926,8 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
-  const [isTester, setIsTester] = React.useState(false);
+  const [hasTesterAccess, setHasTesterAccess] = React.useState(false);
+  const [isDeveloper, setIsDeveloper] = React.useState(false);
 
   const confirmDeletion = (members) =>
     new Promise((resolve) => {
@@ -947,52 +959,63 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
 
   React.useEffect(() => {
     let cancelled = false;
+    let userRoleRef = null;
+    let roleListener = null;
     const activeGuildId = String(guildId || "");
 
-    const fetchRole = async () => {
+    const resetRoleAccess = () => {
+      if (cancelled) return;
+      setHasLeaderAccess(false);
+      setHasTesterAccess(false);
+      setIsDeveloper(false);
+    };
+
+    const subscribeToRole = async () => {
       try {
         const userId = await AsyncStorage.getItem('userId');
         if (!userId || !activeGuildId) {
-          if (!cancelled) {
-            setHasLeaderAccess(false);
-            setIsTester(false);
-          }
+          resetRoleAccess();
           return;
         }
+        if (cancelled) return;
 
-        const userRoleRef = database().ref(
+        userRoleRef = database().ref(
           `users/${userId}/${activeGuildId}/role`
         );
-        const snap = await userRoleRef.once('value');
-        const role = snap.exists() ? snap.val() : null;
-        const canUseLeaderFeatures = role === 'guildLeader' || role === 'tester';
+        roleListener = (snapshot) => {
+          if (cancelled) return;
+          const role = snapshot.exists() ? snapshot.val() : null;
+          const canUseLeaderFeatures = hasLeaderFeatures(role);
 
-        if (cancelled) return;
-        setHasLeaderAccess(canUseLeaderFeatures);
-        setIsTester(role === 'tester');
+          setHasLeaderAccess(canUseLeaderFeatures);
+          setHasTesterAccess(hasTesterFeatures(role));
+          setIsDeveloper(canAccessGuildTasks(role));
 
-        if (canUseLeaderFeatures) {
-          syncGuildMembers({
-            guildId: activeGuildId,
-            confirmDeletion,
-            confirmAddition,
-          }).catch((error) => {
-            console.log(
-              '❌ Помилка синхронізації учасників гільдії:',
-              error?.message || String(error)
-            );
-          });
-        }
+          if (canUseLeaderFeatures) {
+            syncGuildMembers({
+              guildId: activeGuildId,
+              confirmDeletion,
+              confirmAddition,
+            }).catch((error) => {
+              console.log(
+                '❌ Помилка синхронізації учасників гільдії:',
+                error?.message || String(error)
+              );
+            });
+          }
+        };
+        userRoleRef.on('value', roleListener, resetRoleAccess);
       } catch (_error) {
-        if (cancelled) return;
-        setHasLeaderAccess(false);
-        setIsTester(false);
+        resetRoleAccess();
       }
     };
 
-    fetchRole();
+    subscribeToRole();
     return () => {
       cancelled = true;
+      if (userRoleRef && roleListener) {
+        userRoleRef.off('value', roleListener);
+      }
     };
   }, [guildId]);
 
@@ -1044,16 +1067,24 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
             drawerIconComponent: renderIcon(Chat)
           }}
         />
-        <Drawer.Screen
-          name="Community"
-          component={CommunityStack}
-          options={{
-            drawerLabel: 'Спільнота',
-            drawerIconComponent: ({ color }) => (
-              <MaterialIcons name="groups" size={25} color={color} />
-            )
-          }}
-        />
+        {hasTesterAccess && (
+          <Drawer.Screen
+            name="Community"
+            component={CommunityStack}
+            options={{
+              drawerLabel: 'Спільнота',
+              drawerIconComponent: () => (
+                <Community
+                  width={24}
+                  height={24}
+                  fill={COLORS.textSecondary}
+                  color={COLORS.textSecondary}
+                  style={{ color: COLORS.textSecondary }}
+                />
+              )
+            }}
+          />
+        )}
         <Drawer.Screen
           name="GBG"
           component={GBGStack}
@@ -1074,7 +1105,7 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           name="culture"
           component={CultureStack}
           options={{
-            drawerLabel: isTester ? t("drawer.culture") : null,
+            drawerLabel: hasTesterAccess ? t("drawer.culture") : null,
             drawerIconComponent: renderIcon(Boat)
           }}
         />
@@ -1089,12 +1120,13 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
         {hasLeaderAccess && (
           <Drawer.Screen
             name="admin"
-            component={AdmintStack}
             options={{
               drawerLabel: t("drawer.adminLabel"),
               drawerIconComponent: renderIcon(Admin)
             }}
-          />
+          >
+            {() => <AdmintStack canAccessTasks={isDeveloper} />}
+          </Drawer.Screen>
         )}
       </Drawer.Navigator>
     </NavigationContainer>
@@ -1295,7 +1327,7 @@ export default function MainContent() {
       }
     } else if (
       route.type === 'culture_build_ready' &&
-      routeAccessSnap?.val() !== 'tester'
+      !hasTesterFeatures(routeAccessSnap?.val())
     ) {
       throw createPermanentNotificationRouteError(
         'У вас немає доступу до культурних поселень у цьому світі.'

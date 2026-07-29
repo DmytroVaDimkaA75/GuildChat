@@ -35,6 +35,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import notifee from '@notifee/react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { format } from 'date-fns';
 import { de, es, fr, ru, uk } from 'date-fns/locale';
 import { Audio } from 'expo-av';
@@ -89,6 +90,8 @@ const INPUT_VERTICAL_PADDING = 8;
 const INPUT_MAX_LINES = 5;
 const MIN_INPUT_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING;
 const MAX_INPUT_HEIGHT = INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_VERTICAL_PADDING;
+const clampInputHeight = (height) =>
+  Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, Number(height) || MIN_INPUT_HEIGHT));
 
 const isYouTubeURL = (url) => (url || '').includes('youtube.com') || (url || '').includes('youtu.be');
 const isDocsURL = (url) => (url || '').includes('docs.google.com');
@@ -267,6 +270,10 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         setHeight(minHeight);
         inject(`window.__clear && window.__clear()`);
       },
+      normalizeHeight: () => {
+        setHeight(minHeight);
+        inject(`window.__normalizeHeight && window.__normalizeHeight()`);
+      },
       focus: () => inject(`window.__focus && window.__focus()`)
     }),
     [inject, minHeight]
@@ -281,8 +288,11 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <style>
-    body { margin:0; padding:0; background: transparent; }
+    html, body { margin:0; padding:0; background: transparent; overflow: hidden; }
     #editor {
+      box-sizing: border-box;
+      width: 100%;
+      height: ${minHeight}px;
       padding: ${INPUT_VERTICAL_PADDING / 2}px 6px;
       font-size: 16px;
       line-height: ${INPUT_LINE_HEIGHT}px;
@@ -293,7 +303,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
       white-space: pre-wrap;
       word-break: break-word;
-      overflow-y: auto;
+      overflow-y: hidden;
     }
     #editor:empty:before {
       content: attr(data-placeholder);
@@ -370,13 +380,39 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       return preRange.toString().length;
     }
 
+    function editorHasContent() {
+      const text = (editor.innerText || '').replace(/\\u200B/g, '').trim();
+      const markup = (editor.innerHTML || '')
+        .replace(/<br\\s*\\/?>/gi, '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, '')
+        .trim();
+      return text.length > 0 || markup.length > 0;
+    }
+
+    function measureEditorHeight() {
+      editor.style.height = '${minHeight}px';
+
+      if (!editorHasContent()) {
+        editor.style.overflowY = 'hidden';
+        editor.scrollTop = 0;
+        return ${minHeight};
+      }
+
+      const measuredHeight = editor.scrollHeight || ${minHeight};
+      const nextHeight = Math.max(${minHeight}, Math.min(${maxHeight}, measuredHeight));
+      editor.style.height = nextHeight + 'px';
+      editor.style.overflowY = measuredHeight > ${maxHeight} ? 'auto' : 'hidden';
+      return nextHeight;
+    }
+
     function notifyChange() {
       const html = editor.innerHTML || '';
       const text = editor.innerText || '';
       let marked = nodeToMarked(editor) || '';
       marked = marked.replace(/\\n{3,}/g, '\\n\\n').trimEnd();
 
-      const h = Math.max(${minHeight}, Math.min(${maxHeight}, (editor.scrollHeight || ${minHeight})));
+      const h = measureEditorHeight();
       const selActive = selectionActiveInEditor();
       const caretIndex = getCaretIndex();
 
@@ -472,6 +508,10 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       notifyChange();
     };
 
+    window.__normalizeHeight = () => {
+      notifyChange();
+    };
+
     window.__focus = () => {
       try { editor.focus(); } catch(e) {}
     };
@@ -504,7 +544,13 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         const data = JSON.parse(event.nativeEvent.data);
         if (data && data.type === 'change') {
           const h = Number(data.height);
-          if (!Number.isNaN(h)) setHeight(h);
+          const hasContent = String(data.text || '').replace(/\u200B/g, '').trim().length > 0;
+          if (!Number.isNaN(h)) {
+            const nextHeight = hasContent
+              ? Math.min(maxHeight, Math.max(minHeight, h))
+              : minHeight;
+            setHeight(nextHeight);
+          }
           onChange &&
             onChange({
               html: data.html || '',
@@ -516,11 +562,11 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
         }
       } catch (e) {}
     },
-    [onChange]
+    [maxHeight, minHeight, onChange]
   );
 
   return (
-    <View style={{ height }}>
+    <View style={{ height, minHeight, maxHeight, overflow: 'hidden' }}>
       <WebView
         ref={webRef}
         originWhitelist={['*']}
@@ -1008,6 +1054,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 };
 
 const ChatWindow = ({ route, navigation }) => {
+  const headerHeight = useHeaderHeight();
   const {
     chatId,
     guildId: routeGuildId,
@@ -1128,6 +1175,26 @@ const ChatWindow = ({ route, navigation }) => {
   const recordingMeteringsRef = useRef([]);
   const processedRead = useRef(new Set());
   const initialMessageHandledRef = useRef("");
+
+  useEffect(() => {
+    let animationFrameId = null;
+    const unsubscribe = navigation.addListener('focus', () => {
+      animationFrameId = requestAnimationFrame(() => {
+        composerRef.current?.normalizeHeight?.();
+      });
+    });
+
+    return () => {
+      unsubscribe();
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+    };
+  }, [chatId, navigation]);
+
+  useEffect(() => {
+    if (!editMessageText) {
+      setInputHeight(MIN_INPUT_HEIGHT);
+    }
+  }, [editMessageText]);
 
   const handleToggleChatSound = useCallback(async () => {
     if (!chatId || !guildId || !userId || !isChatMemberRef.current) return;
@@ -1803,6 +1870,7 @@ const ChatWindow = ({ route, navigation }) => {
       });
       setEditMessage(null);
       setEditMessageText('');
+      setInputHeight(MIN_INPUT_HEIGHT);
       return;
     }
 
@@ -1938,9 +2006,6 @@ const ChatWindow = ({ route, navigation }) => {
     [flatData]
   );
 
-  // The application root already reserves the bottom safe area.
-  const keyboardOffset = 0;
-
   return (
     <MenuProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#121212' }} edges={['right', 'left']}>
@@ -1949,7 +2014,7 @@ const ChatWindow = ({ route, navigation }) => {
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={keyboardOffset}
+          keyboardVerticalOffset={headerHeight}
         >
           <View style={{ flex: 1 }}>
             {/* ✅ Закріплені: свайп -> скрол чату до видимого pinned + підсвітка */}
@@ -2183,6 +2248,7 @@ const ChatWindow = ({ route, navigation }) => {
                               onSelect={() => {
                                 setEditMessage(msg);
                                 setEditMessageText(msg.text || '');
+                                setInputHeight(MIN_INPUT_HEIGHT);
                                 composerRef.current?.clear?.();
                                 setNewMessage('');
                                 setNewMessageHtml('');
@@ -2358,12 +2424,17 @@ const ChatWindow = ({ route, navigation }) => {
                   <TextInput
                     style={[
                       styles.input,
-                      { height: Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, inputHeight)) }
+                      { height: clampInputHeight(inputHeight) }
                     ]}
                     value={editMessageText}
                     onChangeText={setEditMessageText}
                     onSelectionChange={({ nativeEvent: { selection } }) => setSelection(selection)}
-                    onContentSizeChange={(e) => setInputHeight(e.nativeEvent.contentSize.height)}
+                    onContentSizeChange={(e) => {
+                      const contentHeight = editMessageText.trim()
+                        ? e.nativeEvent.contentSize.height
+                        : MIN_INPUT_HEIGHT;
+                      setInputHeight(clampInputHeight(contentHeight));
+                    }}
                     placeholder="Повідомлення..."
                     placeholderTextColor="#666"
                     multiline

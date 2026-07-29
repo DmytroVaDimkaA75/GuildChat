@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // import { database } from '../../firebaseConfig'; // УДАЛЕНО
+import { getUkrainianRoleLabel } from '../../constants/roles';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 import GBIcon from '../ico/GB.svg';
 import BoatIcon from '../ico/boat.svg';
@@ -26,14 +27,7 @@ const ProfileMain = () => {
   const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
-  const convertRole = (role) => {
-    switch (role) {
-      case 'guildLeader': return 'Адміністратор';
-      case 'tester': return 'Тестер';
-      case 'member': return 'Користувач';
-      default: return role;
-    }
-  };
+  const convertRole = getUkrainianRoleLabel;
 
   // toggles
   const toggleCultureSettings = () => setCultureSettingsOpen(prev => !prev);

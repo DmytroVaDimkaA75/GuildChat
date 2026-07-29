@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  canManageTelegramGuild,
   createTelegramBindingCode,
   createTelegramBindingFunctions,
   createTelegramBindingProof,
@@ -12,6 +13,49 @@ const {
   parseTelegramBindCommand,
   timingSafeStringEqual,
 } = require("./telegramBinding");
+
+test("developer has the same Telegram guild-management access as tester", async () => {
+  assert.equal(canManageTelegramGuild("tester"), true);
+  assert.equal(canManageTelegramGuild("developer"), true);
+  assert.equal(canManageTelegramGuild("member"), false);
+
+  const guildId = "en_1_42";
+  const userId = "developer_42";
+  const values = new Map([
+    [`/guilds/${guildId}/guildUsers/${userId}`, true],
+    [`/users/${userId}/${guildId}/role`, "developer"],
+  ]);
+  const database = () => ({
+    ref: (path) => ({
+      once: async () => {
+        const value = values.get(path);
+        return {
+          exists: () => value !== undefined && value !== null,
+          val: () => value,
+        };
+      },
+    }),
+  });
+  database.ServerValue = { TIMESTAMP: { ".sv": "timestamp" } };
+
+  const passthrough = (_options, handler) => handler;
+  const handlers = createTelegramBindingFunctions({
+    admin: { database },
+    logger: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+    onCall: passthrough,
+    onRequest: passthrough,
+    telegramBotToken: { value: () => "123456:test-token" },
+  });
+
+  const result = await handlers.testBinding({
+    data: { guildId, userId },
+  });
+  assert.deepEqual(result, { success: false, error: "NOT_CONNECTED" });
+});
 
 test("binding codes use the non-ambiguous 12-character alphabet", () => {
   const codes = new Set();

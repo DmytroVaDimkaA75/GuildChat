@@ -17,7 +17,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const COLORS = {
   background: '#0f1115',
@@ -36,7 +35,6 @@ const formatTime = (timestamp) => {
 };
 
 export default function CommunityChannelsScreen({ route, navigation }) {
-  const insets = useSafeAreaInsets();
   const { communityId, communityName } = route.params || {};
   const [community, setCommunity] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -489,7 +487,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         }
       />
 
-      <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
           value={message}

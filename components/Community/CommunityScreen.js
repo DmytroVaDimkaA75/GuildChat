@@ -26,53 +26,9 @@ const COLORS = {
   success: '#4cc38a',
 };
 
-const STARTER_COMMUNITIES = [
-  {
-    id: 'forge-of-empires',
-    name: 'Forge of Empires',
-    description: 'Стратегії розвитку, події та спілкування між світами.',
-    category: 'Ігри',
-    icon: '🏛️',
-    channels: {
-      general: { name: 'загальний', description: 'Знайомства та вільне спілкування', order: 1 },
-      strategy: { name: 'стратегії', description: 'Поради щодо розвитку міста', order: 2 },
-      events: { name: 'події', description: 'Обговорення поточних подій', order: 3 },
-    },
-  },
-  {
-    id: 'guild-leaders',
-    name: 'Лідери гільдій',
-    description: 'Обмін досвідом керування, дипломатії та організації.',
-    category: 'Гільдії',
-    icon: '🛡️',
-    channels: {
-      general: { name: 'загальний', description: 'Спілкування лідерів', order: 1 },
-      recruitment: { name: 'набір', description: 'Пошук гравців і гільдій', order: 2 },
-      diplomacy: { name: 'дипломатія', description: 'Міжгільдійні домовленості', order: 3 },
-    },
-  },
-  {
-    id: 'creative-corner',
-    name: 'Творчий куточок',
-    description: 'Меми, оформлення міст, історії та фан-творчість.',
-    category: 'Творчість',
-    icon: '🎨',
-    channels: {
-      general: { name: 'загальний', description: 'Покажіть, що ви створили', order: 1 },
-      screenshots: { name: 'скриншоти', description: 'Міста та цікаві моменти', order: 2 },
-    },
-  },
-  {
-    id: 'help-hub',
-    name: 'Центр допомоги',
-    description: 'Запитання про гру та взаємодопомога без прив’язки до світу.',
-    category: 'Допомога',
-    icon: '💡',
-    channels: {
-      questions: { name: 'запитання', description: 'Поставте запитання спільноті', order: 1 },
-      guides: { name: 'гайди', description: 'Корисні інструкції та поради', order: 2 },
-    },
-  },
+const COMMUNITY_FILTERS = [
+  { key: 'mine', label: 'Мої' },
+  { key: 'all', label: 'Всі' },
 ];
 
 const toCommunityList = (value) =>
@@ -82,8 +38,7 @@ export default function CommunityScreen({ navigation }) {
   const [communities, setCommunities] = useState([]);
   const [memberships, setMemberships] = useState({});
   const [userId, setUserId] = useState('');
-  const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Усі');
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -130,26 +85,20 @@ export default function CommunityScreen({ navigation }) {
     };
   }, []);
 
-  const visibleCommunities = communities.length ? communities : STARTER_COMMUNITIES;
-  const categories = useMemo(
-    () => ['Усі', ...new Set(visibleCommunities.map((item) => item.category).filter(Boolean))],
-    [visibleCommunities]
-  );
   const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('uk');
-    return visibleCommunities
-      .filter((item) => selectedCategory === 'Усі' || item.category === selectedCategory)
+    return communities
       .filter(
         (item) =>
-          !query ||
-          item.name?.toLocaleLowerCase('uk').includes(query) ||
-          item.description?.toLocaleLowerCase('uk').includes(query)
+          selectedFilter === 'all' ||
+          Boolean(memberships[item.id] || item.members?.[userId])
       )
       .sort((a, b) => {
-        const joinedDifference = Number(Boolean(memberships[b.id])) - Number(Boolean(memberships[a.id]));
+        const joinedDifference =
+          Number(Boolean(memberships[b.id] || b.members?.[userId])) -
+          Number(Boolean(memberships[a.id] || a.members?.[userId]));
         return joinedDifference || (b.memberCount || 0) - (a.memberCount || 0);
       });
-  }, [memberships, search, selectedCategory, visibleCommunities]);
+  }, [communities, memberships, selectedFilter, userId]);
 
   const joinCommunity = async (community) => {
     if (!userId) {
@@ -161,12 +110,8 @@ export default function CommunityScreen({ navigation }) {
       const communityRef = database().ref(`communities/${community.id}`);
       const snapshot = await communityRef.once('value');
       if (!snapshot.exists()) {
-        const { id, ...starterData } = community;
-        await communityRef.set({
-          ...starterData,
-          memberCount: 0,
-          createdAt: database.ServerValue.TIMESTAMP,
-        });
+        Alert.alert('Спільноту не знайдено', 'Можливо, її вже було видалено.');
+        return;
       }
 
       const updates = {};
@@ -258,7 +203,7 @@ export default function CommunityScreen({ navigation }) {
   };
 
   const renderCommunity = ({ item }) => {
-    const joined = Boolean(memberships[item.id]);
+    const joined = Boolean(memberships[item.id] || item.members?.[userId]);
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -303,21 +248,6 @@ export default function CommunityScreen({ navigation }) {
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>Знайдіть своїх людей</Text>
         <Text style={styles.heroText}>Спілкуйтеся за інтересами з гравцями з усіх світів.</Text>
-        <View style={styles.searchBox}>
-          <MaterialIcons name="search" size={22} color={COLORS.muted} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchInput}
-            placeholder="Пошук спільнот"
-            placeholderTextColor={COLORS.muted}
-          />
-          {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <MaterialIcons name="close" size={20} color={COLORS.muted} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
       </View>
 
       <FlatList
@@ -327,31 +257,39 @@ export default function CommunityScreen({ navigation }) {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <FlatList
-            horizontal
-            data={categories}
-            keyExtractor={(item) => item}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categories}
-            renderItem={({ item }) => (
+          <View style={styles.filters}>
+            {COMMUNITY_FILTERS.map((filter) => (
               <TouchableOpacity
-                style={[styles.categoryChip, selectedCategory === item && styles.categoryChipActive]}
-                onPress={() => setSelectedCategory(item)}
+                key={filter.key}
+                style={[
+                  styles.filterChip,
+                  selectedFilter === filter.key && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter(filter.key)}
               >
-                <Text style={[styles.categoryChipText, selectedCategory === item && styles.categoryChipTextActive]}>
-                  {item}
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === filter.key && styles.filterChipTextActive,
+                  ]}
+                >
+                  {filter.label}
                 </Text>
               </TouchableOpacity>
-            )}
-          />
+            ))}
+          </View>
         }
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator color={COLORS.primary} style={styles.empty} />
           ) : (
             <View style={styles.empty}>
-              <MaterialIcons name="search-off" size={42} color={COLORS.muted} />
-              <Text style={styles.emptyText}>Нічого не знайдено</Text>
+              <MaterialIcons name="groups" size={42} color={COLORS.muted} />
+              <Text style={styles.emptyText}>
+                {selectedFilter === 'mine'
+                  ? 'Ви ще не приєдналися до жодної спільноти'
+                  : 'Спільнот поки немає'}
+              </Text>
             </View>
           )
         }
@@ -433,20 +371,14 @@ const styles = StyleSheet.create({
   hero: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10 },
   heroTitle: { color: COLORS.text, fontSize: 24, fontWeight: '700' },
   heroText: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 5 },
-  searchBox: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 18,
-    paddingHorizontal: 12,
-  },
-  searchInput: { color: COLORS.text, flex: 1, fontSize: 16, paddingHorizontal: 9, paddingVertical: 12 },
   list: { paddingBottom: 28 },
-  categories: { gap: 8, paddingHorizontal: 18, paddingVertical: 10 },
-  categoryChip: {
+  filters: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  filterChip: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
     borderRadius: 18,
@@ -454,9 +386,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  categoryChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  categoryChipText: { color: COLORS.muted, fontWeight: '600' },
-  categoryChipTextActive: { color: '#fff' },
+  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipText: { color: COLORS.muted, fontWeight: '600' },
+  filterChipTextActive: { color: '#fff' },
   card: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,

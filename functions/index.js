@@ -2512,7 +2512,13 @@ exports.processGbgSectorBuildChecks = onSchedule(
                     db.ref(`/users/${uid}/fcmToken`).once("value"),
                   ]);
                   const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
-                  if (role !== "guildLeader" && role !== "tester") return null;
+                  if (
+                    role !== "guildLeader" &&
+                    role !== "tester" &&
+                    role !== "developer"
+                  ) {
+                    return null;
+                  }
 
                   const token = tokenSnap.exists() ? tokenSnap.val() : null;
                   if (!token) return null;

@@ -17,10 +17,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {
+  getUkrainianRoleLabel,
+  USER_ROLES,
+} from '../../constants/roles';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 import TelegramSettings from './TelegramSettings';
 
-const AdminMain = () => {
+const AdminMain = ({ canAccessTasks = false }) => {
   const [userName, setUserName] = useState('');
   const [guildName, setGuildName] = useState('');
   const [activeWorld, setActiveWorld] = useState('');
@@ -39,14 +43,7 @@ const AdminMain = () => {
   const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
-  const convertRole = (role) => {
-    switch (role) {
-      case 'guildLeader': return 'Адміністратор';
-      case 'tester': return 'Тестер';
-      case 'member': return 'Користувач';
-      default: return role;
-    }
-  };
+  const convertRole = getUkrainianRoleLabel;
 
   const toggleCultureSettings = () => setCultureSettingsOpen(prev => !prev);
   const toggleProductionOpen = () => setProductionOpen(prev => !prev);
@@ -237,7 +234,9 @@ const AdminMain = () => {
     try {
       const guildId = await AsyncStorage.getItem('guildId');
       if (!guildId) return;
-      const newRole = checked ? 'guildLeader' : 'member';
+      const newRole = checked
+        ? USER_ROLES.GUILD_LEADER
+        : USER_ROLES.MEMBER;
       await database().ref(`/users/${userId}/${guildId}/role`).set(newRole);
       setGuildMembersList(prev =>
         prev.map(m => (m.id === userId ? { ...m, role: newRole } : m))
@@ -313,20 +312,22 @@ const AdminMain = () => {
         <Text style={styles.userName}>{guildName}</Text>
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => navigation.navigate('GuildTasks')}
-        style={styles.tasksEntry}
-      >
-        <View style={styles.tasksEntryIcon}>
-          <Ionicons name="clipboard-outline" size={25} color="#4ea1ff" />
-        </View>
-        <View style={styles.tasksEntryText}>
-          <Text style={styles.tasksEntryTitle}>Завдання гільдії</Text>
-          <Text style={styles.tasksEntrySubtitle}>Створення, виконавці та прогрес</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={22} color="#9aa3b2" />
-      </TouchableOpacity>
+      {canAccessTasks && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('GuildTasks')}
+          style={styles.tasksEntry}
+        >
+          <View style={styles.tasksEntryIcon}>
+            <Ionicons name="clipboard-outline" size={25} color="#4ea1ff" />
+          </View>
+          <View style={styles.tasksEntryText}>
+            <Text style={styles.tasksEntryTitle}>Завдання гільдії</Text>
+            <Text style={styles.tasksEntrySubtitle}>Створення, виконавці та прогрес</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#9aa3b2" />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.section}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -403,14 +404,22 @@ const AdminMain = () => {
                           style={{ width: 28, height: 28, borderRadius: 14, marginRight: 8 }}
                         />
                       )}
-                      <Text style={styles.mainText}>{member.userName}</Text>
+                      <View>
+                        <Text style={styles.mainText}>{member.userName}</Text>
+                        <Text style={styles.memberRole}>
+                          {convertRole(member.role)}
+                        </Text>
+                      </View>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <CustomCheckBox
-                        checked={member.role === 'guildLeader'}
+                        checked={member.role === USER_ROLES.GUILD_LEADER}
                         onPress={() => {
                           if (member.isSelf) return;
-                          handleRoleChange(member.id, !(member.role === 'guildLeader'));
+                          handleRoleChange(
+                            member.id,
+                            member.role !== USER_ROLES.GUILD_LEADER
+                          );
                         }}
                         style={{ marginLeft: 10 }}
                         disabled={member.isSelf}
@@ -588,6 +597,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
     color: '#E0E0E0',
+  },
+  memberRole: {
+    color: '#7f8794',
+    fontSize: 11,
+    marginLeft: 8,
+    marginTop: 1,
   },
   subHeaderRow: {
     flexDirection: 'row',

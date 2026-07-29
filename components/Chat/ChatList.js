@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, FlatList, Image, PanResponder, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Image, PanResponder, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import database from '@react-native-firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -239,9 +239,6 @@ const ChatList = ({ chats, guildId, userId }) => {
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('chatList.title')}</Text>
-      </View>
       <Animated.FlatList
         data={chats}
         renderItem={renderItem}
@@ -268,20 +265,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: 'transparent',
-  },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
   listContent: {
     paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 40,
   },
   chatItem: {

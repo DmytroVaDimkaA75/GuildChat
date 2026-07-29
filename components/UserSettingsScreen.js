@@ -27,7 +27,9 @@ const UserSettingsScreen = ({ fetch }) => {
     try {
       await AsyncStorage.setItem("guildId", guild.guildId);
       setGuildId(guild.guildId);
-      fetch();
+      if (typeof fetch === "function") {
+        await fetch(guild.guildId);
+      }
     } catch (error) {
       console.error("Помилка при виборі гільдії:", error);
     }

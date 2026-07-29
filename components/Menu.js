@@ -18,6 +18,10 @@ import {
 } from "react-native";
 import { MaterialIcons } from '@expo/vector-icons';
 import database from '@react-native-firebase/database';
+import {
+  hasLeaderFeatures,
+  hasTesterFeatures,
+} from '../constants/roles';
 
 import GB from "./ico/menu/GB.svg";
 import Admin from "./ico/menu/setting.svg";
@@ -276,9 +280,6 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
     }
   };
 
-  const hasLeaderAccess = (role) => role === "guildLeader" || role === "tester";
-  const isTester = (role) => role === "tester";
-  
   function isOptionVisible(option, currentDate) {
     if (!option.keyDate) return true;
     const keyDateWeek = getWeekNumber(option.keyDate, option.keyDate);
@@ -383,8 +384,9 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                     <Text style={styles.sectionTitle}>Основне</Text>
                     {menuOptions.map((option, index) => {
                         if (!isOptionVisible(option, new Date())) return null;
-                        if (option.fullText === "Адміністративна панель" && !hasLeaderAccess(userRole)) return null;
-                        if (option.fullText === "Культурні поселення" && !isTester(userRole)) return null;
+                        if (option.fullText === "Адміністративна панель" && !hasLeaderFeatures(userRole)) return null;
+                        if (option.fullText === "Культурні поселення" && !hasTesterFeatures(userRole)) return null;
+                        if (option.fullText === "Спільнота" && !hasTesterFeatures(userRole)) return null;
 
                         const isSelected = selectedOption === index;
 
