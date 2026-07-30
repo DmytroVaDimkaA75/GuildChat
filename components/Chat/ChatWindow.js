@@ -1324,10 +1324,37 @@ const ChatWindow = ({ route, navigation }) => {
     return () => userRef.off('value', listener);
   }, [guildId, headerUserId]);
 
+  const headerUserLastMessageTimestamp = useMemo(() => {
+    if (!headerUserId) return 0;
+
+    return groups.reduce(
+      (latestTimestamp, group) =>
+        (group.messages || []).reduce((latestInGroup, message) => {
+          if (String(message?.senderId || '') !== String(headerUserId)) {
+            return latestInGroup;
+          }
+
+          const timestamp = Number(
+            message?.deliverySource === 'scheduled'
+              ? message?.authoredAt
+              : message?.timestamp
+          );
+          return Number.isFinite(timestamp) && timestamp > latestInGroup
+            ? timestamp
+            : latestInGroup;
+        }, latestTimestamp),
+      0
+    );
+  }, [groups, headerUserId]);
+
   useEffect(() => {
     if (chatType === 'private') {
       if (!headerUser || !headerUserId) return;
-      const presenceLabel = getPresenceStatusLabel(headerUser.presence, locale);
+      const presenceLabel = getPresenceStatusLabel(
+        headerUser.presence,
+        locale,
+        headerUserLastMessageTimestamp
+      );
       navigation.setOptions({
         headerTitle: () => (
           <TouchableOpacity
@@ -1373,6 +1400,7 @@ const ChatWindow = ({ route, navigation }) => {
     handleOpenUserInfo,
     headerUser,
     headerUserId,
+    headerUserLastMessageTimestamp,
     locale,
     navigation,
     renderHeaderRight
@@ -1709,7 +1737,7 @@ const ChatWindow = ({ route, navigation }) => {
       senderId: userId,
       text: imageCaption,
       imageUrls: urls,
-      timestamp: Date.now(),
+      timestamp: database.ServerValue.TIMESTAMP,
       status: 'sent'
     });
     setSelectedImageUris([]);
@@ -1783,7 +1811,7 @@ const ChatWindow = ({ route, navigation }) => {
         audioUrl,
         audioDuration: durationMillis,
         audioWaveform: waveform,
-        timestamp: Date.now(),
+        timestamp: database.ServerValue.TIMESTAMP,
         status: 'sent',
         replyTo: replyToMessage?.id || null
       });
@@ -1840,6 +1868,7 @@ const ChatWindow = ({ route, navigation }) => {
       guildId,
       chatId,
       sendAt: utcTimestamp,
+      authoredAt: database.ServerValue.TIMESTAMP,
       status: 'pending',
       replyTo: replyToMessage?.id || null
     };
@@ -1879,7 +1908,7 @@ const ChatWindow = ({ route, navigation }) => {
       senderId: userId,
       text: newMessage,
       html: newMessageHtml || null,
-      timestamp: Date.now(),
+      timestamp: database.ServerValue.TIMESTAMP,
       status: 'sent',
       replyTo: replyToMessage?.id || null
     });

@@ -1688,7 +1688,26 @@ exports.sendChatNotification = onValueCreated(
     const messageData = event.data.val();
     if (!messageData) return null;
 
-    await sendChatNotificationForMessage({ guildId, chatId, messageId, messageData, db: admin.database() });
+    const db = admin.database();
+    const tasks = [
+      sendChatNotificationForMessage({
+        guildId,
+        chatId,
+        messageId,
+        messageData,
+        db,
+      }),
+    ];
+    const senderId = String(messageData.senderId || "");
+    if (senderId && messageData.deliverySource !== "scheduled") {
+      tasks.push(
+        db
+          .ref(`guilds/${guildId}/guildUsers/${senderId}/presence/lastActivityAt`)
+          .set(admin.database.ServerValue.TIMESTAMP)
+      );
+    }
+
+    await Promise.all(tasks);
     return null;
   }
 );
@@ -1825,7 +1844,15 @@ async function moveMessageToChat({ guildId, messageId, messageData, db }) {
   }
   const chatMessagesRef = db.ref(`/guilds/${normalizedGuildId}/chats/${normalizedChatId}/messages`);
   const chatMessageRef = chatMessagesRef.push();
-  const finalMessage = { senderId, text, status: "sent", timestamp: admin.database.ServerValue.TIMESTAMP };
+  const authoredAt = Number(messageData.authoredAt);
+  const finalMessage = {
+    senderId,
+    text,
+    status: "sent",
+    timestamp: admin.database.ServerValue.TIMESTAMP,
+    deliverySource: "scheduled",
+    ...(Number.isFinite(authoredAt) && authoredAt > 0 ? { authoredAt } : {}),
+  };
   await chatMessageRef.set(finalMessage);
   return db.ref(`/guilds/${normalizedGuildId}/scheduledMessages/${scheduledMessageId}`).remove();
 }

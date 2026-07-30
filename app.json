@@ -3,6 +3,7 @@
     "name": "FoEChat",
     "slug": "guildchat",
     "version": "1.0.1",
+    "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/foechat.png",
     "splash": {
@@ -27,7 +28,8 @@
     },
     "ios": {
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Дозвольте доступ до мікрофона для запису голосових повідомлень."
+        "NSMicrophoneUsageDescription": "Дозвольте доступ до мікрофона для запису голосових повідомлень.",
+        "NSPhotoLibraryUsageDescription": "Дозвольте доступ до фото, щоб вибирати аватарки спільнот."
       }
     },
     "plugins": [

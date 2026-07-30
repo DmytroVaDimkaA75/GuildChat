@@ -228,10 +228,29 @@ const navigationTheme = {
 const AppContent = () => {
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const { guildId } = useContext(GuildContext);
+  const [activeUserId, setActiveUserId] = useState(null);
   const [selectedOption, setSelectedOption] = useState(i18n.t("server"));
   const [userData, setUserData] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    AsyncStorage.getItem("userId")
+      .then((storedUserId) => {
+        if (!cancelled) {
+          setActiveUserId(storedUserId || null);
+        }
+      })
+      .catch((error) => {
+        console.error("Помилка при зчитуванні userId:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const initLanguage = async () => {
@@ -386,68 +405,84 @@ const AppContent = () => {
   }, [guildId]);
 
   useEffect(() => {
-    let presenceRef;
-    let connectedRef;
-    let appStateSubscription;
+    if (!activeUserId || !guildId) return undefined;
 
-    const updatePresence = async (state) => {
-      if (!presenceRef) return;
-      await presenceRef.set({
+    let disposed = false;
+    const presenceRef = database().ref(
+      `guilds/${guildId}/guildUsers/${activeUserId}/presence`
+    );
+    const connectedRef = database().ref(".info/connected");
+
+    const updatePresence = (state) => {
+      const timestamp = database.ServerValue.TIMESTAMP;
+      return presenceRef.update({
         state,
-        lastChanged: database.ServerValue.TIMESTAMP,
+        lastChanged: timestamp,
+        lastActivityAt: timestamp,
       });
     };
 
-    const setupPresence = async () => {
-      const userId = await AsyncStorage.getItem("userId");
-      if (!userId || !guildId) return;
+    const handleConnectionChange = async (snapshot) => {
+      if (snapshot.val() !== true) return;
 
-      presenceRef = database().ref(`guilds/${guildId}/guildUsers/${userId}/presence`);
-      connectedRef = database().ref(".info/connected");
+      try {
+        const timestamp = database.ServerValue.TIMESTAMP;
+        await presenceRef.onDisconnect().update({
+          state: "offline",
+          lastChanged: timestamp,
+          lastActivityAt: timestamp,
+        });
+        if (!disposed) {
+          await updatePresence(
+            AppState.currentState === "active" ? "online" : "offline"
+          );
+        }
+      } catch (error) {
+        if (!disposed) {
+          console.log(
+            "❌ Не вдалося оновити presence:",
+            error?.message || String(error)
+          );
+        }
+      }
+    };
 
-      connectedRef.on("value", async (snapshot) => {
-        if (snapshot.val() === true) {
-          presenceRef.onDisconnect().set({
-            state: "offline",
-            lastChanged: database.ServerValue.TIMESTAMP,
-          });
+    connectedRef.on("value", handleConnectionChange);
 
-          if (AppState.currentState === "active") {
-            await updatePresence("online");
-          } else {
-            await updatePresence("offline");
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextState) => {
+        updatePresence(nextState === "active" ? "online" : "offline").catch(
+          (error) => {
+            if (!disposed) {
+              console.log(
+                "❌ Не вдалося змінити presence:",
+                error?.message || String(error)
+              );
+            }
           }
-        } else {
-          await updatePresence("offline");
-        }
-      });
-
-      appStateSubscription = AppState.addEventListener("change", (nextState) => {
-        if (nextState === "active") {
-          updatePresence("online");
-        } else {
-          updatePresence("offline");
-        }
-      });
-    };
-
-    setupPresence();
+        );
+      }
+    );
 
     return () => {
-      if (presenceRef) {
-        presenceRef.set({
-          state: "offline",
-          lastChanged: database.ServerValue.TIMESTAMP,
-        });
-      }
-      if (connectedRef) {
-        connectedRef.off();
-      }
-      if (appStateSubscription) {
-        appStateSubscription.remove();
-      }
+      disposed = true;
+      connectedRef.off("value", handleConnectionChange);
+      appStateSubscription.remove();
+      presenceRef
+        .onDisconnect()
+        .cancel()
+        .catch(() => {})
+        .then(() =>
+          presenceRef.update({
+            state: "offline",
+            lastChanged: database.ServerValue.TIMESTAMP,
+            lastActivityAt: database.ServerValue.TIMESTAMP,
+          })
+        )
+        .catch(() => {});
     };
-  }, [guildId]);
+  }, [activeUserId, guildId]);
 
   useEffect(() => {
     const checkAndLogWorldData = async () => {
@@ -499,6 +534,7 @@ const AppContent = () => {
     if (!checked) setLoading(true);
     try {
       const userId = await AsyncStorage.getItem("userId");
+      setActiveUserId(userId || null);
       if (activeGuildId && userId) {
         const snapshot = await database().ref(`users/${userId}`).once('value');
         setUserData(snapshot.exists());

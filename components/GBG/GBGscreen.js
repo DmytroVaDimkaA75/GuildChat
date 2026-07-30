@@ -1382,7 +1382,7 @@ const styles = StyleSheet.create({
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
   loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
   infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { width: "100%", maxHeight: HALF_HEIGHT, alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
+  mapContainer: { width: "100%", alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
 
   listContainer: { flex: 1, width: "100%", paddingTop: 20 },
 

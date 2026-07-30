@@ -1,12 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
+import storage from '@react-native-firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Modal,
+  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -42,9 +46,9 @@ export default function CommunityScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newAvatarUri, setNewAvatarUri] = useState('');
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [newCategory, setNewCategory] = useState('');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -139,23 +143,74 @@ export default function CommunityScreen({ navigation }) {
     });
   };
 
+  const resetCreateForm = () => {
+    setNewAvatarUri('');
+    setNewName('');
+    setNewDescription('');
+  };
+
+  const openCreateModal = () => {
+    resetCreateForm();
+    setCreateModalVisible(true);
+  };
+
+  const closeCreateModal = () => {
+    if (creating) return;
+    setCreateModalVisible(false);
+    resetCreateForm();
+  };
+
+  const pickCommunityAvatar = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== 'granted') {
+          Alert.alert(
+            'Потрібен доступ до фото',
+            'Дозвольте доступ до медіатеки, щоб вибрати аватарку спільноти.'
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setNewAvatarUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Помилка вибору аватарки спільноти:', error);
+      Alert.alert('Не вдалося вибрати фото', 'Спробуйте вибрати інше зображення.');
+    }
+  };
+
   const createCommunity = async () => {
     const name = newName.trim();
-    if (!name || creating) return;
+    if (!name || !newAvatarUri || creating) return;
     if (!userId) {
       Alert.alert('Потрібен профіль', 'Увійдіть у профіль, щоб створити спільноту.');
       return;
     }
 
     setCreating(true);
+    let avatarRef = null;
+    let communityPersisted = false;
     try {
       const communityRef = database().ref('communities').push();
       const communityId = communityRef.key;
+      avatarRef = storage().ref(`communities/${communityId}/avatar.jpg`);
+      await avatarRef.putFile(newAvatarUri);
+      const avatarUrl = await avatarRef.getDownloadURL();
+
       const community = {
         name,
         description: newDescription.trim() || 'Нова міжсвітова спільнота.',
-        category: newCategory.trim() || 'Інше',
-        icon: '💬',
+        avatarUrl,
         createdBy: userId,
         createdAt: database.ServerValue.TIMESTAMP,
         memberCount: 1,
@@ -185,16 +240,18 @@ export default function CommunityScreen({ navigation }) {
       updates[`communities/${communityId}`] = community;
       updates[`communityMemberships/${userId}/${communityId}`] = true;
       await database().ref().update(updates);
+      communityPersisted = true;
 
-      setNewName('');
-      setNewDescription('');
-      setNewCategory('');
       setCreateModalVisible(false);
+      resetCreateForm();
       navigation.navigate('CommunityChannels', {
         communityId,
         communityName: name,
       });
     } catch (error) {
+      if (avatarRef && !communityPersisted) {
+        avatarRef.delete().catch(() => {});
+      }
       console.error('Помилка створення спільноти:', error);
       Alert.alert('Не вдалося створити спільноту', 'Перевірте з’єднання та спробуйте ще раз.');
     } finally {
@@ -208,11 +265,14 @@ export default function CommunityScreen({ navigation }) {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.communityIcon}>
-            <Text style={styles.emoji}>{item.icon || '💬'}</Text>
+            {item.avatarUrl ? (
+              <Image source={{ uri: item.avatarUrl }} style={styles.communityAvatar} />
+            ) : (
+              <Text style={styles.emoji}>{item.icon || '💬'}</Text>
+            )}
           </View>
           <View style={styles.cardTitleBlock}>
             <Text style={styles.cardTitle}>{item.name}</Text>
-            <Text style={styles.category}>{item.category}</Text>
           </View>
           {joined && (
             <View style={styles.joinedBadge}>
@@ -297,7 +357,7 @@ export default function CommunityScreen({ navigation }) {
       <TouchableOpacity
         accessibilityLabel="Створити спільноту"
         style={styles.floatingButton}
-        onPress={() => setCreateModalVisible(true)}
+        onPress={openCreateModal}
       >
         <MaterialIcons name="add" size={28} color="#fff" />
       </TouchableOpacity>
@@ -306,7 +366,7 @@ export default function CommunityScreen({ navigation }) {
         visible={createModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setCreateModalVisible(false)}
+        onRequestClose={closeCreateModal}
       >
         <SafeAreaView style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -315,28 +375,40 @@ export default function CommunityScreen({ navigation }) {
                 <Text style={styles.modalTitle}>Нова спільнота</Text>
                 <Text style={styles.modalSubtitle}>Ви станете її власником</Text>
               </View>
-              <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
+              <TouchableOpacity disabled={creating} onPress={closeCreateModal}>
                 <MaterialIcons name="close" size={24} color={COLORS.muted} />
               </TouchableOpacity>
             </View>
+            <Text style={styles.fieldLabel}>АВАТАРКА *</Text>
+            <TouchableOpacity
+              accessibilityLabel={newAvatarUri ? 'Замінити аватарку' : 'Обрати аватарку'}
+              activeOpacity={0.8}
+              disabled={creating}
+              onPress={pickCommunityAvatar}
+              style={styles.avatarPicker}
+            >
+              {newAvatarUri ? (
+                <Image source={{ uri: newAvatarUri }} style={styles.avatarPreview} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <MaterialIcons name="add-a-photo" size={28} color={COLORS.primary} />
+                </View>
+              )}
+              <View style={styles.avatarPickerText}>
+                <Text style={styles.avatarPickerTitle}>
+                  {newAvatarUri ? 'Замінити аватарку' : 'Обрати аватарку'}
+                </Text>
+                <Text style={styles.avatarPickerHint}>Квадратне зображення виглядатиме найкраще</Text>
+              </View>
+            </TouchableOpacity>
             <Text style={styles.fieldLabel}>НАЗВА *</Text>
             <TextInput
-              autoFocus
               value={newName}
               onChangeText={setNewName}
               style={styles.modalInput}
               placeholder="Назва спільноти"
               placeholderTextColor={COLORS.muted}
               maxLength={60}
-            />
-            <Text style={styles.fieldLabel}>КАТЕГОРІЯ</Text>
-            <TextInput
-              value={newCategory}
-              onChangeText={setNewCategory}
-              style={styles.modalInput}
-              placeholder="Ігри, творчість, допомога…"
-              placeholderTextColor={COLORS.muted}
-              maxLength={30}
             />
             <Text style={styles.fieldLabel}>ОПИС</Text>
             <TextInput
@@ -349,8 +421,11 @@ export default function CommunityScreen({ navigation }) {
               maxLength={240}
             />
             <TouchableOpacity
-              style={[styles.createButton, !newName.trim() && styles.createButtonDisabled]}
-              disabled={!newName.trim() || creating}
+              style={[
+                styles.createButton,
+                (!newAvatarUri || !newName.trim()) && styles.createButtonDisabled,
+              ]}
+              disabled={!newAvatarUri || !newName.trim() || creating}
               onPress={createCommunity}
             >
               {creating ? (
@@ -408,10 +483,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
     width: 46,
   },
+  communityAvatar: { borderRadius: 13, height: '100%', width: '100%' },
   emoji: { fontSize: 24 },
   cardTitleBlock: { flex: 1 },
   cardTitle: { color: COLORS.text, fontSize: 17, fontWeight: '700' },
-  category: { color: COLORS.primary, fontSize: 12, marginTop: 3 },
   joinedBadge: { alignItems: 'center', flexDirection: 'row', gap: 3 },
   joinedText: { color: COLORS.success, fontSize: 12, fontWeight: '600' },
   description: { color: COLORS.muted, fontSize: 14, lineHeight: 20, marginTop: 13 },
@@ -464,6 +539,30 @@ const styles = StyleSheet.create({
   modalTitle: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
   modalSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 3 },
   fieldLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '700', marginBottom: 7, marginTop: 10 },
+  avatarPicker: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceHighlight,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    padding: 10,
+  },
+  avatarPreview: { borderRadius: 14, height: 68, width: 68 },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    height: 68,
+    justifyContent: 'center',
+    width: 68,
+  },
+  avatarPickerText: { flex: 1, marginLeft: 12 },
+  avatarPickerTitle: { color: COLORS.primary, fontSize: 14, fontWeight: '700' },
+  avatarPickerHint: { color: COLORS.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
   modalInput: {
     backgroundColor: COLORS.surfaceHighlight,
     borderColor: COLORS.border,

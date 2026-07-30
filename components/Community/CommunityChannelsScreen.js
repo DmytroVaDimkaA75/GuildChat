@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -34,7 +36,24 @@ const formatTime = (timestamp) => {
   return date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
 };
 
+const getProfileAvatarUrl = (profile) => {
+  if (!profile || typeof profile !== 'object') return '';
+
+  const directUrl = profile.avatarUrl || profile.imageUrl;
+  if (typeof directUrl === 'string' && directUrl.trim()) return directUrl;
+
+  const guildProfile = Object.values(profile).find(
+    (value) =>
+      value &&
+      typeof value === 'object' &&
+      typeof value.imageUrl === 'string' &&
+      value.imageUrl.trim()
+  );
+  return guildProfile?.imageUrl || '';
+};
+
 export default function CommunityChannelsScreen({ route, navigation }) {
+  const headerHeight = useHeaderHeight();
   const { communityId, communityName } = route.params || {};
   const [community, setCommunity] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -51,6 +70,12 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState({});
+  const [channelMenuExpanded, setChannelMenuExpanded] = useState(false);
+  const [membersModalVisible, setMembersModalVisible] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState({});
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [memberRoleBusyId, setMemberRoleBusyId] = useState('');
+  const [membersError, setMembersError] = useState('');
   const messageListRef = useRef(null);
 
   useEffect(() => {
@@ -148,6 +173,161 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   }, [channels, community?.categories]);
   const memberRole = community?.members?.[identity.userId]?.role;
   const canManageChannels = memberRole === 'owner' || memberRole === 'moderator';
+  const isCommunityAuthor =
+    Boolean(identity.userId) &&
+    community?.createdBy === identity.userId &&
+    memberRole === 'owner';
+  const communityMemberIds = useMemo(
+    () => Object.keys(community?.members || {}).sort(),
+    [community?.members]
+  );
+  const memberRows = useMemo(
+    () =>
+      communityMemberIds
+        .map((userId) => ({
+          id: userId,
+          role: community?.members?.[userId]?.role || 'member',
+          userName: memberProfiles[userId]?.userName || userId,
+          avatarUrl: memberProfiles[userId]?.avatarUrl || '',
+        }))
+        .sort((a, b) => {
+          if (a.role === 'owner' && b.role !== 'owner') return -1;
+          if (a.role !== 'owner' && b.role === 'owner') return 1;
+          return a.userName.localeCompare(b.userName, 'uk');
+        }),
+    [community?.members, communityMemberIds, memberProfiles]
+  );
+
+  useEffect(() => {
+    if (!membersModalVisible) return undefined;
+
+    let active = true;
+    const loadMemberProfiles = async () => {
+      setMembersLoading(true);
+      setMembersError('');
+      let hasLoadError = false;
+
+      const profiles = await Promise.all(
+        communityMemberIds.map(async (userId) => {
+          try {
+            const snapshot = await database().ref(`users/${userId}`).once('value');
+            const profile = snapshot.val() || {};
+            return [
+              userId,
+              {
+                userName: profile.userName || userId,
+                avatarUrl: getProfileAvatarUrl(profile),
+              },
+            ];
+          } catch (error) {
+            console.error(`Помилка завантаження учасника ${userId}:`, error);
+            hasLoadError = true;
+            return [userId, { userName: userId, avatarUrl: '' }];
+          }
+        })
+      );
+
+      if (!active) return;
+      setMemberProfiles(Object.fromEntries(profiles));
+      setMembersLoading(false);
+      if (hasLoadError) {
+        setMembersError('Деякі профілі не вдалося завантажити. Для них показано ID.');
+      }
+    };
+
+    loadMemberProfiles().catch((error) => {
+      console.error('Помилка завантаження учасників спільноти:', error);
+      if (!active) return;
+      setMembersLoading(false);
+      setMembersError('Не вдалося завантажити профілі учасників.');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [communityMemberIds, membersModalVisible]);
+
+  useEffect(() => {
+    if (membersModalVisible && !isCommunityAuthor) {
+      setMembersModalVisible(false);
+      setMembersError('');
+    }
+  }, [isCommunityAuthor, membersModalVisible]);
+
+  const openMembersModal = () => {
+    if (!isCommunityAuthor) return;
+    setMembersError('');
+    setChannelMenuExpanded(false);
+    setMembersModalVisible(true);
+  };
+
+  const toggleMemberRole = async (targetUserId) => {
+    if (!targetUserId || memberRoleBusyId) return;
+
+    setMemberRoleBusyId(targetUserId);
+    setMembersError('');
+    try {
+      if (!communityId || !identity.userId) {
+        throw new Error('Не вдалося підтвердити ваш профіль.');
+      }
+
+      const communityRef = database().ref(`communities/${communityId}`);
+      const latestSnapshot = await communityRef.once('value');
+      const latestCommunity = latestSnapshot.val();
+      const latestAuthorRole = latestCommunity?.members?.[identity.userId]?.role;
+      const latestTargetRole = latestCommunity?.members?.[targetUserId]?.role;
+
+      if (
+        !latestCommunity ||
+        latestCommunity.createdBy !== identity.userId ||
+        latestAuthorRole !== 'owner'
+      ) {
+        throw new Error('Право керувати учасниками більше не підтверджено.');
+      }
+      if (latestTargetRole === 'owner') {
+        throw new Error('Роль автора спільноти змінити не можна.');
+      }
+      if (latestTargetRole !== 'member' && latestTargetRole !== 'moderator') {
+        throw new Error('Учасника більше немає у спільноті або його роль змінилася.');
+      }
+
+      const result = await communityRef.transaction((currentCommunity) => {
+        const currentAuthorRole = currentCommunity?.members?.[identity.userId]?.role;
+        const currentTarget = currentCommunity?.members?.[targetUserId];
+        const currentTargetRole = currentTarget?.role;
+
+        if (
+          !currentCommunity ||
+          currentCommunity.createdBy !== identity.userId ||
+          currentAuthorRole !== 'owner' ||
+          currentTargetRole === 'owner' ||
+          (currentTargetRole !== 'member' && currentTargetRole !== 'moderator')
+        ) {
+          return undefined;
+        }
+
+        return {
+          ...currentCommunity,
+          members: {
+            ...currentCommunity.members,
+            [targetUserId]: {
+              ...currentTarget,
+              role: currentTargetRole === 'moderator' ? 'member' : 'moderator',
+            },
+          },
+        };
+      });
+
+      if (!result.committed) {
+        throw new Error('Роль змінилася до запису. Оновіть список і спробуйте ще раз.');
+      }
+    } catch (error) {
+      console.error('Помилка зміни ролі учасника:', error);
+      setMembersError(error.message || 'Не вдалося змінити роль учасника.');
+    } finally {
+      setMemberRoleBusyId('');
+    }
+  };
 
   const createChannel = async () => {
     const normalizedName = newChannelName
@@ -192,6 +372,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
       setNewChannelDescription('');
       setNewChannelCategory(categoryName);
       setChannelModalVisible(false);
+      setChannelMenuExpanded(false);
     } catch (error) {
       console.error('Помилка створення каналу:', error);
       Alert.alert('Не вдалося створити канал', 'Перевірте з’єднання та спробуйте ще раз.');
@@ -331,14 +512,30 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      keyboardVerticalOffset={headerHeight}
     >
       <View style={styles.communityHeader}>
-        <Text style={styles.emoji}>{community.icon || '💬'}</Text>
+        {community.avatarUrl ? (
+          <Image
+            source={{ uri: community.avatarUrl }}
+            style={styles.communityAvatar}
+          />
+        ) : (
+          <Text style={styles.emoji}>{community.icon || '💬'}</Text>
+        )}
         <View style={styles.headerText}>
           <Text style={styles.communityName}>{community.name}</Text>
           <Text style={styles.communityDescription} numberOfLines={1}>{community.description}</Text>
         </View>
+        {isCommunityAuthor && (
+          <TouchableOpacity
+            accessibilityLabel="Керувати учасниками"
+            onPress={openMembersModal}
+            style={styles.headerAction}
+          >
+            <MaterialIcons name="manage-accounts" size={23} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           accessibilityLabel="Вийти зі спільноти"
           onPress={leaveCommunity}
@@ -349,94 +546,118 @@ export default function CommunityChannelsScreen({ route, navigation }) {
       </View>
 
       <View style={styles.channelSection}>
-        <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionLabel}>ТЕМИ ТА КАНАЛИ</Text>
-          {canManageChannels && (
-            <View style={styles.manageButtons}>
-              <TouchableOpacity
-                style={styles.addChannelButton}
-                onPress={() => setCategoryModalVisible(true)}
-              >
-                <MaterialIcons name="create-new-folder" size={17} color={COLORS.primary} />
-                <Text style={styles.addChannelText}>Тема</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.addChannelButton}
-                onPress={() => setChannelModalVisible(true)}
-              >
-                <MaterialIcons name="add" size={18} color={COLORS.primary} />
-                <Text style={styles.addChannelText}>Канал</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        <ScrollView
-          style={styles.groupsScroll}
-          contentContainerStyle={styles.groupsContent}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator={false}
+        <TouchableOpacity
+          accessibilityLabel="Теми та канали"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: channelMenuExpanded }}
+          activeOpacity={0.8}
+          onPress={() => setChannelMenuExpanded((current) => !current)}
+          style={styles.channelSelector}
         >
-          {channelGroups.map((group) => {
-            const collapsed = Boolean(collapsedCategories[group.id]);
-            return (
-              <View key={group.id} style={styles.channelGroup}>
+          <Text style={styles.sectionLabel}>ТЕМИ ТА КАНАЛИ</Text>
+          <Text numberOfLines={1} style={styles.selectedChannelLabel}>
+            {selectedChannel?.name ? `# ${selectedChannel.name}` : 'Оберіть канал'}
+          </Text>
+          <MaterialIcons
+            name={channelMenuExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+            size={24}
+            color={COLORS.muted}
+          />
+        </TouchableOpacity>
+
+        {channelMenuExpanded && (
+          <View style={styles.channelDropdownContent}>
+            {canManageChannels && (
+              <View style={styles.dropdownManageRow}>
                 <TouchableOpacity
-                  style={styles.groupHeader}
-                  onPress={() =>
-                    setCollapsedCategories((current) => ({
-                      ...current,
-                      [group.id]: !current[group.id],
-                    }))
-                  }
+                  style={styles.addChannelButton}
+                  onPress={() => setCategoryModalVisible(true)}
                 >
-                  <MaterialIcons
-                    name={collapsed ? 'keyboard-arrow-right' : 'keyboard-arrow-down'}
-                    size={21}
-                    color={COLORS.muted}
-                  />
-                  <Text style={styles.groupTitle}>{group.name}</Text>
-                  <Text style={styles.groupCount}>{group.channels.length}</Text>
+                  <MaterialIcons name="create-new-folder" size={17} color={COLORS.primary} />
+                  <Text style={styles.addChannelText}>Тема</Text>
                 </TouchableOpacity>
-                {!collapsed &&
-                  (group.channels.length ? group.channels.map((item) => {
-                    const active = selectedChannel?.id === item.id;
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={[styles.channelRow, active && styles.channelRowActive]}
-                        onPress={() => setSelectedChannel(item)}
-                      >
-                        <Text style={[styles.hash, active && styles.channelTextActive]}>#</Text>
-                        <View style={styles.channelRowText}>
-                          <Text style={[styles.channelText, active && styles.channelTextActive]}>
-                            {item.name}
-                          </Text>
-                          {item.description ? (
-                            <Text numberOfLines={1} style={styles.channelRowDescription}>
-                              {item.description}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  }) : (
-                    <TouchableOpacity
-                      style={styles.emptyGroup}
-                      disabled={!canManageChannels}
-                      onPress={() => {
-                        setNewChannelCategory(group.name);
-                        setChannelModalVisible(true);
-                      }}
-                    >
-                      <Text style={styles.emptyGroupText}>
-                        {canManageChannels ? '+ Додати перший канал' : 'Каналів ще немає'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                <TouchableOpacity
+                  style={styles.addChannelButton}
+                  onPress={() => setChannelModalVisible(true)}
+                >
+                  <MaterialIcons name="add" size={18} color={COLORS.primary} />
+                  <Text style={styles.addChannelText}>Канал</Text>
+                </TouchableOpacity>
               </View>
-            );
-          })}
-        </ScrollView>
+            )}
+
+            <ScrollView
+              style={styles.groupsScroll}
+              contentContainerStyle={styles.groupsContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              {channelGroups.map((group) => {
+                const collapsed = Boolean(collapsedCategories[group.id]);
+                return (
+                  <View key={group.id} style={styles.channelGroup}>
+                    <TouchableOpacity
+                      style={styles.groupHeader}
+                      onPress={() =>
+                        setCollapsedCategories((current) => ({
+                          ...current,
+                          [group.id]: !current[group.id],
+                        }))
+                      }
+                    >
+                      <MaterialIcons
+                        name={collapsed ? 'keyboard-arrow-right' : 'keyboard-arrow-down'}
+                        size={21}
+                        color={COLORS.muted}
+                      />
+                      <Text style={styles.groupTitle}>{group.name}</Text>
+                      <Text style={styles.groupCount}>{group.channels.length}</Text>
+                    </TouchableOpacity>
+                    {!collapsed &&
+                      (group.channels.length ? group.channels.map((item) => {
+                        const active = selectedChannel?.id === item.id;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={[styles.channelRow, active && styles.channelRowActive]}
+                            onPress={() => {
+                              setSelectedChannel(item);
+                              setChannelMenuExpanded(false);
+                            }}
+                          >
+                            <Text style={[styles.hash, active && styles.channelTextActive]}>#</Text>
+                            <View style={styles.channelRowText}>
+                              <Text style={[styles.channelText, active && styles.channelTextActive]}>
+                                {item.name}
+                              </Text>
+                              {item.description ? (
+                                <Text numberOfLines={1} style={styles.channelRowDescription}>
+                                  {item.description}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }) : (
+                        <TouchableOpacity
+                          style={styles.emptyGroup}
+                          disabled={!canManageChannels}
+                          onPress={() => {
+                            setNewChannelCategory(group.name);
+                            setChannelModalVisible(true);
+                          }}
+                        >
+                          <Text style={styles.emptyGroupText}>
+                            {canManageChannels ? '+ Додати перший канал' : 'Каналів ще немає'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       <View style={styles.channelHeading}>
@@ -492,6 +713,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
           style={styles.input}
           value={message}
           onChangeText={setMessage}
+          onFocus={() => setChannelMenuExpanded(false)}
           placeholder={`Написати в #${selectedChannel?.name || ''}`}
           placeholderTextColor={COLORS.muted}
           multiline
@@ -509,6 +731,119 @@ export default function CommunityChannelsScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={membersModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMembersModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.membersModalCard]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Учасники</Text>
+                <Text style={styles.modalSubtitle}>
+                  {memberRows.length} у спільноті
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityLabel="Закрити список учасників"
+                onPress={() => setMembersModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {membersError ? (
+              <View style={styles.membersError}>
+                <MaterialIcons name="error-outline" size={18} color="#ff9a9a" />
+                <Text style={styles.membersErrorText}>{membersError}</Text>
+              </View>
+            ) : null}
+
+            {membersLoading ? (
+              <View style={styles.membersLoading}>
+                <ActivityIndicator color={COLORS.primary} />
+                <Text style={styles.membersLoadingText}>Завантаження учасників…</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={memberRows}
+                keyExtractor={(item) => item.id}
+                style={styles.membersList}
+                contentContainerStyle={styles.membersListContent}
+                ListEmptyComponent={
+                  <Text style={styles.emptyMembersText}>Учасників не знайдено.</Text>
+                }
+                renderItem={({ item }) => {
+                  const isOwner = item.role === 'owner';
+                  const isBusy = memberRoleBusyId === item.id;
+                  return (
+                    <View style={styles.memberRow}>
+                      {item.avatarUrl ? (
+                        <Image source={{ uri: item.avatarUrl }} style={styles.memberAvatar} />
+                      ) : (
+                        <View style={[styles.memberAvatar, styles.memberAvatarFallback]}>
+                          <Text style={styles.memberAvatarText}>
+                            {String(item.userName || item.id).slice(0, 1).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.memberDetails}>
+                        <Text numberOfLines={1} style={styles.memberName}>
+                          {item.userName}
+                        </Text>
+                        {item.userName !== item.id ? (
+                          <Text numberOfLines={1} style={styles.memberId}>
+                            {item.id}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.memberRole}>
+                          {isOwner
+                            ? 'Автор'
+                            : item.role === 'moderator'
+                              ? 'Модератор'
+                              : 'Учасник'}
+                        </Text>
+                      </View>
+                      {isOwner ? (
+                        <View style={styles.authorBadge}>
+                          <MaterialIcons name="verified-user" size={15} color={COLORS.primary} />
+                          <Text style={styles.authorBadgeText}>Автор</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          accessibilityLabel={
+                            item.role === 'moderator'
+                              ? `Зняти роль модератора з ${item.userName}`
+                              : `Призначити ${item.userName} модератором`
+                          }
+                          disabled={Boolean(memberRoleBusyId)}
+                          onPress={() => toggleMemberRole(item.id)}
+                          style={[
+                            styles.memberRoleButton,
+                            item.role === 'moderator' && styles.memberRoleButtonActive,
+                            Boolean(memberRoleBusyId) && styles.memberRoleButtonDisabled,
+                          ]}
+                        >
+                          {isBusy ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.memberRoleButtonText}>
+                              {item.role === 'moderator' ? 'Зняти роль' : 'Призначити'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={channelModalVisible}
@@ -644,6 +979,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 14,
   },
+  communityAvatar: {
+    backgroundColor: COLORS.surfaceHighlight,
+    borderRadius: 24,
+    height: 48,
+    marginRight: 12,
+    width: 48,
+  },
   emoji: { fontSize: 30, marginRight: 12 },
   headerText: { flex: 1 },
   headerAction: { padding: 9 },
@@ -654,20 +996,38 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     borderBottomWidth: 1,
     maxHeight: 285,
-    paddingTop: 10,
   },
-  sectionTitleRow: {
+  channelSelector: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    minHeight: 48,
     paddingHorizontal: 14,
   },
-  sectionLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '700' },
-  manageButtons: { alignItems: 'center', flexDirection: 'row', gap: 14 },
+  sectionLabel: { color: COLORS.muted, fontSize: 10, fontWeight: '700', marginRight: 12 },
+  selectedChannelLabel: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  channelDropdownContent: {
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    flexShrink: 1,
+  },
+  dropdownManageRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
   addChannelButton: { alignItems: 'center', flexDirection: 'row', gap: 3, paddingVertical: 3 },
   addChannelText: { color: COLORS.primary, fontSize: 12, fontWeight: '600' },
-  groupsScroll: { marginTop: 7 },
-  groupsContent: { paddingBottom: 9 },
+  groupsScroll: { maxHeight: 200 },
+  groupsContent: { paddingBottom: 9, paddingTop: 4 },
   channelGroup: { paddingHorizontal: 9 },
   groupHeader: {
     alignItems: 'center',
@@ -797,6 +1157,64 @@ const styles = StyleSheet.create({
   },
   modalTitle: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
   modalSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 3 },
+  membersModalCard: { maxHeight: '85%' },
+  membersError: {
+    alignItems: 'center',
+    backgroundColor: '#3a2024',
+    borderRadius: 9,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    padding: 10,
+  },
+  membersErrorText: { color: '#ffb4b4', flex: 1, fontSize: 12, lineHeight: 17 },
+  membersLoading: { alignItems: 'center', gap: 10, paddingVertical: 34 },
+  membersLoadingText: { color: COLORS.muted, fontSize: 13 },
+  membersList: { flexGrow: 0 },
+  membersListContent: { gap: 9, paddingBottom: 2 },
+  emptyMembersText: { color: COLORS.muted, paddingVertical: 24, textAlign: 'center' },
+  memberRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceHighlight,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    padding: 10,
+  },
+  memberAvatar: { borderRadius: 20, height: 40, marginRight: 10, width: 40 },
+  memberAvatarFallback: {
+    alignItems: 'center',
+    backgroundColor: '#315b85',
+    justifyContent: 'center',
+  },
+  memberAvatarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  memberDetails: { flex: 1, marginRight: 8 },
+  memberName: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  memberId: { color: '#727b89', fontSize: 9, marginTop: 1 },
+  memberRole: { color: COLORS.muted, fontSize: 11, marginTop: 3 },
+  authorBadge: {
+    alignItems: 'center',
+    backgroundColor: '#1b3550',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  authorBadgeText: { color: '#8bc3ff', fontSize: 11, fontWeight: '700' },
+  memberRoleButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 9,
+    justifyContent: 'center',
+    minHeight: 34,
+    minWidth: 82,
+    paddingHorizontal: 9,
+  },
+  memberRoleButtonActive: { backgroundColor: '#734b50' },
+  memberRoleButtonDisabled: { opacity: 0.55 },
+  memberRoleButtonText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   fieldLabel: { color: COLORS.muted, fontSize: 11, fontWeight: '700', marginBottom: 7, marginTop: 9 },
   categoryChoices: { gap: 7, paddingBottom: 8 },
   categoryChoice: {
