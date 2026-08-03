@@ -147,7 +147,11 @@ const ukTranslation = {
     datesTitle: "Графік за датами",
     noTimeSet: "Час не задано",
     selectedDaysCount: "обрано днів: {{count}}",
-    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
+    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
+    deleteConfirmationTitle: "Видалення графіка",
+    deleteConfirmationMessage: "Видалити цей графік активності?",
+    cancel: "Скасувати",
+    delete: "Видалити"
   },
   customDrawer: {
     addWorld: "Додати світ",
@@ -504,7 +508,11 @@ const ruTranslation = {
     datesTitle: "График по датам",
     noTimeSet: "Время не задано",
     selectedDaysCount: "выбрано дней: {{count}}",
-    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+    deleteConfirmationTitle: "Удаление графика",
+    deleteConfirmationMessage: "Удалить этот график активности?",
+    cancel: "Отмена",
+    delete: "Удалить"
   },
   customDrawer: {
     addWorld: "Добавить мир",
@@ -861,7 +869,11 @@ const beTranslation = {
     datesTitle: "Графік па датах",
     noTimeSet: "Час не зададзены",
     selectedDaysCount: "абрана дзён: {{count}}",
-    daysShort: ["Пн", "Аў", "Ср", "Чц", "Пт", "Сб", "Нд"]
+    daysShort: ["Пн", "Аў", "Ср", "Чц", "Пт", "Сб", "Нд"],
+    deleteConfirmationTitle: "Выдаленне графіка",
+    deleteConfirmationMessage: "Выдаліць гэты графік актыўнасці?",
+    cancel: "Скасаваць",
+    delete: "Выдаліць"
   },
   customDrawer: {
     addWorld: "Дадаць свет",
@@ -1218,7 +1230,11 @@ const deTranslation = {
     datesTitle: "Zeitplan nach Daten",
     noTimeSet: "Zeit nicht festgelegt",
     selectedDaysCount: "ausgewählte Tage: {{count}}",
-    daysShort: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    daysShort: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+    deleteConfirmationTitle: "Zeitplan löschen",
+    deleteConfirmationMessage: "Diesen Aktivitätszeitplan löschen?",
+    cancel: "Abbrechen",
+    delete: "Löschen"
   },
   customDrawer: {
     addWorld: "Welt hinzufügen",
@@ -1637,7 +1653,11 @@ const enOverrides = {
     datesTitle: "Schedule by dates",
     noTimeSet: "Time not set",
     selectedDaysCount: "selected days: {{count}}",
-    daysShort: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    daysShort: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    deleteConfirmationTitle: "Delete schedule",
+    deleteConfirmationMessage: "Delete this activity schedule?",
+    cancel: "Cancel",
+    delete: "Delete"
   },
   customDrawer: {
     addWorld: "Add world",

@@ -2,11 +2,23 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  PanResponder,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 const TOTAL_MINUTES = 24 * 60;
+const SWIPE_DELETE_THRESHOLD = 80;
+const DELETE_ACTION_WIDTH = 96;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const formatMinutes = (value) => {
   if (typeof value !== 'number') return null;
@@ -199,12 +211,95 @@ const buildScheduleSummary = (scheduleId, scheduleData, t, daysShort) => {
   return null;
 };
 
+const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const { t } = useTranslation();
+
+  const resetSwipe = useCallback(() => {
+    Animated.spring(swipeX, {
+      toValue: 0,
+      useNativeDriver: true
+    }).start();
+  }, [swipeX]);
+
+  const confirmDelete = useCallback(() => {
+    Alert.alert(
+      t('addSchedule.deleteConfirmationTitle'),
+      t('addSchedule.deleteConfirmationMessage'),
+      [
+        { text: t('addSchedule.cancel'), style: 'cancel', onPress: resetSwipe },
+        {
+          text: t('addSchedule.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await onDelete(schedule.id);
+              Animated.timing(swipeX, {
+                toValue: -SCREEN_WIDTH,
+                duration: 180,
+                useNativeDriver: true
+              }).start();
+            } catch (error) {
+              console.error('Помилка видалення графіка активності:', error);
+              resetSwipe();
+            }
+          }
+        }
+      ],
+      { cancelable: true, onDismiss: resetSwipe }
+    );
+  }, [onDelete, resetSwipe, schedule.id, swipeX, t]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          gestureState.dx < -10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dx < 0) {
+            swipeX.setValue(Math.max(gestureState.dx, -DELETE_ACTION_WIDTH));
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dx <= -SWIPE_DELETE_THRESHOLD) {
+            confirmDelete();
+          } else {
+            resetSwipe();
+          }
+        },
+        onPanResponderTerminate: resetSwipe
+      }),
+    [confirmDelete, resetSwipe, swipeX]
+  );
+
+  return (
+    <View style={styles.swipeContainer}>
+      <View style={styles.deleteBackground}>
+        <MaterialIcons name="delete-outline" size={25} color="#fff" />
+        <Text style={styles.deleteText}>{t('addSchedule.delete')}</Text>
+      </View>
+      <Animated.View style={{ transform: [{ translateX: swipeX }] }} {...panResponder.panHandlers}>
+        <TouchableOpacity style={styles.scheduleItem} onPress={onPress} activeOpacity={0.75}>
+          <View style={styles.scheduleText}>
+            <Text style={styles.scheduleTitle}>{schedule.title}</Text>
+            <Text style={styles.scheduleSubtitle}>{schedule.subtitle}</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color="#A0D8FF" />
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+};
+
 const AddSchedule = () => {
   const [schedules, setSchedules] = useState([]);
+  const [userId, setUserId] = useState(null);
   const navigation = useNavigation();
   const { t } = useTranslation();
-  const daysShort = t('addSchedule.daysShort', { returnObjects: true });
-  const daysShortList = Array.isArray(daysShort) ? daysShort : [];
+  const daysShortList = useMemo(() => {
+    const daysShort = t('addSchedule.daysShort', { returnObjects: true });
+    return Array.isArray(daysShort) ? daysShort : [];
+  }, [t]);
 
   const handleSleepSchedule = () => {
     navigation.navigate('SleepSchedule');
@@ -222,6 +317,7 @@ const AddSchedule = () => {
           if (isActive) setSchedules([]);
           return;
         }
+        setUserId(userId);
 
         scheduleRef = database().ref(`users/${userId}/setting/schedules`);
 
@@ -257,7 +353,12 @@ const AddSchedule = () => {
         scheduleRef.off('value', onValue);
       }
     };
-  }, []);
+  }, [daysShortList, t]);
+
+  const handleDeleteSchedule = async (scheduleId) => {
+    if (!userId || !scheduleId) return;
+    await database().ref(`users/${userId}/setting/schedules/${scheduleId}`).remove();
+  };
 
   return (
     <View style={styles.container}>
@@ -269,17 +370,12 @@ const AddSchedule = () => {
 
         {schedules.length ? (
           schedules.map((schedule) => (
-            <TouchableOpacity
+            <SwipeableScheduleItem
               key={schedule.id}
-              style={styles.scheduleItem}
+              schedule={schedule}
               onPress={() => navigation.navigate('SleepSchedule', { scheduleId: schedule.id })}
-            >
-              <View>
-                <Text style={styles.scheduleTitle}>{schedule.title}</Text>
-                <Text style={styles.scheduleSubtitle}>{schedule.subtitle}</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color="#A0D8FF" />
-            </TouchableOpacity>
+              onDelete={handleDeleteSchedule}
+            />
           ))
         ) : (
           <Text style={styles.emptyText}>{t('addSchedule.emptyText')}</Text>
@@ -329,6 +425,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#C7CDD3',
   },
+  scheduleText: {
+    flex: 1,
+    paddingRight: 12
+  },
+  swipeContainer: {
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden'
+  },
+  deleteBackground: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#d9363e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: DELETE_ACTION_WIDTH,
+  },
+  deleteText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700'
+  },
   scheduleItem: {
     backgroundColor: '#1e1e1e',
     flexDirection: 'row',
@@ -336,7 +456,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
@@ -382,4 +501,3 @@ const styles = StyleSheet.create({
 });
 
 export default AddSchedule;
-

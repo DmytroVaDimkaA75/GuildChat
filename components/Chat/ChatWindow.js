@@ -69,7 +69,7 @@ import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
 import DatePicker from 'react-native-date-picker';
 import moment from 'moment-timezone';
-import translateMessage from '../../translateMessage';
+import translateMessage, { detectMessageLanguage } from '../../translateMessage';
 import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
@@ -92,6 +92,8 @@ const MIN_INPUT_HEIGHT = INPUT_LINE_HEIGHT + INPUT_VERTICAL_PADDING;
 const MAX_INPUT_HEIGHT = INPUT_LINE_HEIGHT * INPUT_MAX_LINES + INPUT_VERTICAL_PADDING;
 const clampInputHeight = (height) =>
   Math.min(MAX_INPUT_HEIGHT, Math.max(MIN_INPUT_HEIGHT, Number(height) || MIN_INPUT_HEIGHT));
+
+const normalizeLanguageCode = (code) => String(code || '').trim().toLowerCase().split(/[-_]/)[0];
 
 const isYouTubeURL = (url) => (url || '').includes('youtube.com') || (url || '').includes('youtu.be');
 const isDocsURL = (url) => (url || '').includes('docs.google.com');
@@ -596,10 +598,19 @@ const Spoiler = ({ children }) => {
 
 const normalizeMentionName = (value) => String(value || '').trim().toLowerCase();
 
-const parseMentions = (text, mentionNameSet = new Set()) => {
+const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const parseMentions = (text, mentionUsers = []) => {
   if (!text) return [];
+  const users = mentionUsers
+    .filter((user) => user?.id && user?.userName)
+    .sort((a, b) => b.userName.length - a.userName.length);
+  if (!users.length) return [{ type: 'normal', content: text }];
+
+  const usersByName = new Map(users.map((user) => [normalizeMentionName(user.userName), user]));
   const parts = [];
-  const regex = /@([a-z0-9_.-]+(?:\s+[a-z0-9_.-]+)*)/gi;
+  const namesPattern = users.map((user) => escapeRegExp(user.userName)).join('|');
+  const regex = new RegExp(`@(${namesPattern})(?![\\p{L}\\p{N}])`, 'giu');
   let lastIndex = 0;
   let match;
 
@@ -608,8 +619,12 @@ const parseMentions = (text, mentionNameSet = new Set()) => {
       parts.push({ type: 'normal', content: text.slice(lastIndex, match.index) });
     }
     const mentionBody = String(match[1] || '').trim();
-    const isKnownMention = mentionNameSet.has(normalizeMentionName(mentionBody));
-    parts.push({ type: isKnownMention ? 'mention' : 'normal', content: match[0] });
+    const mentionedUser = usersByName.get(normalizeMentionName(mentionBody));
+    parts.push({
+      type: 'mention',
+      content: mentionBody,
+      userId: mentionedUser.id
+    });
     lastIndex = match.index + match[0].length;
   }
 
@@ -617,7 +632,7 @@ const parseMentions = (text, mentionNameSet = new Set()) => {
   return parts;
 };
 
-const parseFormattedText = (text, mentionNameSet = new Set()) => {
+const parseFormattedText = (text, mentionUsers = []) => {
   const parts = [];
   let lastIndex = 0;
 
@@ -626,7 +641,7 @@ const parseFormattedText = (text, mentionNameSet = new Set()) => {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index), mentionNameSet) });
+      parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex, match.index), mentionUsers) });
     }
     const matchedContent = match[2] || match[3] || match[4] || match[5] || match[6];
     let type = 'normal';
@@ -637,11 +652,11 @@ const parseFormattedText = (text, mentionNameSet = new Set()) => {
     else if (match[5]) type = 'strikethrough';
     else if (match[6]) type = 'spoiler';
 
-    parts.push({ type, content: parseFormattedText(matchedContent, mentionNameSet) });
+    parts.push({ type, content: parseFormattedText(matchedContent, mentionUsers) });
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex), mentionNameSet) });
+  if (lastIndex < text.length) parts.push({ type: 'normal', content: parseMentions(text.slice(lastIndex), mentionUsers) });
   return parts;
 };
 
@@ -673,18 +688,22 @@ const buildMentionTextStyle = (activeStyles = []) => {
   return style;
 };
 
-const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
+const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '', onMentionPress) =>
   parts.map((part, index) => {
     const key = `${keyPrefix}-${index}`;
 
     if (part.type === 'spoiler') {
       const contentParts = Array.isArray(part.content) ? part.content : [{ type: 'normal', content: part.content }];
-      return <Spoiler key={key}>{renderFormattedParts(contentParts, activeStyles, key)}</Spoiler>;
+      return <Spoiler key={key}>{renderFormattedParts(contentParts, activeStyles, key, onMentionPress)}</Spoiler>;
     }
 
     if (part.type === 'mention') {
       return (
-        <Text key={key} style={[styles.mentionText, buildMentionTextStyle(activeStyles)]}>
+        <Text
+          key={key}
+          onPress={() => onMentionPress?.(part.userId)}
+          style={[styles.mentionText, buildMentionTextStyle(activeStyles)]}
+        >
           {part.content}
         </Text>
       );
@@ -692,7 +711,9 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
 
     const newActiveStyles = part.type === 'normal' ? activeStyles : [...activeStyles, part.type];
     const textStyle = buildTextStyle(newActiveStyles);
-    const children = Array.isArray(part.content) ? renderFormattedParts(part.content, newActiveStyles, key) : part.content;
+    const children = Array.isArray(part.content)
+      ? renderFormattedParts(part.content, newActiveStyles, key, onMentionPress)
+      : part.content;
 
     return (
       <Text key={key} style={textStyle}>
@@ -701,9 +722,9 @@ const renderFormattedParts = (parts, activeStyles = [], keyPrefix = '') =>
     );
   });
 
-const FormattedText = ({ text, mentionNameSet }) => {
-  const parts = parseFormattedText(text || '', mentionNameSet);
-  return <Text style={styles.messageText}>{renderFormattedParts(parts)}</Text>;
+const FormattedText = ({ text, mentionUsers, onMentionPress }) => {
+  const parts = parseFormattedText(text || '', mentionUsers);
+  return <Text style={styles.messageText}>{renderFormattedParts(parts, [], '', onMentionPress)}</Text>;
 };
 
 // Не завантажуємо довільні URL на пристрій заради превʼю. React Native
@@ -846,6 +867,13 @@ const UserInfoPopup = ({ visible, user, loading, onClose }) => {
     <Modal transparent animationType="fade" visible>
       <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.popupOverlay}>
         <View style={styles.userInfoPopup}>
+          {user?.imageUrl ? (
+            <Image source={{ uri: user.imageUrl }} style={styles.userInfoAvatar} />
+          ) : (
+            <View style={[styles.userInfoAvatar, styles.userInfoAvatarFallback]}>
+              <Text style={styles.userInfoAvatarFallbackText}>{displayName.charAt(0).toUpperCase() || '?'}</Text>
+            </View>
+          )}
           <Text style={styles.userInfoName}>{displayName}</Text>
           {!!displayCity && <Text style={styles.userInfoCity}>{displayCity}</Text>}
         </View>
@@ -1145,6 +1173,7 @@ const ChatWindow = ({ route, navigation }) => {
 
   const [translationModalVisible, setTranslationModalVisible] = useState(false);
   const [translatedText, setTranslatedText] = useState('');
+  const languageDetectionInProgressRef = useRef(new Set());
 
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [sendOptionsPopupVisible, setSendOptionsPopupVisible] = useState(false);
@@ -1153,10 +1182,6 @@ const ChatWindow = ({ route, navigation }) => {
   const [linkUrl, setLinkUrl] = useState('');
 
   const [guildMembers, setGuildMembers] = useState([]);
-  const mentionNameSet = useMemo(
-    () => new Set(guildMembers.map((member) => normalizeMentionName(member?.userName)).filter(Boolean)),
-    [guildMembers]
-  );
   const [mentionStartIndex, setMentionStartIndex] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
 
@@ -1218,18 +1243,25 @@ const ChatWindow = ({ route, navigation }) => {
     setUserInfoPopupLoading(true);
     setUserInfoPopupVisible(true);
     try {
-      const snap = await database().ref(`users/${targetUserId}`).once('value');
-      const data = snap.val() || {};
+      const [userSnap, guildUserSnap] = await Promise.all([
+        database().ref(`users/${targetUserId}`).once('value'),
+        guildId
+          ? database().ref(`guilds/${guildId}/guildUsers/${targetUserId}`).once('value')
+          : Promise.resolve(null)
+      ]);
+      const data = userSnap.val() || {};
+      const guildUser = guildUserSnap?.val() || {};
       setUserInfoPopupUser({
-        name: data.name || '',
-        city: data.city || ''
+        name: data.name || guildUser.userName || '',
+        city: data.city || '',
+        imageUrl: guildUser.imageUrl || data.imageUrl || ''
       });
     } catch (error) {
-      setUserInfoPopupUser({ name: '', city: '' });
+      setUserInfoPopupUser({ name: '', city: '', imageUrl: '' });
     } finally {
       setUserInfoPopupLoading(false);
     }
-  }, []);
+  }, [guildId]);
 
   useEffect(() => {
     return () => {
@@ -1712,6 +1744,40 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleReply = (msg) => setReplyToMessage(msg);
 
+  const cacheMessageLanguage = useCallback(
+    async (messageId, text) => {
+      const sourceText = stripUrls(String(text || '')).trim();
+      if (!messageId || !sourceText || !guildId || !chatId) return null;
+      if (languageDetectionInProgressRef.current.has(messageId)) return null;
+
+      languageDetectionInProgressRef.current.add(messageId);
+      try {
+        const language = await detectMessageLanguage(sourceText);
+        if (language) {
+          await database()
+            .ref(`guilds/${guildId}/chats/${chatId}/messages/${messageId}/language`)
+            .set(normalizeLanguageCode(language));
+        }
+        return language;
+      } catch (error) {
+        console.warn('Не вдалося визначити мову повідомлення:', error?.message || String(error));
+        return null;
+      } finally {
+        languageDetectionInProgressRef.current.delete(messageId);
+      }
+    },
+    [chatId, guildId]
+  );
+
+  const handleMessageMenuOpen = useCallback(
+    (message, isOwnMessage) => {
+      const sourceText = (message?.text || '').trim() || stripHtml(message?.html);
+      if (isOwnMessage || message?.language || !sourceText) return;
+      cacheMessageLanguage(message.id, sourceText);
+    },
+    [cacheMessageLanguage]
+  );
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -1740,6 +1806,7 @@ const ChatWindow = ({ route, navigation }) => {
       timestamp: database.ServerValue.TIMESTAMP,
       status: 'sent'
     });
+    cacheMessageLanguage(ref.key, imageCaption);
     setSelectedImageUris([]);
     setImageCaption('');
     setCaptionModalVisible(false);
@@ -1897,6 +1964,7 @@ const ChatWindow = ({ route, navigation }) => {
         text: editMessageText,
         edited: true
       });
+      cacheMessageLanguage(editMessage.id, editMessageText);
       setEditMessage(null);
       setEditMessageText('');
       setInputHeight(MIN_INPUT_HEIGHT);
@@ -1912,6 +1980,7 @@ const ChatWindow = ({ route, navigation }) => {
       status: 'sent',
       replyTo: replyToMessage?.id || null
     });
+    cacheMessageLanguage(ref.key, newMessage);
 
     setNewMessage('');
     setNewMessagePlain('');
@@ -1993,6 +2062,12 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleTranslate = async (message) => {
     if (!message?.id || !guildId || !chatId) return;
+    if (
+      normalizeLanguageCode(message.language) &&
+      normalizeLanguageCode(message.language) === normalizeLanguageCode(localeCode)
+    ) {
+      return;
+    }
     const sourceText = (message.text || '').trim() || stripHtml(message.html);
     if (!sourceText) {
       Alert.alert('Помилка', 'Немає тексту для перекладу.');
@@ -2000,7 +2075,7 @@ const ChatWindow = ({ route, navigation }) => {
     }
     try {
       const translationRef = database().ref(
-        `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translate/${localeCode}`
+        `guilds/${guildId}/chats/${chatId}/messages/${message.id}/translateSafe/${localeCode}`
       );
       const snap = await translationRef.once('value');
       let translated = snap.val();
@@ -2130,7 +2205,7 @@ const ChatWindow = ({ route, navigation }) => {
                     )}
                     {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
 
-                    <Menu>
+                    <Menu onOpen={() => handleMessageMenuOpen(msg, isMe)}>
                       <MenuTrigger
                         triggerOnLongPress
                         onPress={() => setSelectedMessageId(msg.id)}
@@ -2228,7 +2303,13 @@ const ChatWindow = ({ route, navigation }) => {
                             </TouchableOpacity>
                           )}
 
-                          {!!messageText && <FormattedText text={messageText} mentionNameSet={mentionNameSet} />}
+                          {!!messageText && (
+                            <FormattedText
+                              text={messageText}
+                              mentionUsers={guildMembers}
+                              onMentionPress={handleOpenUserInfo}
+                            />
+                          )}
 
                           {uniqueUrls.map((u) => (
                             <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
@@ -2326,10 +2407,14 @@ const ChatWindow = ({ route, navigation }) => {
                           <Text style={styles.menuText}>{isPinnedForMe ? 'Відкріпити' : 'Закріпити'}</Text>
                         </MenuOption>
 
-                        <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
-                          <TransleteIcon width={16} height={16} fill="#ddd" />
-                          <Text style={styles.menuText}>Перекласти</Text>
-                        </MenuOption>
+                        {!isMe &&
+                          normalizeLanguageCode(msg.language) &&
+                          normalizeLanguageCode(msg.language) !== normalizeLanguageCode(localeCode) && (
+                            <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
+                              <TransleteIcon width={16} height={16} fill="#ddd" />
+                              <Text style={styles.menuText}>Перекласти</Text>
+                            </MenuOption>
+                          )}
                       </MenuOptions>
 
                       {readUsersPopupFor === msg.id && (
@@ -2936,8 +3021,11 @@ const styles = StyleSheet.create({
     borderColor: '#444',
     width: 240
   },
-  userInfoName: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  userInfoCity: { color: '#aaa', fontSize: 13 },
+  userInfoAvatar: { width: 64, height: 64, borderRadius: 32, alignSelf: 'center', marginBottom: 12 },
+  userInfoAvatarFallback: { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
+  userInfoAvatarFallbackText: { color: '#fff', fontSize: 24, fontWeight: '700' },
+  userInfoName: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  userInfoCity: { color: '#aaa', fontSize: 13, textAlign: 'center' },
 
   menuSeparator: { height: 1, backgroundColor: '#333', marginVertical: 6 },
   contextMenu: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
