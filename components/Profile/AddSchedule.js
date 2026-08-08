@@ -4,9 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
-  Dimensions,
   PanResponder,
   StyleSheet,
   Text,
@@ -16,9 +14,8 @@ import {
 import { useTranslation } from 'react-i18next';
 
 const TOTAL_MINUTES = 24 * 60;
-const SWIPE_DELETE_THRESHOLD = 80;
-const DELETE_ACTION_WIDTH = 96;
-const SCREEN_WIDTH = Dimensions.get('window').width;
+const SWIPE_DELETE_THRESHOLD = 60;
+const DELETE_ACTION_WIDTH = 72;
 
 const formatMinutes = (value) => {
   if (typeof value !== 'number') return null;
@@ -222,33 +219,14 @@ const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
     }).start();
   }, [swipeX]);
 
-  const confirmDelete = useCallback(() => {
-    Alert.alert(
-      t('addSchedule.deleteConfirmationTitle'),
-      t('addSchedule.deleteConfirmationMessage'),
-      [
-        { text: t('addSchedule.cancel'), style: 'cancel', onPress: resetSwipe },
-        {
-          text: t('addSchedule.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await onDelete(schedule.id);
-              Animated.timing(swipeX, {
-                toValue: -SCREEN_WIDTH,
-                duration: 180,
-                useNativeDriver: true
-              }).start();
-            } catch (error) {
-              console.error('Помилка видалення графіка активності:', error);
-              resetSwipe();
-            }
-          }
-        }
-      ],
-      { cancelable: true, onDismiss: resetSwipe }
-    );
-  }, [onDelete, resetSwipe, schedule.id, swipeX, t]);
+  const deleteSchedule = useCallback(async () => {
+    try {
+      await onDelete(schedule.id);
+    } catch (error) {
+      console.error('Помилка видалення графіка активності:', error);
+      resetSwipe();
+    }
+  }, [onDelete, resetSwipe, schedule.id]);
 
   const panResponder = useMemo(
     () =>
@@ -262,14 +240,14 @@ const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
         },
         onPanResponderRelease: (_, gestureState) => {
           if (gestureState.dx <= -SWIPE_DELETE_THRESHOLD) {
-            confirmDelete();
+            deleteSchedule();
           } else {
             resetSwipe();
           }
         },
         onPanResponderTerminate: resetSwipe
       }),
-    [confirmDelete, resetSwipe, swipeX]
+    [deleteSchedule, resetSwipe, swipeX]
   );
 
   return (
@@ -436,13 +414,15 @@ const styles = StyleSheet.create({
   },
   deleteBackground: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
+    top: 1,
+    right: 1,
+    bottom: 1,
     backgroundColor: '#d9363e',
     alignItems: 'center',
     justifyContent: 'center',
     width: DELETE_ACTION_WIDTH,
+    borderTopRightRadius: 11,
+    borderBottomRightRadius: 11,
   },
   deleteText: {
     color: '#fff',

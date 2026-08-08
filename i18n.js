@@ -158,7 +158,7 @@ const ukTranslation = {
     noName: "Без назви"
   },
   drawer: {
-    gbLabel: "Величні споруди",
+    gbLabel: "Центр ВС",
     chatLabel: "Альтанка",
     quantLabel: "Квантові вторгнення",
     pbgLabel: "Поле битви гільдій",
@@ -208,14 +208,14 @@ const ukTranslation = {
     addError: "Помилка додавання ВС"
   },
   newGBChat: {
-    contributionRatioLabel: "Коефіцієнт внеску (nodeRatio):",
-    contributionRatioLabelWithCoefficient: "Коефіцієнт внеску (nodeRatio): (коефіцієнт {{coefficient}})",
-    allowedGBsLabel: "Дозволені в гілці ВС (allowedGBs):",
+    contributionRatioLabel: "Коефіцієнт внеску:",
+    contributionRatioLabelWithCoefficient: "Коефіцієнт внеску: {{coefficient}}",
+    allowedGBsLabel: "Дозволені в гілці ВС:",
     selectGBPlaceholder: "Оберіть ВС",
-    levelThresholdLabel: "Мінімальний рівень ВС (levelThreshold):",
+    levelThresholdLabel: "Мінімальний рівень ВС:",
     guildMembersLabel: "Учасники гільдії:",
     selectMembersPlaceholder: "Оберіть учасників",
-    placeLimitLabel: "Обмеження місць (placeLimit):",
+    placeLimitLabel: "Обмеження місць:",
     createChatButton: "Створити новий чат",
     selectAllOption: "Обрати все",
     guildIdNotFound: "Guild ID не знайдено",
@@ -519,7 +519,7 @@ const ruTranslation = {
     noName: "Без названия"
   },
   drawer: {
-    gbLabel: "Великие сооружения",
+    gbLabel: "Центр ВС",
     chatLabel: "Беседка",
     quantLabel: "Квантовые вторжения",
     pbgLabel: "Поле битвы гильдий",
@@ -569,14 +569,14 @@ const ruTranslation = {
     addError: "Ошибка добавления ВС"
   },
   newGBChat: {
-    contributionRatioLabel: "Коэффициент вклада (nodeRatio):",
-    contributionRatioLabelWithCoefficient: "Коэффициент вклада (nodeRatio): (коэффициент {{coefficient}})",
-    allowedGBsLabel: "Разрешенные в ветке ВС (allowedGBs):",
+    contributionRatioLabel: "Коэффициент вклада:",
+    contributionRatioLabelWithCoefficient: "Коэффициент вклада: {{coefficient}}",
+    allowedGBsLabel: "Разрешенные в ветке ВС:",
     selectGBPlaceholder: "Выберите ВС",
-    levelThresholdLabel: "Минимальный уровень ВС (levelThreshold):",
+    levelThresholdLabel: "Минимальный уровень ВС:",
     guildMembersLabel: "Участники гильдии:",
     selectMembersPlaceholder: "Выберите участников",
-    placeLimitLabel: "Ограничение мест (placeLimit):",
+    placeLimitLabel: "Ограничение мест:",
     createChatButton: "Создать новый чат",
     selectAllOption: "Выбрать все",
     guildIdNotFound: "Guild ID не найден",
@@ -880,7 +880,7 @@ const beTranslation = {
     noName: "Без назвы"
   },
   drawer: {
-    gbLabel: "Вялікія спорудкі",
+    gbLabel: "Центр ВС",
     chatLabel: "Альтанка",
     quantLabel: "Квантаваныя ўварванні",
     pbgLabel: "Поле битвы гільдый",
@@ -930,14 +930,14 @@ const beTranslation = {
     addError: "Памылка дадання ВС"
   },
   newGBChat: {
-    contributionRatioLabel: "Коефіцієнт внеску (nodeRatio):",
-    contributionRatioLabelWithCoefficient: "Коефіцієнт внеску (nodeRatio): (коефіцієнт {{coefficient}})",
-    allowedGBsLabel: "Дозволеныя ў гілцы ВС (allowedGBs):",
+    contributionRatioLabel: "Каэфіцыент унёску:",
+    contributionRatioLabelWithCoefficient: "Каэфіцыент унёску: {{coefficient}}",
+    allowedGBsLabel: "Дазволеныя ў галіне ВС:",
     selectGBPlaceholder: "Оберіть ВС",
-    levelThresholdLabel: "Мінімальны ўзровень ВС (levelThreshold):",
+    levelThresholdLabel: "Мінімальны ўзровень ВС:",
     guildMembersLabel: "Удзельнікі гільдыі:",
     selectMembersPlaceholder: "Оберіть удзельників",
-    placeLimitLabel: "Абмежаванне месцаў (placeLimit):",
+    placeLimitLabel: "Абмежаванне месцаў:",
     createChatButton: "Стварыць новы чат",
     selectAllOption: "Абраць усё",
     guildIdNotFound: "Guild ID не знойдзены",
@@ -1241,7 +1241,7 @@ const deTranslation = {
     noName: "Ohne Namen"
   },
   drawer: {
-    gbLabel: "Großartige Bauwerke",
+    gbLabel: "GB-Zentrum",
     chatLabel: "Aultanka",
     quantLabel: "Quanteninvasionen",
     pbgLabel: "Gildenkampffeld",
@@ -1291,14 +1291,14 @@ const deTranslation = {
     addError: "Fehler beim Hinzufügen von GB"
   },
   newGBChat: {
-    contributionRatioLabel: "Koeffizient des Beitrags (nodeRatio):",
-    contributionRatioLabelWithCoefficient: "Koeffizient des Beitrags (nodeRatio): (Koeffizient {{coefficient}})",
-    allowedGBsLabel: "Erlaubte GB in der Gruppe (allowedGBs):",
+    contributionRatioLabel: "Beitragskoeffizient:",
+    contributionRatioLabelWithCoefficient: "Beitragskoeffizient: {{coefficient}}",
+    allowedGBsLabel: "Erlaubte GB in der Gruppe:",
     selectGBPlaceholder: "Wählen Sie GB",
-    levelThresholdLabel: "Mindestlevel GB (levelThreshold):",
+    levelThresholdLabel: "Mindestlevel GB:",
     guildMembersLabel: "Gildenmitglieder:",
     selectMembersPlaceholder: "Wählen Sie Mitglieder",
-    placeLimitLabel: "Platzbeschränkung (placeLimit):",
+    placeLimitLabel: "Platzbeschränkung:",
     createChatButton: "Neuen Chat erstellen",
     selectAllOption: "Alles auswählen",
     guildIdNotFound: "Guild ID nicht gefunden",
@@ -1664,7 +1664,7 @@ const enOverrides = {
     noName: "No name"
   },
   drawer: {
-    gbLabel: "Great Buildings",
+    gbLabel: "GB Center",
     chatLabel: "Chat",
     quantLabel: "Quantum incursions",
     pbgLabel: "Guild battlegrounds",
@@ -1869,7 +1869,7 @@ const plOverrides = {
     noName: "Bez nazwy"
   },
   drawer: {
-    gbLabel: "Wielkie Budowle",
+    gbLabel: "Centrum WB",
     chatLabel: "Czat",
     quantLabel: "Najazdy kwantowe",
     pbgLabel: "Pola bitew gildii",
@@ -1891,8 +1891,76 @@ const plOverrides = {
   }
 };
 
-const enTranslation = deepMerge(ukTranslation, enOverrides);
-const plTranslation = deepMerge(ukTranslation, plOverrides);
+const guaranteeTranslations = {
+  uk: {
+    title: "Гаранти", level: "Рівень {{level}}", chat: "Чат", allProtected: "Усі поточні місця захищені",
+    filters: { ready: "Доступні", all_protected: "Гарантоване" },
+    placeFilters: { all: "Усі місця", "1-2": "1–2 місця", "3-5": "3–5 місця" },
+    status: { protected: "Гарантоване", takePlace: "Можна зайти", ownerDeposit: "Потрібен внесок власника", topUp: "Потрібно докинути", overtake: "Можна перебити", action: "Потрібна дія" },
+    labels: { place: "Місце", guaranteedPlace: "Гарантоване місце", multiplier: "Коефіцієнт вкладу", contributionSize: "Розмір вкладу", updated: "Оновлено", branch: "Гілка", rate: "Ставка", remaining: "Залишок до закриття", nextAction: "Наступна дія", amount: "Сума", target: "Підсумковий вклад", arc: "Арка від" },
+    actions: { takePlace: "Можна зайти на місце", ownerDeposit: "Власнику потрібно внести", topUp: "Потрібно докинути вкладнику", newDeposit: "Новому вкладнику потрібно внести" },
+    freshness: { now: "щойно", minutes: "{{count}} хв тому", hours: "{{count}} год тому", days: "{{count}} дн тому" },
+    empty: { ready: "Немає доступних гарантів", protected: "Немає гарантованих ВС", filtered: "Нічого не знайдено для цього фільтра" },
+    loadError: "Не вдалося завантажити гаранти", retry: "Повторити", refreshAll: "Оновити всі ВС", refreshErrorTitle: "Помилка оновлення", refreshError: "Не вдалося оновити всі ВС гільдії",
+  },
+  ru: {
+    title: "Гаранты", level: "Уровень {{level}}", chat: "Чат", allProtected: "Все текущие места защищены",
+    filters: { ready: "Доступные", all_protected: "Обеспечено" }, placeFilters: { all: "Все места", "1-2": "1–2 места", "3-5": "3–5 места" },
+    status: { protected: "Гарант обеспечен", takePlace: "Можно войти", ownerDeposit: "Нужен вклад владельца", topUp: "Нужно добавить", overtake: "Можно перебить", action: "Нужно действие" },
+    labels: { place: "Место", guaranteedPlace: "Гарантированное место", multiplier: "Коэффициент вклада", contributionSize: "Размер вклада", updated: "Обновлено", branch: "Ветка", rate: "Ставка", remaining: "Осталось до закрытия", nextAction: "Следующее действие", amount: "Сумма", target: "Итоговый вклад", arc: "Арка от" },
+    actions: { takePlace: "Можно занять место", ownerDeposit: "Владельцу нужно внести", topUp: "Нужно добавить вкладчику", newDeposit: "Новому вкладчику нужно внести" },
+    freshness: { now: "только что", minutes: "{{count}} мин назад", hours: "{{count}} ч назад", days: "{{count}} дн назад" },
+    empty: { ready: "Нет доступных гарантов", protected: "Нет обеспеченных гарантов", filtered: "Для этого фильтра ничего не найдено" }, loadError: "Не удалось загрузить гаранты", retry: "Повторить", refreshAll: "Обновить все ВС", refreshErrorTitle: "Ошибка обновления", refreshError: "Не удалось обновить все ВС гильдии",
+  },
+  be: {
+    title: "Гаранты", level: "Узровень {{level}}", chat: "Чат", allProtected: "Усе бягучыя месцы абаронены",
+    filters: { ready: "Даступныя", all_protected: "Забяспечана" }, placeFilters: { all: "Усе месцы", "1-2": "1–2 месцы", "3-5": "3–5 месцы" },
+    status: { protected: "Гарант забяспечаны", takePlace: "Можна ўвайсці", ownerDeposit: "Патрэбны ўклад уладальніка", topUp: "Трэба дадаць", overtake: "Можна перабіць", action: "Патрэбна дзеянне" },
+    labels: { place: "Месца", guaranteedPlace: "Гарантаванае месца", multiplier: "Каэфіцыент унёску", contributionSize: "Памер унёску", updated: "Абноўлена", branch: "Галіна", rate: "Стаўка", remaining: "Засталося да закрыцця", nextAction: "Наступнае дзеянне", amount: "Сума", target: "Выніковы ўклад", arc: "Арка ад" },
+    actions: { takePlace: "Можна заняць месца", ownerDeposit: "Уладальніку трэба ўнесці", topUp: "Трэба дадаць укладчыку", newDeposit: "Новаму ўкладчыку трэба ўнесці" },
+    freshness: { now: "толькі што", minutes: "{{count}} хв таму", hours: "{{count}} г таму", days: "{{count}} дз таму" },
+    empty: { ready: "Няма даступных гарантаў", protected: "Няма забяспечаных гарантаў", filtered: "Для гэтага фільтра нічога не знойдзена" }, loadError: "Не ўдалося загрузіць гаранты", retry: "Паўтарыць", refreshAll: "Абнавіць усе ВС", refreshErrorTitle: "Памылка абнаўлення", refreshError: "Не ўдалося абнавіць усе ВС гільдыі",
+  },
+  de: {
+    title: "Garantien", level: "Stufe {{level}}", chat: "Chat", allProtected: "Alle aktuellen Plätze sind geschützt",
+    filters: { ready: "Verfügbar", all_protected: "Gesichert" }, placeFilters: { all: "Alle Plätze", "1-2": "Plätze 1–2", "3-5": "Plätze 3–5" },
+    status: { protected: "Garantie gesichert", takePlace: "Platz verfügbar", ownerDeposit: "Eigentümerbeitrag nötig", topUp: "Aufstockung nötig", overtake: "Überbieten möglich", action: "Aktion nötig" },
+    labels: { place: "Platz", guaranteedPlace: "Garantierter Platz", multiplier: "Beitragsfaktor", contributionSize: "Beitragshöhe", updated: "Aktualisiert", branch: "Zweig", rate: "Beitrag", remaining: "Bis zum Abschluss", nextAction: "Nächste Aktion", amount: "Betrag", target: "Zielbeitrag", arc: "Arche ab" },
+    actions: { takePlace: "Platz kann belegt werden", ownerDeposit: "Eigentümer muss einzahlen", topUp: "Beitrag muss aufgestockt werden", newDeposit: "Neues Mitglied muss einzahlen" },
+    freshness: { now: "gerade eben", minutes: "vor {{count}} Min.", hours: "vor {{count}} Std.", days: "vor {{count}} Tagen" },
+    empty: { ready: "Keine verfügbaren Garantien", protected: "Keine gesicherten Garantien", filtered: "Keine Treffer für diesen Filter" }, loadError: "Garantien konnten nicht geladen werden", retry: "Erneut versuchen", refreshAll: "Alle GB aktualisieren", refreshErrorTitle: "Aktualisierungsfehler", refreshError: "Die GB der Gilde konnten nicht aktualisiert werden",
+  },
+  en: {
+    title: "Guarantees", level: "Level {{level}}", chat: "Chat", allProtected: "All current places are protected",
+    filters: { ready: "Available", all_protected: "Protected" }, placeFilters: { all: "All places", "1-2": "Places 1–2", "3-5": "Places 3–5" },
+    status: { protected: "Guarantee secured", takePlace: "Ready to enter", ownerDeposit: "Owner deposit needed", topUp: "Top-up needed", overtake: "Can overtake", action: "Action needed" },
+    labels: { place: "Place", guaranteedPlace: "Guaranteed place", multiplier: "Contribution multiplier", contributionSize: "Contribution size", updated: "Updated", branch: "Branch", rate: "Contribution", remaining: "Remaining to close", nextAction: "Next action", amount: "Amount", target: "Target contribution", arc: "Arc from" },
+    actions: { takePlace: "A member can take the place", ownerDeposit: "The owner needs to contribute", topUp: "The contributor needs to top up", newDeposit: "A new contributor needs to contribute" },
+    freshness: { now: "just now", minutes: "{{count}} min ago", hours: "{{count}} hr ago", days: "{{count}} days ago" },
+    empty: { ready: "No available guarantees", protected: "No protected guarantees", filtered: "Nothing found for this filter" }, loadError: "Could not load guarantees", retry: "Retry", refreshAll: "Refresh all GBs", refreshErrorTitle: "Refresh failed", refreshError: "Could not refresh all guild GBs",
+  },
+  pl: {
+    title: "Gwarancje", level: "Poziom {{level}}", chat: "Czat", allProtected: "Wszystkie obecne miejsca są chronione",
+    filters: { ready: "Dostępne", all_protected: "Zabezpieczone" }, placeFilters: { all: "Wszystkie miejsca", "1-2": "Miejsca 1–2", "3-5": "Miejsca 3–5" },
+    status: { protected: "Gwarancja zabezpieczona", takePlace: "Można wejść", ownerDeposit: "Potrzebny wkład właściciela", topUp: "Potrzebna dopłata", overtake: "Można przebić", action: "Wymagane działanie" },
+    labels: { place: "Miejsce", guaranteedPlace: "Gwarantowane miejsce", multiplier: "Mnożnik wkładu", contributionSize: "Wielkość wkładu", updated: "Zaktualizowano", branch: "Wątek", rate: "Wkład", remaining: "Do zamknięcia", nextAction: "Następne działanie", amount: "Kwota", target: "Docelowy wkład", arc: "Arka od" },
+    actions: { takePlace: "Można zająć miejsce", ownerDeposit: "Właściciel musi wpłacić", topUp: "Wkładca musi dopłacić", newDeposit: "Nowy wkładca musi wpłacić" },
+    freshness: { now: "przed chwilą", minutes: "{{count}} min temu", hours: "{{count}} godz. temu", days: "{{count}} dni temu" },
+    empty: { ready: "Brak dostępnych gwarancji", protected: "Brak zabezpieczonych gwarancji", filtered: "Brak wyników dla tego filtra" }, loadError: "Nie udało się wczytać gwarancji", retry: "Ponów", refreshAll: "Odśwież wszystkie WB", refreshErrorTitle: "Błąd odświeżania", refreshError: "Nie udało się odświeżyć wszystkich WB gildii",
+  },
+};
+
+ukTranslation.gbGuarantees = guaranteeTranslations.uk;
+ruTranslation.gbGuarantees = guaranteeTranslations.ru;
+beTranslation.gbGuarantees = guaranteeTranslations.be;
+deTranslation.gbGuarantees = guaranteeTranslations.de;
+
+const enTranslation = deepMerge(deepMerge(ukTranslation, enOverrides), {
+  gbGuarantees: guaranteeTranslations.en,
+});
+const plTranslation = deepMerge(deepMerge(ukTranslation, plOverrides), {
+  gbGuarantees: guaranteeTranslations.pl,
+});
 
 const resources = {
   uk: { translation: ukTranslation },

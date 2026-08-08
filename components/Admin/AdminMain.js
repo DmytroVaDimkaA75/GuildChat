@@ -306,6 +306,19 @@ const AdminMain = ({ canAccessTasks = false }) => {
     navigation.navigate('NewGBChat', { editBranch: branch, from: 'AdminMain' });
   };
 
+  const handleCreateBranch = () => {
+    const parentNavigation = navigation.getParent();
+    const params = { from: 'AdminMain', mode: 'create', editBranch: undefined };
+    if (parentNavigation) {
+      parentNavigation.navigate('GB', {
+        screen: 'NewGBChat',
+        params,
+      });
+      return;
+    }
+    navigation.navigate('NewGBChat', params);
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -464,7 +477,17 @@ const AdminMain = ({ canAccessTasks = false }) => {
       
       <View style={styles.divider} />
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Гілки прокачки</Text>
+        <View style={styles.upgradeBranchesHeader}>
+          <Text style={styles.sectionTitle}>Гілки прокачки</Text>
+          <TouchableOpacity
+            onPress={handleCreateBranch}
+            style={styles.addBranchButton}
+            accessibilityRole="button"
+            accessibilityLabel="Створити гілку прокачки"
+          >
+            <Ionicons name="add" size={25} color="#4ea1ff" />
+          </TouchableOpacity>
+        </View>
         {upgradeBranches.length === 0 ? (
           <Text style={styles.mainText}>Немає гілок прокачки</Text>
         ) : (
@@ -577,6 +600,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#A0D8FF',
     marginBottom: 6,
+  },
+  upgradeBranchesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addBranchButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
   },
   itemRow: {
     flexDirection: 'row',

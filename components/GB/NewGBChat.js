@@ -19,16 +19,15 @@ const NewGBChat = () => {
 
   // Додаємо стейт для назви чату
   const [chatName, setChatName] = useState('');
-  const [nodeRatio, setNodeRatio] = useState('');
+  const [arcLevel, setArcLevel] = useState(0);
   const [levelThreshold, setLevelThreshold] = useState('');
   const [allowedGBs, setAllowedGBs] = useState([]);
   const [placeLimit, setPlaceLimit] = useState([false, false, false, false, false]);
   const [greatBuildings, setGreatBuildings] = useState([]);
   const [guildMembers, setGuildMembers] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [contributionMultiplier, setContributionMultiplier] = useState(0);
+  const [contributionMultiplier, setContributionMultiplier] = useState(1);
   const [stepperWidth, setStepperWidth] = useState(200);
-  const [coefficientText, setCoefficientText] = useState(t('newGBChat.contributionRatioLabel'));
 
   // Функція для локалізації значення, якщо воно є об'єктом
   const getLocalizedValue = (value) => {
@@ -118,14 +117,26 @@ const NewGBChat = () => {
         if (snap.exists()) {
           const data = snap.val();
           setChatName(data.name || '');
-          setNodeRatio(data.rules?.ArcLevel?.toString() || '');
+          setArcLevel(Number(data.rules?.ArcLevel) || 0);
           setLevelThreshold(data.rules?.levelThreshold?.toString() || '');
           setAllowedGBs(data.rules?.allowedGBs || []);
           setPlaceLimit([1,2,3,4,5].map(i => (data.rules?.placeLimit || []).includes(i)));
           setSelectedMembers(data.rules?.selectedMembers || []);
-          setContributionMultiplier(data.rules?.contributionMultiplier || 0);
+          setContributionMultiplier(
+            Math.min(2, Math.max(1, Number(data.rules?.contributionMultiplier) || 1))
+          );
         }
       })();
+    } else {
+      setIsEditMode(false);
+      setEditBranchId(null);
+      setChatName('');
+      setArcLevel(0);
+      setLevelThreshold('');
+      setAllowedGBs([]);
+      setPlaceLimit([false, false, false, false, false]);
+      setSelectedMembers([]);
+      setContributionMultiplier(1);
     }
    
   }, [route.params?.editBranch]);
@@ -147,24 +158,6 @@ const NewGBChat = () => {
     setPlaceLimit(newPlaceLimit);
   };
 
-  const fetchContributionBoost = async (level) => {
-    if (level === 0) {
-      setCoefficientText(t('newGBChat.contributionRatioLabel'));
-      setContributionMultiplier(0);
-      return;
-    }
-    try {
-      const response = await fetch(`https://api.foe-helper.com/v1/LegendaryBuilding/get?id=X_FutureEra_Landmark1&level=${level}`);
-      const data = await response.json();
-      const contributionBoost = data.response.rewards.contribution_boost;
-      const coefficient = contributionBoost / 100 + 1;
-      setCoefficientText(t('newGBChat.contributionRatioLabelWithCoefficient', { coefficient: coefficient.toFixed(3) }));
-      setContributionMultiplier(coefficient);
-    } catch (error) {
-      console.error(t('newGBChat.fetchContributionError'), error);
-    }
-  };
-
   const handleCreateChat = async () => {
     try {
       const userId = await AsyncStorage.getItem('userId');
@@ -176,11 +169,11 @@ const NewGBChat = () => {
       const newChat = {
         name: chatName,
         rules: {
-          ArcLevel: parseFloat(nodeRatio) || 0,
+          ArcLevel: arcLevel,
           levelThreshold: parseInt(levelThreshold, 10) || 0,
           allowedGBs,
           placeLimit: selectedPlaceLimits,
-          contributionMultiplier: contributionMultiplier || 0,
+          contributionMultiplier: Number(Number(contributionMultiplier).toFixed(2)),
           selectedMembers,
         },
         createdBy: userId || null,
@@ -200,9 +193,13 @@ const NewGBChat = () => {
         await database().ref(`guilds/${guildId}/GBChat`).push(newChat);
       }
 
-      // Повертаємося до попереднього екрану (звідки відкривали)
       if (route.params?.from === 'AdminMain') {
-        navigation.navigate('AdminScreen');
+        const parentNavigation = navigation.getParent();
+        if (parentNavigation) {
+          parentNavigation.navigate('admin', { screen: 'AdminScreen' });
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
       } else if (route.params?.from === 'GBChatList') {
         navigation.navigate('GBScreen');
       } else if (navigation.canGoBack()) {
@@ -216,39 +213,46 @@ const NewGBChat = () => {
   };
 
   // Компонент Stepper для зміни числових значень
-  const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue = 200 }) => {
+  const Stepper = ({
+    value,
+    onValueChange,
+    buttonSize = 20,
+    minValue = 0,
+    maxValue = 200,
+    step = 1,
+    precision = 0,
+  }) => {
     const inputWidth = stepperWidth - buttonSize * 2;
-    const [inputValue, setInputValue] = useState(String(value));
+    const formatValue = (nextValue) => Number(nextValue).toFixed(precision);
+    const [inputValue, setInputValue] = useState(formatValue(value));
 
     const handleIncrement = () => {
-      const newValue = Math.min(value + 1, maxValue);
+      const newValue = Number(Math.min(Number(value) + step, maxValue).toFixed(precision));
       onValueChange(newValue);
-      setInputValue(String(newValue));
+      setInputValue(formatValue(newValue));
     };
 
     const handleDecrement = () => {
-      const newValue = Math.max(value - 1, minValue);
+      const newValue = Number(Math.max(Number(value) - step, minValue).toFixed(precision));
       onValueChange(newValue);
-      setInputValue(String(newValue));
+      setInputValue(formatValue(newValue));
     };
 
     const handleInputChange = (text) => {
-      if (/^\d*$/.test(text)) {
+      const pattern = precision > 0 ? /^\d*(?:[.,]\d{0,2})?$/ : /^\d*$/;
+      if (pattern.test(text)) {
         setInputValue(text);
       }
     };
 
     const handleEndEditing = () => {
-      let newValue = parseInt(inputValue, 10);
-      if (isNaN(newValue)) {
-        newValue = minValue;
-      } else if (newValue > maxValue) {
-        newValue = maxValue;
-      } else if (newValue < minValue) {
+      let newValue = Number(inputValue.replace(',', '.'));
+      if (!Number.isFinite(newValue)) {
         newValue = minValue;
       }
+      newValue = Number(Math.min(maxValue, Math.max(minValue, newValue)).toFixed(precision));
       onValueChange(newValue);
-      setInputValue(String(newValue));
+      setInputValue(formatValue(newValue));
     };
 
     return (
@@ -264,11 +268,11 @@ const NewGBChat = () => {
         </TouchableOpacity>
         <TextInput
           style={[styles.valueInput, { width: inputWidth, height: buttonSize }]}
-          keyboardType="numeric"
+          keyboardType={precision > 0 ? 'decimal-pad' : 'numeric'}
           value={inputValue}
           onChangeText={handleInputChange}
           onEndEditing={handleEndEditing}
-          maxLength={String(maxValue).length}
+          maxLength={precision > 0 ? String(maxValue).length + precision + 1 : String(maxValue).length}
         />
         <TouchableOpacity onPress={handleIncrement} style={[styles.stepButton, { width: buttonSize, height: buttonSize }]}>
           <Text style={styles.stepButtonText}>+</Text>
@@ -278,7 +282,7 @@ const NewGBChat = () => {
   };
 
   // Перевірка, чи кнопка має бути активною
-  const isCreateDisabled = !chatName.trim() || !nodeRatio || Number(nodeRatio) === 0;
+  const isCreateDisabled = !chatName.trim();
 
   return (
     <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: '#0f1115' }}>
@@ -294,19 +298,17 @@ const NewGBChat = () => {
         />
       </View>
 
-      {/* Блок для коефіцієнта внеску (nodeRatio) */}
+      {/* Блок для коефіцієнта внеску */}
       <View style={styles.block}>
         <Text style={styles.blockLabel}>{t('newGBChat.contributionRatioLabel')}</Text>
-        <Text style={styles.blockSubtle}>{coefficientText}</Text>
         <Stepper
-          value={parseInt(nodeRatio, 10) || 0}
-          onValueChange={(value) => {
-            setNodeRatio(value);
-            fetchContributionBoost(value);
-          }}
+          value={contributionMultiplier}
+          onValueChange={setContributionMultiplier}
           buttonSize={40}
-          minValue={0}
-          maxValue={200}
+          minValue={1}
+          maxValue={2}
+          step={0.01}
+          precision={2}
         />
       </View>
 
@@ -321,6 +323,7 @@ const NewGBChat = () => {
           itemTextStyle={styles.itemText}
           itemContainerStyle={styles.dropdownItemContainer}
           data={greatBuildings}
+          activeColor="#1b1f2a"
           labelField="label"
           valueField="value"
           placeholder={t('newGBChat.selectGBPlaceholder')}
@@ -369,6 +372,7 @@ const NewGBChat = () => {
           itemTextStyle={styles.itemText}
           itemContainerStyle={styles.dropdownItemContainer}
           data={guildMembers}
+          activeColor="#1b1f2a"
           labelField="name"
           valueField="userId"
           placeholder={t('newGBChat.selectMembersPlaceholder')}
@@ -400,6 +404,7 @@ const NewGBChat = () => {
             <CustomCheckBox
               key={index}
               title={`${value}`}
+              titleStyle={styles.checkboxLabel}
               checked={placeLimit[index]}
               onPress={() => handleCheckBoxChange(index)}
             />
@@ -529,10 +534,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#e6e9ef',
   },
-  blockSubtle: {
-    marginBottom: 10,
-    color: '#9aa3b2',
-  },
+  checkboxLabel: { color: '#e6e9ef' },
   placeholderStyle: {
     color: '#9aa3b2',
   },

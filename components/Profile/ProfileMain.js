@@ -203,7 +203,7 @@ const ProfileMain = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Налаштування світу</Text>
         <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('MyGB')}>
-          <GBIcon width={20} height={20} style={styles.iconSpacing} />
+          <GBIcon width={20} height={20} color="#A0A6AD" style={styles.iconSpacing} />
           <Text style={styles.mainText}>Налаштування ВС</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.itemRow} onPress={toggleCultureSettings}>

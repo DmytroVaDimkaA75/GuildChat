@@ -13,6 +13,12 @@ const {
 const {
   isUserActiveNowBySchedules,
 } = require("./notificationSchedule");
+const {
+  ApiValidationError,
+  GUARANTEE_STATUSES,
+  calculateGuarantee,
+  writeIfCurrent,
+} = require("./gbGuarantee");
 
 admin.initializeApp();
 
@@ -2765,3 +2771,101 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   }
   return { success: true };
 });
+
+/**
+ * Calculates the next actionable Great Building guarantee from the completed
+ * autoclicker snapshot. The formulas are intentionally kept server-side.
+ */
+exports.calculateGreatBuildingGuarantee = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/guildUsers/{ownerUserId}/greatBuild/{buildingId}/updateAt",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const triggeringUpdateAt = event.data.after.val();
+    if (triggeringUpdateAt == null || triggeringUpdateAt === event.data.before.val()) return null;
+
+    const { guildId, ownerUserId, buildingId } = event.params;
+    const db = admin.database();
+    const buildingPath = `/guilds/${guildId}/guildUsers/${ownerUserId}/greatBuild/${buildingId}`;
+    const updateAtRef = db.ref(`${buildingPath}/updateAt`);
+    const guarantRef = db.ref(`${buildingPath}/guarant`);
+    const context = { guildId, ownerUserId, buildingId };
+    const writeStatus = (status) => writeIfCurrent({
+      updateAtRef,
+      guarantRef,
+      triggeringUpdateAt,
+      result: {
+        calculatedAt: admin.database.ServerValue.TIMESTAMP,
+        status,
+      },
+    });
+
+    try {
+      const [buildingSnap, catalogSnap, guildUsersSnap, branchesSnap] = await Promise.all([
+        db.ref(buildingPath).once("value"),
+        db.ref(`/greatBuildings/${buildingId}`).once("value"),
+        db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+        db.ref(`/guilds/${guildId}/GBChat`).once("value"),
+      ]);
+      const building = buildingSnap.val();
+      const catalog = catalogSnap.val();
+      if (!building || !catalog || typeof catalog.levelBase !== "string" || !catalog.levelBase.trim()) {
+        throw new Error("Missing building or levelBase");
+      }
+      const currentLevel = Number(building.level);
+      if (!Number.isFinite(currentLevel) || currentLevel < 0) throw new Error("Invalid current level");
+      const targetLevel = currentLevel + 1;
+      const apiUrl = `${catalog.levelBase}${targetLevel}`;
+      let apiPayload;
+      try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        apiPayload = await response.json();
+      } catch (error) {
+        logger.error("[GB_GUARANTEE] API request failed", {
+          ...context, targetLevel, error: error?.message || String(error),
+        });
+        await writeStatus(GUARANTEE_STATUSES.API_ERROR);
+        return null;
+      }
+
+      let result;
+      try {
+        result = calculateGuarantee({
+          ownerUserId,
+          buildingId,
+          building,
+          guildUsers: guildUsersSnap.val() || {},
+          branches: branchesSnap.val() || {},
+          apiPayload,
+          calculatedAt: admin.database.ServerValue.TIMESTAMP,
+        });
+      } catch (error) {
+        const isApiValidationError = error instanceof ApiValidationError;
+        logger.error("[GB_GUARANTEE] Calculation failed", {
+          ...context,
+          targetLevel,
+          stage: isApiValidationError ? "api_validation" : "input_validation",
+          error: error?.message || String(error),
+        });
+        await writeStatus(
+          isApiValidationError ? GUARANTEE_STATUSES.API_ERROR : GUARANTEE_STATUSES.INVALID_DATA
+        );
+        return null;
+      }
+
+      const written = await writeIfCurrent({
+        updateAtRef, guarantRef, triggeringUpdateAt, result,
+      });
+      if (!written) logger.info("[GB_GUARANTEE] Skipped stale result", context);
+      return null;
+    } catch (error) {
+      logger.error("[GB_GUARANTEE] Invalid building input", {
+        ...context, error: error?.message || String(error),
+      });
+      await writeStatus(GUARANTEE_STATUSES.INVALID_DATA);
+      return null;
+    }
+  }
+);

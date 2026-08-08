@@ -53,11 +53,14 @@ import ObstaclesMap from './Culture/ObstaclesMap';
 import SettlementGamePlanner from './Culture/SettlementGamePlanner';
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
+import GBCenterScreen from './GB/GBCenterScreen';
 import GBExpress from './GB/GBExpress';
 import GBGuarant from './GB/GBGuarant';
+import GBGuaranteesScreen from './GB/GBGuaranteesScreen';
 import GBNewExpress from './GB/GBNewExpress';
 import GBScreen from "./GB/GBScreen";
 import MyGB from './GB/MyGB';
+import MyGBCenterScreen from './GB/MyGBCenterScreen';
 import NewGBChat from './GB/NewGBChat';
 import GBGScreen from './GBG/GBGscreen';
 import AddSchedule from './Profile/AddSchedule';
@@ -278,6 +281,14 @@ function GBStack() {
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen
+        name="GBCenter"
+        component={GBCenterScreen}
+        options={{
+          title: 'Центр ВС',
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        }}
+      />
+      <Stack.Screen
         name="GBScreen"
         component={GBScreen}
         options={({ navigation }) => ({
@@ -289,6 +300,18 @@ function GBStack() {
             </TouchableOpacity>
           ),
         })}
+      />
+      <Stack.Screen
+        name="MyGBCenter"
+        component={MyGBCenterScreen}
+        options={{
+          title: 'Мої ВС',
+        }}
+      />
+      <Stack.Screen
+        name="GBGuarantees"
+        component={GBGuaranteesScreen}
+        options={{ title: t('gbGuarantees.title') }}
       />
       <Stack.Screen
         name="GBChatWindow"

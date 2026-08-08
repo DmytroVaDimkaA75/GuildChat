@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-const CustomCheckBox = ({ title, checked, onPress, checkmarkSize = 26, checkmarkPositionX = 1, checkmarkPositionY = -6 }) => {
+const CustomCheckBox = ({ title, titleStyle, checked, onPress, checkmarkSize = 26, checkmarkPositionX = 1, checkmarkPositionY = -6 }) => {
 const checkboxSize = 24; // Розмір квадрату чекбокса
 
 return (
@@ -17,7 +17,7 @@ return (
 </Svg>
 )}
 </View>
-<Text style={{ marginLeft: 10 }}>{title}</Text>
+<Text style={[{ marginLeft: 10 }, titleStyle]}>{title}</Text>
 </TouchableOpacity>
 );
 };
