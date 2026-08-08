@@ -1895,6 +1895,7 @@ const guaranteeTranslations = {
   uk: {
     title: "Гаранти", level: "Рівень {{level}}", chat: "Чат", allProtected: "Усі поточні місця захищені",
     filters: { ready: "Доступні", all_protected: "Гарантоване" },
+    statusFilters: { all: "Усі статуси", take_place: "Гарантовано", owner_deposit: "Внесок власника", guild_member_top_up: "Докинути", new_guild_member_deposit: "Перебити" },
     placeFilters: { all: "Усі місця", "1-2": "1–2 місця", "3-5": "3–5 місця" },
     status: { protected: "Гарантоване", takePlace: "Можна зайти", ownerDeposit: "Потрібен внесок власника", topUp: "Потрібно докинути", overtake: "Можна перебити", action: "Потрібна дія" },
     labels: { place: "Місце", guaranteedPlace: "Гарантоване місце", multiplier: "Коефіцієнт вкладу", contributionSize: "Розмір вкладу", updated: "Оновлено", branch: "Гілка", rate: "Ставка", remaining: "Залишок до закриття", nextAction: "Наступна дія", amount: "Сума", target: "Підсумковий вклад", arc: "Арка від" },
@@ -1906,6 +1907,7 @@ const guaranteeTranslations = {
   ru: {
     title: "Гаранты", level: "Уровень {{level}}", chat: "Чат", allProtected: "Все текущие места защищены",
     filters: { ready: "Доступные", all_protected: "Обеспечено" }, placeFilters: { all: "Все места", "1-2": "1–2 места", "3-5": "3–5 места" },
+    statusFilters: { all: "Все статусы", take_place: "Гарантировано", owner_deposit: "Вклад владельца", guild_member_top_up: "Добавить", new_guild_member_deposit: "Перебить" },
     status: { protected: "Гарант обеспечен", takePlace: "Можно войти", ownerDeposit: "Нужен вклад владельца", topUp: "Нужно добавить", overtake: "Можно перебить", action: "Нужно действие" },
     labels: { place: "Место", guaranteedPlace: "Гарантированное место", multiplier: "Коэффициент вклада", contributionSize: "Размер вклада", updated: "Обновлено", branch: "Ветка", rate: "Ставка", remaining: "Осталось до закрытия", nextAction: "Следующее действие", amount: "Сумма", target: "Итоговый вклад", arc: "Арка от" },
     actions: { takePlace: "Можно занять место", ownerDeposit: "Владельцу нужно внести", topUp: "Нужно добавить вкладчику", newDeposit: "Новому вкладчику нужно внести" },
@@ -1915,6 +1917,7 @@ const guaranteeTranslations = {
   be: {
     title: "Гаранты", level: "Узровень {{level}}", chat: "Чат", allProtected: "Усе бягучыя месцы абаронены",
     filters: { ready: "Даступныя", all_protected: "Забяспечана" }, placeFilters: { all: "Усе месцы", "1-2": "1–2 месцы", "3-5": "3–5 месцы" },
+    statusFilters: { all: "Усе статусы", take_place: "Гарантавана", owner_deposit: "Унёсак уладальніка", guild_member_top_up: "Дадаць", new_guild_member_deposit: "Перабіць" },
     status: { protected: "Гарант забяспечаны", takePlace: "Можна ўвайсці", ownerDeposit: "Патрэбны ўклад уладальніка", topUp: "Трэба дадаць", overtake: "Можна перабіць", action: "Патрэбна дзеянне" },
     labels: { place: "Месца", guaranteedPlace: "Гарантаванае месца", multiplier: "Каэфіцыент унёску", contributionSize: "Памер унёску", updated: "Абноўлена", branch: "Галіна", rate: "Стаўка", remaining: "Засталося да закрыцця", nextAction: "Наступнае дзеянне", amount: "Сума", target: "Выніковы ўклад", arc: "Арка ад" },
     actions: { takePlace: "Можна заняць месца", ownerDeposit: "Уладальніку трэба ўнесці", topUp: "Трэба дадаць укладчыку", newDeposit: "Новаму ўкладчыку трэба ўнесці" },
@@ -1924,6 +1927,7 @@ const guaranteeTranslations = {
   de: {
     title: "Garantien", level: "Stufe {{level}}", chat: "Chat", allProtected: "Alle aktuellen Plätze sind geschützt",
     filters: { ready: "Verfügbar", all_protected: "Gesichert" }, placeFilters: { all: "Alle Plätze", "1-2": "Plätze 1–2", "3-5": "Plätze 3–5" },
+    statusFilters: { all: "Alle Status", take_place: "Garantiert", owner_deposit: "Eigentümerbeitrag", guild_member_top_up: "Aufstocken", new_guild_member_deposit: "Überbieten" },
     status: { protected: "Garantie gesichert", takePlace: "Platz verfügbar", ownerDeposit: "Eigentümerbeitrag nötig", topUp: "Aufstockung nötig", overtake: "Überbieten möglich", action: "Aktion nötig" },
     labels: { place: "Platz", guaranteedPlace: "Garantierter Platz", multiplier: "Beitragsfaktor", contributionSize: "Beitragshöhe", updated: "Aktualisiert", branch: "Zweig", rate: "Beitrag", remaining: "Bis zum Abschluss", nextAction: "Nächste Aktion", amount: "Betrag", target: "Zielbeitrag", arc: "Arche ab" },
     actions: { takePlace: "Platz kann belegt werden", ownerDeposit: "Eigentümer muss einzahlen", topUp: "Beitrag muss aufgestockt werden", newDeposit: "Neues Mitglied muss einzahlen" },
@@ -1933,6 +1937,7 @@ const guaranteeTranslations = {
   en: {
     title: "Guarantees", level: "Level {{level}}", chat: "Chat", allProtected: "All current places are protected",
     filters: { ready: "Available", all_protected: "Protected" }, placeFilters: { all: "All places", "1-2": "Places 1–2", "3-5": "Places 3–5" },
+    statusFilters: { all: "All statuses", take_place: "Guaranteed", owner_deposit: "Owner deposit", guild_member_top_up: "Top up", new_guild_member_deposit: "Overtake" },
     status: { protected: "Guarantee secured", takePlace: "Ready to enter", ownerDeposit: "Owner deposit needed", topUp: "Top-up needed", overtake: "Can overtake", action: "Action needed" },
     labels: { place: "Place", guaranteedPlace: "Guaranteed place", multiplier: "Contribution multiplier", contributionSize: "Contribution size", updated: "Updated", branch: "Branch", rate: "Contribution", remaining: "Remaining to close", nextAction: "Next action", amount: "Amount", target: "Target contribution", arc: "Arc from" },
     actions: { takePlace: "A member can take the place", ownerDeposit: "The owner needs to contribute", topUp: "The contributor needs to top up", newDeposit: "A new contributor needs to contribute" },
@@ -1942,6 +1947,7 @@ const guaranteeTranslations = {
   pl: {
     title: "Gwarancje", level: "Poziom {{level}}", chat: "Czat", allProtected: "Wszystkie obecne miejsca są chronione",
     filters: { ready: "Dostępne", all_protected: "Zabezpieczone" }, placeFilters: { all: "Wszystkie miejsca", "1-2": "Miejsca 1–2", "3-5": "Miejsca 3–5" },
+    statusFilters: { all: "Wszystkie statusy", take_place: "Gwarantowane", owner_deposit: "Wkład właściciela", guild_member_top_up: "Dopłata", new_guild_member_deposit: "Przebicie" },
     status: { protected: "Gwarancja zabezpieczona", takePlace: "Można wejść", ownerDeposit: "Potrzebny wkład właściciela", topUp: "Potrzebna dopłata", overtake: "Można przebić", action: "Wymagane działanie" },
     labels: { place: "Miejsce", guaranteedPlace: "Gwarantowane miejsce", multiplier: "Mnożnik wkładu", contributionSize: "Wielkość wkładu", updated: "Zaktualizowano", branch: "Wątek", rate: "Wkład", remaining: "Do zamknięcia", nextAction: "Następne działanie", amount: "Kwota", target: "Docelowy wkład", arc: "Arka od" },
     actions: { takePlace: "Można zająć miejsce", ownerDeposit: "Właściciel musi wpłacić", topUp: "Wkładca musi dopłacić", newDeposit: "Nowy wkładca musi wpłacić" },

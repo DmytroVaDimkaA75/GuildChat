@@ -8,6 +8,7 @@ import {
   FlatList,
   Image,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -29,6 +30,13 @@ const COLORS = {
 
 const primaryFilters = ['ready', 'all_protected'];
 const placeFilters = ['all', '1-2', '3-5'];
+const statusFilters = [
+  'all',
+  'take_place',
+  'owner_deposit',
+  'guild_member_top_up',
+  'new_guild_member_deposit',
+];
 
 const numericTime = (value) => {
   if (typeof value === 'number') return value;
@@ -170,6 +178,7 @@ const GBGuaranteesScreen = ({ navigation }) => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [primaryFilter, setPrimaryFilter] = useState('ready');
   const [placeFilter, setPlaceFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
@@ -304,6 +313,11 @@ const GBGuaranteesScreen = ({ navigation }) => {
 
   const primaryRecords = records.filter((item) => item.guarant.status === primaryFilter);
   const visibleRecords = primaryRecords.filter((item) => {
+    if (
+      primaryFilter === 'ready' &&
+      statusFilter !== 'all' &&
+      item.guarant.action?.type !== statusFilter
+    ) return false;
     if (primaryFilter !== 'ready' || placeFilter === 'all') return true;
     const place = Number(item.guarant.place?.placeNumber);
     return placeFilter === '1-2' ? place >= 1 && place <= 2 : place >= 3 && place <= 5;
@@ -336,21 +350,41 @@ const GBGuaranteesScreen = ({ navigation }) => {
             key={filter}
             selected={primaryFilter === filter}
             label={t(`gbGuarantees.filters.${filter}`)}
-            onPress={() => { setPrimaryFilter(filter); setPlaceFilter('all'); }}
+            onPress={() => {
+              setPrimaryFilter(filter);
+              setPlaceFilter('all');
+              setStatusFilter('all');
+            }}
           />
         ))}
       </View>
       {primaryFilter === 'ready' && (
-        <View style={styles.filterRow}>
-          {placeFilters.map((filter) => (
-            <Chip
-              key={filter}
-              selected={placeFilter === filter}
-              label={t(`gbGuarantees.placeFilters.${filter}`)}
-              onPress={() => setPlaceFilter(filter)}
-            />
-          ))}
-        </View>
+        <>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalFilterRow}
+          >
+            {statusFilters.map((filter) => (
+              <Chip
+                key={filter}
+                selected={statusFilter === filter}
+                label={t(`gbGuarantees.statusFilters.${filter}`)}
+                onPress={() => setStatusFilter(filter)}
+              />
+            ))}
+          </ScrollView>
+          <View style={styles.filterRow}>
+            {placeFilters.map((filter) => (
+              <Chip
+                key={filter}
+                selected={placeFilter === filter}
+                label={t(`gbGuarantees.placeFilters.${filter}`)}
+                onPress={() => setPlaceFilter(filter)}
+              />
+            ))}
+          </View>
+        </>
       )}
       <FlatList
         data={visibleRecords}
@@ -374,6 +408,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: COLORS.background },
   filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10 },
+  horizontalFilterRow: { gap: 8, paddingHorizontal: 12, paddingTop: 10 },
   chip: { borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: COLORS.surface },
   chipSelected: { backgroundColor: COLORS.blueSoft, borderColor: COLORS.primary },
   chipText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
