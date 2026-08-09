@@ -3,7 +3,8 @@ import database from '@react-native-firebase/database';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 const COLORS = {
   background: '#0f1115',
@@ -12,10 +13,11 @@ const COLORS = {
   primary: '#4ea1ff',
   primarySoft: '#203047',
   text: '#f4f7fb',
-  muted: '#a7afbd',
+  muted: '#9aa3b2',
   divider: '#303640',
   success: '#59df68',
   warning: '#ff9848',
+  danger: '#ff4d4f',
 };
 
 const getLocalizedBuildingName = (buildingName, language, buildId) => {
@@ -97,67 +99,94 @@ const fetchScoreDbAvatar = async (worldId, investorId) => {
   }
 };
 
-function StatusBadge({ type, label }) {
-  const isSuccess = type === 'success';
-  const isWarning = type === 'warning';
-  const color = isSuccess ? COLORS.success : isWarning ? COLORS.warning : COLORS.muted;
-  const icon = isSuccess ? 'shield-checkmark-outline' : isWarning ? 'flame-outline' : 'lock-closed-outline';
+const formatFreshness = (value) => {
+  const timestamp = getUpdateTime(value);
+  if (!timestamp) return '—';
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return 'щойно';
+  if (minutes < 60) return `${minutes} хв тому`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} год тому`;
+  return `${Math.floor(hours / 24)} д тому`;
+};
+
+function ProgressImage({ image, progress }) {
+  const size = 132;
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
 
   return (
-    <View style={[styles.statusBadge, isSuccess && styles.successBadge, isWarning && styles.warningBadge]}>
-      <Ionicons name={icon} size={18} color={color} />
-      <Text style={[styles.statusText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-function BuildingCard({ building, language }) {
-  const forgePointsUnit = getForgePointsUnit(language);
-
-  return (
-    <View style={styles.card}>
-      {building.image ? (
-        <Image source={{ uri: building.image }} style={styles.buildingImage} />
+    <View style={styles.progressImageWrap}>
+      {image ? (
+        <Image source={{ uri: image }} style={styles.buildingImage} />
       ) : (
         <View style={[styles.buildingImage, styles.imagePlaceholder]}>
           <Ionicons name="business-outline" size={42} color={COLORS.primary} />
         </View>
       )}
-      <View style={styles.cardContent}>
-        <View style={styles.titleRow}>
-          <View style={styles.titleCopy}>
-            <Text style={styles.buildingName}>{building.name}</Text>
-            <Text style={styles.level}>Рівень {building.level}</Text>
-          </View>
-          <View style={styles.guaranteeSlot}>
-            {building.status && <StatusBadge type={building.statusType} label={building.status} />}
-          </View>
-        </View>
+      <Svg width={size} height={size} style={styles.progressCircle}>
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#24384d" strokeWidth={strokeWidth} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={COLORS.primary}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={circumference * (1 - progress / 100)}
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      <View style={styles.progressPill}>
+        <Text style={styles.progressPillText}>{progress}%</Text>
+      </View>
+    </View>
+  );
+}
 
-        <View style={styles.divider} />
-        <View style={styles.contributionRow}>
-          <View>
-            <Text style={styles.contributionLabel}>Мій вклад</Text>
-            <Text style={styles.contributionValue}>
-              {formatNumber(building.ownContribution, language)} {forgePointsUnit}
-            </Text>
-          </View>
-          <View style={styles.totalContribution}>
-            <Text style={styles.contributionLabel}>Сумарний вклад</Text>
-            <Text style={styles.contributionValue}>
-              {formatNumber(building.totalContribution, language)} {forgePointsUnit}
-            </Text>
-          </View>
-        </View>
+const InfoItem = ({ icon, label, value }) => (
+  <View style={styles.infoItem}>
+    <Ionicons name={icon} size={18} color={COLORS.muted} style={styles.infoIcon} />
+    <View style={styles.infoCopy}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+    </View>
+  </View>
+);
 
-        <View style={styles.progressRow}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${building.progress}%` }]} />
-          </View>
-          <Text style={styles.progressText}>{building.progress}%</Text>
-        </View>
+const getGuaranteeBadge = (building, forgePointsUnit) => {
+  if (building.totalLevelCost > 0 && building.totalContribution > building.totalLevelCost) {
+    return { label: 'Перелив', type: 'danger' };
+  }
+  const guarant = building.guarant;
+  if (guarant?.status !== 'ready') return null;
+  const place = guarant.place?.placeNumber;
+  if (guarant.action?.type === 'take_place' && place) {
+    return { label: `Гарантовано місце ${place}`, type: 'success' };
+  }
+  const amount = Number(guarant.action?.amount);
+  if (place && Number.isFinite(amount) && amount > 0) {
+    return { label: `До гаранту на місце ${place} — ${formatNumber(amount, 'uk')} ${forgePointsUnit}`, type: 'warning' };
+  }
+  return null;
+};
 
-        <View style={styles.cardFooter}>
+function BuildingCard({ building, language, onPress }) {
+  const forgePointsUnit = getForgePointsUnit(language);
+  const remaining = Math.max(0, building.totalLevelCost - building.totalContribution);
+  const badge = getGuaranteeBadge(building, forgePointsUnit);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <ProgressImage image={building.image} progress={building.progress} />
+        <View style={styles.summary}>
+          <Text style={styles.buildingName}>{building.name}</Text>
+          <Text style={styles.level}>Рівень {building.level}</Text>
           <View style={styles.avatarRow}>
             {building.contributors.length === 0 ? (
               <Text style={styles.noContributionsText}>Вкладів ще не було</Text>
@@ -183,18 +212,39 @@ function BuildingCard({ building, language }) {
               </View>
             )}
           </View>
-          <View style={styles.cardActions}>
-            <View style={styles.iconButton}>
-              <Ionicons name="chevron-forward" size={25} color={COLORS.primary} />
-            </View>
-          </View>
         </View>
+      </View>
+
+      <View style={styles.divider} />
+      <View style={styles.infoGrid}>
+        <View style={styles.infoColumn}>
+          <InfoItem icon="server-outline" label="Вартість рівня" value={`${formatNumber(building.totalLevelCost, language)} ${forgePointsUnit}`} />
+          <InfoItem icon="person-add-outline" label="Мій вклад" value={`${formatNumber(building.ownContribution, language)} ${forgePointsUnit}`} />
+        </View>
+        <View style={styles.verticalDivider} />
+        <View style={styles.infoColumn}>
+          <InfoItem icon="flag-outline" label="Залишилось до закриття" value={`${formatNumber(remaining, language)} ${forgePointsUnit}`} />
+          <InfoItem icon="time-outline" label="Оновлено" value={formatFreshness(building.updateAt)} />
+        </View>
+      </View>
+
+      <View style={styles.cardFooter}>
+        <View style={styles.badgeSlot}>
+          {badge && (
+            <View style={[styles.statusBadge, styles[`${badge.type}Badge`]]}>
+              <Text style={styles[`${badge.type}BadgeText`]}>{badge.label}</Text>
+            </View>
+          )}
+        </View>
+        <TouchableOpacity style={styles.iconButton} onPress={onPress} accessibilityRole="button">
+          <Ionicons name="chevron-forward" size={30} color={COLORS.primary} />
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const MyGBCenterScreen = () => {
+const MyGBCenterScreen = ({ navigation }) => {
   const { i18n } = useTranslation();
   const [buildings, setBuildings] = useState([]);
   const filters = ['Усі', 'З гарантом', `Потребують ${getForgePointsUnit(i18n.language)}`];
@@ -294,8 +344,7 @@ const MyGBCenterScreen = () => {
                   totalLevelCost,
                   progress,
                   updateAt: userBuild?.updateAt,
-                  status: null,
-                  statusType: 'closed',
+                  guarant: userBuild?.guarant || null,
                   contributors: visibleContributors,
                   extraContributors: Math.max(0, contributorEntries.length - 5),
                 };
@@ -346,7 +395,16 @@ const MyGBCenterScreen = () => {
 
         <View style={styles.cards}>
           {buildings.map((building) => (
-            <BuildingCard key={building.id} building={building} language={i18n.language} />
+            <BuildingCard
+              key={building.id}
+              building={building}
+              language={i18n.language}
+              onPress={() => navigation.navigate('GBGuarant', {
+                buildingName: building.name,
+                buildingId: building.id,
+                buildingImage: building.image,
+              })}
+            />
           ))}
         </View>
       </ScrollView>
@@ -357,92 +415,111 @@ const MyGBCenterScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   content: { paddingBottom: 28 },
-  filterRow: { flexDirection: 'row', gap: 9, paddingHorizontal: 14, paddingVertical: 14 },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
   filterChip: {
-    minHeight: 42,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 21,
-  },
-  activeFilter: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
-  filterText: { color: COLORS.muted, fontSize: 15 },
-  activeFilterText: { color: '#8ecbff', fontWeight: '700' },
-  cards: { paddingHorizontal: 12, gap: 10 },
-  card: {
-    minHeight: 214,
-    padding: 11,
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 17,
+    borderRadius: 18,
     backgroundColor: COLORS.surface,
   },
+  activeFilter: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
+  filterText: { color: COLORS.muted, fontSize: 13, fontWeight: '600' },
+  activeFilterText: { color: '#8ecbff' },
+  cards: { paddingHorizontal: 12, gap: 10 },
+  card: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#3b536d',
+    borderRadius: 17,
+    backgroundColor: '#111c29',
+  },
+  cardTop: { minHeight: 136, flexDirection: 'row', alignItems: 'center' },
+  progressImageWrap: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center' },
   buildingImage: {
-    width: 112,
-    height: 124,
+    width: 114,
+    height: 114,
     resizeMode: 'contain',
-    borderRadius: 14,
-    backgroundColor: COLORS.primarySoft,
+    borderRadius: 57,
   },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  cardContent: { flex: 1, marginLeft: 12 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 7 },
-  titleCopy: { flex: 1 },
-  guaranteeSlot: { minWidth: 96, minHeight: 31, alignItems: 'flex-end' },
-  buildingName: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-  level: { color: COLORS.muted, fontSize: 14, marginTop: 5 },
-  statusBadge: {
-    minHeight: 31,
+  progressCircle: { position: 'absolute' },
+  progressPill: {
+    position: 'absolute',
+    bottom: 0,
+    minWidth: 54,
     paddingHorizontal: 9,
-    flexDirection: 'row',
+    paddingVertical: 2,
     alignItems: 'center',
-    gap: 5,
-    borderRadius: 16,
-    backgroundColor: '#292c31',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 14,
+    backgroundColor: '#101b29',
   },
-  successBadge: { backgroundColor: '#1d3b22' },
-  warningBadge: { backgroundColor: '#472d18' },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  divider: { height: 1, marginVertical: 9, backgroundColor: COLORS.divider },
-  contributionRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  totalContribution: { minWidth: 115 },
-  contributionLabel: { color: COLORS.muted, fontSize: 13 },
-  contributionValue: { color: COLORS.text, fontSize: 16, fontWeight: '600', marginTop: 3 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 11 },
-  progressTrack: { flex: 1, height: 5, overflow: 'hidden', borderRadius: 3, backgroundColor: '#31363d' },
-  progressFill: { height: '100%', borderRadius: 3, backgroundColor: COLORS.primary },
-  progressText: { minWidth: 42, color: COLORS.primary, fontSize: 14, textAlign: 'right' },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
-  avatarRow: { flexDirection: 'row', alignItems: 'center' },
+  progressPillText: { color: '#c9ddf5', fontSize: 11, lineHeight: 14, fontWeight: '700' },
+  summary: { flex: 1, minWidth: 0, marginLeft: 14, alignSelf: 'stretch', justifyContent: 'center' },
+  buildingName: { color: COLORS.primary, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  level: { color: COLORS.muted, fontSize: 13, lineHeight: 18, marginTop: 4 },
+  statusBadge: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+  },
+  successBadge: { borderColor: '#24b84b', backgroundColor: '#173d29' },
+  warningBadge: { borderColor: '#d79600', backgroundColor: '#553900' },
+  dangerBadge: { borderColor: COLORS.danger, backgroundColor: '#682022' },
+  successBadgeText: { color: '#9af5a5', fontSize: 11, lineHeight: 14, fontWeight: '700' },
+  warningBadgeText: { color: '#fff0c7', fontSize: 11, lineHeight: 14, fontWeight: '700' },
+  dangerBadgeText: { color: '#ffe3e3', fontSize: 11, lineHeight: 14, fontWeight: '700' },
+  divider: { height: 1, marginTop: 8, marginBottom: 10, backgroundColor: '#395068' },
+  infoGrid: { minHeight: 88, flexDirection: 'row' },
+  infoColumn: { flex: 1, justifyContent: 'space-around' },
+  verticalDivider: { width: 1, marginHorizontal: 9, backgroundColor: '#75a3cb' },
+  infoItem: { minHeight: 42, flexDirection: 'row', alignItems: 'center' },
+  infoIcon: { width: 24, textAlign: 'center' },
+  infoCopy: { flex: 1, minWidth: 0, marginLeft: 5 },
+  infoLabel: { color: COLORS.muted, fontSize: 11 },
+  infoValue: { color: COLORS.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
+  cardFooter: { minHeight: 43, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 5 },
+  badgeSlot: { flex: 1, minHeight: 28, alignItems: 'flex-start', justifyContent: 'center', marginRight: 10 },
+  avatarRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', marginTop: 7 },
   avatar: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 17,
+    borderRadius: 19,
     borderWidth: 2,
     backgroundColor: '#2b3037',
   },
   avatarImage: { width: '100%', height: '100%' },
   guildAvatar: { borderColor: '#55d96b' },
-  externalAvatar: { borderColor: '#ff5b5b' },
-  noContributionsText: { color: COLORS.muted, fontSize: 13 },
+  externalAvatar: { borderColor: COLORS.primary },
+  noContributionsText: { color: COLORS.muted, fontSize: 13, lineHeight: 18 },
   overlapAvatar: { marginLeft: -7 },
-  extraAvatar: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#29313d' },
-  extraText: { color: '#79baff', fontSize: 14 },
-  cardActions: { flexDirection: 'row', gap: 8 },
+  extraAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#29313d' },
+  extraText: { color: '#79baff', fontSize: 12, fontWeight: '700' },
   iconButton: {
-    width: 47,
-    height: 39,
+    width: 43,
+    height: 43,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#3c5879',
-    borderRadius: 11,
+    borderRadius: 13,
   },
 });
 

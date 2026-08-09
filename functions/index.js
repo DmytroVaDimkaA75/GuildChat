@@ -2776,21 +2776,16 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
  * Calculates the next actionable Great Building guarantee from the completed
  * autoclicker snapshot. The formulas are intentionally kept server-side.
  */
-exports.calculateGreatBuildingGuarantee = onValueWritten(
-  {
-    ref: "/guilds/{guildId}/guildUsers/{ownerUserId}/greatBuild/{buildingId}/updateAt",
-    region: "europe-west1",
-  },
-  async (event) => {
+const handleGreatBuildingGuaranteeRefresh = (timestampField) => async (event) => {
     const triggeringUpdateAt = event.data.after.val();
     if (triggeringUpdateAt == null || triggeringUpdateAt === event.data.before.val()) return null;
 
     const { guildId, ownerUserId, buildingId } = event.params;
     const db = admin.database();
     const buildingPath = `/guilds/${guildId}/guildUsers/${ownerUserId}/greatBuild/${buildingId}`;
-    const updateAtRef = db.ref(`${buildingPath}/updateAt`);
+    const updateAtRef = db.ref(`${buildingPath}/${timestampField}`);
     const guarantRef = db.ref(`${buildingPath}/guarant`);
-    const context = { guildId, ownerUserId, buildingId };
+    const context = { guildId, ownerUserId, buildingId, timestampField };
     const writeStatus = (status) => writeIfCurrent({
       updateAtRef,
       guarantRef,
@@ -2867,5 +2862,22 @@ exports.calculateGreatBuildingGuarantee = onValueWritten(
       await writeStatus(GUARANTEE_STATUSES.INVALID_DATA);
       return null;
     }
-  }
+};
+
+// `updateAt` is a temporary manual refresh signal. Keep it alongside the
+// normal autoclicker `updatedAt` trigger until the manual action is removed.
+exports.calculateGreatBuildingGuarantee = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/guildUsers/{ownerUserId}/greatBuild/{buildingId}/updateAt",
+    region: "europe-west1",
+  },
+  handleGreatBuildingGuaranteeRefresh("updateAt")
+);
+
+exports.calculateGreatBuildingGuaranteeOnUpdatedAt = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/guildUsers/{ownerUserId}/greatBuild/{buildingId}/updatedAt",
+    region: "europe-west1",
+  },
+  handleGreatBuildingGuaranteeRefresh("updatedAt")
 );

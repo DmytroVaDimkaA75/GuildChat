@@ -1,6 +1,17 @@
+const FALLBACK_CONTRIBUTION_MULTIPLIER = 1.9;
+
 const GUARANTEE_STATUSES = Object.freeze({
-  READY: "ready",
-  ALL_PROTECTED: "all_protected",
+  SECURED_GUILD_MEMBER: "secured_guild_member",
+  GUILD_MEMBER_CAN_BE_OVERTAKEN: "guild_member_can_be_overtaken",
+  OUTSIDER_CAN_BE_OVERTAKEN: "outsider_can_be_overtaken",
+  OUTSIDER_CANNOT_BE_OVERTAKEN: "outsider_cannot_be_overtaken",
+  OUTSIDER_WITHOUT_GUILD_CHALLENGER: "outsider_without_guild_challenger",
+  EMPTY_GUARANTEED: "empty_guaranteed",
+  EMPTY_REQUIRES_OWNER_GUARANTEE: "empty_requires_owner_guarantee",
+  EMPTY_URGENT_DEPOSIT: "empty_urgent_deposit",
+  EMPTY_URGENT_PROPORTIONAL_DEPOSIT: "empty_urgent_proportional_deposit",
+  EMPTY_OWNER_CONFIRMATION_REQUIRED: "empty_owner_confirmation_required",
+  NO_ACTION_REQUIRED: "no_action_required",
   API_ERROR: "api_error",
   INVALID_DATA: "invalid_data",
 });
@@ -14,9 +25,7 @@ class ApiValidationError extends Error {
 
 const asFiniteNumber = (value, field, { min = 0 } = {}) => {
   const number = Number(value);
-  if (!Number.isFinite(number) || number < min) {
-    throw new Error(`Invalid ${field}`);
-  }
+  if (!Number.isFinite(number) || number < min) throw new Error(`Invalid ${field}`);
   return number;
 };
 
@@ -47,14 +56,13 @@ const selectBranch = (branches, input) => {
   const matches = [];
   Object.entries(branches || {}).forEach(([branchId, branch]) => {
     if (!branchMatches({ branch, ...input })) return;
-    const multiplier = asFiniteNumber(
-      branch?.rules?.contributionMultiplier,
-      "contributionMultiplier"
-    );
     matches.push({
       branchId,
       branchName: String(branch?.name || "").trim() || undefined,
-      contributionMultiplier: multiplier,
+      contributionMultiplier: asFiniteNumber(
+        branch?.rules?.contributionMultiplier,
+        "contributionMultiplier"
+      ),
       requiredArcLevel: asFiniteNumber(branch?.rules?.ArcLevel ?? 0, "ArcLevel"),
     });
   });
@@ -64,10 +72,6 @@ const selectBranch = (branches, input) => {
     (item) => item.contributionMultiplier === highestMultiplier
   );
   if (highestMatches.length === 1) return highestMatches[0];
-
-  // Equal multipliers have identical calculation semantics. There is no unique
-  // chat destination, so omit branch identity. The lowest Arc requirement keeps
-  // the result visible to everyone eligible through at least one tied branch.
   return {
     contributionMultiplier: highestMultiplier,
     requiredArcLevel: Math.min(...highestMatches.map((item) => item.requiredArcLevel)),
@@ -79,12 +83,17 @@ const validateApiPayload = (payload, targetLevel) => {
     throw new ApiValidationError("API status/response is invalid");
   }
   const response = payload.response;
-  const totalFp = response.total_fp;
-  if (typeof totalFp !== "number" || !Number.isFinite(totalFp) || totalFp < 0) {
+  if (
+    typeof response.total_fp !== "number" ||
+    !Number.isFinite(response.total_fp) ||
+    response.total_fp < 0
+  ) {
     throw new ApiValidationError("Invalid total_fp");
   }
   if (response.level !== targetLevel) throw new ApiValidationError("API level mismatch");
-  if (!Array.isArray(response.patron_bonus)) throw new ApiValidationError("Invalid patron_bonus");
+  if (!Array.isArray(response.patron_bonus)) {
+    throw new ApiValidationError("Invalid patron_bonus");
+  }
 
   const nominalByRank = new Map();
   response.patron_bonus.forEach((bonus) => {
@@ -102,7 +111,7 @@ const validateApiPayload = (payload, targetLevel) => {
     nominalByRank.set(rank, bonus.forgepoints);
   });
   return {
-    totalFp,
+    totalFp: response.total_fp,
     places: Array.from({ length: 5 }, (_, index) => ({
       placeNumber: index + 1,
       nominalCost: nominalByRank.get(index + 1) || 0,
@@ -124,7 +133,7 @@ const normalizeContributors = ({ contributors, ownerUserId, guildUsers }) => {
     playerName: String(contributor?.playerName || "").trim() || contributorId,
     forgePoints: asFiniteNumber(contributor?.forgePoints, "contributor forgePoints"),
     rank: asFiniteNumber(contributor?.rank, "contributor rank"),
-    memberType: Object.prototype.hasOwnProperty.call(guildUsers || {}, contributorId)
+    membership: Object.prototype.hasOwnProperty.call(guildUsers || {}, contributorId)
       ? "guild_member"
       : "outsider",
   }));
@@ -140,107 +149,260 @@ const normalizeContributors = ({ contributors, ownerUserId, guildUsers }) => {
 const canOvertake = (challengerContribution, availableFp, currentContribution) =>
   challengerContribution + availableFp > currentContribution;
 
-const findFirstUnprotectedPlace = ({ candidates, remainingFp }) => {
-  for (let index = 0; index < 5; index += 1) {
-    const occupant = candidates[index];
-    if (!occupant) return { placeNumber: index + 1, occupant: null, index };
-    const challenger = candidates[index + 1];
-    if (canOvertake(challenger?.forgePoints || 0, remainingFp, occupant.forgePoints)) {
-      return { placeNumber: index + 1, occupant, index };
+const buildPlaces = ({ nominalPlaces, branches, ownerUserId, buildingId, currentLevel }) =>
+  nominalPlaces.map((place) => {
+    const branch = selectBranch(branches, {
+      ownerUserId,
+      buildingId,
+      currentLevel,
+      placeNumber: place.placeNumber,
+    });
+    // A coefficient belongs to a concrete place of a concrete GB. Only use
+    // the agreed 1.9 fallback when no GBChat branch matches that place.
+    const coefficient = branch?.contributionMultiplier ?? FALLBACK_CONTRIBUTION_MULTIPLIER;
+    return {
+      ...place,
+      placeCost: Math.max(1, Math.round(place.nominalCost * coefficient)),
+      coefficient,
+      ...(branch?.branchId ? { branchId: branch.branchId } : {}),
+      ...(branch?.branchName ? { branchName: branch.branchName } : {}),
+      requiredArcLevel: branch?.requiredArcLevel ?? 0,
+    };
+  });
+
+const distributeContributors = ({ candidates, places, remainingFp }) => {
+  const distribution = [];
+  let placeNumber = 1;
+  let candidateIndex = 0;
+
+  while (candidateIndex < candidates.length) {
+    const candidate = candidates[candidateIndex];
+    if (placeNumber > 5) {
+      distribution.push({ placeNumber, occupant: candidate });
+      candidateIndex += 1;
+      placeNumber += 1;
+      continue;
     }
+
+    const placeCost = places[placeNumber - 1].placeCost;
+    const nextCandidateFp = candidates[candidateIndex + 1]?.forgePoints || 0;
+    const qualifiesByCost = candidate.forgePoints >= placeCost;
+    const isAlreadyProtected = !canOvertake(
+      nextCandidateFp,
+      remainingFp,
+      candidate.forgePoints
+    );
+
+    if (qualifiesByCost || isAlreadyProtected) {
+      distribution.push({ placeNumber, occupant: candidate });
+      candidateIndex += 1;
+    } else {
+      distribution.push({ placeNumber, occupant: null });
+    }
+    placeNumber += 1;
   }
-  return null;
+
+  while (placeNumber <= 5) {
+    distribution.push({ placeNumber, occupant: null });
+    placeNumber += 1;
+  }
+  return distribution;
 };
 
-const calculateAction = ({ target, candidates, remainingFp, fixedCost }) => {
-  const occupant = target.occupant;
-  if (!occupant) {
-    const outsider = candidates.slice(target.index)
-      .find((item) => item.memberType === "outsider");
-    const amount = Math.max(0, remainingFp + (outsider?.forgePoints || 0) - 2 * fixedCost);
-    return amount > 0
-      ? { type: "owner_deposit", amount }
-      : { type: "take_place", amount: fixedCost, targetContribution: fixedCost };
-  }
-  if (occupant.memberType === "guild_member") {
-    const outsider = candidates.slice(target.index + 1)
-      .find((item) => item.memberType === "outsider");
-    const amount = Math.max(
-      0,
-      remainingFp + (outsider?.forgePoints || 0) - occupant.forgePoints
-    );
-    return amount > 0 ? { type: "owner_deposit", amount } : { type: "none" };
+const occupantPayload = (occupant) => ({
+  contributorId: occupant.contributorId,
+  playerName: occupant.playerName,
+  forgePoints: occupant.forgePoints,
+  membership: occupant.membership,
+});
+
+const action = (type, actor, amount, extra = {}) => ({ type, actor, amount, ...extra });
+
+const calculateEmptyResult = ({ target, distribution, places, remainingFp }) => {
+  const place = places[target.placeNumber - 1];
+  const followingRewardPlaces = distribution.filter(
+    (item) => item.placeNumber > target.placeNumber && item.placeNumber <= 5
+  );
+  const allFollowingEmpty = followingRewardPlaces.every((item) => !item.occupant);
+  const common = {
+    placeNumber: target.placeNumber,
+    placeCost: place.placeCost,
+    nominalCost: place.nominalCost,
+    coefficient: place.coefficient,
+    ...(place.branchId ? { branchId: place.branchId } : {}),
+    ...(place.branchName ? { branchName: place.branchName } : {}),
+    requiredArcLevel: place.requiredArcLevel,
+  };
+
+  if (allFollowingEmpty) {
+    const emptyPlaces = places.slice(target.placeNumber - 1);
+    const sumEmptyPlaceCosts = emptyPlaces.reduce((sum, item) => sum + item.placeCost, 0);
+    const emptyCommon = { ...common, sumEmptyPlaceCosts };
+
+    if (sumEmptyPlaceCosts < remainingFp) {
+      const oneFpPlacesCount = emptyPlaces.filter((item) => item.placeCost === 1).length;
+      const weightedPlaces = emptyPlaces.filter((item) => item.placeCost > 1);
+      const weightSum = weightedPlaces.reduce((sum, item) => sum + item.placeCost, 0);
+      const proportionalPool = remainingFp - 1 - oneFpPlacesCount;
+      const recommendedDeposit = place.placeCost === 1
+        ? 1
+        : Math.ceil(proportionalPool * place.placeCost / weightSum);
+      return {
+        ...emptyCommon,
+        status: GUARANTEE_STATUSES.EMPTY_URGENT_PROPORTIONAL_DEPOSIT,
+        ownerClosingFp: 1,
+        oneFpPlacesCount,
+        proportionalPool,
+        weightSum,
+        recommendedDeposit,
+        action: action("guild_member_deposit", "guild_member", recommendedDeposit),
+      };
+    }
+
+    if (sumEmptyPlaceCosts === remainingFp) {
+      const nextEmptyPlace = emptyPlaces[1];
+      if (!nextEmptyPlace && place.placeCost === 1) {
+        return {
+          ...emptyCommon,
+          status: GUARANTEE_STATUSES.EMPTY_OWNER_CONFIRMATION_REQUIRED,
+          recommendedDeposit: 0,
+          ownerClosingFp: 1,
+          action: action("confirm_with_owner", "owner", 1),
+        };
+      }
+      const leaveOneFp = !nextEmptyPlace || nextEmptyPlace.placeCost === 1;
+      const recommendedDeposit = place.placeCost - (leaveOneFp ? 1 : 0);
+      return {
+        ...emptyCommon,
+        status: GUARANTEE_STATUSES.EMPTY_URGENT_DEPOSIT,
+        recommendedDeposit,
+        ownerClosingFp: leaveOneFp ? 1 : 0,
+        ...(nextEmptyPlace ? {
+          nextEmptyPlace: {
+            placeNumber: nextEmptyPlace.placeNumber,
+            placeCost: nextEmptyPlace.placeCost,
+          },
+        } : {}),
+        action: action("guild_member_deposit", "guild_member", recommendedDeposit),
+      };
+    }
   }
 
-  const guildMember = candidates.slice(target.index + 1)
-    .find((item) => item.memberType === "guild_member");
-  if (guildMember) {
-    const amount = Math.max(
-      0,
-      occupant.forgePoints + 1 - guildMember.forgePoints,
-      Math.ceil((remainingFp + occupant.forgePoints - guildMember.forgePoints) / 2)
-    );
+  const nearestOutsider = distribution.find(
+    (item) => item.placeNumber > target.placeNumber &&
+      item.occupant?.membership === "outsider"
+  )?.occupant;
+  const ownerGuaranteeFp = Math.max(
+    0,
+    (nearestOutsider?.forgePoints || 0) + remainingFp - 2 * place.placeCost
+  );
+  if (ownerGuaranteeFp > 0) {
     return {
-      type: "guild_member_top_up",
-      amount,
-      targetContribution: guildMember.forgePoints + amount,
-      contributorId: guildMember.contributorId,
-      playerName: guildMember.playerName,
+      ...common,
+      status: GUARANTEE_STATUSES.EMPTY_REQUIRES_OWNER_GUARANTEE,
+      ownerGuaranteeFp,
+      ...(nearestOutsider ? { nearestOutsider: occupantPayload(nearestOutsider) } : {}),
+      action: action("owner_deposit", "owner", ownerGuaranteeFp),
     };
   }
-  const amount = Math.max(
-    occupant.forgePoints + 1,
-    Math.ceil((remainingFp + occupant.forgePoints) / 2)
-  );
-  return { type: "new_guild_member_deposit", amount, targetContribution: amount };
+  return {
+    ...common,
+    status: GUARANTEE_STATUSES.EMPTY_GUARANTEED,
+    ownerGuaranteeFp: 0,
+    ...(nearestOutsider ? { nearestOutsider: occupantPayload(nearestOutsider) } : {}),
+    action: action("guild_member_deposit", "guild_member", place.placeCost),
+  };
+};
+
+const findFirstActionableResult = ({ distribution, places, remainingFp }) => {
+  for (const target of distribution) {
+    const occupant = target.occupant;
+    if (!occupant) {
+      return calculateEmptyResult({ target, distribution, places, remainingFp });
+    }
+
+    if (occupant.membership === "guild_member") {
+      const nearestOutsider = distribution.find(
+        (item) => item.placeNumber > target.placeNumber &&
+          item.occupant?.membership === "outsider"
+      )?.occupant;
+      const challengerFp = nearestOutsider?.forgePoints || 0;
+      if (!canOvertake(challengerFp, remainingFp, occupant.forgePoints)) continue;
+      const ownerGuaranteeFp = challengerFp + remainingFp - occupant.forgePoints;
+      return {
+        status: GUARANTEE_STATUSES.GUILD_MEMBER_CAN_BE_OVERTAKEN,
+        placeNumber: target.placeNumber,
+        occupant: occupantPayload(occupant),
+        ...(nearestOutsider ? { nearestOutsider: occupantPayload(nearestOutsider) } : {}),
+        ownerGuaranteeFp,
+        action: action("owner_deposit", "owner", ownerGuaranteeFp),
+      };
+    }
+
+    const nearestGuildMember = distribution.find(
+      (item) => item.placeNumber > target.placeNumber &&
+        item.occupant?.membership === "guild_member"
+    )?.occupant;
+    if (!nearestGuildMember) {
+      return {
+        status: GUARANTEE_STATUSES.OUTSIDER_WITHOUT_GUILD_CHALLENGER,
+        placeNumber: target.placeNumber,
+        occupant: occupantPayload(occupant),
+        action: action("guild_member_deposit", "guild_member", occupant.forgePoints + 1),
+      };
+    }
+
+    const requiredTopUp = occupant.forgePoints + 1 - nearestGuildMember.forgePoints;
+    if (requiredTopUp > remainingFp) continue;
+    return {
+      status: GUARANTEE_STATUSES.OUTSIDER_CAN_BE_OVERTAKEN,
+      placeNumber: target.placeNumber,
+      occupant: occupantPayload(occupant),
+      nearestGuildMember: {
+        ...occupantPayload(nearestGuildMember),
+        requiredTopUp,
+      },
+      action: action(
+        "guild_member_top_up",
+        "guild_member",
+        requiredTopUp,
+        { contributorId: nearestGuildMember.contributorId }
+      ),
+    };
+  }
+  return null;
 };
 
 const calculateGuarantee = ({
   ownerUserId, buildingId, building, guildUsers, branches, apiPayload, calculatedAt,
 }) => {
   const currentLevel = asFiniteNumber(building?.level, "building level");
-  const { totalFp, places } = validateApiPayload(apiPayload, currentLevel + 1);
+  const { totalFp, places: nominalPlaces } = validateApiPayload(apiPayload, currentLevel + 1);
   const { owner, candidates } = normalizeContributors({
-    contributors: building?.contributors, ownerUserId, guildUsers,
+    contributors: building?.contributors,
+    ownerUserId,
+    guildUsers,
   });
-  const investedFp = owner.forgePoints + candidates.reduce((sum, item) => sum + item.forgePoints, 0);
+  const investedFp = owner.forgePoints + candidates.reduce(
+    (sum, item) => sum + item.forgePoints,
+    0
+  );
   const remainingFp = totalFp - investedFp;
   if (remainingFp < 0) throw new Error("Contributions exceed total_fp");
-  const target = findFirstUnprotectedPlace({ candidates, remainingFp });
-  const base = { calculatedAt, totalFp, remainingFp };
-  if (!target) return { ...base, status: GUARANTEE_STATUSES.ALL_PROTECTED };
 
-  const nominal = places[target.placeNumber - 1];
-  const branch = selectBranch(branches, {
-    ownerUserId, buildingId, currentLevel, placeNumber: target.placeNumber,
+  const places = buildPlaces({
+    nominalPlaces,
+    branches,
+    ownerUserId,
+    buildingId,
+    currentLevel,
   });
-  const multiplier = branch?.contributionMultiplier ?? 1;
-  const fixedCost = Math.max(1, Math.round(nominal.nominalCost * multiplier));
-  const place = {
-    placeNumber: target.placeNumber,
-    state: target.occupant?.memberType || "empty",
-    nominalCost: nominal.nominalCost,
-    fixedCost,
-    ...(branch || {
-      contributionMultiplier: 1,
-      requiredArcLevel: 0,
-    }),
-  };
-  const action = calculateAction({ target, candidates, remainingFp, fixedCost });
-  return {
-    ...base,
-    status: GUARANTEE_STATUSES.READY,
-    place,
-    ...(target.occupant ? {
-      occupant: {
-        contributorId: target.occupant.contributorId,
-        playerName: target.occupant.playerName,
-        forgePoints: target.occupant.forgePoints,
-        memberType: target.occupant.memberType,
-      },
-    } : {}),
-    action,
-  };
+  const distribution = distributeContributors({ candidates, places, remainingFp });
+  const result = findFirstActionableResult({ distribution, places, remainingFp });
+  const base = { calculatedAt, totalFp, remainingFp };
+  return result
+    ? { ...base, ...result }
+    : { ...base, status: GUARANTEE_STATUSES.NO_ACTION_REQUIRED };
 };
 
 const writeIfCurrent = async ({ updateAtRef, guarantRef, triggeringUpdateAt, result }) => {
@@ -252,12 +414,15 @@ const writeIfCurrent = async ({ updateAtRef, guarantRef, triggeringUpdateAt, res
 
 module.exports = {
   ApiValidationError,
+  FALLBACK_CONTRIBUTION_MULTIPLIER,
   GUARANTEE_STATUSES,
   branchMatches,
-  calculateAction,
+  buildPlaces,
+  calculateEmptyResult,
   calculateGuarantee,
   canOvertake,
-  findFirstUnprotectedPlace,
+  distributeContributors,
+  findFirstActionableResult,
   normalizeContributors,
   selectBranch,
   sortContributors,

@@ -282,6 +282,7 @@ const GBGuaranteesScreen = ({ navigation }) => {
     const language = i18n.language || 'uk';
     const items = [];
     Object.entries(guildUsers).forEach(([ownerUserId, ownerData]) => {
+      if (ownerUserId === currentUserId) return;
       Object.entries(ownerData?.greatBuild || {}).forEach(([buildingId, parent]) => {
         const guarant = parent?.guarant;
         if (!guarant || !['ready', 'all_protected'].includes(guarant.status)) return;
@@ -309,7 +310,7 @@ const GBGuaranteesScreen = ({ navigation }) => {
     return items.sort((a, b) => {
       return numericTime(b.updateAt) - numericTime(a.updateAt) || a.id.localeCompare(b.id);
     });
-  }, [catalog, currentArcLevel, guildUsers, i18n.language]);
+  }, [catalog, currentArcLevel, currentUserId, guildUsers, i18n.language]);
 
   const primaryRecords = records.filter((item) => item.guarant.status === primaryFilter);
   const visibleRecords = primaryRecords.filter((item) => {
