@@ -163,6 +163,45 @@ const getGuaranteeBadge = (building, forgePointsUnit) => {
     return { label: 'Перелив', type: 'danger' };
   }
   const guarant = building.guarant;
+  if (
+    guarant?.status === 'empty_urgent_deposit'
+    || guarant?.status === 'empty_urgent_proportional_deposit'
+  ) {
+    const placeNumber = Number(guarant.placeNumber);
+    const totalFp = Number(guarant.totalFp);
+    if (
+      Number.isInteger(placeNumber)
+      && placeNumber > 0
+      && Number.isFinite(totalFp)
+      && totalFp >= 0
+    ) {
+      return {
+        label: `Перелив. На місце ${placeNumber} запропоновано вкласти ${formatNumber(totalFp, 'uk')} СО`,
+        type: 'danger',
+      };
+    }
+  }
+  if (guarant?.status === 'empty_guaranteed') {
+    const placeNumber = Number(guarant.placeNumber);
+    if (Number.isInteger(placeNumber) && placeNumber > 0) {
+      return { label: `Гарантовано місце ${placeNumber}`, type: 'success' };
+    }
+  }
+  if (guarant?.status === 'guild_member_can_be_overtaken') {
+    const placeNumber = Number(guarant.placeNumber);
+    const ownerGuaranteeFp = Number(guarant.ownerGuaranteeFp);
+    if (
+      Number.isInteger(placeNumber)
+      && placeNumber > 0
+      && Number.isFinite(ownerGuaranteeFp)
+      && ownerGuaranteeFp > 0
+    ) {
+      return {
+        label: `Для прикриття вкладника на місці ${placeNumber} слід додати ${formatNumber(ownerGuaranteeFp, 'uk')} СО`,
+        type: 'warning',
+      };
+    }
+  }
   if (guarant?.status !== 'ready') return null;
   const place = guarant.place?.placeNumber;
   if (guarant.action?.type === 'take_place' && place) {
@@ -247,7 +286,12 @@ function BuildingCard({ building, language, onPress }) {
 const MyGBCenterScreen = ({ navigation }) => {
   const { i18n } = useTranslation();
   const [buildings, setBuildings] = useState([]);
-  const filters = ['Усі', 'З гарантом', `Потребують ${getForgePointsUnit(i18n.language)}`];
+  const [selectedFilter, setSelectedFilter] = useState('all');
+  const filters = [
+    { id: 'all', label: 'Усі' },
+    { id: 'guaranteed', label: 'З гарантом' },
+    { id: 'needs_fp', label: `Потребують ${getForgePointsUnit(i18n.language)}` },
+  ];
 
   useEffect(() => {
     let greatBuildRef;
@@ -343,7 +387,7 @@ const MyGBCenterScreen = ({ navigation }) => {
                   totalContribution,
                   totalLevelCost,
                   progress,
-                  updateAt: userBuild?.updateAt,
+                  updateAt: userBuild?.guarant?.calculatedAt,
                   guarant: userBuild?.guarant || null,
                   contributors: visibleContributors,
                   extraContributors: Math.max(0, contributorEntries.length - 5),
@@ -382,19 +426,36 @@ const MyGBCenterScreen = ({ navigation }) => {
     };
   }, [i18n.language]);
 
+  const visibleBuildings = buildings.filter((building) => {
+    if (selectedFilter === 'all') return true;
+    if (selectedFilter === 'needs_fp') {
+      return building.guarant?.status === 'guild_member_can_be_overtaken'
+        || building.guarant?.action?.type === 'owner_deposit';
+    }
+    return building.guarant?.status === 'empty_guaranteed'
+      || building.guarant?.action?.type === 'take_place';
+  });
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.filterRow}>
-          {filters.map((filter, index) => (
-            <View key={filter} style={[styles.filterChip, index === 0 && styles.activeFilter]}>
-              <Text style={[styles.filterText, index === 0 && styles.activeFilterText]}>{filter}</Text>
-            </View>
+          {filters.map((filter) => (
+            <TouchableOpacity
+              key={filter.id}
+              accessibilityRole="button"
+              onPress={() => setSelectedFilter(filter.id)}
+              style={[styles.filterChip, selectedFilter === filter.id && styles.activeFilter]}
+            >
+              <Text style={[styles.filterText, selectedFilter === filter.id && styles.activeFilterText]}>
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
         <View style={styles.cards}>
-          {buildings.map((building) => (
+          {visibleBuildings.map((building) => (
             <BuildingCard
               key={building.id}
               building={building}
@@ -494,7 +555,14 @@ const styles = StyleSheet.create({
   infoValue: { color: COLORS.text, fontSize: 12, fontWeight: '700', marginTop: 2 },
   cardFooter: { minHeight: 43, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 5 },
   badgeSlot: { flex: 1, minHeight: 28, alignItems: 'flex-start', justifyContent: 'center', marginRight: 10 },
-  avatarRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', marginTop: 7 },
+  avatarRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 7,
+    marginLeft: -4,
+    paddingRight: 8,
+  },
   avatar: {
     width: 38,
     height: 38,
@@ -507,9 +575,9 @@ const styles = StyleSheet.create({
   },
   avatarImage: { width: '100%', height: '100%' },
   guildAvatar: { borderColor: '#55d96b' },
-  externalAvatar: { borderColor: COLORS.primary },
+  externalAvatar: { borderColor: COLORS.danger },
   noContributionsText: { color: COLORS.muted, fontSize: 13, lineHeight: 18 },
-  overlapAvatar: { marginLeft: -7 },
+  overlapAvatar: { marginLeft: -11 },
   extraAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#29313d' },
   extraText: { color: '#79baff', fontSize: 12, fontWeight: '700' },
   iconButton: {

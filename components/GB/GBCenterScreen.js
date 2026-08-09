@@ -48,6 +48,12 @@ const moreItems = [
   { icon: 'time-outline', label: 'Історія вкладень' },
 ];
 
+const GUARANTEE_SCREEN_STATUSES = new Set([
+  'empty_guaranteed',
+  'empty_urgent_deposit',
+  'empty_urgent_proportional_deposit',
+]);
+
 function MainSection({ icon, title, subtitle, count, onPress }) {
   return (
     <TouchableOpacity style={styles.mainSection} onPress={onPress} activeOpacity={onPress ? 0.75 : 1}>
@@ -95,14 +101,18 @@ const GBCenterScreen = ({ navigation }) => {
           setMyGBCount(Object.keys(guildUsers[userId]?.greatBuild || {}).length);
           const arcLevel = Number(guildUsers[userId]?.greatBuild?.['The Arc']?.level) || 0;
           let visibleGuarantees = 0;
-          Object.values(guildUsers).forEach((owner) => {
+          Object.entries(guildUsers).forEach(([ownerUserId, owner]) => {
+            // "Гаранти" contains only Great Buildings owned by other members
+            // of the current guild. The current user's GBs belong to "Мої ВС".
+            if (ownerUserId === userId) return;
             Object.values(owner?.greatBuild || {}).forEach((building) => {
+              const currentUserContribution = Number(
+                building?.contributors?.[userId]?.forgePoints
+              ) || 0;
+              if (currentUserContribution > 0) return;
               const guarant = building?.guarant;
-              if (!guarant || !['ready', 'all_protected'].includes(guarant.status)) return;
-              if (
-                guarant.status === 'ready' &&
-                arcLevel < (Number(guarant.place?.requiredArcLevel) || 0)
-              ) return;
+              if (!GUARANTEE_SCREEN_STATUSES.has(guarant?.status)) return;
+              if (arcLevel < (Number(guarant.requiredArcLevel) || 0)) return;
               visibleGuarantees += 1;
             });
           });

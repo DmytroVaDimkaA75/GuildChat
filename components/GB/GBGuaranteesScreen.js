@@ -8,7 +8,6 @@ import {
   FlatList,
   Image,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,17 +25,16 @@ const COLORS = {
   greenSoft: '#183923',
   amber: '#ffad33',
   amberSoft: '#422f17',
+  red: '#ff5b61',
+  redSoft: '#4a1d21',
 };
 
-const primaryFilters = ['ready', 'all_protected'];
+const urgentDepositStatuses = new Set([
+  'empty_urgent_deposit',
+  'empty_urgent_proportional_deposit',
+]);
+
 const placeFilters = ['all', '1-2', '3-5'];
-const statusFilters = [
-  'all',
-  'take_place',
-  'owner_deposit',
-  'guild_member_top_up',
-  'new_guild_member_deposit',
-];
 
 const numericTime = (value) => {
   if (typeof value === 'number') return value;
@@ -44,6 +42,11 @@ const numericTime = (value) => {
   if (Number.isFinite(parsed)) return parsed;
   const date = Date.parse(value);
   return Number.isFinite(date) ? date : 0;
+};
+
+const formatForgePoints = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toLocaleString('uk') : '0';
 };
 
 const getBuildingName = (catalogEntry, language, buildingId) => {
@@ -63,22 +66,22 @@ const formatFreshness = (timestamp, t) => {
   return t('gbGuarantees.freshness.days', { count: Math.floor(hours / 24) });
 };
 
-const statusPresentation = (item, t) => {
-  if (item.guarant.status === 'all_protected') {
-    return { label: t('gbGuarantees.status.protected'), color: COLORS.green, background: COLORS.greenSoft };
+const statusPresentation = (item) => {
+  if (item.guarant.status === 'empty_guaranteed') {
+    return {
+      label: `Гарантовано місце ${item.guarant.placeNumber}`,
+      color: COLORS.green,
+      background: COLORS.greenSoft,
+    };
   }
-  const type = item.guarant.action?.type;
-  if (type === 'take_place') {
-    return { label: t('gbGuarantees.status.takePlace'), color: COLORS.primary, background: COLORS.blueSoft };
+  if (urgentDepositStatuses.has(item.guarant.status)) {
+    return {
+      label: `Перелив. На місце ${item.guarant.placeNumber} слід вкласти ${formatForgePoints(item.guarant.totalFp)} СО`,
+      color: COLORS.red,
+      background: COLORS.redSoft,
+    };
   }
-  const labels = {
-    owner_deposit: t('gbGuarantees.status.ownerDeposit'),
-    guild_member_top_up: t('gbGuarantees.status.topUp'),
-    new_guild_member_deposit: t('gbGuarantees.status.overtake'),
-  };
-  return labels[type]
-    ? { label: labels[type], color: COLORS.amber, background: COLORS.amberSoft }
-    : null;
+  return null;
 };
 
 const CompactInfoRow = ({ icon, label, value }) => {
@@ -94,13 +97,15 @@ const CompactInfoRow = ({ icon, label, value }) => {
 
 const GuaranteeCard = ({ item, t }) => {
   const { guarant, owner, building, level, updateAt } = item;
-  const status = statusPresentation(item, t);
-  const place = guarant.place || {};
+  const status = statusPresentation(item);
   const freshness = formatFreshness(updateAt, t);
   const hasLevel = level !== undefined && level !== null && level !== '';
-  const contributionMultiplier = Number.isFinite(Number(place.contributionMultiplier))
-    ? Number(place.contributionMultiplier)
+  const contributionMultiplier = Number.isFinite(Number(guarant.coefficient))
+    ? Number(guarant.coefficient)
     : null;
+  const contributionSize = guarant.status === 'empty_guaranteed'
+    ? guarant.action?.amount
+    : guarant.remainingFp;
 
   return (
     <View style={styles.card}>
@@ -131,15 +136,12 @@ const GuaranteeCard = ({ item, t }) => {
         )}
       </View>
 
-      {guarant.status === 'all_protected' && (
-        <Text style={styles.protectedText}>{t('gbGuarantees.allProtected')}</Text>
-      )}
       <View style={styles.infoGrid}>
         <View style={styles.infoColumn}>
           <CompactInfoRow
             icon="shield-checkmark-outline"
             label={t('gbGuarantees.labels.guaranteedPlace')}
-            value={place.placeNumber}
+            value={guarant.placeNumber}
           />
           <CompactInfoRow
             icon="speedometer-outline"
@@ -151,7 +153,7 @@ const GuaranteeCard = ({ item, t }) => {
           <CompactInfoRow
             icon="server-outline"
             label={t('gbGuarantees.labels.contributionSize')}
-            value={guarant.remainingFp}
+            value={contributionSize}
           />
           <CompactInfoRow
             icon="time-outline"
@@ -176,9 +178,7 @@ const GBGuaranteesScreen = ({ navigation }) => {
   const [guildUsers, setGuildUsers] = useState(null);
   const [catalog, setCatalog] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const [primaryFilter, setPrimaryFilter] = useState('ready');
   const [placeFilter, setPlaceFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
@@ -284,9 +284,16 @@ const GBGuaranteesScreen = ({ navigation }) => {
     Object.entries(guildUsers).forEach(([ownerUserId, ownerData]) => {
       if (ownerUserId === currentUserId) return;
       Object.entries(ownerData?.greatBuild || {}).forEach(([buildingId, parent]) => {
+        const currentUserContribution = Number(
+          parent?.contributors?.[currentUserId]?.forgePoints
+        ) || 0;
+        if (currentUserContribution > 0) return;
         const guarant = parent?.guarant;
-        if (!guarant || !['ready', 'all_protected'].includes(guarant.status)) return;
-        const requiredArcLevel = Number(guarant.place?.requiredArcLevel);
+        if (
+          guarant?.status !== 'empty_guaranteed'
+          && !urgentDepositStatuses.has(guarant?.status)
+        ) return;
+        const requiredArcLevel = Number(guarant.requiredArcLevel);
         if (Number.isFinite(requiredArcLevel) && currentArcLevel < requiredArcLevel) return;
         const catalogEntry = catalog[buildingId] || {};
         items.push({
@@ -295,7 +302,7 @@ const GBGuaranteesScreen = ({ navigation }) => {
           buildingId,
           guarant,
           level: parent.level,
-          updateAt: parent.updateAt,
+          updateAt: guarant.calculatedAt,
           owner: {
             displayName: ownerData.userName || ownerData.playerName || ownerData.name || ownerUserId,
             imageUrl: ownerData.imageUrl || ownerData.avatarUrl || null,
@@ -312,20 +319,14 @@ const GBGuaranteesScreen = ({ navigation }) => {
     });
   }, [catalog, currentArcLevel, currentUserId, guildUsers, i18n.language]);
 
-  const primaryRecords = records.filter((item) => item.guarant.status === primaryFilter);
-  const visibleRecords = primaryRecords.filter((item) => {
-    if (
-      primaryFilter === 'ready' &&
-      statusFilter !== 'all' &&
-      item.guarant.action?.type !== statusFilter
-    ) return false;
-    if (primaryFilter !== 'ready' || placeFilter === 'all') return true;
-    const place = Number(item.guarant.place?.placeNumber);
+  const visibleRecords = records.filter((item) => {
+    if (placeFilter === 'all') return true;
+    const place = Number(item.guarant.placeNumber);
     return placeFilter === '1-2' ? place >= 1 && place <= 2 : place >= 3 && place <= 5;
   });
   const loading = guildUsers === null || catalog === null || currentUserId === null;
-  const emptyText = primaryRecords.length === 0
-    ? t(primaryFilter === 'ready' ? 'gbGuarantees.empty.ready' : 'gbGuarantees.empty.protected')
+  const emptyText = records.length === 0
+    ? t('gbGuarantees.empty.ready')
     : t('gbGuarantees.empty.filtered');
 
   if (loading) {
@@ -346,47 +347,15 @@ const GBGuaranteesScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.filterRow}>
-        {primaryFilters.map((filter) => (
+        {placeFilters.map((filter) => (
           <Chip
             key={filter}
-            selected={primaryFilter === filter}
-            label={t(`gbGuarantees.filters.${filter}`)}
-            onPress={() => {
-              setPrimaryFilter(filter);
-              setPlaceFilter('all');
-              setStatusFilter('all');
-            }}
+            selected={placeFilter === filter}
+            label={t(`gbGuarantees.placeFilters.${filter}`)}
+            onPress={() => setPlaceFilter(filter)}
           />
         ))}
       </View>
-      {primaryFilter === 'ready' && (
-        <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalFilterRow}
-          >
-            {statusFilters.map((filter) => (
-              <Chip
-                key={filter}
-                selected={statusFilter === filter}
-                label={t(`gbGuarantees.statusFilters.${filter}`)}
-                onPress={() => setStatusFilter(filter)}
-              />
-            ))}
-          </ScrollView>
-          <View style={styles.filterRow}>
-            {placeFilters.map((filter) => (
-              <Chip
-                key={filter}
-                selected={placeFilter === filter}
-                label={t(`gbGuarantees.placeFilters.${filter}`)}
-                onPress={() => setPlaceFilter(filter)}
-              />
-            ))}
-          </View>
-        </>
-      )}
       <FlatList
         data={visibleRecords}
         keyExtractor={(item) => item.id}
