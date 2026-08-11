@@ -210,11 +210,21 @@ const buildScheduleSummary = (scheduleId, scheduleData, t, daysShort) => {
 
 const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
   const swipeX = useRef(new Animated.Value(0)).current;
+  const isSwipeOpen = useRef(false);
   const { t } = useTranslation();
 
   const resetSwipe = useCallback(() => {
+    isSwipeOpen.current = false;
     Animated.spring(swipeX, {
       toValue: 0,
+      useNativeDriver: true
+    }).start();
+  }, [swipeX]);
+
+  const openSwipe = useCallback(() => {
+    isSwipeOpen.current = true;
+    Animated.spring(swipeX, {
+      toValue: -DELETE_ACTION_WIDTH,
       useNativeDriver: true
     }).start();
   }, [swipeX]);
@@ -232,30 +242,60 @@ const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          gestureState.dx < -10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+          Math.abs(gestureState.dx) > 10 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          (gestureState.dx < 0 || isSwipeOpen.current),
         onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dx < 0) {
-            swipeX.setValue(Math.max(gestureState.dx, -DELETE_ACTION_WIDTH));
-          }
+          const startPosition = isSwipeOpen.current ? -DELETE_ACTION_WIDTH : 0;
+          const nextPosition = Math.max(
+            -DELETE_ACTION_WIDTH,
+            Math.min(0, startPosition + gestureState.dx)
+          );
+          swipeX.setValue(nextPosition);
         },
         onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx <= -SWIPE_DELETE_THRESHOLD) {
-            deleteSchedule();
+          if (isSwipeOpen.current) {
+            if (gestureState.dx > 10) {
+              resetSwipe();
+            } else {
+              openSwipe();
+            }
+          } else if (gestureState.dx <= -SWIPE_DELETE_THRESHOLD) {
+            openSwipe();
           } else {
             resetSwipe();
           }
         },
-        onPanResponderTerminate: resetSwipe
+        onPanResponderTerminate: () => {
+          if (isSwipeOpen.current) {
+            openSwipe();
+          } else {
+            resetSwipe();
+          }
+        }
       }),
-    [deleteSchedule, resetSwipe, swipeX]
+    [openSwipe, resetSwipe, swipeX]
   );
 
   return (
     <View style={styles.swipeContainer}>
-      <View style={styles.deleteBackground}>
+      <TouchableOpacity
+        style={styles.deleteBackground}
+        onPress={deleteSchedule}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={t('addSchedule.delete')}
+      >
         <MaterialIcons name="delete-outline" size={25} color="#fff" />
-        <Text style={styles.deleteText}>{t('addSchedule.delete')}</Text>
-      </View>
+        <Text
+          style={styles.deleteText}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.65}
+        >
+          {t('addSchedule.delete')}
+        </Text>
+      </TouchableOpacity>
       <Animated.View style={{ transform: [{ translateX: swipeX }] }} {...panResponder.panHandlers}>
         <TouchableOpacity style={styles.scheduleItem} onPress={onPress} activeOpacity={0.75}>
           <View style={styles.scheduleText}>
@@ -420,14 +460,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#d9363e',
     alignItems: 'center',
     justifyContent: 'center',
-    width: DELETE_ACTION_WIDTH,
+    width: DELETE_ACTION_WIDTH + 20,
+    paddingLeft: 20,
     borderTopRightRadius: 11,
     borderBottomRightRadius: 11,
   },
   deleteText: {
+    width: DELETE_ACTION_WIDTH - 8,
     color: '#fff',
     fontSize: 12,
-    fontWeight: '700'
+    fontWeight: '700',
+    textAlign: 'center'
   },
   scheduleItem: {
     backgroundColor: '#1e1e1e',

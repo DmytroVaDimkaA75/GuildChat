@@ -2853,7 +2853,17 @@ const handleGreatBuildingGuaranteeRefresh = (timestampField) => async (event) =>
       const written = await writeIfCurrent({
         updateAtRef, guarantRef, triggeringUpdateAt, result,
       });
-      if (!written) logger.info("[GB_GUARANTEE] Skipped stale result", context);
+      if (!written) {
+        logger.info("[GB_GUARANTEE] Skipped stale result", context);
+      } else {
+        const currentContributorsSnap = await db.ref(`${buildingPath}/contributors`).once("value");
+        const hasContribution = Object.values(currentContributorsSnap.val() || {}).some(
+          (contributor) => Number(contributor?.forgePoints) > 0
+        );
+        if (hasContribution) {
+          await db.ref(`${buildingPath}/lock`).set(false);
+        }
+      }
       return null;
     } catch (error) {
       logger.error("[GB_GUARANTEE] Invalid building input", {

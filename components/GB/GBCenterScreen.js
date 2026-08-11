@@ -52,6 +52,7 @@ const GUARANTEE_SCREEN_STATUSES = new Set([
   'empty_guaranteed',
   'empty_urgent_deposit',
   'empty_urgent_proportional_deposit',
+  'guild_member_below_place_cost',
 ]);
 
 function MainSection({ icon, title, subtitle, count, onPress }) {
@@ -106,11 +107,15 @@ const GBCenterScreen = ({ navigation }) => {
             // of the current guild. The current user's GBs belong to "Мої ВС".
             if (ownerUserId === userId) return;
             Object.values(owner?.greatBuild || {}).forEach((building) => {
+              if (building?.lock === true) return;
               const currentUserContribution = Number(
                 building?.contributors?.[userId]?.forgePoints
               ) || 0;
-              if (currentUserContribution > 0) return;
               const guarant = building?.guarant;
+              const isTopUpTarget = guarant?.status === 'guild_member_below_place_cost'
+                && guarant?.action?.contributorId === userId;
+              if (currentUserContribution > 0 && !isTopUpTarget) return;
+              if (guarant?.status === 'guild_member_below_place_cost' && !isTopUpTarget) return;
               if (!GUARANTEE_SCREEN_STATUSES.has(guarant?.status)) return;
               if (arcLevel < (Number(guarant.requiredArcLevel) || 0)) return;
               visibleGuarantees += 1;

@@ -56,6 +56,7 @@ import GBChatWindow from './GB/GBChatWindow';
 import GBCenterScreen from './GB/GBCenterScreen';
 import GBExpress from './GB/GBExpress';
 import GBGuarant from './GB/GBGuarant';
+import GBGuaranteeDebugScreen from './GB/GBGuaranteeDebugScreen';
 import GBGuaranteesScreen from './GB/GBGuaranteesScreen';
 import GBNewExpress from './GB/GBNewExpress';
 import GBScreen from "./GB/GBScreen";
@@ -276,7 +277,7 @@ function GBGStack() {
   );
 }
 
-function GBStack() {
+function GBStack({ isDeveloper = false }) {
   const { t } = useTranslation();
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
@@ -310,9 +311,17 @@ function GBStack() {
       />
       <Stack.Screen
         name="GBGuarantees"
-        component={GBGuaranteesScreen}
         options={{ title: t('gbGuarantees.title') }}
-      />
+      >
+        {(props) => <GBGuaranteesScreen {...props} isDeveloper={isDeveloper} />}
+      </Stack.Screen>
+      {isDeveloper && (
+        <Stack.Screen
+          name="GBGuaranteeDebug"
+          component={GBGuaranteeDebugScreen}
+          options={{ title: 'Розподіл місць' }}
+        />
+      )}
       <Stack.Screen
         name="GBChatWindow"
         component={GBChatWindow}
@@ -1118,12 +1127,13 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
         />
         <Drawer.Screen
           name="GB"
-          component={GBStack}
           options={{
             drawerLabel: t("drawer.gbLabel"),
             drawerIconComponent: renderIcon(GB)
           }}
-        />
+        >
+          {() => <GBStack isDeveloper={isDeveloper} />}
+        </Drawer.Screen>
         <Drawer.Screen
           name="culture"
           component={CultureStack}

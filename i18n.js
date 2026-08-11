@@ -71,7 +71,7 @@ const ukTranslation = {
     newGBChatTitle: "Нова гілка прокачки ВС",
     gbChatWindowTitle: "GBChatWindow",
     gbExpressTitle: "Експрес прокачка",
-    gbNewExpressTitle: "Експрес прокачка1"
+    gbNewExpressTitle: "Експрес прокачка"
   },
   quantStack: {
     quantScreenTitle: "Квантові вторгнення"
@@ -132,7 +132,7 @@ const ukTranslation = {
     profileDataTitle: "Дані профілю",
     myGBTitle: "Мої Величні Споруди",
     addGBComponentTitle: "Додайте ВС до свого списку",
-    gbNewExpressTitle: "Експрес прокачка1",
+    gbNewExpressTitle: "Експрес прокачка",
     addScheduleTitle: "Графіки активності",
     sleepScheduleTitle: "Дані профілю",
     languageSelectorTitle: "Мова"
@@ -432,7 +432,7 @@ const ruTranslation = {
     newGBChatTitle: "Новая ветка прокачки ВС",
     gbChatWindowTitle: "GBChatWindow",
     gbExpressTitle: "Экспресс прокачка",
-    gbNewExpressTitle: "Экспресс прокачка1"
+    gbNewExpressTitle: "Экспресс прокачка"
   },
   quantStack: {
     quantScreenTitle: "Квантовые вторжения"
@@ -493,7 +493,7 @@ const ruTranslation = {
     profileDataTitle: "Данные профиля",
     myGBTitle: "Мои Великие Сооружения",
     addGBComponentTitle: "Добавьте ВС в свой список",
-    gbNewExpressTitle: "Экспресс прокачка1",
+    gbNewExpressTitle: "Экспресс прокачка",
     addScheduleTitle: "Графики активности",
     sleepScheduleTitle: "Данные профиля",
     languageSelectorTitle: "Язык"
@@ -793,7 +793,7 @@ const beTranslation = {
     newGBChatTitle: "Новая галіна прокачкі ВС",
     gbChatWindowTitle: "GBChatWindow",
     gbExpressTitle: "Экспрэс прокачка",
-    gbNewExpressTitle: "Экспрэс прокачка1"
+    gbNewExpressTitle: "Экспрэс прокачка"
   },
   quantStack: {
     quantScreenTitle: "Квантаваныя ўварванні"
@@ -854,7 +854,7 @@ const beTranslation = {
     profileDataTitle: "Дадзеныя профілю",
     myGBTitle: "Мае Вялікія Спорудкі",
     addGBComponentTitle: "Дадайце ВС да свайго спісу",
-    gbNewExpressTitle: "Экспрэс прокачка1",
+    gbNewExpressTitle: "Экспрэс прокачка",
     addScheduleTitle: "Графікі актыўнасці",
     sleepScheduleTitle: "Дадзеныя профілю",
     languageSelectorTitle: "Мова"
@@ -1154,7 +1154,7 @@ const deTranslation = {
     newGBChatTitle: "Neuer Zweig der Aufwertung von GS",
     gbChatWindowTitle: "GBChatWindow",
     gbExpressTitle: "Express-Aufwertung",
-    gbNewExpressTitle: "Express-Aufwertung1"
+    gbNewExpressTitle: "Express-Aufwertung"
   },
   quantStack: {
     quantScreenTitle: "Quanteninvasionen"
@@ -1215,7 +1215,7 @@ const deTranslation = {
     profileDataTitle: "Profildaten",
     myGBTitle: "Meine Großartigen Bauwerke",
     addGBComponentTitle: "Fügen Sie GS zu Ihrer Liste hinzu",
-    gbNewExpressTitle: "Express-Aufwertung1",
+    gbNewExpressTitle: "Express-Aufwertung",
     addScheduleTitle: "Aktivitätszeitpläne",
     sleepScheduleTitle: "Profildaten",
     languageSelectorTitle: "Sprache"

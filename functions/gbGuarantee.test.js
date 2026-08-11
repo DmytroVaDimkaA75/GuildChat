@@ -192,6 +192,25 @@ test("the agreed example returns only the first actionable place", () => {
   assert.equal(result.placeNumber, 4);
   assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_REQUIRES_OWNER_GUARANTEE);
   assert.deepEqual(result.action, { type: "owner_deposit", actor: "owner", amount: 100 });
+  assert.equal(result.developerDebug.ownerDeposit, 0);
+  assert.deepEqual(
+    result.developerDebug.places.map((place) => ({
+      placeNumber: place.placeNumber,
+      occupant: place.occupant?.contributorId || null,
+    })),
+    [
+      { placeNumber: 1, occupant: "anna" },
+      { placeNumber: 2, occupant: "bohdan" },
+      { placeNumber: 3, occupant: "vira" },
+      { placeNumber: 4, occupant: null },
+      { placeNumber: 5, occupant: "hlib" },
+      { placeNumber: 6, occupant: "dana" },
+      { placeNumber: 7, occupant: "yevhen" },
+    ]
+  );
+  assert.equal(result.developerDebug.places[0].nominalCost, 1000);
+  assert.equal(result.developerDebug.places[0].coefficient, 1.9);
+  assert.equal(result.developerDebug.places[0].placeCost, 1900);
 });
 
 test("guild member at risk produces an owner guarantee action", () => {
@@ -256,20 +275,208 @@ test("outsider without a guild challenger requests a new guild deposit", () => {
   assert.deepEqual(result.action, {
     type: "guild_member_deposit",
     actor: "guild_member",
-    amount: 81,
+    amount: 190,
   });
 });
 
-test("empty tail with more total cost than remaining is immediately guaranteed", () => {
+test("G-002 recommends the final safe deposit when overtaking an outsider", () => {
+  const distribution = [
+    { placeNumber: 1, occupant: candidate("max", 1230, "guild_member") },
+    { placeNumber: 2, occupant: candidate("cavalo", 620, "guild_member") },
+    { placeNumber: 3, occupant: candidate("lymon", 210, "guild_member") },
+    { placeNumber: 4, occupant: candidate("tertiadecima", 56, "outsider") },
+    { placeNumber: 5, occupant: candidate("geminist", 48, "outsider") },
+  ];
+  const result = findFirstActionableResult({
+    distribution,
+    places: catalogPlaces([1230, 620, 210, 48, 10]),
+    remainingFp: 134,
+  });
+
+  assert.equal(result.status, GUARANTEE_STATUSES.OUTSIDER_WITHOUT_GUILD_CHALLENGER);
+  assert.equal(result.placeNumber, 4);
+  assert.deepEqual(result.action, {
+    type: "guild_member_deposit",
+    actor: "guild_member",
+    amount: 95,
+  });
+  assert.equal(56 + (134 - result.action.amount), result.action.amount);
+});
+
+test("G-003 skips an outsider that cannot be overtaken and guarantees place two", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "274084",
+    buildingId: "great_building",
+    building: {
+      level: 77,
+      contributors: {
+        "244096": contributor(11, 2, "Tertiadecima"),
+        "274084": contributor(650, 2, "иван2000"),
+        "850585903": contributor(1539, 1, "Strannik888"),
+      },
+    },
+    guildUsers: { "274084": {} },
+    branches: {
+      double: { rules: { contributionMultiplier: 2, placeLimit: [1, 2, 3] } },
+      onePointNine: { rules: { contributionMultiplier: 1.9, placeLimit: [4, 5] } },
+    },
+    apiPayload: api([810, 405, 135, 35, 5], 3485, 78),
+  }));
+
+  assert.equal(result.remainingFp, 1285);
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_GUARANTEED);
+  assert.equal(result.placeNumber, 2);
+  assert.equal(result.placeCost, 810);
+  assert.equal(result.ownerGuaranteeFp, 0);
+  assert.deepEqual(result.action, {
+    type: "guild_member_deposit",
+    actor: "guild_member",
+    amount: 810,
+  });
+});
+
+test("G-004 asks the owner for only 24 FP to protect place four", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "274084",
+    buildingId: "great_building",
+    building: {
+      level: 81,
+      contributors: {
+        "274084": contributor(600, 3, "иван2000"),
+        "3389246": contributor(1360, 1, "Макс Чайка 999"),
+        "851646354": contributor(680, 2, "cavalo escuro"),
+        "851689153": contributor(60, 4, "trupis19"),
+        "852152036": contributor(234, 3, "seward"),
+      },
+    },
+    guildUsers: {
+      "274084": {},
+      "3389246": {},
+      "851646354": {},
+      "851689153": {},
+      "852152036": {},
+    },
+    branches: {
+      double: { rules: { contributionMultiplier: 2, placeLimit: [1, 2, 3] } },
+      onePointNinetyFive: {
+        rules: { contributionMultiplier: 1.95, placeLimit: [4, 5] },
+      },
+    },
+    apiPayload: api([680, 340, 115, 30, 5], 3018, 82),
+  }));
+
+  assert.equal(result.remainingFp, 84);
+  assert.equal(result.status, GUARANTEE_STATUSES.GUILD_MEMBER_CAN_BE_OVERTAKEN);
+  assert.equal(result.placeNumber, 4);
+  assert.equal(result.ownerGuaranteeFp, 24);
+  assert.deepEqual(result.action, {
+    type: "owner_deposit",
+    actor: "owner",
+    amount: 24,
+  });
+});
+
+test("G-005 prioritizes Berd 222 top-up to the full cost of place two", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "274084",
+    buildingId: "great_building",
+    building: {
+      level: 64,
+      contributors: {
+        "244096": contributor(8, 6, "Tertiadecima"),
+        "274084": contributor(250, 3, "иван2000"),
+        "3389246": contributor(50, 4, "Макс Чайка 999"),
+        "9382952": contributor(594, 2, "Berd 222"),
+        "9773882": contributor(200, 3, "Lexx84"),
+        "850585903": contributor(1150, 1, "Strannik888"),
+        "852166780": contributor(10, 5, "Тарквиний Хитрец 893"),
+      },
+    },
+    guildUsers: {
+      "274084": {},
+      "3389246": {},
+      "9382952": {},
+      "9773882": {},
+      "852166780": {},
+    },
+    branches: {
+      double: { rules: { contributionMultiplier: 2, placeLimit: [1, 2, 3] } },
+      onePointNine: { rules: { contributionMultiplier: 1.9, placeLimit: [4, 5] } },
+    },
+    apiPayload: api([605, 305, 100, 25, 5], 2334, 65),
+  }));
+
+  assert.equal(result.remainingFp, 72);
+  assert.equal(result.status, GUARANTEE_STATUSES.GUILD_MEMBER_BELOW_PLACE_COST);
+  assert.equal(result.placeNumber, 2);
+  assert.equal(result.placeCost, 610);
+  assert.equal(result.requiredTopUp, 16);
+  assert.equal(result.occupant.contributorId, "9382952");
+  assert.deepEqual(result.action, {
+    type: "guild_member_top_up",
+    actor: "guild_member",
+    amount: 16,
+    contributorId: "9382952",
+  });
+});
+
+test("G-006 asks the owner for 598 FP before opening place three", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "274084",
+    buildingId: "great_building",
+    building: {
+      level: 130,
+      contributors: {
+        "244096": contributor(11, 3, "Tertiadecima"),
+        "274084": contributor(10000, 1, "иван2000"),
+        "3758137": contributor(2258, 2, "Джеминист"),
+        "850585903": contributor(4731, 1, "Strannik888"),
+      },
+    },
+    guildUsers: { "274084": {} },
+    branches: {
+      double: { rules: { contributionMultiplier: 2, placeLimit: [1, 2, 3] } },
+      onePointNinetyFive: {
+        rules: { contributionMultiplier: 1.95, placeLimit: [4, 5] },
+      },
+    },
+    apiPayload: api([2490, 1245, 415, 105, 20], 19247, 131),
+  }));
+
+  assert.equal(result.remainingFp, 2247);
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_REQUIRES_OWNER_GUARANTEE);
+  assert.equal(result.placeNumber, 3);
+  assert.equal(result.placeCost, 830);
+  assert.equal(result.ownerGuaranteeFp, 598);
+  assert.equal(result.nearestOutsider.contributorId, "244096");
+  assert.deepEqual(result.action, {
+    type: "owner_deposit",
+    actor: "owner",
+    amount: 598,
+  });
+});
+
+test("empty tail below remaining is immediately guaranteed when the place is protected", () => {
   const places = catalogPlaces([200, 70, 20, 10, 5]);
   const distribution = places.map((place) => ({ placeNumber: place.placeNumber, occupant: null }));
   const result = calculateEmptyResult({
-    target: distribution[0], distribution, places, remainingFp: 250,
+    target: distribution[0], distribution, places, remainingFp: 400,
   });
   assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_GUARANTEED);
   assert.deepEqual(result.action, {
     type: "guild_member_deposit", actor: "guild_member", amount: 200,
   });
+});
+
+test("empty tail below remaining requires an owner guarantee when the place is exposed", () => {
+  const places = catalogPlaces([200, 70, 20, 10, 5]);
+  const distribution = places.map((place) => ({ placeNumber: place.placeNumber, occupant: null }));
+  const result = calculateEmptyResult({
+    target: distribution[0], distribution, places, remainingFp: 500,
+  });
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_REQUIRES_OWNER_GUARANTEE);
+  assert.equal(result.ownerGuaranteeFp, 100);
+  assert.deepEqual(result.action, { type: "owner_deposit", actor: "owner", amount: 100 });
 });
 
 test("equal empty-tail sum creates an urgent deposit", () => {
@@ -293,17 +500,93 @@ test("a following one-FP empty place reduces the urgent deposit by one", () => {
   assert.equal(result.action.amount, 199);
 });
 
-test("an empty tail below remaining uses only the current proportional deposit", () => {
+test("an empty tail above remaining uses only the current proportional deposit", () => {
   const places = catalogPlaces([200, 50, 25, 10, 1]);
   const distribution = places.map((place) => ({ placeNumber: place.placeNumber, occupant: null }));
   const result = calculateEmptyResult({
-    target: distribution[0], distribution, places, remainingFp: 300,
+    target: distribution[0], distribution, places, remainingFp: 250,
   });
   assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_URGENT_PROPORTIONAL_DEPOSIT);
   assert.equal(result.oneFpPlacesCount, 1);
-  assert.equal(result.proportionalPool, 298);
+  assert.equal(result.proportionalPool, 248);
   assert.equal(result.weightSum, 285);
-  assert.equal(result.action.amount, 210);
+  assert.equal(result.action.amount, 175);
+});
+
+test("G-001 recommends 1232 FP for the first empty place", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "851419219",
+    buildingId: "great_building",
+    building: {
+      level: 59,
+      contributors: {
+        "851419219": contributor(748, 1, "PASSAT B6"),
+      },
+    },
+    guildUsers: { "851419219": {} },
+    branches: {
+      double: {
+        name: "×2",
+        rules: {
+          contributionMultiplier: 2,
+          placeLimit: [1, 2, 3],
+        },
+      },
+      onePointNine: {
+        name: "×1.9",
+        rules: {
+          contributionMultiplier: 1.9,
+          placeLimit: [4, 5],
+        },
+      },
+    },
+    apiPayload: api([760, 380, 125, 30, 5], 2853, 60),
+  }));
+
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_URGENT_PROPORTIONAL_DEPOSIT);
+  assert.equal(result.remainingFp, 2105);
+  assert.equal(result.sumEmptyPlaceCosts, 2597);
+  assert.equal(result.ownerClosingFp, 1);
+  assert.equal(result.proportionalPool, 2104);
+  assert.equal(result.weightSum, 2597);
+  assert.equal(result.recommendedDeposit, 1232);
+  assert.deepEqual(result.action, {
+    type: "guild_member_deposit",
+    actor: "guild_member",
+    amount: 1232,
+  });
+  assert.deepEqual(
+    result.developerDebug.places.map((place) => place.placeCost),
+    [1520, 760, 250, 57, 10]
+  );
+});
+
+test("a contributor below fifth place prevents empty-tail calculation", () => {
+  const places = catalogPlaces([200, 50, 25, 10, 1]);
+  const distribution = [
+    ...places.map((place) => ({ placeNumber: place.placeNumber, occupant: null })),
+    { placeNumber: 6, occupant: candidate("outsider", 80, "outsider") },
+  ];
+  const result = calculateEmptyResult({
+    target: distribution[0], distribution, places, remainingFp: 250,
+  });
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_GUARANTEED);
+  assert.equal(result.sumEmptyPlaceCosts, undefined);
+  assert.equal(result.nearestOutsider.contributorId, "outsider");
+});
+
+test("a large remaining amount does not trigger proportional distribution", () => {
+  const places = catalogPlaces([6210, 2000, 1200, 800, 453]);
+  const distribution = places.map((place) => ({ placeNumber: place.placeNumber, occupant: null }));
+  const result = calculateEmptyResult({
+    target: distribution[0], distribution, places, remainingFp: 35771,
+  });
+  assert.equal(places.reduce((sum, place) => sum + place.placeCost, 0), 10663);
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_REQUIRES_OWNER_GUARANTEE);
+  assert.equal(result.ownerGuaranteeFp, 23351);
+  assert.deepEqual(result.action, {
+    type: "owner_deposit", actor: "owner", amount: 23351,
+  });
 });
 
 test("a final one-FP empty place asks the owner", () => {

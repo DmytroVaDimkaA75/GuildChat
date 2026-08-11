@@ -67,6 +67,13 @@ const formatFreshness = (timestamp, t) => {
 };
 
 const statusPresentation = (item) => {
+  if (item.guarant.status === 'guild_member_below_place_cost') {
+    return {
+      label: `Вартість місця ${item.guarant.placeNumber} складає ${formatForgePoints(item.guarant.placeCost)} СО. Треба докинути ${formatForgePoints(item.guarant.requiredTopUp ?? item.guarant.action?.amount)} СО`,
+      color: COLORS.red,
+      background: COLORS.redSoft,
+    };
+  }
   if (item.guarant.status === 'empty_guaranteed') {
     return {
       label: `Гарантовано місце ${item.guarant.placeNumber}`,
@@ -95,7 +102,7 @@ const CompactInfoRow = ({ icon, label, value }) => {
   );
 };
 
-const GuaranteeCard = ({ item, t }) => {
+const GuaranteeCard = ({ item, onPress, t }) => {
   const { guarant, owner, building, level, updateAt } = item;
   const status = statusPresentation(item);
   const freshness = formatFreshness(updateAt, t);
@@ -108,7 +115,13 @@ const GuaranteeCard = ({ item, t }) => {
     : guarant.remainingFp;
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      accessibilityRole={onPress ? 'button' : undefined}
+      activeOpacity={onPress ? 0.78 : 1}
+      disabled={!onPress}
+      onPress={onPress}
+      style={styles.card}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.avatar}>
           {owner.imageUrl ? (
@@ -162,7 +175,7 @@ const GuaranteeCard = ({ item, t }) => {
           />
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -172,7 +185,7 @@ const Chip = ({ selected, label, onPress }) => (
   </TouchableOpacity>
 );
 
-const GBGuaranteesScreen = ({ navigation }) => {
+const GBGuaranteesScreen = ({ isDeveloper = false, navigation }) => {
   const { guildId } = useContext(GuildContext);
   const { t, i18n } = useTranslation();
   const [guildUsers, setGuildUsers] = useState(null);
@@ -284,13 +297,18 @@ const GBGuaranteesScreen = ({ navigation }) => {
     Object.entries(guildUsers).forEach(([ownerUserId, ownerData]) => {
       if (ownerUserId === currentUserId) return;
       Object.entries(ownerData?.greatBuild || {}).forEach(([buildingId, parent]) => {
+        if (parent?.lock === true) return;
         const currentUserContribution = Number(
           parent?.contributors?.[currentUserId]?.forgePoints
         ) || 0;
-        if (currentUserContribution > 0) return;
         const guarant = parent?.guarant;
+        const isTopUpTarget = guarant?.status === 'guild_member_below_place_cost'
+          && guarant?.action?.contributorId === currentUserId;
+        if (currentUserContribution > 0 && !isTopUpTarget) return;
+        if (guarant?.status === 'guild_member_below_place_cost' && !isTopUpTarget) return;
         if (
           guarant?.status !== 'empty_guaranteed'
+          && guarant?.status !== 'guild_member_below_place_cost'
           && !urgentDepositStatuses.has(guarant?.status)
         ) return;
         const requiredArcLevel = Number(guarant.requiredArcLevel);
@@ -359,7 +377,18 @@ const GBGuaranteesScreen = ({ navigation }) => {
       <FlatList
         data={visibleRecords}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <GuaranteeCard item={item} t={t} />}
+        renderItem={({ item }) => (
+          <GuaranteeCard
+            item={item}
+            t={t}
+            onPress={isDeveloper ? () => navigation.navigate('GBGuaranteeDebug', {
+              guildId,
+              ownerUserId: item.ownerUserId,
+              buildingId: item.buildingId,
+              buildingName: item.building.name,
+            }) : undefined}
+          />
+        )}
         contentContainerStyle={[styles.list, visibleRecords.length === 0 && styles.emptyList]}
         ListEmptyComponent={<Text style={styles.stateText}>{emptyText}</Text>}
         refreshControl={(

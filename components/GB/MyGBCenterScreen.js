@@ -1,10 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import MyGBDistributionTable, {
+  DISTRIBUTION_HEADER_HEIGHT,
+  DISTRIBUTION_ROW_HEIGHT,
+  MIN_DISTRIBUTION_ROWS,
+  getDistributionPlaces,
+} from './MyGBDistributionTable';
 
 const COLORS = {
   background: '#0f1115',
@@ -202,6 +208,24 @@ const getGuaranteeBadge = (building, forgePointsUnit) => {
       };
     }
   }
+  if (guarant?.status === 'empty_requires_owner_guarantee') {
+    const ownerGuaranteeFp = Number(guarant.ownerGuaranteeFp);
+    if (Number.isFinite(ownerGuaranteeFp) && ownerGuaranteeFp > 0) {
+      return {
+        label: `Терміново вкласти ${formatNumber(ownerGuaranteeFp, 'uk')} СО`,
+        type: 'danger',
+      };
+    }
+  }
+  if (guarant?.status === 'guild_member_below_place_cost') {
+    const playerName = guarant.occupant?.playerName;
+    if (playerName) {
+      return {
+        label: `Очікуємо доплати від ${playerName}`,
+        type: 'warning',
+      };
+    }
+  }
   if (guarant?.status !== 'ready') return null;
   const place = guarant.place?.placeNumber;
   if (guarant.action?.type === 'take_place' && place) {
@@ -214,13 +238,63 @@ const getGuaranteeBadge = (building, forgePointsUnit) => {
   return null;
 };
 
-function BuildingCard({ building, language, onPress }) {
+function BuildingCard({
+  building,
+  language,
+  onToggleLock,
+  lockUpdating,
+  onScheduleExpress,
+}) {
   const forgePointsUnit = getForgePointsUnit(language);
   const remaining = Math.max(0, building.totalLevelCost - building.totalContribution);
   const badge = getGuaranteeBadge(building, forgePointsUnit);
+  const [expanded, setExpanded] = useState(false);
+  const expansion = useRef(new Animated.Value(0)).current;
+  const distributionRowCount = Math.max(
+    MIN_DISTRIBUTION_ROWS,
+    getDistributionPlaces(building.guarant).length
+  );
+  const expandedAreaHeight = 14
+    + DISTRIBUTION_HEADER_HEIGHT
+    + distributionRowCount * DISTRIBUTION_ROW_HEIGHT
+    + 58;
+  const chevronRotation = expansion.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  const toggleExpanded = () => {
+    const nextExpanded = !expanded;
+    setExpanded(nextExpanded);
+    Animated.timing(expansion, {
+      toValue: nextExpanded ? 1 : 0,
+      duration: 260,
+      useNativeDriver: false,
+    }).start();
+  };
 
   return (
     <View style={styles.card}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={building.lockEligible
+          ? building.lock ? 'Відкрити ВС' : 'Закрити ВС'
+          : 'Блокування недоступне для ВС із внесками'}
+        activeOpacity={0.7}
+        disabled={lockUpdating || !building.lockEligible}
+        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        onPress={onToggleLock}
+        style={[
+          styles.lockButton,
+          (lockUpdating || !building.lockEligible) && styles.lockButtonDisabled,
+        ]}
+      >
+        <Ionicons
+          name={building.lock ? 'lock-closed' : 'lock-open'}
+          size={23}
+          color={building.lock ? COLORS.warning : COLORS.primary}
+        />
+      </TouchableOpacity>
       <View style={styles.cardTop}>
         <ProgressImage image={building.image} progress={building.progress} />
         <View style={styles.summary}>
@@ -275,10 +349,40 @@ function BuildingCard({ building, language, onPress }) {
             </View>
           )}
         </View>
-        <TouchableOpacity style={styles.iconButton} onPress={onPress} accessibilityRole="button">
-          <Ionicons name="chevron-forward" size={30} color={COLORS.primary} />
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={toggleExpanded}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Згорнути таблицю місць' : 'Розгорнути таблицю місць'}
+          accessibilityState={{ expanded }}
+        >
+          <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+            <Ionicons name="chevron-down" size={31} color={COLORS.primary} />
+          </Animated.View>
         </TouchableOpacity>
       </View>
+
+      <Animated.View
+        pointerEvents={expanded ? 'auto' : 'none'}
+        style={[
+          styles.expandedArea,
+          {
+            height: expansion.interpolate({ inputRange: [0, 1], outputRange: [0, expandedAreaHeight] }),
+            opacity: expansion,
+          },
+        ]}
+      >
+        <MyGBDistributionTable guarant={building.guarant} />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Запланувати експрес"
+          activeOpacity={0.75}
+          onPress={onScheduleExpress}
+          style={styles.scheduleExpressButton}
+        >
+          <Text style={styles.scheduleExpressButtonText}>Запланувати експрес</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
@@ -287,6 +391,7 @@ const MyGBCenterScreen = ({ navigation }) => {
   const { i18n } = useTranslation();
   const [buildings, setBuildings] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [updatingLockId, setUpdatingLockId] = useState(null);
   const filters = [
     { id: 'all', label: 'Усі' },
     { id: 'guaranteed', label: 'З гарантом' },
@@ -316,6 +421,22 @@ const MyGBCenterScreen = ({ navigation }) => {
         handleGreatBuildsChange = async (snapshot) => {
           const currentRequest = ++requestVersion;
           const userBuilds = snapshot.val() || {};
+
+          const forcedUnlocks = {};
+          Object.entries(userBuilds).forEach(([buildId, userBuild]) => {
+            const totalContribution = Object.values(userBuild?.contributors || {}).reduce(
+              (sum, contributor) => sum + (Number(contributor?.forgePoints) || 0),
+              0
+            );
+            if (totalContribution > 0 && userBuild?.lock === true) {
+              forcedUnlocks[`${buildId}/lock`] = false;
+            }
+          });
+          if (Object.keys(forcedUnlocks).length > 0) {
+            greatBuildRef.update(forcedUnlocks).catch((unlockError) => {
+              console.error('Не вдалося автоматично відкрити ВС із внесками:', unlockError);
+            });
+          }
 
           try {
             const guildUsersSnapshot = await database().ref(`guilds/${guildId}/guildUsers`).once('value');
@@ -378,6 +499,8 @@ const MyGBCenterScreen = ({ navigation }) => {
 
                 return {
                   id: buildId,
+                  lock: totalContribution === 0 && userBuild?.lock === true,
+                  lockEligible: totalContribution === 0,
                   name: getLocalizedBuildingName(buildingInfo.buildingName, i18n.language, buildId),
                   image: typeof buildingInfo.buildingImage === 'string'
                     ? buildingInfo.buildingImage
@@ -436,6 +559,32 @@ const MyGBCenterScreen = ({ navigation }) => {
       || building.guarant?.action?.type === 'take_place';
   });
 
+  const toggleBuildingLock = async (building) => {
+    if (updatingLockId || !building?.id || !building.lockEligible) return;
+    const nextLock = !building.lock;
+    setUpdatingLockId(building.id);
+    setBuildings((currentBuildings) => currentBuildings.map((item) =>
+      item.id === building.id ? { ...item, lock: nextLock } : item
+    ));
+    try {
+      const [guildId, userId] = await Promise.all([
+        AsyncStorage.getItem('guildId'),
+        AsyncStorage.getItem('userId'),
+      ]);
+      if (!guildId || !userId) throw new Error('Не знайдено guildId або userId');
+      await database()
+        .ref(`guilds/${guildId}/guildUsers/${userId}/greatBuild/${building.id}/lock`)
+        .set(nextLock);
+    } catch (error) {
+      console.error(`Не вдалося змінити блокування ВС ${building.id}:`, error);
+      setBuildings((currentBuildings) => currentBuildings.map((item) =>
+        item.id === building.id ? { ...item, lock: building.lock } : item
+      ));
+    } finally {
+      setUpdatingLockId(null);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -460,10 +609,10 @@ const MyGBCenterScreen = ({ navigation }) => {
               key={building.id}
               building={building}
               language={i18n.language}
-              onPress={() => navigation.navigate('GBGuarant', {
-                buildingName: building.name,
+              lockUpdating={updatingLockId === building.id}
+              onToggleLock={() => toggleBuildingLock(building)}
+              onScheduleExpress={() => navigation.navigate('GBNewExpress', {
                 buildingId: building.id,
-                buildingImage: building.image,
               })}
             />
           ))}
@@ -498,12 +647,29 @@ const styles = StyleSheet.create({
   activeFilterText: { color: '#8ecbff' },
   cards: { paddingHorizontal: 12, gap: 10 },
   card: {
+    position: 'relative',
     padding: 12,
     borderWidth: 1,
     borderColor: '#3b536d',
     borderRadius: 17,
     backgroundColor: '#111c29',
   },
+  lockButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    elevation: 4,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#3c5879',
+    borderRadius: 12,
+    backgroundColor: '#152334',
+  },
+  lockButtonDisabled: { opacity: 0.5 },
   cardTop: { minHeight: 136, flexDirection: 'row', alignItems: 'center' },
   progressImageWrap: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center' },
   buildingImage: {
@@ -527,7 +693,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#101b29',
   },
   progressPillText: { color: '#c9ddf5', fontSize: 11, lineHeight: 14, fontWeight: '700' },
-  summary: { flex: 1, minWidth: 0, marginLeft: 14, alignSelf: 'stretch', justifyContent: 'center' },
+  summary: { flex: 1, minWidth: 0, marginLeft: 14, paddingRight: 38, alignSelf: 'stretch', justifyContent: 'center' },
   buildingName: { color: COLORS.primary, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   level: { color: COLORS.muted, fontSize: 13, lineHeight: 18, marginTop: 4 },
   statusBadge: {
@@ -580,15 +746,22 @@ const styles = StyleSheet.create({
   overlapAvatar: { marginLeft: -11 },
   extraAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#29313d' },
   extraText: { color: '#79baff', fontSize: 12, fontWeight: '700' },
-  iconButton: {
-    width: 43,
-    height: 43,
+  expandButton: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#3c5879',
-    borderRadius: 13,
   },
+  expandedArea: { overflow: 'hidden', paddingTop: 12 },
+  scheduleExpressButton: {
+    height: 46,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#2f7de1',
+  },
+  scheduleExpressButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
 
 export default MyGBCenterScreen;

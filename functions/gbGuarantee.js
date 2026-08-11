@@ -3,6 +3,7 @@ const FALLBACK_CONTRIBUTION_MULTIPLIER = 1.9;
 const GUARANTEE_STATUSES = Object.freeze({
   SECURED_GUILD_MEMBER: "secured_guild_member",
   GUILD_MEMBER_CAN_BE_OVERTAKEN: "guild_member_can_be_overtaken",
+  GUILD_MEMBER_BELOW_PLACE_COST: "guild_member_below_place_cost",
   OUTSIDER_CAN_BE_OVERTAKEN: "outsider_can_be_overtaken",
   OUTSIDER_CANNOT_BE_OVERTAKEN: "outsider_cannot_be_overtaken",
   OUTSIDER_WITHOUT_GUILD_CHALLENGER: "outsider_without_guild_challenger",
@@ -133,6 +134,8 @@ const normalizeContributors = ({ contributors, ownerUserId, guildUsers }) => {
     playerName: String(contributor?.playerName || "").trim() || contributorId,
     forgePoints: asFiniteNumber(contributor?.forgePoints, "contributor forgePoints"),
     rank: asFiniteNumber(contributor?.rank, "contributor rank"),
+    avatar: String(contributor?.avatar || "").trim() || undefined,
+    imageUrl: String(guildUsers?.[contributorId]?.imageUrl || "").trim() || undefined,
     membership: Object.prototype.hasOwnProperty.call(guildUsers || {}, contributorId)
       ? "guild_member"
       : "outsider",
@@ -214,16 +217,36 @@ const occupantPayload = (occupant) => ({
   playerName: occupant.playerName,
   forgePoints: occupant.forgePoints,
   membership: occupant.membership,
+  ...(occupant.avatar ? { avatar: occupant.avatar } : {}),
+  ...(occupant.imageUrl ? { imageUrl: occupant.imageUrl } : {}),
+});
+
+const buildDeveloperDebug = ({ distribution, places, ownerDeposit }) => ({
+  ownerDeposit,
+  places: distribution.map(({ placeNumber, occupant }) => {
+    const place = placeNumber <= 5 ? places[placeNumber - 1] : null;
+    return {
+      placeNumber,
+      ...(place ? {
+        nominalCost: place.nominalCost,
+        coefficient: place.coefficient,
+        placeCost: place.placeCost,
+        ...(place.branchId ? { branchId: place.branchId } : {}),
+        ...(place.branchName ? { branchName: place.branchName } : {}),
+      } : {}),
+      occupant: occupant ? occupantPayload(occupant) : null,
+    };
+  }),
 });
 
 const action = (type, actor, amount, extra = {}) => ({ type, actor, amount, ...extra });
 
 const calculateEmptyResult = ({ target, distribution, places, remainingFp }) => {
   const place = places[target.placeNumber - 1];
-  const followingRewardPlaces = distribution.filter(
-    (item) => item.placeNumber > target.placeNumber && item.placeNumber <= 5
+  const followingPlaces = distribution.filter(
+    (item) => item.placeNumber > target.placeNumber
   );
-  const allFollowingEmpty = followingRewardPlaces.every((item) => !item.occupant);
+  const allFollowingEmpty = followingPlaces.every((item) => !item.occupant);
   const common = {
     placeNumber: target.placeNumber,
     placeCost: place.placeCost,
@@ -239,7 +262,7 @@ const calculateEmptyResult = ({ target, distribution, places, remainingFp }) => 
     const sumEmptyPlaceCosts = emptyPlaces.reduce((sum, item) => sum + item.placeCost, 0);
     const emptyCommon = { ...common, sumEmptyPlaceCosts };
 
-    if (sumEmptyPlaceCosts < remainingFp) {
+    if (sumEmptyPlaceCosts > remainingFp) {
       const oneFpPlacesCount = emptyPlaces.filter((item) => item.placeCost === 1).length;
       const weightedPlaces = emptyPlaces.filter((item) => item.placeCost > 1);
       const weightSum = weightedPlaces.reduce((sum, item) => sum + item.placeCost, 0);
@@ -322,6 +345,23 @@ const findFirstActionableResult = ({ distribution, places, remainingFp }) => {
     }
 
     if (occupant.membership === "guild_member") {
+      const place = places[target.placeNumber - 1];
+      if (place && occupant.forgePoints < place.placeCost) {
+        const requiredTopUp = place.placeCost - occupant.forgePoints;
+        return {
+          status: GUARANTEE_STATUSES.GUILD_MEMBER_BELOW_PLACE_COST,
+          placeNumber: target.placeNumber,
+          placeCost: place.placeCost,
+          occupant: occupantPayload(occupant),
+          requiredTopUp,
+          action: action(
+            "guild_member_top_up",
+            "guild_member",
+            requiredTopUp,
+            { contributorId: occupant.contributorId }
+          ),
+        };
+      }
       const nearestOutsider = distribution.find(
         (item) => item.placeNumber > target.placeNumber &&
           item.occupant?.membership === "outsider"
@@ -344,11 +384,16 @@ const findFirstActionableResult = ({ distribution, places, remainingFp }) => {
         item.occupant?.membership === "guild_member"
     )?.occupant;
     if (!nearestGuildMember) {
+      const guaranteedDeposit = Math.max(
+        occupant.forgePoints + 1,
+        Math.ceil((occupant.forgePoints + remainingFp) / 2)
+      );
+      if (guaranteedDeposit > remainingFp) continue;
       return {
         status: GUARANTEE_STATUSES.OUTSIDER_WITHOUT_GUILD_CHALLENGER,
         placeNumber: target.placeNumber,
         occupant: occupantPayload(occupant),
-        action: action("guild_member_deposit", "guild_member", occupant.forgePoints + 1),
+        action: action("guild_member_deposit", "guild_member", guaranteedDeposit),
       };
     }
 
@@ -399,7 +444,16 @@ const calculateGuarantee = ({
   });
   const distribution = distributeContributors({ candidates, places, remainingFp });
   const result = findFirstActionableResult({ distribution, places, remainingFp });
-  const base = { calculatedAt, totalFp, remainingFp };
+  const base = {
+    calculatedAt,
+    totalFp,
+    remainingFp,
+    developerDebug: buildDeveloperDebug({
+      distribution,
+      places,
+      ownerDeposit: owner.forgePoints,
+    }),
+  };
   return result
     ? { ...base, ...result }
     : { ...base, status: GUARANTEE_STATUSES.NO_ACTION_REQUIRED };
@@ -418,6 +472,7 @@ module.exports = {
   GUARANTEE_STATUSES,
   branchMatches,
   buildPlaces,
+  buildDeveloperDebug,
   calculateEmptyResult,
   calculateGuarantee,
   canOvertake,
