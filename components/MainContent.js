@@ -1099,24 +1099,22 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
             drawerIconComponent: renderIcon(Chat)
           }}
         />
-        {hasTesterAccess && (
-          <Drawer.Screen
-            name="Community"
-            component={CommunityStack}
-            options={{
-              drawerLabel: 'Спільнота',
-              drawerIconComponent: () => (
-                <Community
-                  width={24}
-                  height={24}
-                  fill={COLORS.textSecondary}
-                  color={COLORS.textSecondary}
-                  style={{ color: COLORS.textSecondary }}
-                />
-              )
-            }}
-          />
-        )}
+        <Drawer.Screen
+          name="Community"
+          component={CommunityStack}
+          options={{
+            drawerLabel: 'Спільнота',
+            drawerIconComponent: () => (
+              <Community
+                width={24}
+                height={24}
+                fill={COLORS.textSecondary}
+                color={COLORS.textSecondary}
+                style={{ color: COLORS.textSecondary }}
+              />
+            )
+          }}
+        />
         <Drawer.Screen
           name="GBG"
           component={GBGStack}

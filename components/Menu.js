@@ -386,8 +386,6 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                         if (!isOptionVisible(option, new Date())) return null;
                         if (option.fullText === "Адміністративна панель" && !hasLeaderFeatures(userRole)) return null;
                         if (option.fullText === "Культурні поселення" && !hasTesterFeatures(userRole)) return null;
-                        if (option.fullText === "Спільнота" && !hasTesterFeatures(userRole)) return null;
-
                         const isSelected = selectedOption === index;
 
                         return (

@@ -2,6 +2,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
+import storage from '@react-native-firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
+import uuid from 'react-native-uuid';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import translateMessage, { detectMessageLanguage } from '../../translateMessage';
 
 const COLORS = {
   background: '#0f1115',
@@ -52,6 +56,43 @@ const getProfileAvatarUrl = (profile) => {
   return guildProfile?.imageUrl || '';
 };
 
+const FORMATS = [
+  { icon: 'format-bold', prefix: '**', suffix: '**', label: 'Жирний' },
+  { icon: 'format-italic', prefix: '_', suffix: '_', label: 'Курсив' },
+  { icon: 'format-underlined', prefix: '__', suffix: '__', label: 'Підкреслений' },
+  { icon: 'strikethrough-s', prefix: '~~', suffix: '~~', label: 'Закреслений' },
+];
+
+const FormattedMessage = ({ value, members }) => {
+  const memberNames = new Set(members.map((item) => String(item.userName).toLowerCase()));
+  const escapedNames = members
+    .map((item) => String(item.userName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .sort((a, b) => b.length - a.length);
+  const mentionPattern = escapedNames.length ? `|@(?:${escapedNames.join('|')})(?![\\p{L}\\p{N}])` : '';
+  const tokenPattern = new RegExp(`(\\*\\*[^*]+\\*\\*|__[^_]+__|_[^_]+_|~~[^~]+~~${mentionPattern})`, 'gu');
+  const parts = String(value || '').split(tokenPattern).filter(Boolean);
+  return (
+    <Text style={styles.messageText}>
+      {parts.map((part, index) => {
+        let text = part;
+        const textStyle = [];
+        if (part.startsWith('**') && part.endsWith('**')) {
+          text = part.slice(2, -2); textStyle.push({ fontWeight: '700' });
+        } else if (part.startsWith('__') && part.endsWith('__')) {
+          text = part.slice(2, -2); textStyle.push({ textDecorationLine: 'underline' });
+        } else if (part.startsWith('~~') && part.endsWith('~~')) {
+          text = part.slice(2, -2); textStyle.push({ textDecorationLine: 'line-through' });
+        } else if (part.startsWith('_') && part.endsWith('_')) {
+          text = part.slice(1, -1); textStyle.push({ fontStyle: 'italic' });
+        } else if (part.startsWith('@') && memberNames.has(part.slice(1).trim().toLowerCase())) {
+          textStyle.push(styles.mentionText);
+        }
+        return <Text key={`${index}-${part}`} style={textStyle}>{text}</Text>;
+      })}
+    </Text>
+  );
+};
+
 export default function CommunityChannelsScreen({ route, navigation }) {
   const headerHeight = useHeaderHeight();
   const { communityId, communityName } = route.params || {};
@@ -59,6 +100,13 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [replyTo, setReplyTo] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [translation, setTranslation] = useState(null);
+  const [viewedImage, setViewedImage] = useState('');
+  const [localeCode, setLocaleCode] = useState('uk');
   const [identity, setIdentity] = useState({ userId: '', userName: 'Гравець', worldName: 'Інший світ' });
   const [sending, setSending] = useState(false);
   const [channelModalVisible, setChannelModalVisible] = useState(false);
@@ -102,6 +150,13 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     };
     loadIdentity().catch((error) => console.error('Помилка профілю спільноти:', error));
   }, []);
+
+  useEffect(() => {
+    if (!identity.userId) return undefined;
+    const languageRef = database().ref(`users/${identity.userId}/setting/language`);
+    const listener = languageRef.on('value', (snapshot) => setLocaleCode(snapshot.val() || 'uk'));
+    return () => languageRef.off('value', listener);
+  }, [identity.userId]);
 
   useEffect(() => {
     if (!communityId) return undefined;
@@ -197,9 +252,19 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         }),
     [community?.members, communityMemberIds, memberProfiles]
   );
+  const pinnedMessages = useMemo(
+    () => messages.filter((item) => item.pinned).sort((a, b) => Number(b.pinnedAt || 0) - Number(a.pinnedAt || 0)),
+    [messages]
+  );
+  const mentionSuggestions = useMemo(() => {
+    const match = message.slice(0, selection.start).match(/(?:^|\s)@([^@\s]*)$/u);
+    if (!match) return [];
+    const query = match[1].toLowerCase();
+    return memberRows.filter((item) => item.userName.toLowerCase().includes(query)).slice(0, 6);
+  }, [memberRows, message, selection.start]);
 
   useEffect(() => {
-    if (!membersModalVisible) return undefined;
+    if (!communityMemberIds.length) return undefined;
 
     let active = true;
     const loadMemberProfiles = async () => {
@@ -245,7 +310,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     return () => {
       active = false;
     };
-  }, [communityMemberIds, membersModalVisible]);
+  }, [communityMemberIds]);
 
   useEffect(() => {
     if (membersModalVisible && !isCommunityAuthor) {
@@ -419,28 +484,109 @@ export default function CommunityChannelsScreen({ route, navigation }) {
 
   const sendMessage = async () => {
     const text = message.trim();
-    if (!text || sending || !selectedChannel?.id) return;
+    if ((!text && !selectedImages.length) || sending || !selectedChannel?.id) return;
     if (!identity.userId) {
       Alert.alert('Потрібен профіль', 'Увійдіть у профіль, щоб надсилати повідомлення.');
       return;
     }
     setSending(true);
+    setUploadingImages(Boolean(selectedImages.length));
     try {
-      await database()
-        .ref(`communityMessages/${communityId}/${selectedChannel.id}`)
-        .push({
-          text,
-          senderId: identity.userId,
-          senderName: identity.userName,
-          worldName: identity.worldName,
-          timestamp: database.ServerValue.TIMESTAMP,
-        });
+      const messageRef = database().ref(`communityMessages/${communityId}/${selectedChannel.id}`).push();
+      const imageUrls = [];
+      for (const uri of selectedImages) {
+        const imageRef = storage().ref(`communityImages/${communityId}/${selectedChannel.id}/${uuid.v4()}.jpg`);
+        await imageRef.putFile(uri);
+        imageUrls.push(await imageRef.getDownloadURL());
+      }
+      await messageRef.set({
+        text,
+        imageUrls,
+        senderId: identity.userId,
+        senderName: identity.userName,
+        worldName: identity.worldName,
+        timestamp: database.ServerValue.TIMESTAMP,
+        replyTo: replyTo?.id || null,
+      });
+      if (text) {
+        detectMessageLanguage(text)
+          .then((language) => language && messageRef.child('language').set(language))
+          .catch((error) => console.warn('Не вдалося визначити мову повідомлення:', error?.message));
+      }
       setMessage('');
+      setSelectedImages([]);
+      setReplyTo(null);
     } catch (error) {
       console.error('Помилка надсилання у спільноту:', error);
       Alert.alert('Повідомлення не надіслано', 'Перевірте з’єднання та спробуйте ще раз.');
     } finally {
       setSending(false);
+      setUploadingImages(false);
+    }
+  };
+
+  const pickImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: 6,
+    });
+    if (!result.canceled) setSelectedImages(result.assets.map((asset) => asset.uri).slice(0, 6));
+  };
+
+  const applyFormat = ({ prefix, suffix }) => {
+    const start = selection.start ?? message.length;
+    const end = selection.end ?? start;
+    const selected = message.slice(start, end);
+    setMessage(`${message.slice(0, start)}${prefix}${selected}${suffix}${message.slice(end)}`);
+    setSelection({ start: start + prefix.length, end: start + prefix.length + selected.length });
+  };
+
+  const insertMention = (member) => {
+    const beforeCaret = message.slice(0, selection.start);
+    const match = beforeCaret.match(/@[^@\s]*$/u);
+    if (!match) return;
+    const start = selection.start - match[0].length;
+    const insertion = `@${member.userName} `;
+    setMessage(`${message.slice(0, start)}${insertion}${message.slice(selection.start)}`);
+    const caret = start + insertion.length;
+    setSelection({ start: caret, end: caret });
+  };
+
+  const togglePin = async (item) => {
+    try {
+      const latest = (await database().ref(`communities/${communityId}`).once('value')).val();
+      if (latest?.createdBy !== identity.userId || latest?.members?.[identity.userId]?.role !== 'owner') {
+        Alert.alert('Недостатньо прав', 'Закріплювати повідомлення може лише адміністратор спільноти.');
+        return;
+      }
+      await database().ref(`communityMessages/${communityId}/${selectedChannel.id}/${item.id}`).update({
+        pinned: item.pinned ? null : true,
+        pinnedAt: item.pinned ? null : database.ServerValue.TIMESTAMP,
+        pinnedBy: item.pinned ? null : identity.userId,
+      });
+    } catch (error) {
+      console.error('Помилка закріплення повідомлення:', error);
+      Alert.alert('Не вдалося змінити закріплення');
+    }
+  };
+
+  const handleTranslate = async (item) => {
+    if (!item.text?.trim()) return Alert.alert('Немає тексту для перекладу');
+    try {
+      const translationRef = database().ref(
+        `communityMessages/${communityId}/${selectedChannel.id}/${item.id}/translateSafe/${localeCode}`
+      );
+      let translated = (await translationRef.once('value')).val();
+      if (!translated) {
+        translated = await translateMessage(item.text, localeCode);
+        await translationRef.set(translated);
+      }
+      setTranslation({ source: item.text, text: translated });
+    } catch (error) {
+      console.error('Помилка перекладу:', error);
+      Alert.alert('Не вдалося перекласти повідомлення');
     }
   };
 
@@ -497,6 +643,20 @@ export default function CommunityChannelsScreen({ route, navigation }) {
           }
         },
       },
+    ]);
+  };
+
+  const openMessageActions = (item) => {
+    Alert.alert('Дії з повідомленням', undefined, [
+      { text: 'Відповісти', onPress: () => setReplyTo(item) },
+      ...(item.text ? [{ text: 'Перекласти', onPress: () => handleTranslate(item) }] : []),
+      ...(isCommunityAuthor
+        ? [{ text: item.pinned ? 'Відкріпити' : 'Закріпити', onPress: () => togglePin(item) }]
+        : []),
+      ...(item.senderId !== identity.userId
+        ? [{ text: 'Поскаржитися', onPress: () => reportMessage(item) }]
+        : []),
+      { text: 'Скасувати', style: 'cancel' },
     ]);
   };
 
@@ -665,6 +825,24 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         <Text style={styles.channelHeadingDescription}>{selectedChannel?.description}</Text>
       </View>
 
+      {pinnedMessages.length > 0 && (
+        <TouchableOpacity
+          style={styles.pinnedBanner}
+          onPress={() => {
+            const index = messages.findIndex((item) => item.id === pinnedMessages[0].id);
+            if (index >= 0) messageListRef.current?.scrollToIndex({ index, animated: true });
+          }}
+        >
+          <MaterialIcons name="push-pin" size={17} color={COLORS.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pinnedLabel}>Закріплено · {pinnedMessages.length}</Text>
+            <Text numberOfLines={1} style={styles.pinnedText}>
+              {pinnedMessages[0].text || 'Зображення'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       <FlatList
         ref={messageListRef}
         data={messages}
@@ -673,6 +851,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         onContentSizeChange={() => messageListRef.current?.scrollToEnd({ animated: false })}
         renderItem={({ item }) => {
           const own = item.senderId === identity.userId;
+          const quoted = item.replyTo ? messages.find((candidate) => candidate.id === item.replyTo) : null;
           return (
             <View style={[styles.messageRow, own && styles.ownMessageRow]}>
               <View style={[styles.avatar, own && styles.ownAvatar]}>
@@ -680,8 +859,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
               </View>
               <TouchableOpacity
                 activeOpacity={0.85}
-                disabled={own}
-                onLongPress={() => reportMessage(item)}
+                onLongPress={() => openMessageActions(item)}
                 style={[styles.messageBody, own && styles.ownMessageBody]}
               >
                 <View style={styles.messageMeta}>
@@ -691,8 +869,26 @@ export default function CommunityChannelsScreen({ route, navigation }) {
                     <Text style={styles.worldText}>{item.worldName || 'Інший світ'}</Text>
                   </View>
                   <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
+                  {item.pinned ? <MaterialIcons name="push-pin" size={12} color={COLORS.primary} /> : null}
                 </View>
-                <Text style={styles.messageText}>{item.text}</Text>
+                {quoted ? (
+                  <View style={styles.quoteBox}>
+                    <Text numberOfLines={1} style={styles.quoteAuthor}>{quoted.senderName || 'Гравець'}</Text>
+                    <Text numberOfLines={2} style={styles.quoteText}>{quoted.text || 'Зображення'}</Text>
+                  </View>
+                ) : item.replyTo ? (
+                  <View style={styles.quoteBox}><Text style={styles.quoteText}>Повідомлення недоступне</Text></View>
+                ) : null}
+                {item.imageUrls?.length ? (
+                  <View style={styles.messageImages}>
+                    {item.imageUrls.map((uri) => (
+                      <TouchableOpacity key={uri} onPress={() => setViewedImage(uri)}>
+                        <Image source={{ uri }} style={styles.messageImage} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+                {item.text ? <FormattedMessage value={item.text} members={memberRows} /> : null}
               </TouchableOpacity>
             </View>
           );
@@ -708,11 +904,71 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         }
       />
 
+      {replyTo && (
+        <View style={styles.replyBar}>
+          <MaterialIcons name="reply" size={18} color={COLORS.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.replyTitle}>Відповідь для {replyTo.senderName}</Text>
+            <Text numberOfLines={1} style={styles.replyText}>{replyTo.text || 'Зображення'}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setReplyTo(null)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></TouchableOpacity>
+        </View>
+      )}
+
+      {selectedImages.length > 0 && (
+        <ScrollView horizontal style={styles.imagePreviewStrip} contentContainerStyle={styles.imagePreviewContent}>
+          {selectedImages.map((uri) => (
+            <View key={uri}>
+              <Image source={{ uri }} style={styles.imagePreview} />
+              <TouchableOpacity
+                style={styles.removeImage}
+                onPress={() => setSelectedImages((current) => current.filter((item) => item !== uri))}
+              ><MaterialIcons name="close" size={14} color="#fff" /></TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {mentionSuggestions.length > 0 && (
+        <View style={styles.mentionSuggestions}>
+          {mentionSuggestions.map((member) => (
+            <TouchableOpacity key={member.id} style={styles.mentionRow} onPress={() => insertMention(member)}>
+              <Text style={styles.mentionName}>@{member.userName}</Text>
+              <Text style={styles.mentionRole}>{member.role === 'owner' ? 'Адміністратор' : member.role === 'moderator' ? 'Модератор' : 'Учасник'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.formatBar}>
+        <TouchableOpacity accessibilityLabel="Додати зображення" onPress={pickImages} style={styles.formatButton}>
+          <MaterialIcons name="image" size={20} color={COLORS.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel="Згадати учасника"
+          onPress={() => {
+            const caret = selection.start ?? message.length;
+            setMessage(`${message.slice(0, caret)}@${message.slice(caret)}`);
+            setSelection({ start: caret + 1, end: caret + 1 });
+          }}
+          style={styles.formatButton}
+        >
+          <MaterialIcons name="alternate-email" size={20} color={COLORS.muted} />
+        </TouchableOpacity>
+        {FORMATS.map((format) => (
+          <TouchableOpacity key={format.label} accessibilityLabel={format.label} onPress={() => applyFormat(format)} style={styles.formatButton}>
+            <MaterialIcons name={format.icon} size={20} color={COLORS.muted} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
           value={message}
           onChangeText={setMessage}
+          selection={selection}
+          onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
           onFocus={() => setChannelMenuExpanded(false)}
           placeholder={`Написати в #${selectedChannel?.name || ''}`}
           placeholderTextColor={COLORS.muted}
@@ -720,17 +976,39 @@ export default function CommunityChannelsScreen({ route, navigation }) {
           maxLength={2000}
         />
         <TouchableOpacity
-          style={[styles.sendButton, (!message.trim() || sending) && styles.sendButtonDisabled]}
-          disabled={!message.trim() || sending}
+          style={[styles.sendButton, ((!message.trim() && !selectedImages.length) || sending) && styles.sendButtonDisabled]}
+          disabled={(!message.trim() && !selectedImages.length) || sending}
           onPress={sendMessage}
         >
-          {sending ? (
+          {sending || uploadingImages ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <MaterialIcons name="send" size={21} color="#fff" />
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal visible={Boolean(translation)} transparent animationType="fade" onRequestClose={() => setTranslation(null)}>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Переклад</Text>
+              <TouchableOpacity onPress={() => setTranslation(null)}><MaterialIcons name="close" size={24} color={COLORS.muted} /></TouchableOpacity>
+            </View>
+            <Text style={styles.translationSource}>{translation?.source}</Text>
+            <Text style={styles.translationText}>{translation?.text}</Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal visible={Boolean(viewedImage)} transparent animationType="fade" onRequestClose={() => setViewedImage('')}>
+        <SafeAreaView style={styles.imageViewer}>
+          <TouchableOpacity accessibilityLabel="Закрити зображення" style={styles.imageViewerClose} onPress={() => setViewedImage('')}>
+            <MaterialIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {viewedImage ? <Image source={{ uri: viewedImage }} style={styles.fullImage} resizeMode="contain" /> : null}
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={membersModalVisible}
@@ -1057,6 +1335,12 @@ const styles = StyleSheet.create({
   channelHeading: { borderBottomColor: COLORS.border, borderBottomWidth: 1, padding: 12, paddingHorizontal: 16 },
   channelHeadingTitle: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
   channelHeadingDescription: { color: COLORS.muted, fontSize: 12, marginTop: 3 },
+  pinnedBanner: {
+    alignItems: 'center', backgroundColor: '#172333', borderBottomColor: COLORS.border,
+    borderBottomWidth: 1, flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  pinnedLabel: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  pinnedText: { color: COLORS.text, fontSize: 12, marginTop: 2 },
   messages: { padding: 14 },
   emptyMessages: { flexGrow: 1, justifyContent: 'flex-end', padding: 20 },
   messageRow: { alignItems: 'flex-start', flexDirection: 'row', marginBottom: 17 },
@@ -1087,6 +1371,14 @@ const styles = StyleSheet.create({
   },
   worldText: { color: '#8bc3ff', fontSize: 10 },
   time: { color: COLORS.muted, fontSize: 10 },
+  quoteBox: {
+    backgroundColor: '#151b25', borderLeftColor: COLORS.primary, borderLeftWidth: 3,
+    borderRadius: 7, marginTop: 5, maxWidth: '100%', paddingHorizontal: 9, paddingVertical: 6,
+  },
+  quoteAuthor: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  quoteText: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  messageImages: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 6, maxWidth: 260 },
+  messageImage: { backgroundColor: COLORS.surfaceHighlight, borderRadius: 9, height: 120, width: 120 },
   messageText: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
@@ -1100,6 +1392,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 8,
   },
+  mentionText: { backgroundColor: '#24496d', color: '#9dceff', fontWeight: '700' },
   welcome: { paddingBottom: 12 },
   welcomeIcon: {
     alignItems: 'center',
@@ -1112,6 +1405,31 @@ const styles = StyleSheet.create({
   welcomeHash: { color: COLORS.text, fontSize: 28, fontWeight: '700' },
   welcomeTitle: { color: COLORS.text, fontSize: 19, fontWeight: '700', marginTop: 12 },
   welcomeText: { color: COLORS.muted, fontSize: 13, marginTop: 5 },
+  replyBar: {
+    alignItems: 'center', backgroundColor: '#151b25', borderTopColor: COLORS.border,
+    borderTopWidth: 1, flexDirection: 'row', gap: 9, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  replyTitle: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  replyText: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  imagePreviewStrip: { backgroundColor: COLORS.surface, borderTopColor: COLORS.border, borderTopWidth: 1, maxHeight: 76 },
+  imagePreviewContent: { gap: 8, padding: 8 },
+  imagePreview: { borderRadius: 7, height: 58, width: 58 },
+  removeImage: {
+    alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 10,
+    height: 20, justifyContent: 'center', position: 'absolute', right: -5, top: -5, width: 20,
+  },
+  mentionSuggestions: {
+    backgroundColor: COLORS.surface, borderColor: COLORS.border, borderTopWidth: 1,
+    maxHeight: 210, paddingHorizontal: 8, paddingVertical: 5,
+  },
+  mentionRow: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 8 },
+  mentionName: { color: COLORS.text, flex: 1, fontSize: 13, fontWeight: '600' },
+  mentionRole: { color: COLORS.muted, fontSize: 10 },
+  formatBar: {
+    alignItems: 'center', backgroundColor: COLORS.surface, borderTopColor: COLORS.border,
+    borderTopWidth: 1, flexDirection: 'row', paddingHorizontal: 8, paddingTop: 5,
+  },
+  formatButton: { alignItems: 'center', justifyContent: 'center', minHeight: 30, minWidth: 38 },
   inputRow: {
     alignItems: 'flex-end',
     backgroundColor: COLORS.surface,
@@ -1157,6 +1475,11 @@ const styles = StyleSheet.create({
   },
   modalTitle: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
   modalSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 3 },
+  translationSource: { color: COLORS.muted, fontSize: 12, lineHeight: 17, marginBottom: 14 },
+  translationText: { color: COLORS.text, fontSize: 16, lineHeight: 23 },
+  imageViewer: { backgroundColor: 'rgba(0,0,0,0.96)', flex: 1, justifyContent: 'center' },
+  imageViewerClose: { padding: 16, position: 'absolute', right: 4, top: 4, zIndex: 2 },
+  fullImage: { height: '100%', width: '100%' },
   membersModalCard: { maxHeight: '85%' },
   membersError: {
     alignItems: 'center',
