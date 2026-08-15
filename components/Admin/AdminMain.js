@@ -358,7 +358,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
                 ],
               }}
             >
-              <Ionicons name="chevron-down" size={22} color="#3498db" />
+              <Ionicons name="chevron-down" size={22} color="#4ea1ff" />
             </Animated.View>
           </TouchableOpacity>
         </View>
@@ -441,7 +441,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
                         onPress={() => handleCopyPassword(member.password)}
                         style={{ marginLeft: 10 }}
                       >
-                        <FontAwesomeIcon icon={faCopy} size={18} color="#3498db" />
+                        <FontAwesomeIcon icon={faCopy} size={18} color="#4ea1ff" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -456,7 +456,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={styles.sectionTitle}>Мета гільдії на ПБГ</Text>
           <TouchableOpacity onPress={() => setShowGBGGoal(v => !v)}>
-            <Ionicons name={showGBGGoal ? 'chevron-up' : 'chevron-down'} size={22} color="#3498db" />
+            <Ionicons name={showGBGGoal ? 'chevron-up' : 'chevron-down'} size={22} color="#4ea1ff" />
           </TouchableOpacity>
         </View>
         {showGBGGoal && (
@@ -466,7 +466,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
               value={gbgGoalMaxPoints}
               onValueChange={handleGBGGoalChange}
               trackColor={{ false: 'rgba(255,255,255,0.18)', true: 'rgba(52,152,219,0.35)' }}
-              thumbColor={gbgGoalMaxPoints ? '#3498db' : '#d0d0d0'}
+              thumbColor={gbgGoalMaxPoints ? '#4ea1ff' : '#d0d0d0'}
             />
             <Text style={[styles.mainText, { marginLeft: 0, textAlign: 'right', maxWidth: '35%' }]}>Максимальна кількість очок</Text>
           </View>
@@ -507,12 +507,12 @@ const AdminMain = ({ canAccessTasks = false }) => {
                   onPress={() => handleEditBranch(branch.id)}
                   style={{ marginRight: 16 }}
                 >
-                  <FontAwesome name="pencil" size={18} color="#3498db" />
+                  <FontAwesome name="pencil" size={18} color="#4ea1ff" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDeleteBranch(branch.id)}
                 >
-                  <FontAwesome name="trash" size={18} color="#3498db" />
+                  <FontAwesome name="trash" size={18} color="#4ea1ff" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -526,23 +526,23 @@ const AdminMain = ({ canAccessTasks = false }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   content: { paddingBottom: 24 },
   header: {
     padding: 20,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: '#152330',
     borderBottomWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   userName: {
     fontSize: 24,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     fontWeight: '700',
   },
   divider: {
     height: 1,
-    backgroundColor: '#1f1f1f',
+    backgroundColor: '#152330',
     marginHorizontal: 16,
     marginVertical: 16,
     borderRadius: 1,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginHorizontal: 16,
     marginTop: 14,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
@@ -568,10 +568,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 14,
     padding: 15,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#3a3f4a',
+    borderColor: '#36516a',
   },
   tasksEntryIcon: {
     width: 46,
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#A0D8FF',
+    color: '#82c6ff',
     marginBottom: 6,
   },
   upgradeBranchesHeader: {
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   mainText: {
     fontSize: 14,
     marginLeft: 8,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
   },
   memberRole: {
     color: '#7f8794',
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#3498db',
+    borderColor: '#4ea1ff',
     marginRight: 8,
   },
   iconSpacing: {

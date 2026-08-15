@@ -295,12 +295,12 @@ const ProfileData = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
     paddingHorizontal: 16,
   },
   content: { paddingVertical: 16 },
   section: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     padding: 16,
     borderRadius: 14,
     marginBottom: 12,
@@ -314,13 +314,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#A0D8FF',
+    color: '#82c6ff',
     marginBottom: 8,
     fontWeight: '700',
   },
   input: {
     fontSize: 16,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.15)',
     paddingVertical: 6,
@@ -333,11 +333,11 @@ const styles = StyleSheet.create({
   },
   dr: {
     fontSize: 16,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
   },
   link: {
     fontSize: 16,
-    color: '#3498db',
+    color: '#4ea1ff',
     fontWeight: '700',
   },
   modalBackground: {
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     width: '100%',
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 15,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     textAlign: 'center',
   },
   wheelWrapper: {
@@ -379,10 +379,10 @@ const styles = StyleSheet.create({
     height: 40,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#3498db',
+    borderColor: '#4ea1ff',
   },
   modalButtonSave: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#4ea1ff',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

@@ -102,7 +102,7 @@ const GuildMembersList = () => {
           <Text style={styles.memberName}>{item.name}</Text>
           {selectedMembers.includes(item.id) && (
             <Svg width={checkmarkSize} height={checkmarkSize} viewBox="0 0 24 24" fill="none" style={styles.checkmark}>
-              <Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#007AFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#4ea1ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           )}
           <Text style={styles.memberStatus}>{getPresenceStatusLabel(item.presence)}</Text>
@@ -147,7 +147,7 @@ const GuildMembersList = () => {
         <Button 
           title={selectedMembers.length === members.length ? "Зняти всіх" : "Обрати всіх"} 
           onPress={handleSelectAll}
-          color="#3498db"
+          color="#4ea1ff"
         />
       </View>
     </View>
@@ -157,13 +157,13 @@ const GuildMembersList = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   memberContainer: {
     flexDirection: 'row',
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   },
   selectionInfo: {
     padding: 10,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: '#152330',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   selectAllContainer: {
     padding: 10,
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
 });
 

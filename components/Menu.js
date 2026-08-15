@@ -38,13 +38,13 @@ const MENU_WIDTH = 320;
 
 const COLORS = {
   background: "#0f1115",
-  surface: "#1b1f2a",
-  surfaceHighlight: "#2a2f3a",
+  surface: "#152330",
+  surfaceHighlight: "#1b2b3b",
   primary: "#4ea1ff",
   textPrimary: "#f4f7fb",
   textSecondary: "#9aa3b2",
   danger: "#ff5b5b",
-  separator: "#3a3f4a"
+  separator: "#36516a"
 };
 
 const menuOptions = [
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     worldsContainer: {
-        backgroundColor: '#161616',
+        backgroundColor: '#0f1115',
         marginTop: -10,
         marginBottom: 10,
         marginHorizontal: 16,

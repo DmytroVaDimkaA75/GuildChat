@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     //borderBottomWidth: 1,
-    borderBottomColor: '#2a2f3a',
+    borderBottomColor: '#1b2b3b',
   },
   gbImage: {
     width: 50,

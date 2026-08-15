@@ -20,7 +20,7 @@ import RULE_PACKS from './RulePack';
 import SettlementMapGridHeaders, { getBoundsWithGridHeaders } from './SettlementMapGridHeaders';
 
 const COLORS = {
-  background: '#121212',
+  background: '#0f1115',
   textPrimary: '#FFFFFF',
   borderStrong: '#111111',
   sectorGrid: '#303030',
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     width: '100%',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#152330',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   toggleActive: {
-    backgroundColor: '#2196F3',
+    backgroundColor: '#4ea1ff',
   },
   modalButtonsRow: {
     flexDirection: 'row',

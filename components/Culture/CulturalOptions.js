@@ -6,11 +6,11 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import RULE_PACKS from './RulePack';
 
 const COLORS = {
-  background: '#121212',
-  surface: '#1E1E1E',
-  border: '#2F2F2F',
-  textPrimary: '#FFFFFF',
-  accent: '#2196f3',
+  background: '#0f1115',
+  surface: '#152330',
+  border: '#36516a',
+  textPrimary: '#f4f7fb',
+  accent: '#4ea1ff',
 };
 
 const CulturalOptions = () => {

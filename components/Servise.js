@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
       padding: 20,
     },
     button: {
-      backgroundColor: '#007bff',
+      backgroundColor: '#4ea1ff',
       padding: 15,
       borderRadius: 10,
       width: '100%',
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     modalContainer: {
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       padding: 20,
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       padding: 10,
-      backgroundColor: '#007bff',
+      backgroundColor: '#4ea1ff',
       marginBottom: 10,
       borderRadius: 10,
     },
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
       fontSize: 18,
     },
     closeButton: {
-      backgroundColor: '#007bff',
+      backgroundColor: '#4ea1ff',
       padding: 15,
       borderRadius: 10,
       alignItems: 'center',

@@ -159,7 +159,7 @@ const ProfileMain = () => {
                 <Ionicons
                   name="checkmark-circle"
                   size={20}
-                  color="#3498db"
+                  color="#4ea1ff"
                   style={styles.iconSpacing}
                 />
                 )}
@@ -232,7 +232,7 @@ const ProfileMain = () => {
                 onPress={() => selectProductionTime(time)}
               >
                 {selectedProductionTime === time ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#3498db" style={{ marginRight: 8 }} />
+                  <Ionicons name="checkmark-circle" size={20} color="#4ea1ff" style={{ marginRight: 8 }} />
                 ) : (
                   <View style={styles.radioUnselected} />
                 )}
@@ -257,24 +257,24 @@ const ProfileMain = () => {
 export default ProfileMain;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
+  container: { flex: 1, backgroundColor: '#0f1115' },
   content: { paddingBottom: 24 },
   header: {
     padding: 20,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: '#152330',
     borderBottomWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
-  userName: { fontSize: 24, color: '#E0E0E0', fontWeight: '700' },
+  userName: { fontSize: 24, color: '#f4f7fb', fontWeight: '700' },
   divider: {
     height: 1,
-    backgroundColor: '#1f1f1f',
+    backgroundColor: '#152330',
     marginHorizontal: 16,
     marginVertical: 16,
     borderRadius: 1,
   },
   section: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginHorizontal: 16,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#A0D8FF',
+    color: '#82c6ff',
     marginBottom: 6,
   },
   itemRow: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowContent: { flexDirection: 'row', alignItems: 'center' },
-  mainText: { fontSize: 14, marginLeft: 8, color: '#E0E0E0' },
+  mainText: { fontSize: 14, marginLeft: 8, color: '#f4f7fb' },
   subHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     borderWidth: 2,
-    borderColor: '#3498db',
+    borderColor: '#4ea1ff',
     marginRight: 8,
   },
   iconSpacing: { marginRight: 10 },

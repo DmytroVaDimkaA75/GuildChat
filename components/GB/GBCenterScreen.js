@@ -6,13 +6,13 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 
 const COLORS = {
   background: '#0f1115',
-  surface: '#171b22',
-  border: '#343a44',
+  surface: '#152330',
+  border: '#36516a',
   primary: '#4ea1ff',
-  primarySoft: '#203047',
+  primarySoft: '#1b2b3b',
   text: '#f4f7fb',
-  muted: '#a7afbd',
-  divider: '#303640',
+  muted: '#9aa3b2',
+  divider: '#36516a',
 };
 
 const sections = [

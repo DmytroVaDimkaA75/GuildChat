@@ -14,7 +14,7 @@ height: 24,
 width: 24,
 borderRadius: 4,
 borderWidth: 2,
-borderColor: checked ? '#007AFF' : '#ccc',
+borderColor: checked ? '#4ea1ff' : '#ccc',
 justifyContent: 'center',
 alignItems: 'center',
 backgroundColor: 'transparent',
@@ -34,7 +34,7 @@ left: 3,
 >
 <Path
 d="M20 6L9 17L4 12" // Векторний шлях для галочки
-stroke="#007AFF" // Колір лінії галочки
+stroke="#4ea1ff" // Колір лінії галочки
 strokeWidth="2" // Товщина лінії галочки
 strokeLinecap="round" // Зробити кінці лінії круглими
 strokeLinejoin="round" // Зробити кути з'єднання круглими

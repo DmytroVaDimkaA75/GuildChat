@@ -19,8 +19,30 @@ const {
   calculateGuarantee,
   writeIfCurrent,
 } = require("./gbGuarantee");
+const {
+  isGbgSectorNotificationMuted,
+} = require("./gbgNotificationMute");
+const { fetchLinkPreview } = require("./linkPreview");
 
 admin.initializeApp();
+
+const linkPreviewCache = new Map();
+const LINK_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
+
+exports.getLinkPreview = onCall({ region: "europe-west1", timeoutSeconds: 15, memory: "256MiB" }, async (request) => {
+  const requestedUrl = String(request.data?.url || "").trim();
+  const cached = linkPreviewCache.get(requestedUrl);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  try {
+    const value = await fetchLinkPreview(requestedUrl);
+    if (linkPreviewCache.size >= 200) linkPreviewCache.delete(linkPreviewCache.keys().next().value);
+    linkPreviewCache.set(requestedUrl, { value, expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS });
+    return value;
+  } catch (error) {
+    logger.info("[LINK_PREVIEW] Metadata unavailable", { url: requestedUrl.slice(0, 300), reason: error?.message || String(error) });
+    return { url: requestedUrl, host: "", title: "", description: "", image: "" };
+  }
+});
 
 /**
  * =====================================================================
@@ -2102,6 +2124,10 @@ async function sendPushAndMarkSent({
 
   const memberIds = Object.keys(membersSnap.val());
   const nowMs = Date.now();
+  const currentArmySnap = await db
+    .ref(`/guilds/${guildId}/GBG/sectors/${sectorId}/army`)
+    .once("value");
+  const effectiveArmy = String(currentArmySnap.val() || army || "").trim().toLowerCase();
 
   const userInfos = await Promise.all(
     memberIds.map(async (uid) => {
@@ -2112,12 +2138,11 @@ async function sendPushAndMarkSent({
           .once("value"),
       ]);
 
-      const rawMuteUntil = muteUntilSnap.val();
-      const muteUntil =
-        typeof rawMuteUntil === "number" && Number.isFinite(rawMuteUntil)
-          ? rawMuteUntil
-          : 0;
-      if (muteUntil > nowMs) {
+      if (isGbgSectorNotificationMuted({
+        rawMute: muteUntilSnap.val(),
+        army: effectiveArmy,
+        nowMs,
+      })) {
         return { uid, token: null, sound: false, muted: true };
       }
 
@@ -2136,7 +2161,7 @@ async function sendPushAndMarkSent({
     })
   );
 
-  const isAttack = army === "attack";
+  const isAttack = effectiveArmy === "attack";
   const icon = isAttack ? "⚔️" : "🛡️";
   const actionText = isAttack ? "Атака!" : "Захист!";
 

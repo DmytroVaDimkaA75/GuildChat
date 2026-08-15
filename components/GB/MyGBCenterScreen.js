@@ -14,16 +14,16 @@ import MyGBDistributionTable, {
 
 const COLORS = {
   background: '#0f1115',
-  surface: '#171b22',
-  border: '#343a44',
+  surface: '#152330',
+  border: '#36516a',
   primary: '#4ea1ff',
-  primarySoft: '#203047',
+  primarySoft: '#1b2b3b',
   text: '#f4f7fb',
   muted: '#9aa3b2',
-  divider: '#303640',
-  success: '#59df68',
-  warning: '#ff9848',
-  danger: '#ff4d4f',
+  divider: '#36516a',
+  success: '#4edb78',
+  warning: '#ffa51f',
+  danger: '#ff5b5b',
 };
 
 const getLocalizedBuildingName = (buildingName, language, buildId) => {
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 19,
     borderWidth: 2,
-    backgroundColor: '#2b3037',
+    backgroundColor: '#1b2b3b',
   },
   avatarImage: { width: '100%', height: '100%' },
   guildAvatar: { borderColor: '#55d96b' },
@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
   },
   scheduleExpressButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

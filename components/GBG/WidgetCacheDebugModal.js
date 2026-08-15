@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   btnSecondary: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: "#3a3a3a",
+    backgroundColor: "#1b2b3b",
     borderRadius: 18,
     flexGrow: 1,
     alignItems: "center",

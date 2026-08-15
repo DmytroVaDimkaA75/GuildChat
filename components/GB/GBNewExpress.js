@@ -590,12 +590,12 @@ const styles = StyleSheet.create({
       paddingTop: 20,
     },
     block: {
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       padding: 10,
       marginBottom: 20,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#2a2f3a',
+      borderColor: '#1b2b3b',
       width: '90%',
     },
     dropdown: {
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
       borderWidth: 1,
       borderColor: '#4ea1ff',
       borderRadius: 8,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
     },
     dropdownImage: {
       width: 30,
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       padding: 5,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
     },
     dropdownItemText: {
       fontSize: 14,
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     stepButton: {
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
     },
     stepButtonText: {
       color: '#fff',
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
       color: '#e6e9ef',
     },
     dateButton: {
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 6,
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
       alignItems: 'center',
     },
     modalContainer: {
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
       width: '100%',
@@ -725,7 +725,7 @@ const styles = StyleSheet.create({
       borderColor: '#4ea1ff',
     },
     modalButtonSave: {
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
       paddingVertical: 12,
       borderRadius: 10,
       alignItems: 'center',

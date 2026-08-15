@@ -7,7 +7,7 @@ import {
   faCheck,
   faCheckDouble,
   faFileAlt,
-  faPaperclip,
+  faImage,
   faPaperPlane,
   faTableCellsLarge,
   faReply,
@@ -47,7 +47,6 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -63,7 +62,6 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Menu, MenuOption, MenuOptions, MenuProvider, MenuTrigger } from 'react-native-popup-menu';
 import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
@@ -75,6 +73,8 @@ import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
+import LinkPreviewCard from '../CustomElements/LinkPreviewCard';
+import { MessageReactions, ReactionPicker } from '../CustomElements/MessageReactions';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const WAVEFORM_BAR_COUNT = 60;
@@ -192,7 +192,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
           }}
         >
           <View style={styles.sendOptionContent}>
-            <CalendarclockIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+            <CalendarclockIcon width={20} height={20} fill="#9aa3b2" style={{ marginRight: 8 }} />
             <Text style={styles.sendOptionText}>Надіслати пізніше</Text>
           </View>
         </TouchableOpacity>
@@ -204,7 +204,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
           }}
         >
           <View style={styles.sendOptionContent}>
-            <ClockIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+            <ClockIcon width={20} height={20} fill="#9aa3b2" style={{ marginRight: 8 }} />
             <Text style={styles.sendOptionText}>Тимчасове повідомлення</Text>
           </View>
         </TouchableOpacity>
@@ -217,7 +217,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
             }}
           >
             <View style={styles.sendOptionContent}>
-              <UsercheckIcon width={20} height={20} fill="#9aa0a6" style={{ marginRight: 8 }} />
+              <UsercheckIcon width={20} height={20} fill="#9aa3b2" style={{ marginRight: 8 }} />
               <Text style={styles.sendOptionText}>Надіслати обраним</Text>
             </View>
           </TouchableOpacity>
@@ -321,7 +321,7 @@ const RichTextWebInput = React.forwardRef(function RichTextWebInput(
       color: inherit;
       background: rgba(255,255,255,0.08);
     }
-    a { color: #3498db; text-decoration: underline; }
+    a { color: #4ea1ff; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -727,42 +727,6 @@ const FormattedText = ({ text, mentionUsers, onMentionPress }) => {
   return <Text style={styles.messageText}>{renderFormattedParts(parts, [], '', onMentionPress)}</Text>;
 };
 
-// Не завантажуємо довільні URL на пристрій заради превʼю. React Native
-// буферизує тіло fetch-відповіді в памʼяті, тому велике посилання може
-// завершити застосунок з OutOfMemoryError.
-const useLinkMeta = (url) => {
-  return useMemo(() => {
-    const safeUrl = String(url || '');
-    return {
-      title: safeUrl ? getHostLabel(safeUrl) : '',
-      description: '',
-      image: ''
-    };
-  }, [url]);
-};
-
-const LinkPreviewCard = ({ url }) => {
-  const badgeIcon = isYouTubeURL(url) ? faYoutube : isDocsURL(url) ? getDocsIcon(url) : faLink;
-  const hostLabel = getHostLabel(url);
-
-  return (
-    <TouchableOpacity style={styles.linkPreviewContainer} onPress={() => Linking.openURL(url)} activeOpacity={0.9}>
-      <View style={styles.linkPreviewTextContainer}>
-        <Text style={styles.linkPreviewTitle} numberOfLines={1}>
-          {hostLabel}
-        </Text>
-        <Text style={styles.linkPreviewDescription} numberOfLines={1}>
-          {url}
-        </Text>
-      </View>
-
-      <View style={styles.mediaIconBadgeMono}>
-        <FontAwesomeIcon icon={badgeIcon} size={14} color="#FFF" />
-      </View>
-    </TouchableOpacity>
-  );
-};
-
 const InterlocutorAvatar = ({ senderId, guildId }) => {
   const [avatar, setAvatar] = useState(null);
   useEffect(() => {
@@ -910,17 +874,11 @@ const CompactMessagePreview = ({ message, lines = 1 }) => {
   }, [text, html]);
 
   const firstUrl = urls[0] || '';
-  const meta = useLinkMeta(firstUrl);
   const cleaned = stripUrls(text);
 
   const linkTypeIcon = isYouTubeURL(firstUrl) ? faYoutube : isDocsURL(firstUrl) ? getDocsIcon(firstUrl) : faLink;
 
-  const titleForLink = (() => {
-    if (cleaned) return cleaned;
-    const t = (meta?.title || '').trim();
-    if (t) return t;
-    return getHostLabel(firstUrl);
-  })();
+  const titleForLink = cleaned || getHostLabel(firstUrl);
 
   // ✅ якщо є фото — показуємо мініатюру завжди (а не просто "Фото")
   if (hasImage) {
@@ -1128,7 +1086,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [newMessage, setNewMessage] = useState('');
   const [newMessagePlain, setNewMessagePlain] = useState('');
   const [newMessageHtml, setNewMessageHtml] = useState('');
-  const [composerSelectionActive, setComposerSelectionActive] = useState(false);
+  const [, setComposerSelectionActive] = useState(false);
   const [composerCaretIndex, setComposerCaretIndex] = useState(0);
   const composerRef = useRef(null);
 
@@ -1157,6 +1115,8 @@ const ChatWindow = ({ route, navigation }) => {
   const [fullSizeImageModalVisible, setFullSizeImageModalVisible] = useState(false);
 
   const [replyToMessage, setReplyToMessage] = useState(null);
+  const [actionMessage, setActionMessage] = useState(null);
+  const [reactionMessage, setReactionMessage] = useState(null);
 
   const [selectedMessageId, setSelectedMessageId] = useState(null);
   const [editMessage, setEditMessage] = useState(null);
@@ -1744,6 +1704,17 @@ const ChatWindow = ({ route, navigation }) => {
 
   const handleReply = (msg) => setReplyToMessage(msg);
 
+  const toggleMessageReaction = useCallback(async (message, reactionKey) => {
+    if (!guildId || !chatId || !message?.id || !userId || !reactionKey) return;
+    try {
+      await database()
+        .ref(`guilds/${guildId}/chats/${chatId}/messages/${message.id}/reactions/${reactionKey}/${userId}`)
+        .transaction((current) => current ? null : true);
+    } catch (error) {
+      console.warn('Не вдалося змінити реакцію:', error?.message || String(error));
+    }
+  }, [chatId, guildId, userId]);
+
   const cacheMessageLanguage = useCallback(
     async (messageId, text) => {
       const sourceText = stripUrls(String(text || '')).trim();
@@ -2111,9 +2082,8 @@ const ChatWindow = ({ route, navigation }) => {
   );
 
   return (
-    <MenuProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#121212' }} edges={['right', 'left']}>
-        <StatusBar barStyle="light-content" backgroundColor="#121212" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0f1115' }} edges={['right', 'left']}>
+        <StatusBar barStyle="light-content" backgroundColor="#0f1115" />
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -2189,13 +2159,11 @@ const ChatWindow = ({ route, navigation }) => {
                 const urlsInText = extractUrlsFromText(messageText);
                 const urlsInHtml = extractUrlsFromHtml(msg.html || '');
                 const allUrls = [...urlsInText, ...urlsInHtml].filter(Boolean);
-                const uniqueUrls = Array.from(new Set(allUrls));
+                const uniqueUrls = Array.from(new Set(allUrls)).slice(0, 3);
 
                 const isHighlighted = highlightedMessageId === msg.id;
 
                 const isPinnedForMe = !!msg?.pinned?.pinnedFor?.[userId];
-                const isPinnedForAll = !!msg?.pinned?.forAll;
-
                 return (
                   <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
                     {!isMe && showAvatar && (
@@ -2205,11 +2173,14 @@ const ChatWindow = ({ route, navigation }) => {
                     )}
                     {!isMe && !showAvatar && chatType === 'group' && <View style={{ width: 40 }} />}
 
-                    <Menu onOpen={() => handleMessageMenuOpen(msg, isMe)}>
-                      <MenuTrigger
-                        triggerOnLongPress
+                      <TouchableOpacity
+                        activeOpacity={0.86}
                         onPress={() => setSelectedMessageId(msg.id)}
-                        customStyles={{ TriggerTouchableComponent: TouchableOpacity }}
+                        onLongPress={() => {
+                          handleMessageMenuOpen(msg, isMe);
+                          setSelectedMessageId(msg.id);
+                          setActionMessage(msg);
+                        }}
                       >
                         <View
                           style={[
@@ -2315,6 +2286,12 @@ const ChatWindow = ({ route, navigation }) => {
                             <LinkPreviewCard key={`h_${msg.id}_${u}`} url={u} />
                           ))}
 
+                          <MessageReactions
+                            reactions={msg.reactions}
+                            currentUserId={userId}
+                            onToggle={(reactionKey) => toggleMessageReaction(msg, reactionKey)}
+                          />
+
                           <View style={styles.metaContainer}>
                             {/* ✅ показуємо "пін" лише якщо pinned для МЕНЕ */}
                             {isPinnedForMe && (
@@ -2336,86 +2313,7 @@ const ChatWindow = ({ route, navigation }) => {
                             )}
                           </View>
                         </View>
-                      </MenuTrigger>
-
-                      <MenuOptions customStyles={{ optionsContainer: styles.contextMenu }}>
-                        {renderGroupReadReceiptOption(msg)}
-                        {renderReadReceiptOption(msg)}
-
-                        <MenuOption onSelect={() => handleReply(msg)} style={styles.menuItem}>
-                          <FontAwesomeIcon icon={faReply} color="#ddd" />
-                          <Text style={styles.menuText}>Відповісти</Text>
-                        </MenuOption>
-
-                        <MenuOption onSelect={() => Clipboard.setString(msg.text || '')} style={styles.menuItem}>
-                          <FontAwesomeIcon icon={faCopy} color="#ddd" />
-                          <Text style={styles.menuText}>Копіювати</Text>
-                        </MenuOption>
-
-                        {isMe && (
-                          <>
-                            <MenuOption
-                              onSelect={() => {
-                                setEditMessage(msg);
-                                setEditMessageText(msg.text || '');
-                                setInputHeight(MIN_INPUT_HEIGHT);
-                                composerRef.current?.clear?.();
-                                setNewMessage('');
-                                setNewMessageHtml('');
-                              }}
-                              style={styles.menuItem}
-                            >
-                              <FontAwesomeIcon icon={faPen} color="#ddd" />
-                              <Text style={styles.menuText}>Редагувати</Text>
-                            </MenuOption>
-
-                            <MenuOption
-                              onSelect={() => {
-                                setMessageToDelete(msg);
-                                setSelectedMessageId(msg.id);
-                                setDeleteModalVisible(true);
-                              }}
-                              style={styles.menuItem}
-                            >
-                              <FontAwesomeIcon icon={faTrash} color="#ff5b5b" />
-                              <Text style={[styles.menuText, { color: '#ff5b5b' }]}>Видалити</Text>
-                            </MenuOption>
-                          </>
-                        )}
-
-                        <MenuOption
-                          onSelect={() => {
-                            setSelectedMessageId(msg.id);
-                            setMessageToPin(msg);
-
-                            // ✅ якщо вже pinned для мене:
-                            // - якщо forAll => питаємо (для себе / для всіх)
-                            // - якщо тільки для мене => відкріпляємо без перепитування
-                            if (isPinnedForMe) {
-                              if (isPinnedForAll) {
-                                setUnpinModalVisible(true);
-                              } else {
-                                handleUnpin(false, msg);
-                              }
-                            } else {
-                              setPinModalVisible(true);
-                            }
-                          }}
-                          style={styles.menuItem}
-                        >
-                          <FontAwesomeIcon icon={faThumbtack} color="#ddd" />
-                          <Text style={styles.menuText}>{isPinnedForMe ? 'Відкріпити' : 'Закріпити'}</Text>
-                        </MenuOption>
-
-                        {!isMe &&
-                          normalizeLanguageCode(msg.language) &&
-                          normalizeLanguageCode(msg.language) !== normalizeLanguageCode(localeCode) && (
-                            <MenuOption onSelect={() => handleTranslate(msg)} style={styles.menuItem}>
-                              <TransleteIcon width={16} height={16} fill="#ddd" />
-                              <Text style={styles.menuText}>Перекласти</Text>
-                            </MenuOption>
-                          )}
-                      </MenuOptions>
+                      </TouchableOpacity>
 
                       {readUsersPopupFor === msg.id && (
                         <ReadUsersPopup
@@ -2425,9 +2323,137 @@ const ChatWindow = ({ route, navigation }) => {
                           onClose={() => setReadUsersPopupFor(null)}
                         />
                       )}
-                    </Menu>
                   </View>
                 );
+              }}
+            />
+
+            <Modal
+              visible={Boolean(actionMessage)}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setActionMessage(null)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.actionOverlay}
+                onPress={() => setActionMessage(null)}
+              >
+                <View style={styles.actionSheet}>
+                  <View style={styles.actionHandle} />
+                  <Text style={styles.actionTitle}>Дії з повідомленням</Text>
+                  {renderGroupReadReceiptOption(actionMessage)}
+                  {renderReadReceiptOption(actionMessage)}
+
+                  {[
+                    {
+                      label: 'Додати реакцію',
+                      reactionIcon: true,
+                      show: true,
+                      action: () => setReactionMessage(actionMessage),
+                    },
+                    {
+                      label: 'Відповісти',
+                      icon: faReply,
+                      show: true,
+                      action: () => handleReply(actionMessage),
+                    },
+                    {
+                      label: 'Копіювати',
+                      icon: faCopy,
+                      show: Boolean(actionMessage?.text),
+                      action: () => Clipboard.setString(actionMessage?.text || ''),
+                    },
+                    {
+                      label: 'Редагувати',
+                      icon: faPen,
+                      show: actionMessage?.senderId === userId && Boolean(actionMessage?.text),
+                      action: () => {
+                        setEditMessage(actionMessage);
+                        setEditMessageText(actionMessage?.text || '');
+                        setInputHeight(MIN_INPUT_HEIGHT);
+                        composerRef.current?.clear?.();
+                        setNewMessage('');
+                        setNewMessageHtml('');
+                      },
+                    },
+                    {
+                      label: actionMessage?.pinned?.pinnedFor?.[userId] ? 'Відкріпити' : 'Закріпити',
+                      icon: faThumbtack,
+                      show: true,
+                      action: () => {
+                        const message = actionMessage;
+                        const pinnedForMe = Boolean(message?.pinned?.pinnedFor?.[userId]);
+                        const pinnedForAll = Boolean(message?.pinned?.forAll);
+                        setSelectedMessageId(message?.id);
+                        setMessageToPin(message);
+                        if (pinnedForMe) {
+                          if (pinnedForAll) setUnpinModalVisible(true);
+                          else handleUnpin(false, message);
+                        } else {
+                          setPinModalVisible(true);
+                        }
+                      },
+                    },
+                    {
+                      label: 'Перекласти',
+                      translateIcon: true,
+                      show:
+                        actionMessage?.senderId !== userId &&
+                        Boolean(actionMessage?.text) &&
+                        normalizeLanguageCode(actionMessage?.language) !== normalizeLanguageCode(localeCode),
+                      action: () => handleTranslate(actionMessage),
+                    },
+                    {
+                      label: 'Видалити',
+                      icon: faTrash,
+                      destructive: true,
+                      show: actionMessage?.senderId === userId,
+                      action: () => {
+                        setMessageToDelete(actionMessage);
+                        setSelectedMessageId(actionMessage?.id);
+                        setDeleteModalVisible(true);
+                      },
+                    },
+                  ]
+                    .filter((item) => item.show)
+                    .map((item) => (
+                      <TouchableOpacity
+                        key={item.label}
+                        style={styles.actionRow}
+                        onPress={() => {
+                          const action = item.action;
+                          setActionMessage(null);
+                          action();
+                        }}
+                      >
+                        {item.reactionIcon ? (
+                          <Text style={styles.actionReactionIcon}>😊</Text>
+                        ) : item.translateIcon ? (
+                          <TransleteIcon width={19} height={19} fill="#f4f7fb" />
+                        ) : (
+                          <FontAwesomeIcon
+                            icon={item.icon}
+                            size={18}
+                            color={item.destructive ? '#ff7070' : '#f4f7fb'}
+                          />
+                        )}
+                        <Text style={[styles.actionText, item.destructive && styles.actionTextDestructive]}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                </View>
+              </TouchableOpacity>
+            </Modal>
+
+            <ReactionPicker
+              visible={Boolean(reactionMessage)}
+              onClose={() => setReactionMessage(null)}
+              onSelect={(reactionKey) => {
+                const message = reactionMessage;
+                setReactionMessage(null);
+                toggleMessageReaction(message, reactionKey);
               }}
             />
 
@@ -2475,25 +2501,33 @@ const ChatWindow = ({ route, navigation }) => {
                 </View>
               )}
 
-              {!editMessage && composerSelectionActive && (
-                <View style={styles.formatTools}>
-                  <TouchableOpacity onPress={() => composerRef.current?.cmd?.('bold')}>
-                    <FontAwesomeIcon icon={faBold} color="#fff" size={16} />
+              {!editMessage && (
+                <View style={styles.composerToolbar}>
+                  <TouchableOpacity
+                    accessibilityLabel="Додати зображення"
+                    style={styles.composerToolButton}
+                    onPress={pickImage}
+                  >
+                    <FontAwesomeIcon icon={faImage} color="#9aa3b2" size={19} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => composerRef.current?.cmd?.('italic')}>
-                    <FontAwesomeIcon icon={faItalic} color="#fff" size={16} />
+                  <TouchableOpacity
+                    accessibilityLabel="Згадати учасника"
+                    style={styles.composerToolButton}
+                    onPress={() => composerRef.current?.replaceRange?.(composerCaretIndex, composerCaretIndex, '@')}
+                  >
+                    <Text style={styles.mentionToolText}>@</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => composerRef.current?.cmd?.('strikeThrough')}>
-                    <FontAwesomeIcon icon={faStrikethrough} color="#fff" size={16} />
+                  <TouchableOpacity accessibilityLabel="Жирний" style={styles.composerToolButton} onPress={() => composerRef.current?.cmd?.('bold')}>
+                    <FontAwesomeIcon icon={faBold} color="#9aa3b2" size={18} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => composerRef.current?.cmd?.('underline')}>
-                    <FontAwesomeIcon icon={faUnderline} color="#fff" size={16} />
+                  <TouchableOpacity accessibilityLabel="Курсив" style={styles.composerToolButton} onPress={() => composerRef.current?.cmd?.('italic')}>
+                    <FontAwesomeIcon icon={faItalic} color="#9aa3b2" size={18} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => composerRef.current?.spoiler?.()}>
-                    <FontAwesomeIcon icon={faEyeSlash} color="#fff" size={16} />
+                  <TouchableOpacity accessibilityLabel="Підкреслений" style={styles.composerToolButton} onPress={() => composerRef.current?.cmd?.('underline')}>
+                    <FontAwesomeIcon icon={faUnderline} color="#9aa3b2" size={18} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setIsLinkModalVisible(true)}>
-                    <FontAwesomeIcon icon={faLink} color="#fff" size={16} />
+                  <TouchableOpacity accessibilityLabel="Закреслений" style={styles.composerToolButton} onPress={() => composerRef.current?.cmd?.('strikeThrough')}>
+                    <FontAwesomeIcon icon={faStrikethrough} color="#9aa3b2" size={18} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -2522,10 +2556,6 @@ const ChatWindow = ({ route, navigation }) => {
               )}
 
               <View style={styles.inputContainer}>
-                <TouchableOpacity style={styles.attachBtn} onPress={pickImage}>
-                  <FontAwesomeIcon icon={faPaperclip} size={22} color="#888" />
-                </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[styles.micBtn, isRecording && styles.micBtnActive]}
                   onPress={isRecording ? handleStopRecording : handleStartRecording}
@@ -2775,19 +2805,18 @@ const ChatWindow = ({ route, navigation }) => {
           theme="dark"
         />
       </SafeAreaView>
-    </MenuProvider>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
+  container: { flex: 1, backgroundColor: '#0f1115' },
 
   // pinned
   pinnedContainer: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: '#152330',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderColor: '#333',
+    borderColor: '#36516a',
     overflow: 'hidden'
   },
   pinnedItemPage: { width: screenWidth, paddingHorizontal: 10 },
@@ -2796,12 +2825,12 @@ const styles = StyleSheet.create({
   pinnedItemInner: { flexDirection: 'row', alignItems: 'center', width: '100%' },
 
   // зафіксовано як ти просив:
-  pinnedBar: { width: 4, height: 30, backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
-  pinnedLabel: { color: '#3498db', fontSize: 11, fontWeight: 'bold' },
+  pinnedBar: { width: 4, height: 30, backgroundColor: '#4ea1ff', borderRadius: 2, marginRight: 10 },
+  pinnedLabel: { color: '#4ea1ff', fontSize: 11, fontWeight: 'bold' },
 
   dateBadgeContainer: { alignItems: 'center', marginVertical: 15 },
   dateBadge: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#1b2b3b',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -2813,28 +2842,28 @@ const styles = StyleSheet.create({
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
 
-  bubble: { maxWidth: screenWidth * 0.75, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, marginBottom: 2 },
+  bubble: { maxWidth: screenWidth * 0.78, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, marginBottom: 3 },
   bubbleReply: { width: screenWidth * 0.75 },
   bubbleMe: {
-    backgroundColor: 'rgba(52, 152, 219, 0.25)',
+    backgroundColor: '#17354a',
     borderBottomRightRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(52, 152, 219, 0.3)'
+    borderColor: '#4ea1ff'
   },
   bubbleThem: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#1b2732',
     borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)'
+    borderColor: '#36516a'
   },
 
   // підсвітка знайденого/цільового повідомлення
   bubbleHighlighted: {
-    borderColor: '#3498db',
+    borderColor: '#4ea1ff',
     borderWidth: 2
   },
 
-  senderName: { color: '#3498db', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
+  senderName: { color: '#4ea1ff', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
   messageText: { color: '#fff', fontSize: 16, lineHeight: 22 },
 
   metaContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
@@ -2862,16 +2891,16 @@ const styles = StyleSheet.create({
 
   quotedContainer: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 6, marginBottom: 6 },
   quotedMinimal: { padding: 4 },
-  quotedLine: { width: 3, backgroundColor: '#3498db', borderRadius: 2, marginRight: 8 },
+  quotedLine: { width: 3, backgroundColor: '#4ea1ff', borderRadius: 2, marginRight: 8 },
   quotedContent: { flex: 1 },
-  quotedTitle: { color: '#3498db', fontSize: 11, fontWeight: '700', marginBottom: 4 },
+  quotedTitle: { color: '#4ea1ff', fontSize: 11, fontWeight: '700', marginBottom: 4 },
 
   interlocutorAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
 
-  inputArea: { paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#1c1c1e', borderTopWidth: 1, borderColor: '#333' },
+  inputArea: { paddingVertical: 7, paddingHorizontal: 10, backgroundColor: '#15202b', borderTopWidth: 1, borderColor: '#36516a' },
   replyBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#252525', padding: 10, borderBottomWidth: 1, borderColor: '#333' },
-  replyBarLine: { width: 4, height: '100%', backgroundColor: '#3498db', borderRadius: 2, marginRight: 10 },
-  replyBarTitle: { color: '#3498db', fontWeight: 'bold', fontSize: 12 },
+  replyBarLine: { width: 4, height: '100%', backgroundColor: '#4ea1ff', borderRadius: 2, marginRight: 10 },
+  replyBarTitle: { color: '#4ea1ff', fontWeight: 'bold', fontSize: 12 },
   replyBarText: { color: '#aaa', fontSize: 13, flex: 1 },
   recordingBar: {
     flexDirection: 'row',
@@ -2885,12 +2914,24 @@ const styles = StyleSheet.create({
   recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff3b30', marginRight: 8 },
   recordingText: { color: '#ffb4ae', fontSize: 13 },
 
-  formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 12, marginBottom: 8 },
+  formatTools: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#1b2b3b', padding: 8, borderRadius: 12, marginBottom: 8 },
+  composerToolbar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    borderBottomColor: '#36516a',
+    borderBottomWidth: 1,
+    marginBottom: 7,
+    paddingBottom: 6,
+  },
+  composerToolButton: { alignItems: 'center', height: 34, justifyContent: 'center', minWidth: 42 },
+  mentionToolText: { color: '#9aa3b2', fontSize: 25, fontWeight: '600', lineHeight: 28 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2c2c2e',
-    borderRadius: 22,
+    backgroundColor: '#1b2b3b',
+    borderColor: '#36516a',
+    borderRadius: 24,
+    borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 2
   },
@@ -2908,7 +2949,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#3a3a3c',
+    backgroundColor: '#263b4e',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 6
@@ -2920,12 +2961,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#333',
+    backgroundColor: '#263b4e',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8
   },
-  sendBtnActive: { backgroundColor: '#3498db' },
+  sendBtnActive: { backgroundColor: '#4ea1ff' },
 
   audioContainer: {
     flexDirection: 'row',
@@ -2942,7 +2983,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#3498db',
+    backgroundColor: '#4ea1ff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10
@@ -2987,13 +3028,53 @@ const styles = StyleSheet.create({
   extraCount: { color: '#aaa', marginLeft: 4 },
 
   popupOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', paddingHorizontal: 40 },
+  actionOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.68)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  actionSheet: {
+    backgroundColor: '#152330',
+    borderColor: '#36516a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    paddingBottom: 26,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+  actionHandle: {
+    alignSelf: 'center',
+    backgroundColor: '#52677a',
+    borderRadius: 2,
+    height: 4,
+    marginBottom: 12,
+    width: 42,
+  },
+  actionTitle: {
+    color: '#9aa3b2',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+  },
+  actionRow: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  actionText: { color: '#f4f7fb', fontSize: 15, marginLeft: 14 },
+  actionReactionIcon: { fontSize: 19, width: 19 },
+  actionTextDestructive: { color: '#ff7070' },
   sendOptionsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
   sendOptionsPopup: {
     position: 'absolute',
     bottom: 70,
     right: 20,
     width: 240,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderRadius: 12,
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -3008,12 +3089,12 @@ const styles = StyleSheet.create({
   sendOptionButton: { paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8 },
   sendOptionContent: { flexDirection: 'row', alignItems: 'center' },
   sendOptionText: { fontSize: 15, color: '#f5f5f5' },
-  readUsersPopup: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
+  readUsersPopup: { backgroundColor: '#152330', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#444', width: 220, maxHeight: 220 },
   readUsersPopupPersonal: { alignSelf: 'flex-end' },
   readUsersPopupInterlocutor: { alignSelf: 'flex-start' },
 
   userInfoPopup: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -3028,17 +3109,17 @@ const styles = StyleSheet.create({
   userInfoCity: { color: '#aaa', fontSize: 13, textAlign: 'center' },
 
   menuSeparator: { height: 1, backgroundColor: '#333', marginVertical: 6 },
-  contextMenu: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
+  contextMenu: { backgroundColor: '#152330', borderRadius: 12, padding: 8, width: 200, borderWidth: 1, borderColor: '#444' },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   menuText: { color: '#eee', marginLeft: 12, fontSize: 15 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  glassCard: { backgroundColor: '#1e1e1e', borderRadius: 20, padding: 20, width: '85%', borderWidth: 1, borderColor: '#333' },
+  glassCard: { backgroundColor: '#152330', borderRadius: 20, padding: 20, width: '85%', borderWidth: 1, borderColor: '#333' },
   modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
-  modalInput: { backgroundColor: '#2c2c2e', color: '#fff', borderRadius: 12, padding: 12, marginBottom: 15 },
+  modalInput: { backgroundColor: '#1b2b3b', color: '#fff', borderRadius: 12, padding: 12, marginBottom: 15 },
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
   modalBtnCancel: { flex: 1, padding: 14, backgroundColor: '#333', borderRadius: 12, alignItems: 'center', marginRight: 10 },
-  modalBtnPrimary: { flex: 1, padding: 14, backgroundColor: '#3498db', borderRadius: 12, alignItems: 'center' },
+  modalBtnPrimary: { flex: 1, padding: 14, backgroundColor: '#4ea1ff', borderRadius: 12, alignItems: 'center' },
   actionBtn: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: 1, borderColor: '#333' },
 
   translatedText: { fontSize: 16, color: '#fff', lineHeight: 22 },
@@ -3048,7 +3129,7 @@ const styles = StyleSheet.create({
   spoilerHiddenText: { color: 'transparent' },
 
   mentionList: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#333',
@@ -3060,13 +3141,13 @@ const styles = StyleSheet.create({
   mentionAvatar: { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   mentionAvatarFallback: { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' },
   mentionName: { color: '#fff', fontSize: 14 },
-  mentionText: { color: '#3498db', textDecorationLine: 'underline' },
+  mentionText: { color: '#4ea1ff', textDecorationLine: 'underline' },
 
   headerTitleContainer: { flexDirection: 'row', alignItems: 'center' },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
+  headerAvatar: { width: 38, height: 38, borderRadius: 19, marginRight: 10, borderWidth: 2, borderColor: '#4ea1ff' },
   headerTitleText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  headerSubText: { color: '#aaa', fontSize: 12 },
-  headerSoundButton: { paddingHorizontal: 12, paddingVertical: 6 },
+  headerSubText: { color: '#9aa3b2', fontSize: 12 },
+  headerSoundButton: { marginRight: 8, padding: 10, borderRadius: 12, backgroundColor: '#152b3d', borderWidth: 1, borderColor: '#36516a' },
 
   imageViewerContainer: { flex: 1, backgroundColor: '#000' },
   imageViewerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },

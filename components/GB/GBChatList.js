@@ -375,14 +375,14 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       padding: 10,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       marginBottom: 10,
       marginTop: 10,
       marginLeft:20,
       marginRight:20,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: '#2a2f3a',
+      borderColor: '#1b2b3b',
     },
     chatName: {
       fontSize: 18,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
       backgroundColor: '#0f1115',
       //borderRadius: 8,
      
-      //borderColor: '#e0e0e0',
+      //borderColor: '#f4f7fb',
     },
     gbIconTall: {
       height: 40,
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     pinnedMessageBlock: {
       width: screenWidth,
       height: 30,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       justifyContent: 'center',
       borderColor: '#4ea1ff',
       marginLeft: 0,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
       height: 32,
       marginRight: 8,
       borderRadius: 4,
-      backgroundColor: '#2a2f3a',
+      backgroundColor: '#1b2b3b',
     },
     pinnedContentRow: {
       flexDirection: "row",
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
       aspectRatio: 1,
       ///marginRight: 8,
       borderRadius: 4,
-      backgroundColor: '#2a2f3a',
+      backgroundColor: '#1b2b3b',
     },
     myInvestTitle: {
       fontSize: 12,
@@ -529,10 +529,10 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 2,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       borderRadius: 12,
       //borderWidth: 1,
-      borderColor: '#2a2f3a',
+      borderColor: '#1b2b3b',
       padding: 0,
     },
     removeInvestBtnText: {

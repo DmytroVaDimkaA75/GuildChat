@@ -11,7 +11,7 @@ const CustomCheckBox = ({ title, checked, onPress }) => {
           width: 24,
           borderRadius: 4,
           borderWidth: 2,
-          borderColor: checked ? '#007AFF' : '#ccc',
+          borderColor: checked ? '#4ea1ff' : '#ccc',
           justifyContent: 'center',
           alignItems: 'center',
           backgroundColor: 'transparent',
@@ -21,7 +21,7 @@ const CustomCheckBox = ({ title, checked, onPress }) => {
           <Icon
             name="check"
             size={18} // Зменшений розмір галочки
-            color="#007AFF"
+            color="#4ea1ff"
             style={{ position: 'absolute', top: 2, left: 2 }} // Виправлене позиціонування
           />
         )}

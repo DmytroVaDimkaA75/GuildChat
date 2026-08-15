@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   otherMessage: {
     marginLeft: 10,
     marginRight: 20,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     alignSelf: 'flex-start',
   },
   avatar: {
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   telegramButton: {
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
     color: '#fff',
     paddingVertical: 6,
     borderRadius: 4,

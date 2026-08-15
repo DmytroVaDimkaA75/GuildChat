@@ -85,7 +85,7 @@ const LanguageSelector = () => {
           >
             <Text style={styles.languageText}>{lang.label}</Text>
             {selectedLanguage === lang.code && (
-              <Ionicons name="checkmark" size={22} color="#3498db" />
+              <Ionicons name="checkmark" size={22} color="#4ea1ff" />
             )}
           </TouchableOpacity>
         ))}
@@ -99,7 +99,7 @@ export default LanguageSelector;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: "#0f1115",
     paddingHorizontal: 16,
     paddingTop: 16,
   },
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     marginBottom: 16,
-    color: "#E0E0E0",
+    color: "#f4f7fb",
   },
   listContent: {
     paddingBottom: 16,
@@ -118,18 +118,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 14,
-    backgroundColor: "#1e1e1e",
+    backgroundColor: "#152330",
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
   languageOptionActive: {
-    borderColor: "#3498db",
+    borderColor: "#4ea1ff",
     backgroundColor: "rgba(52,152,219,0.1)",
   },
   languageText: {
     fontSize: 16,
-    color: "#E0E0E0",
+    color: "#f4f7fb",
   },
 });

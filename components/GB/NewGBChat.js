@@ -323,7 +323,7 @@ const NewGBChat = () => {
           itemTextStyle={styles.itemText}
           itemContainerStyle={styles.dropdownItemContainer}
           data={greatBuildings}
-          activeColor="#1b1f2a"
+          activeColor="#152330"
           labelField="label"
           valueField="value"
           placeholder={t('newGBChat.selectGBPlaceholder')}
@@ -372,7 +372,7 @@ const NewGBChat = () => {
           itemTextStyle={styles.itemText}
           itemContainerStyle={styles.dropdownItemContainer}
           data={guildMembers}
-          activeColor="#1b1f2a"
+          activeColor="#152330"
           labelField="name"
           valueField="userId"
           placeholder={t('newGBChat.selectMembersPlaceholder')}
@@ -431,12 +431,12 @@ const NewGBChat = () => {
 
 const styles = StyleSheet.create({
   block: {
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     padding: 10,
     marginBottom: 20,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
   },
   dropdown: {
     borderWidth: 1,
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4ea1ff',
     borderRadius: 8,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
   stepButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
   },
   stepButtonText: {
     color: '#fff',
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   dropdownItemContainer: {
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
   },
   buildingImage: {
     width: 30,
@@ -505,14 +505,14 @@ const styles = StyleSheet.create({
     color: '#e6e9ef',
   },
   createButton: {
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginVertical: 10,
   },
   createButtonDisabled: {
-    backgroundColor: '#3a3f4a',
+    backgroundColor: '#36516a',
     opacity: 0.6,
   },
   createButtonText: {

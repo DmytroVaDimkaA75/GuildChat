@@ -107,11 +107,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     marginBottom: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
   },
   gbImage: {
     width: 50,

@@ -134,8 +134,8 @@ const MyGBDistributionTable = ({ guarant }) => {
 const sharedTable = {
   overflow: 'hidden',
   borderWidth: 1,
-  borderColor: '#2a2f3a',
-  backgroundColor: '#1b1f2a',
+  borderColor: '#1b2b3b',
+  backgroundColor: '#152330',
 };
 
 const styles = StyleSheet.create({
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRightWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
   },
   dataCell: {
     height: DISTRIBUTION_ROW_HEIGHT,
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRightWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
   },
   lastFixedCell: { borderRightWidth: 0 },
   headerText: { color: '#e6e9ef', fontSize: 12, fontWeight: '700' },
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2b3037',
+    backgroundColor: '#1b2b3b',
   },
   guildAvatar: { borderColor: '#55d96b' },
   outsiderAvatar: { borderColor: '#ff4d4f' },

@@ -21,12 +21,12 @@ import {
 
 const COLORS = {
   background: '#0f1115',
-  surface: '#1b1f2a',
-  surfaceHighlight: '#2a2f3a',
+  surface: '#152330',
+  surfaceHighlight: '#1b2b3b',
   primary: '#4ea1ff',
   text: '#f4f7fb',
   muted: '#9aa3b2',
-  border: '#3a3f4a',
+  border: '#36516a',
   success: '#4cc38a',
 };
 

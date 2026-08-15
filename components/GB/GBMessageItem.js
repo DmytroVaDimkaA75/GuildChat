@@ -13,7 +13,7 @@ const styles = StyleSheet.create({
   messageContainer: {
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2f3a',
+    borderBottomColor: '#1b2b3b',
     backgroundColor: '#0f1115',
   },
   messageText: {

@@ -27,10 +27,23 @@ import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
+import { getGbgSeasonEndMs, getMoscowDayEndMs } from "./gbgMuteTime";
 
 const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+const UI = {
+  background: "#0f1115",
+  surface: "#152330",
+  surfaceElevated: "#1b2b3b",
+  border: "#36516a",
+  primary: "#4ea1ff",
+  primarySoft: "#82c6ff",
+  text: "#f4f7fb",
+  muted: "#9aa3b2",
+  success: "#4edb78",
+};
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
 const VOLCANIC_SVG_HEIGHT = 248.83203;
@@ -112,11 +125,25 @@ const MAP_NEIGHBORS = { [DEFAULT_MAP_KEY]: SECTOR_NEIGHBORS, waterfall_archipela
 const MAP_DATA = { [DEFAULT_MAP_KEY]: VOLCANIC_ARCHIPELAGO_DATA, waterfall_archipelago: WATERFALL_ARCHIPELAGO_DATA };
 const MAP_TITLE_TRANSLATIONS = { volcanic_archipelago: "Вулканічний архіпелаг", waterfall_archipelago: "Архіпелаг Водоспадів" };
 const SECTOR_NOTIFICATION_MUTE_OPTIONS = [
-  { key: "thirtyMinutes", durationMs: 30 * 60 * 1000 },
-  { key: "oneHour", durationMs: 60 * 60 * 1000 },
-  { key: "threeHours", durationMs: 3 * 60 * 60 * 1000 },
-  { key: "fiveHours", durationMs: 5 * 60 * 60 * 1000 },
+  { key: "thirtyMinutes", kind: "duration", durationMs: 30 * 60 * 1000, scope: "all" },
+  { key: "oneHour", kind: "duration", durationMs: 60 * 60 * 1000, scope: "all" },
+  { key: "threeHours", kind: "duration", durationMs: 3 * 60 * 60 * 1000, scope: "all" },
+  { key: "fiveHours", kind: "duration", durationMs: 5 * 60 * 60 * 1000, scope: "all" },
+  { key: "untilEndOfDay", kind: "day", scope: "all" },
+  { key: "attackSectors", kind: "day", scope: "attack", markerColor: "#e74c3c" },
+  { key: "defenseSectors", kind: "day", scope: "defense", markerColor: "#4ea1ff" },
+  { key: "untilEndOfSeason", kind: "season", scope: "all" },
 ];
+
+const normalizeSectorMute = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return { mutedUntil: value, scope: "all" };
+  }
+  if (!value || typeof value !== "object") return { mutedUntil: 0, scope: "all" };
+  const mutedUntil = Number(value.mutedUntil ?? value.until ?? 0);
+  const scope = ["attack", "defense"].includes(value.scope) ? value.scope : "all";
+  return { mutedUntil: Number.isFinite(mutedUntil) ? mutedUntil : 0, scope };
+};
 
 const getSectorNotificationMutePath = (userId, guildId) =>
   `users/${userId}/setting/notificationMutes/gbgSectorOpen/${guildId}`;
@@ -367,7 +394,7 @@ const getArmyColor = (army) => {
   if (!army) return "#6c757d";
   const normalized = String(army).trim().toLowerCase();
   if (normalized === "attack") return "#e74c3c";
-  if (normalized === "defense") return "#3498db";
+  if (normalized === "defense") return "#4ea1ff";
   return "#6c757d";
 };
 
@@ -399,7 +426,7 @@ const GVG = () => {
   const [battlesUserId, setBattlesUserId] = useState(null);
   const [battlesRaw, setBattlesRaw] = useState(null);
   const [sectorMuteMenuVisible, setSectorMuteMenuVisible] = useState(false);
-  const [sectorOpenMutedUntil, setSectorOpenMutedUntil] = useState(0);
+  const [sectorOpenMute, setSectorOpenMute] = useState({ mutedUntil: 0, scope: "all" });
   const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(null);
   const [isSavingSectorMute, setIsSavingSectorMute] = useState(false);
 
@@ -414,7 +441,7 @@ const GVG = () => {
   const { t } = useTranslation();
   const serverNowMs = currentTime * 1000 + (serverTimeOffsetMs ?? 0);
   const areSectorNotificationsMuted =
-    Number(sectorOpenMutedUntil) > serverNowMs;
+    Number(sectorOpenMute.mutedUntil) > serverNowMs;
 
   useEffect(() => {
     const offsetRef = database().ref(".info/serverTimeOffset");
@@ -434,7 +461,7 @@ const GVG = () => {
     let muteRef = null;
     let handleMuteValue = null;
 
-    setSectorOpenMutedUntil(0);
+    setSectorOpenMute({ mutedUntil: 0, scope: "all" });
     setSectorMuteMenuVisible(false);
 
     (async () => {
@@ -448,12 +475,7 @@ const GVG = () => {
       );
       handleMuteValue = (snapshot) => {
         if (disposed) return;
-        const muteUntil = snapshot.val();
-        setSectorOpenMutedUntil(
-          typeof muteUntil === "number" && Number.isFinite(muteUntil)
-            ? muteUntil
-            : 0
-        );
+        setSectorOpenMute(normalizeSectorMute(snapshot.val()));
       };
       muteRef.on("value", handleMuteValue);
     })().catch((error) => {
@@ -471,7 +493,7 @@ const GVG = () => {
     };
   }, [guildId]);
 
-  const handleSectorMuteDuration = async (durationMs) => {
+  const handleSectorMuteOption = async (option) => {
     if (isSavingSectorMute) return;
     setIsSavingSectorMute(true);
 
@@ -500,14 +522,22 @@ const GVG = () => {
         setServerTimeOffsetMs(offset);
       }
 
-      const muteUntil = Math.round(
-        Date.now() + effectiveServerTimeOffsetMs + durationMs
-      );
+      const serverNow = Date.now() + effectiveServerTimeOffsetMs;
+      const muteUntil = option.kind === "day"
+        ? getMoscowDayEndMs(serverNow)
+        : option.kind === "season"
+          ? getGbgSeasonEndMs(serverNow)
+          : Math.round(serverNow + option.durationMs);
+      const muteValue = {
+        mutedUntil: muteUntil,
+        scope: option.scope || "all",
+        createdAt: Math.round(serverNow),
+      };
       await database()
         .ref(getSectorNotificationMutePath(userId, effectiveGuildId))
-        .set(muteUntil);
+        .set(muteValue);
 
-      setSectorOpenMutedUntil(muteUntil);
+      setSectorOpenMute(muteValue);
       setSectorMuteMenuVisible(false);
     } catch {
       Alert.alert(
@@ -655,11 +685,11 @@ const GVG = () => {
     navigation.setOptions({
       headerTitle: mapTitle,
       headerStyle: {
-        backgroundColor: "#1c1c1e",
+        backgroundColor: "#152330",
         shadowColor: "transparent",
         elevation: 0,
       },
-      headerTintColor: "#E0E0E0",
+      headerTintColor: "#f4f7fb",
       headerTitleStyle: {
         fontWeight: "bold",
       },
@@ -681,7 +711,7 @@ const GVG = () => {
             }
             size={22}
             color={
-              areSectorNotificationsMuted ? "#9AA0A6" : "#E0E0E0"
+              areSectorNotificationsMuted ? "#9aa3b2" : "#f4f7fb"
             }
           />
         </TouchableOpacity>
@@ -706,7 +736,7 @@ const GVG = () => {
 
       if (color) fillStyle.fill = color;
 
-      fillStyle.stroke = "#121212";
+      fillStyle.stroke = "#0f1115";
       fillStyle.strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
       fillStyle.strokeOpacity = 1;
 
@@ -868,6 +898,9 @@ const GVG = () => {
           name: sectorId,
           openTime,
           army: armyRaw === "attack" || armyRaw === "defense" ? armyRaw : "",
+          gainAttritionChance: Number.isFinite(Number(entry.gainAttritionChance))
+            ? Number(entry.gainAttritionChance)
+            : -100,
           bonusValue: bonusInfo.value,
           bonusReadyAt: bonusInfo.readyAt,
           defenseRequirementBonusValue: Number(bonusInfo.defenseRequirementBonusValue) || 0,
@@ -1150,7 +1183,7 @@ const GVG = () => {
   if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={UI.primary} />
         <Text style={styles.loaderText}>{t("gbgScreen.loaderText")}</Text>
       </View>
     );
@@ -1181,9 +1214,6 @@ const GVG = () => {
           <Animated.ScrollView style={[styles.sectorList, { opacity: listFadeAnim }]} contentContainerStyle={styles.sectorListContent}>
             {sectorSchedule.map((item) => {
               const timeRemainingSeconds = item.openTime ? Math.max(item.openTime - currentTime, 0) : 0;
-              const bonusRemainingSeconds = item.bonusReadyAt ? Math.max(item.bonusReadyAt - currentTime, 0) : 0;
-              const bonusTimeLabel =
-                bonusRemainingSeconds > 0 ? t("gbgScreen.bonusTimeRemaining", { time: formatRemaining(bonusRemainingSeconds) }) : "";
 
               return (
                 <TouchableOpacity
@@ -1198,7 +1228,9 @@ const GVG = () => {
                   </View>
                   <View style={styles.sectorMeta}>
                     <Text style={styles.sectorTime}>{item.openTime ? formatRemaining(timeRemainingSeconds) : "--:--:--"}</Text>
-                    <Text style={styles.sectorBonus}>{t("gbgScreen.bonusLabel", { value: item.bonusValue, time: bonusTimeLabel })}</Text>
+                    <Text style={styles.sectorBonus}>
+                      {t("gbgScreen.attritionBonusLabel", { value: item.gainAttritionChance })}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -1238,7 +1270,7 @@ const GVG = () => {
 
             {statsTab === "participants" ? (
               battlesLoading ? (
-                <ActivityIndicator size="large" color="#3498db" />
+                <ActivityIndicator size="large" color={UI.primary} />
               ) : (
                 <>
                   <View style={styles.battlesTitleRow}>
@@ -1350,14 +1382,17 @@ const GVG = () => {
                   disabled={isSavingSectorMute}
                   activeOpacity={0.75}
                   onPress={() =>
-                    handleSectorMuteDuration(option.durationMs)
+                    handleSectorMuteOption(option)
                   }
                 >
-                  <Text style={styles.sectorMuteOptionText}>
-                    {t(
-                      `gbgScreen.sectorNotifications.${option.key}`
+                  <View style={styles.sectorMuteOptionContent}>
+                    <Text style={styles.sectorMuteOptionText}>
+                      {t(`gbgScreen.sectorNotifications.${option.key}`)}
+                    </Text>
+                    {option.markerColor && (
+                      <View style={[styles.sectorMuteArmyMarker, { backgroundColor: option.markerColor }]} />
                     )}
-                  </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
 
@@ -1378,16 +1413,22 @@ const GVG = () => {
 };
 
 const styles = StyleSheet.create({
-  win: { flex: 1, backgroundColor: "#121212" },
-  loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#121212" },
-  loaderText: { marginTop: 15, fontSize: 16, color: "#E0E0E0", fontWeight: "500" },
-  infoButton: { marginRight: 15, padding: 5 },
-  mapContainer: { width: "100%", alignSelf: "center", backgroundColor: "#1c1c1e", overflow: "hidden" },
+  win: { flex: 1, backgroundColor: UI.background },
+  loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: UI.background },
+  loaderText: { marginTop: 15, fontSize: 16, color: UI.text, fontWeight: "600" },
+  infoButton: {
+    alignItems: "center", backgroundColor: UI.surface, borderColor: UI.border, borderRadius: 12,
+    borderWidth: 1, justifyContent: "center", marginRight: 12, padding: 9,
+  },
+  mapContainer: {
+    width: "96%", alignSelf: "center", backgroundColor: UI.surface, overflow: "hidden",
+    borderRadius: 24, borderWidth: 1, borderColor: UI.border, marginTop: 12,
+  },
 
-  listContainer: { flex: 1, width: "100%", paddingTop: 20 },
+  listContainer: { flex: 1, width: "100%", paddingTop: 18 },
 
-  listTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 15 },
-  listTitle: { fontSize: 22, fontWeight: "bold", color: "#E0E0E0" },
+  listTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, marginBottom: 12 },
+  listTitle: { fontSize: 22, fontWeight: "800", color: UI.primarySoft },
 
   listActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   battlesBtn: {
@@ -1395,50 +1436,53 @@ const styles = StyleSheet.create({
     height: 34,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 10,
+    backgroundColor: UI.surfaceElevated,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: UI.border,
   },
 
   sectorList: { width: "100%" },
-  sectorListContent: { paddingHorizontal: 20, paddingBottom: 20 },
+  sectorListContent: { paddingHorizontal: 14, paddingBottom: 20 },
   sectorRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    minHeight: 72,
     paddingVertical: 12,
-    paddingHorizontal: 15,
-    backgroundColor: "#282828",
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    backgroundColor: UI.surface,
+    borderRadius: 20,
     marginBottom: 10,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: UI.border,
+    elevation: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.12,
     shadowRadius: 1.41,
   },
   sectorNameContainer: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
-  armyBox: { width: 14, height: 14, borderRadius: 4, marginRight: 12 },
-  sectorName: { fontSize: 16, color: "#EAEAEA", fontWeight: "600" },
+  armyBox: { width: 18, height: 18, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
+  sectorName: { fontSize: 17, color: UI.text, fontWeight: "700" },
   sectorMeta: { alignItems: "flex-end" },
-  sectorTime: { fontSize: 16, color: "#EAEAEA", fontWeight: "700", fontFamily: "monospace" },
-  sectorBonus: { marginTop: 4, fontSize: 13, color: "#A0D8FF", fontWeight: "600" },
-  activeSectorRow: { backgroundColor: "rgba(52, 152, 219, 0.2)", borderWidth: 1, borderColor: "#3498db" },
+  sectorTime: { fontSize: 16, color: UI.text, fontWeight: "700", fontFamily: "monospace" },
+  sectorBonus: { marginTop: 4, fontSize: 13, color: UI.primarySoft, fontWeight: "600" },
+  activeSectorRow: { backgroundColor: "#17354a", borderWidth: 2, borderColor: UI.primary },
   emptyListContainer: { flex: 1, alignItems: "center", justifyContent: "center", marginTop: -50 },
-  emptyListText: { fontSize: 16, color: "#888", fontStyle: "italic" },
+  emptyListText: { fontSize: 16, color: UI.muted, fontStyle: "italic" },
 
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
   infoList: { maxHeight: HALF_HEIGHT * 0.7 },
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
-  infoName: { flex: 1, fontSize: 17, color: "#E0E0E0" },
+  infoName: { flex: 1, fontSize: 17, color: "#f4f7fb" },
   popupOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 20 },
-  popupMenu: { position: "absolute", backgroundColor: "rgba(40, 40, 40, 0.9)", borderRadius: 15, padding: 12, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.15)" },
+  popupMenu: { position: "absolute", backgroundColor: UI.surface, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: UI.border },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 10 },
   menuIcon: { marginRight: 10 },
-  menuText: { fontSize: 18, color: "#E0E0E0", fontWeight: "600" },
+  menuText: { fontSize: 17, color: UI.text, fontWeight: "700" },
   disabledText: { color: "#6a737c" },
   sectorMuteOverlay: {
     flex: 1,
@@ -1454,14 +1498,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 360,
     padding: 18,
-    backgroundColor: "rgba(30,30,30,0.98)",
-    borderRadius: 18,
+    backgroundColor: UI.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: UI.border,
   },
   sectorMuteTitle: {
     marginBottom: 12,
-    color: "#F4F7FB",
+    color: UI.text,
     fontSize: 20,
     fontWeight: "800",
     textAlign: "center",
@@ -1472,55 +1516,68 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 8,
     paddingHorizontal: 16,
-    backgroundColor: "#2A2F3A",
-    borderRadius: 12,
+    backgroundColor: UI.surfaceElevated,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: UI.border,
   },
   sectorMuteOptionDisabled: {
     opacity: 0.5,
   },
   sectorMuteOptionText: {
-    color: "#F4F7FB",
+    color: UI.text,
     fontSize: 17,
     fontWeight: "700",
+  },
+  sectorMuteOptionContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  sectorMuteArmyMarker: {
+    borderColor: "rgba(255,255,255,0.45)",
+    borderRadius: 4,
+    borderWidth: 1,
+    height: 14,
+    marginLeft: 10,
+    width: 14,
   },
   sectorMuteLoader: {
     marginTop: 14,
   },
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  battlesModal: { width: "92%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: "rgba(30, 30, 30, 0.95)", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  battlesModal: { width: "94%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: UI.surface, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: UI.border },
   statsTabsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  statsTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.08)" },
-  statsTabActive: { backgroundColor: "rgba(52, 152, 219, 0.25)", borderWidth: 1, borderColor: "rgba(52, 152, 219, 0.8)" },
-  statsTabText: { color: "#C8C8C8", fontWeight: "700" },
-  statsTabTextActive: { color: "#FFFFFF" },
+  statsTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 12, backgroundColor: UI.surfaceElevated, borderWidth: 1, borderColor: UI.border },
+  statsTabActive: { backgroundColor: "#17354a", borderWidth: 1, borderColor: UI.primary },
+  statsTabText: { color: UI.muted, fontWeight: "700" },
+  statsTabTextActive: { color: UI.primarySoft },
   battlesTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  battlesTitle: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  battlesTitle: { fontSize: 18, fontWeight: "800", color: UI.text },
   battlesActivityToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
-  battlesActivityLabel: { color: "#E0E0E0", fontSize: 13, fontWeight: "600" },
+  battlesActivityLabel: { color: UI.text, fontSize: 13, fontWeight: "600" },
   battlesCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
-  battlesCheckboxChecked: { borderColor: "#2ecc71", backgroundColor: "rgba(46, 204, 113, 0.18)" },
-  battlesCheckboxMark: { color: "#2ecc71", fontSize: 12, fontWeight: "900", lineHeight: 14 },
+  battlesCheckboxChecked: { borderColor: UI.success, backgroundColor: "rgba(78,219,120,0.16)" },
+  battlesCheckboxMark: { color: UI.success, fontSize: 12, fontWeight: "900", lineHeight: 14 },
   battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
   battlesHeaderRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.12)",
+    borderBottomColor: UI.border,
     paddingBottom: 6,
     marginBottom: 6,
-    backgroundColor: "rgba(30, 30, 30, 0.98)",
+    backgroundColor: UI.surface,
     paddingTop: 2,
   },
   battlesRow: { flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.06)" },
   battlesRowHighlight: { backgroundColor: "rgba(46, 204, 113, 0.08)" },
-  battlesHeaderCell: { flex: 1, color: "#A0D8FF", fontWeight: "800", fontSize: 12, textAlign: "center" },
-  battlesCell: { flex: 1, color: "#E0E0E0", fontSize: 12, textAlign: "center" },
+  battlesHeaderCell: { flex: 1, color: UI.primarySoft, fontWeight: "800", fontSize: 12, textAlign: "center" },
+  battlesCell: { flex: 1, color: UI.text, fontSize: 12, textAlign: "center" },
   battlesCellStack: { flex: 1, alignItems: "center" },
-  battlesDiffText: { color: "#2ecc71", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  battlesDiffText: { color: UI.success, fontSize: 11, fontWeight: "700", marginTop: 2 },
   battlesIdCell: { flex: 1.6, textAlign: "left" },
-  battlesClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 22, paddingVertical: 10, backgroundColor: "#3498db", borderRadius: 20 },
+  battlesClose: { marginTop: 14, alignSelf: "center", paddingHorizontal: 26, paddingVertical: 11, backgroundColor: UI.primary, borderRadius: 20 },
   battlesCloseText: { color: "#fff", fontWeight: "800" },
 });
 

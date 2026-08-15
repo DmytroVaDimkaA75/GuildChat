@@ -661,7 +661,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                       style={{
                         width: BLOCK_ONE_WIDTH,
                         height: 3,
-                        backgroundColor: '#2a2f3a',
+                        backgroundColor: '#1b2b3b',
                         marginBottom: 2,
                       }}
                     />
@@ -672,9 +672,9 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                       width: BLOCK_ONE_WIDTH,
                       height: rowHeight,
                       borderRightWidth: 1,
-                      borderRightColor: '#2a2f3a',
+                      borderRightColor: '#1b2b3b',
                       borderTopWidth: 1,
-                      borderTopColor: '#2a2f3a',
+                      borderTopColor: '#1b2b3b',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
@@ -724,7 +724,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                             <View
                               style={{
                                 height: 3,
-                                backgroundColor: '#2a2f3a',
+                                backgroundColor: '#1b2b3b',
                                 width: columnWidths.reduce((a, b) => a + b, 0),
                                 marginBottom: 2,
                               }}
@@ -773,7 +773,7 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                   cellContent = (
                                     <TouchableOpacity
                                       style={{
-                                        backgroundColor: '#2f7de1',
+                                        backgroundColor: '#4ea1ff',
                                         borderRadius: 6,
                                         paddingVertical: 4,
                                         paddingHorizontal: 8,
@@ -811,9 +811,9 @@ const GBPatrons = ({ buildId, level, buildAPI, personalContribution, refresh }) 
                                     width: cw,
                                     height: rowHeight,
                                     borderLeftWidth: 1,
-                                    borderLeftColor: '#2a2f3a',
+                                    borderLeftColor: '#1b2b3b',
                                     borderTopWidth: 1,
-                                    borderTopColor: '#2a2f3a',
+                                    borderTopColor: '#1b2b3b',
                                     justifyContent: 'center',
                                     alignItems: 'center',
                                   }}
@@ -889,7 +889,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       <TouchableOpacity
         onPress={handleDecrement}
         style={{
-          backgroundColor: '#2f7de1',
+          backgroundColor: '#4ea1ff',
           width: buttonSize,
           height: buttonSize,
           justifyContent: 'center',
@@ -919,7 +919,7 @@ const Stepper = ({ value, onValueChange, buttonSize = 20, minValue = 0, maxValue
       <TouchableOpacity
         onPress={handleIncrement}
         style={{
-          backgroundColor: '#2f7de1',
+          backgroundColor: '#4ea1ff',
           width: buttonSize,
           height: buttonSize,
           justifyContent: 'center',
@@ -945,9 +945,9 @@ const styles = StyleSheet.create({
   emptyBox: {
     width: '100%',
     borderRadius: 10,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     borderWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
     padding: 3,
   },
   topRow: {
@@ -957,9 +957,9 @@ const styles = StyleSheet.create({
   blockOne: {
     width: BLOCK_ONE_WIDTH,
     borderRightWidth: 1,
-    borderRightColor: '#2a2f3a',
+    borderRightColor: '#1b2b3b',
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2f3a',
+    borderBottomColor: '#1b2b3b',
     paddingHorizontal: 5,
     paddingVertical: 4,
     justifyContent: 'center',
@@ -970,9 +970,9 @@ const styles = StyleSheet.create({
   },
   block2Item: {
     borderLeftWidth: 1,
-    borderLeftColor: '#2a2f3a',
+    borderLeftColor: '#1b2b3b',
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2f3a',
+    borderBottomColor: '#1b2b3b',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 4,

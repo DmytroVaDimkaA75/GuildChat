@@ -88,6 +88,7 @@ const ukTranslation = {
     listTitle: "Відкриття секторів",
     cacheButton: "Кеш",
     bonusLabel: "Бонус: {{value}}{{time}}",
+    attritionBonusLabel: "Бонус {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Найближчим часом секторів немає",
     sectorNotifications: {
@@ -96,6 +97,10 @@ const ukTranslation = {
       oneHour: "1 година",
       threeHours: "3 години",
       fiveHours: "5 годин",
+      untilEndOfDay: "До кінця доби",
+      attackSectors: "Сектори на атаку (до кінця доби)",
+      defenseSectors: "Сектори на захист (до кінця доби)",
+      untilEndOfSeason: "До кінця сезону",
       saveFailed: "Не вдалося зберегти налаштування сповіщень."
     },
     info: {
@@ -449,6 +454,7 @@ const ruTranslation = {
     listTitle: "Открытие секторов",
     cacheButton: "Кэш",
     bonusLabel: "Бонус: {{value}}{{time}}",
+    attritionBonusLabel: "Бонус {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "В ближайшее время нет секторов",
     sectorNotifications: {
@@ -457,6 +463,10 @@ const ruTranslation = {
       oneHour: "1 час",
       threeHours: "3 часа",
       fiveHours: "5 часов",
+      untilEndOfDay: "До конца суток",
+      attackSectors: "Секторы на атаку (до конца суток)",
+      defenseSectors: "Секторы на защиту (до конца суток)",
+      untilEndOfSeason: "До конца сезона",
       saveFailed: "Не удалось сохранить настройки уведомлений."
     },
     info: {
@@ -810,6 +820,7 @@ const beTranslation = {
     listTitle: "Адкрыццё сектараў",
     cacheButton: "Кэш",
     bonusLabel: "Бонус: {{value}}{{time}}",
+    attritionBonusLabel: "Бонус {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Бліжэйшым часам сектараў няма",
     sectorNotifications: {
@@ -818,6 +829,10 @@ const beTranslation = {
       oneHour: "1 гадзіна",
       threeHours: "3 гадзіны",
       fiveHours: "5 гадзін",
+      untilEndOfDay: "Да канца сутак",
+      attackSectors: "Сектары на атаку (да канца сутак)",
+      defenseSectors: "Сектары на абарону (да канца сутак)",
+      untilEndOfSeason: "Да канца сезона",
       saveFailed: "Не ўдалося захаваць налады апавяшчэнняў."
     },
     info: {
@@ -1171,6 +1186,7 @@ const deTranslation = {
     listTitle: "Sektorenöffnungen",
     cacheButton: "Cache",
     bonusLabel: "Bonus: {{value}}{{time}}",
+    attritionBonusLabel: "Bonus {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "Keine Sektoren in Kürze",
     sectorNotifications: {
@@ -1179,6 +1195,10 @@ const deTranslation = {
       oneHour: "1 Stunde",
       threeHours: "3 Stunden",
       fiveHours: "5 Stunden",
+      untilEndOfDay: "Bis zum Tagesende",
+      attackSectors: "Angriffssektoren (bis zum Tagesende)",
+      defenseSectors: "Verteidigungssektoren (bis zum Tagesende)",
+      untilEndOfSeason: "Bis zum Saisonende",
       saveFailed: "Benachrichtigungseinstellungen konnten nicht gespeichert werden."
     },
     info: {
@@ -1594,6 +1614,7 @@ const enOverrides = {
     listTitle: "Sector openings",
     cacheButton: "Cache",
     bonusLabel: "Bonus: {{value}}{{time}}",
+    attritionBonusLabel: "Bonus {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "No sectors expected soon",
     sectorNotifications: {
@@ -1602,6 +1623,10 @@ const enOverrides = {
       oneHour: "1 hour",
       threeHours: "3 hours",
       fiveHours: "5 hours",
+      untilEndOfDay: "Until end of day",
+      attackSectors: "Attack sectors (until end of day)",
+      defenseSectors: "Defense sectors (until end of day)",
+      untilEndOfSeason: "Until end of season",
       saveFailed: "Could not save notification settings."
     },
     info: {
@@ -1815,6 +1840,7 @@ const plOverrides = {
     listTitle: "Otwarcia sektorów",
     cacheButton: "Pamięć podręczna",
     bonusLabel: "Premia: {{value}}{{time}}",
+    attritionBonusLabel: "Premia {{value}}%",
     bonusTimeRemaining: " ({{time}})",
     emptySchedule: "W najbliższym czasie brak sektorów",
     sectorNotifications: {
@@ -1823,6 +1849,10 @@ const plOverrides = {
       oneHour: "1 godzina",
       threeHours: "3 godziny",
       fiveHours: "5 godzin",
+      untilEndOfDay: "Do końca dnia",
+      attackSectors: "Sektory ataku (do końca dnia)",
+      defenseSectors: "Sektory obrony (do końca dnia)",
+      untilEndOfSeason: "Do końca sezonu",
       saveFailed: "Nie udało się zapisać ustawień powiadomień."
     },
     info: {

@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     groupContainer: {
       marginBottom: 15,
       padding: 10,
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       borderRadius: 10,
     },
     groupHeader: {
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
       position: 'absolute',
       top: -5,
       right: -10,
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
       borderRadius: 8,
       minWidth: 16,
       height: 16,
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
       width: 50,
       height: 50,
       marginRight: 10,
-      backgroundColor: '#2a2f3a',
+      backgroundColor: '#1b2b3b',
     },
     chatTextContainer: {
       flex: 1,
@@ -486,13 +486,13 @@ const styles = StyleSheet.create({
     button: {
       flex: 1,
       padding: 10,
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
       borderRadius: 5,
       alignItems: 'center',
       marginHorizontal: 5,
     },
     disabledButton: {
-      backgroundColor: '#3a3f4a',
+      backgroundColor: '#36516a',
     },
     buttonText: {
       color: '#fff',
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
       padding: 20,
     },
     modalContainer: {
-      backgroundColor: '#1b1f2a',
+      backgroundColor: '#152330',
       borderRadius: 10,
       padding: 20,
     },
@@ -525,10 +525,10 @@ const styles = StyleSheet.create({
       borderRadius: 5,
     },
     cancelButton: {
-      backgroundColor: '#3a3f4a',
+      backgroundColor: '#36516a',
     },
     acceptButton: {
-      backgroundColor: '#2f7de1',
+      backgroundColor: '#4ea1ff',
     },
     modalButtonText: {
       color: '#fff',

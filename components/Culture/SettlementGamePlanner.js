@@ -11,7 +11,7 @@ import RULE_PACKS from './RulePack';
 import SettlementMapGridHeaders, { getBoundsWithGridHeaders } from './SettlementMapGridHeaders';
 
 const COLORS = {
-  background: '#121212',
+  background: '#0f1115',
   textPrimary: '#FFFFFF',
   borderStrong: '#111111',
   sectorGrid: '#303030',

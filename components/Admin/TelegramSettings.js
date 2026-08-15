@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginHorizontal: 16,
     marginTop: 14,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#A0D8FF',
+    color: '#82c6ff',
     marginBottom: 6,
   },
   description: {
@@ -681,7 +681,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   waitingText: {
-    color: '#A0D8FF',
+    color: '#82c6ff',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 9,
@@ -707,12 +707,12 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     fontSize: 14,
     lineHeight: 20,
   },
   botName: {
-    color: '#A0D8FF',
+    color: '#82c6ff',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 34,
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3498db',
+    backgroundColor: '#4ea1ff',
     borderRadius: 10,
     marginTop: 14,
     paddingHorizontal: 12,

@@ -129,7 +129,7 @@ const CreateGroupScreen = () => {
         chatData.groupAvatar = downloadURL;
       } else {
         const colorPool = [
-          '#F44336', '#E91E63', '#9C27B0', '#3F51B5', '#2196F3',
+          '#F44336', '#E91E63', '#9C27B0', '#3F51B5', '#4ea1ff',
           '#03A9F4', '#00BCD4', '#4CAF50', '#8BC34A', '#FFEB3B',
           '#FF9800', '#FF5722', '#9E9E9E', '#795548', '#607D8B'
         ];

@@ -6,6 +6,56 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faChevronRight, faUserGroup, faCommentDots } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
 
+const CHAT_COLORS = {
+  background: '#0f1115',
+  surface: '#152330',
+  surfaceMuted: '#1b2b3b',
+  border: '#36516a',
+  primary: '#4ea1ff',
+  text: '#f4f7fb',
+  muted: '#9aa3b2',
+  success: '#4edb78',
+};
+
+const stripMessageMarkup = (value = '') =>
+  String(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\*\*|__|~~|\|\||_/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getLatestMessage = (chat) => {
+  const messages = Object.values(chat.messages || {});
+  return messages.reduce((latest, message) => {
+    const timestamp = Number(message?.timestamp || message?.authoredAt || 0);
+    const latestTimestamp = Number(latest?.timestamp || latest?.authoredAt || 0);
+    return timestamp > latestTimestamp ? message : latest;
+  }, null);
+};
+
+const getMessagePreview = (message, fallback) => {
+  if (!message) return fallback;
+  const text = stripMessageMarkup(message.text || message.html || '');
+  if (text) return text;
+  if (message.images?.length || message.imageUrl) return 'Зображення';
+  if (message.audioUrl) return 'Голосове повідомлення';
+  return fallback;
+};
+
+const formatChatTime = (message) => {
+  const timestamp = Number(message?.timestamp || message?.authoredAt || 0);
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Вчора';
+  return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
+};
+
 const { width } = Dimensions.get('window');
 const SWIPE_DELETE_THRESHOLD = 120;
 
@@ -14,6 +64,8 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   const opacity = useMemo(() => new Animated.Value(0), []);
   const swipeX = useRef(new Animated.Value(0)).current;
   const { t } = useTranslation();
+  const latestMessage = useMemo(() => getLatestMessage(chat), [chat]);
+  const latestTime = useMemo(() => formatChatTime(latestMessage), [latestMessage]);
 
   const unreadCount = useMemo(() => {
     if (Number.isFinite(chat.unreadCount)) {
@@ -124,6 +176,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   const renderRightSide = () => {
     return (
       <View style={styles.rightSide}>
+        {!!latestTime && <Text style={styles.chatTime}>{latestTime}</Text>}
         {renderUnreadBadge()}
         <FontAwesomeIcon icon={faChevronRight} size={14} color="rgba(255,255,255,0.3)" />
       </View>
@@ -146,7 +199,9 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
           </View>
           <View style={styles.chatInfo}>
             <Text style={styles.chatName} numberOfLines={1}>{otherUser.userName}</Text>
-            <Text style={styles.subText}>{t('chatList.privateLabel')}</Text>
+            <Text style={styles.subText} numberOfLines={1}>
+              {getMessagePreview(latestMessage, t('chatList.privateLabel'))}
+            </Text>
           </View>
           {renderRightSide()}
         </>
@@ -167,7 +222,7 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
             <Image source={{ uri: chat.groupAvatar }} style={styles.avatar} />
           </View>
         ) : (
-          <View style={[styles.groupAvatar, { backgroundColor: chat.groupColor || '#121212' }]}>
+          <View style={[styles.groupAvatar, { backgroundColor: chat.groupColor || '#0f1115' }]}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
         )}
@@ -175,7 +230,9 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
           <Text style={styles.chatName} numberOfLines={1}>{chat.name}</Text>
           <View style={styles.row}>
             <FontAwesomeIcon icon={faUserGroup} size={10} color="rgba(255,255,255,0.5)" style={{ marginRight: 6 }} />
-            <Text style={styles.subText}>{t('chatList.groupLabel')}</Text>
+            <Text style={styles.subText} numberOfLines={1}>
+              {getMessagePreview(latestMessage, t('chatList.groupLabel'))}
+            </Text>
           </View>
         </View>
         {renderRightSide()}
@@ -263,31 +320,32 @@ const ChatList = ({ chats, guildId, userId }) => {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: CHAT_COLORS.background,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingTop: 16,
     paddingBottom: 40,
   },
   chatItem: {
     marginBottom: 12,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 24,
+    backgroundColor: CHAT_COLORS.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: CHAT_COLORS.border,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   chatItemPressable: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 92,
     padding: 16,
   },
   avatarContainer: {
@@ -295,11 +353,11 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 3,
+    borderColor: CHAT_COLORS.primary,
   },
   onlineIndicator: {
     position: 'absolute',
@@ -308,26 +366,26 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#4cd137',
+    backgroundColor: CHAT_COLORS.success,
     borderWidth: 2,
-    borderColor: '#1c1c1e',
+    borderColor: CHAT_COLORS.surface,
   },
   groupAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: CHAT_COLORS.primary,
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
   },
   avatarText: {
-    color: '#fff',
+    color: CHAT_COLORS.text,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -338,7 +396,7 @@ const styles = StyleSheet.create({
   chatName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: CHAT_COLORS.text,
     marginBottom: 4,
   },
   row: {
@@ -347,14 +405,18 @@ const styles = StyleSheet.create({
   },
   subText: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
+    color: CHAT_COLORS.muted,
+    paddingRight: 8,
   },
 
   // ✅ Права частина: бейдж + стрілка
   rightSide: {
-    flexDirection: 'row',
+    minWidth: 62,
     alignItems: 'center',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
+  chatTime: { color: CHAT_COLORS.muted, fontSize: 11, marginBottom: 7 },
 
   // ✅ Бейдж непрочитаних
   unreadBadge: {
@@ -362,10 +424,10 @@ const styles = StyleSheet.create({
     height: 20,
     paddingHorizontal: 6,
     borderRadius: 10,
-    backgroundColor: '#3498db',
+    backgroundColor: CHAT_COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginBottom: 7,
   },
   unreadBadgeText: {
     color: '#FFFFFF',
@@ -392,7 +454,7 @@ const styles = StyleSheet.create({
   emptyMessage: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     marginBottom: 8,
   },
   emptySubMessage: {

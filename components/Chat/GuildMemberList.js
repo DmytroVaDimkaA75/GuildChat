@@ -148,13 +148,13 @@ const GuildMembersList = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   memberContainer: {
     flexDirection: 'row',

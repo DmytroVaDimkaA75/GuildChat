@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#0f1115',
     borderWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   addButton: {
     marginTop: 20,
     paddingVertical: 12,
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContent: {
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
       width: '100%',
     },
   saveButton: {
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
       fontWeight: 'bold',
     },
   cancelButton: {
-    backgroundColor: '#3a3f4a',
+    backgroundColor: '#36516a',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4ea1ff',
     borderRadius: 8,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
   },
   stepperContainer: {
     flexDirection: 'row',
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stepButton: {
-    backgroundColor: '#2f7de1',
+    backgroundColor: '#4ea1ff',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 10,
-    backgroundColor: '#2a2f3a',
+    backgroundColor: '#1b2b3b',
     alignItems: 'center',
   },
   separatorText: {
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 15,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
   },
   itemText: {
     color: '#e6e9ef',

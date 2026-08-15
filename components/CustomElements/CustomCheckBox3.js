@@ -7,13 +7,13 @@ const checkboxSize = 24; // Розмір квадрату чекбокса
 
 return (
 <TouchableOpacity onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-<View style={{ height: checkboxSize, width: checkboxSize, borderRadius: 4, borderWidth: checked ? 3 : 1, borderColor: '#4ea1ff', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1b1f2a' }}>
+<View style={{ height: checkboxSize, width: checkboxSize, borderRadius: 4, borderWidth: checked ? 3 : 1, borderColor: '#4ea1ff', justifyContent: 'center', alignItems: 'center', backgroundColor: '#152330' }}>
 {checked && (
 <Svg width={checkmarkSize} height={checkmarkSize} viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', top: checkmarkPositionY, left: checkmarkPositionX }}>
 {/* Зелена обводка */}
 <Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
 {/* Основна блакитна галочка */}
-<Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#007AFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+<Path d={`M${(checkmarkSize * 20) / 24} ${(checkmarkSize * 6) / 24}L${(checkmarkSize * 9) / 24} ${(checkmarkSize * 17) / 24}L${(checkmarkSize * 4) / 24} ${(checkmarkSize * 12) / 24}`} stroke="#4ea1ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 </Svg>
 )}
 </View>

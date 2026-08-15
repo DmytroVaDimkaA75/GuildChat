@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     width: '100%',
     //borderTopWidth: 1,
     //borderBottomWidth: 1,
-    borderColor: '#007aff',
+    borderColor: '#4ea1ff',
   },
 });
 

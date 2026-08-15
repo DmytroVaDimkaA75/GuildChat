@@ -23,15 +23,17 @@ import {
   View,
 } from 'react-native';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
+import LinkPreviewCard, { extractPreviewUrls } from '../CustomElements/LinkPreviewCard';
+import { MessageReactions, ReactionPicker } from '../CustomElements/MessageReactions';
 
 const COLORS = {
   background: '#0f1115',
-  surface: '#1b1f2a',
-  surfaceHighlight: '#2a2f3a',
+  surface: '#152330',
+  surfaceHighlight: '#1b2b3b',
   primary: '#4ea1ff',
   text: '#f4f7fb',
   muted: '#9aa3b2',
-  border: '#3a3f4a',
+  border: '#36516a',
 };
 
 const formatTime = (timestamp) => {
@@ -106,6 +108,11 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [translation, setTranslation] = useState(null);
   const [viewedImage, setViewedImage] = useState('');
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [actionMessage, setActionMessage] = useState(null);
+  const [reactionMessage, setReactionMessage] = useState(null);
   const [localeCode, setLocaleCode] = useState('uk');
   const [identity, setIdentity] = useState({ userId: '', userName: 'Гравець', worldName: 'Інший світ' });
   const [sending, setSending] = useState(false);
@@ -646,18 +653,87 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     ]);
   };
 
-  const openMessageActions = (item) => {
-    Alert.alert('Дії з повідомленням', undefined, [
-      { text: 'Відповісти', onPress: () => setReplyTo(item) },
-      ...(item.text ? [{ text: 'Перекласти', onPress: () => handleTranslate(item) }] : []),
-      ...(isCommunityAuthor
-        ? [{ text: item.pinned ? 'Відкріпити' : 'Закріпити', onPress: () => togglePin(item) }]
-        : []),
-      ...(item.senderId !== identity.userId
-        ? [{ text: 'Поскаржитися', onPress: () => reportMessage(item) }]
-        : []),
+  const saveEditedMessage = async () => {
+    const text = editText.trim();
+    if (!editingMessage?.id || !text || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const messageRef = database().ref(
+        `communityMessages/${communityId}/${selectedChannel.id}/${editingMessage.id}`
+      );
+      const result = await messageRef.transaction((current) => {
+        if (!current || current.senderId !== identity.userId) return undefined;
+        return {
+          ...current,
+          text,
+          edited: true,
+          editedAt: database.ServerValue.TIMESTAMP,
+          language: null,
+          translateSafe: null,
+        };
+      });
+      if (!result.committed) {
+        Alert.alert('Редагування недоступне', 'Повідомлення вже видалене або більше не належить вам.');
+        return;
+      }
+      detectMessageLanguage(text)
+        .then((language) => language && messageRef.child('language').set(language))
+        .catch((error) => console.warn('Не вдалося визначити мову повідомлення:', error?.message));
+      setEditingMessage(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Помилка редагування повідомлення:', error);
+      Alert.alert('Не вдалося відредагувати повідомлення');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteOwnMessage = (item) => {
+    Alert.alert('Видалити повідомлення?', 'Цю дію неможливо скасувати.', [
       { text: 'Скасувати', style: 'cancel' },
+      {
+        text: 'Видалити',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const messageRef = database().ref(
+              `communityMessages/${communityId}/${selectedChannel.id}/${item.id}`
+            );
+            const result = await messageRef.transaction((current) => {
+              if (!current || current.senderId !== identity.userId) return undefined;
+              return null;
+            });
+            if (!result.committed) {
+              Alert.alert('Видалення недоступне', 'Повідомлення вже видалене або більше не належить вам.');
+              return;
+            }
+            if (replyTo?.id === item.id) setReplyTo(null);
+            await Promise.allSettled(
+              (item.imageUrls || []).map((url) => storage().refFromURL(url).delete())
+            );
+          } catch (error) {
+            console.error('Помилка видалення повідомлення:', error);
+            Alert.alert('Не вдалося видалити повідомлення');
+          }
+        },
+      },
     ]);
+  };
+
+  const openMessageActions = (item) => {
+    setActionMessage(item);
+  };
+
+  const toggleMessageReaction = async (item, reactionKey) => {
+    if (!communityId || !selectedChannel?.id || !item?.id || !identity.userId || !reactionKey) return;
+    try {
+      await database()
+        .ref(`communityMessages/${communityId}/${selectedChannel.id}/${item.id}/reactions/${reactionKey}/${identity.userId}`)
+        .transaction((current) => current ? null : true);
+    } catch (error) {
+      console.warn('Не вдалося змінити реакцію у спільноті:', error?.message || String(error));
+    }
   };
 
   if (!community) {
@@ -869,6 +945,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
                     <Text style={styles.worldText}>{item.worldName || 'Інший світ'}</Text>
                   </View>
                   <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
+                  {item.edited ? <Text style={styles.editedLabel}>ред.</Text> : null}
                   {item.pinned ? <MaterialIcons name="push-pin" size={12} color={COLORS.primary} /> : null}
                 </View>
                 {quoted ? (
@@ -889,6 +966,14 @@ export default function CommunityChannelsScreen({ route, navigation }) {
                   </View>
                 ) : null}
                 {item.text ? <FormattedMessage value={item.text} members={memberRows} /> : null}
+                {extractPreviewUrls(item.text).map((url) => (
+                  <LinkPreviewCard key={`${item.id}-${url}`} url={url} />
+                ))}
+                <MessageReactions
+                  reactions={item.reactions}
+                  currentUserId={identity.userId}
+                  onToggle={(reactionKey) => toggleMessageReaction(item, reactionKey)}
+                />
               </TouchableOpacity>
             </View>
           );
@@ -997,6 +1082,77 @@ export default function CommunityChannelsScreen({ route, navigation }) {
             </View>
             <Text style={styles.translationSource}>{translation?.source}</Text>
             <Text style={styles.translationText}>{translation?.text}</Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal visible={Boolean(actionMessage)} transparent animationType="fade" onRequestClose={() => setActionMessage(null)}>
+        <TouchableOpacity activeOpacity={1} style={styles.actionOverlay} onPress={() => setActionMessage(null)}>
+          <View style={styles.actionSheet}>
+            <Text style={styles.actionTitle}>Дії з повідомленням</Text>
+            {[
+              { label: 'Додати реакцію', icon: 'emoji-emotions', show: true, action: () => setReactionMessage(actionMessage) },
+              { label: 'Відповісти', icon: 'reply', show: true, action: () => setReplyTo(actionMessage) },
+              { label: 'Редагувати', icon: 'edit', show: actionMessage?.senderId === identity.userId && Boolean(actionMessage?.text), action: () => { setEditingMessage(actionMessage); setEditText(actionMessage.text); } },
+              { label: 'Перекласти', icon: 'translate', show: Boolean(actionMessage?.text), action: () => handleTranslate(actionMessage) },
+              { label: actionMessage?.pinned ? 'Відкріпити' : 'Закріпити', icon: 'push-pin', show: isCommunityAuthor, action: () => togglePin(actionMessage) },
+              { label: 'Поскаржитися', icon: 'flag', show: actionMessage?.senderId !== identity.userId, action: () => reportMessage(actionMessage) },
+              { label: 'Видалити', icon: 'delete', destructive: true, show: actionMessage?.senderId === identity.userId, action: () => deleteOwnMessage(actionMessage) },
+            ].filter((item) => item.show).map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.actionRow}
+                onPress={() => { const action = item.action; setActionMessage(null); action(); }}
+              >
+                <MaterialIcons name={item.icon} size={21} color={item.destructive ? '#ff7070' : COLORS.text} />
+                <Text style={[styles.actionText, item.destructive && styles.actionTextDestructive]}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <ReactionPicker
+        visible={Boolean(reactionMessage)}
+        onClose={() => setReactionMessage(null)}
+        onSelect={(reactionKey) => {
+          const item = reactionMessage;
+          setReactionMessage(null);
+          toggleMessageReaction(item, reactionKey);
+        }}
+      />
+
+      <Modal
+        visible={Boolean(editingMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !savingEdit && setEditingMessage(null)}
+      >
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Редагувати повідомлення</Text>
+              <TouchableOpacity disabled={savingEdit} onPress={() => setEditingMessage(null)}>
+                <MaterialIcons name="close" size={24} color={COLORS.muted} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              autoFocus
+              multiline
+              maxLength={2000}
+              value={editText}
+              onChangeText={setEditText}
+              style={[styles.modalInput, styles.editMessageInput]}
+              placeholder="Текст повідомлення"
+              placeholderTextColor={COLORS.muted}
+            />
+            <TouchableOpacity
+              disabled={!editText.trim() || savingEdit}
+              onPress={saveEditedMessage}
+              style={[styles.createButton, (!editText.trim() || savingEdit) && styles.sendButtonDisabled]}
+            >
+              {savingEdit ? <ActivityIndicator color="#fff" /> : <Text style={styles.createButtonText}>Зберегти</Text>}
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
@@ -1371,6 +1527,7 @@ const styles = StyleSheet.create({
   },
   worldText: { color: '#8bc3ff', fontSize: 10 },
   time: { color: COLORS.muted, fontSize: 10 },
+  editedLabel: { color: COLORS.muted, fontSize: 9, fontStyle: 'italic' },
   quoteBox: {
     backgroundColor: '#151b25', borderLeftColor: COLORS.primary, borderLeftWidth: 3,
     borderRadius: 7, marginTop: 5, maxWidth: '100%', paddingHorizontal: 9, paddingVertical: 6,
@@ -1466,6 +1623,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  actionOverlay: { backgroundColor: 'rgba(0,0,0,0.6)', flex: 1, justifyContent: 'flex-end' },
+  actionSheet: {
+    backgroundColor: COLORS.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18,
+    paddingBottom: 24, paddingHorizontal: 14, paddingTop: 16,
+  },
+  actionTitle: { color: COLORS.muted, fontSize: 12, fontWeight: '700', paddingBottom: 8, paddingHorizontal: 10 },
+  actionRow: { alignItems: 'center', flexDirection: 'row', gap: 13, minHeight: 48, paddingHorizontal: 10 },
+  actionText: { color: COLORS.text, fontSize: 15 },
+  actionTextDestructive: { color: '#ff7070' },
   modalCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 18, width: '100%' },
   modalHeader: {
     alignItems: 'center',
@@ -1562,6 +1728,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   descriptionInput: { minHeight: 76, textAlignVertical: 'top' },
+  editMessageInput: { maxHeight: 220, minHeight: 100, textAlignVertical: 'top' },
   createButton: {
     alignItems: 'center',
     backgroundColor: COLORS.primary,

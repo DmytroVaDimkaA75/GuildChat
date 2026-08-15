@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   blueIcon: {
-    color: "#007bff",
+    color: "#4ea1ff",
   },
   defaultIcon: {
     color: "#ccc",
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderBottomColor: "#2296f3",
+    borderBottomColor: "#4ea1ff",
     zIndex: -1,
     bottom: 0,
     right: -10,
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderBottomColor: "#2296f3",
+    borderBottomColor: "#4ea1ff",
     zIndex: -1,
     bottom: 0,
     left: -10,
@@ -273,13 +273,13 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   cancelReplyText: {
-    color: '#007bff',
+    color: '#4ea1ff',
     marginLeft: 10,
   },
   highlightedMessage: {
-    backgroundColor: '#2296f3',
+    backgroundColor: '#4ea1ff',
     borderWidth: 1,
-    borderColor: '#2296f3',
+    borderColor: '#4ea1ff',
   },
   imageTextInput: {
     padding: 15,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   buttonSendPhoto: {
-    backgroundColor: '#007bff',
+    backgroundColor: '#4ea1ff',
     padding: 15,
     borderRadius: 10,
     width: '100%',
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   formatButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#f4f7fb',
     borderRadius: 8,
     marginHorizontal: 4,
   },
@@ -534,10 +534,10 @@ const styles = StyleSheet.create({
   },
   // кнопки стилізації
   formatButtonActive:   {
-    backgroundColor: '#007bff' 
+    backgroundColor: '#4ea1ff'
   },  // синій активний фон
   formatButtonDisabled: {
-    backgroundColor: '#e0e0e0' 
+    backgroundColor: '#f4f7fb'
   },  // сірий неактивний фон
   formatButtonTextActive:   {
     color: '#fff'

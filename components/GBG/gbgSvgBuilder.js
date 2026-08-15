@@ -98,7 +98,7 @@ export const buildGbgMapSvgStringFromState = ({ mapKey, sectorColors, sectorStaf
       const color = sectorColors?.[sectorId];
       if (color) fillStyle.fill = color;
 
-      fillStyle.stroke = "#121212";
+      fillStyle.stroke = "#0f1115";
       fillStyle.strokeWidth = strokeWidth;
       fillStyle.strokeOpacity = 1;
 

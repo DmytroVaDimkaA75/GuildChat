@@ -72,7 +72,7 @@ const CustomImagePicker = () => {
       <TouchableOpacity
         onPress={pickImages}
         style={{
-          backgroundColor: '#007bff',
+          backgroundColor: '#4ea1ff',
           padding: 10,
           borderRadius: 5,
           marginBottom: 20,

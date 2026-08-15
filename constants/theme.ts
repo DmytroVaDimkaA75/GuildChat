@@ -10,12 +10,15 @@ const tintColorDark = '#4ea1ff';
 
 export const DarkThemeColors = {
   background: '#0f1115',
-  surface: '#1b1f2a',
-  surfaceElevated: '#2a2f3a',
-  border: '#3a3f4a',
+  surface: '#152330',
+  surfaceElevated: '#1b2b3b',
+  border: '#36516a',
   text: '#f4f7fb',
   textSecondary: '#9aa3b2',
   primary: '#4ea1ff',
+  primarySoft: '#82c6ff',
+  success: '#4edb78',
+  warning: '#ffa51f',
   danger: '#ff5b5b',
   overlay: 'rgba(0, 0, 0, 0.72)',
 } as const;

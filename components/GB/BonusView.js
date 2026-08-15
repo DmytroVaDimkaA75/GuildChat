@@ -150,9 +150,9 @@ const BonusView = ({ bonus, build }) => {
 const styles = StyleSheet.create({
   bonusContainer: {
     borderWidth: 1,
-    borderColor: '#2a2f3a',
+    borderColor: '#1b2b3b',
     padding: 5,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
   },
   buildBonus: {
     fontSize: 16,
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: '80%',
     padding: 20,
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#000',

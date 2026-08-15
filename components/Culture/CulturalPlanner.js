@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
   },
   actionText: { flex: 1, marginRight: 8 },
   button: {
-    backgroundColor: '#2196f3',
+    backgroundColor: '#4ea1ff',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4
@@ -1346,7 +1346,7 @@ const styles = StyleSheet.create({
   },
   actionsContainer: { marginTop: 20, alignItems: 'center' },
   actionButton: {
-    backgroundColor: '#2196f3',
+    backgroundColor: '#4ea1ff',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4,
@@ -1362,7 +1362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end'
   },
   modalContainer: {
-    backgroundColor: '#1b1f2a',
+    backgroundColor: '#152330',
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     padding: 16,
@@ -1398,7 +1398,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 12
   },
-  toggleActive: { backgroundColor: '#2196f3' }
+  toggleActive: { backgroundColor: '#4ea1ff' }
 });
 
 export default CulturalPlanner;

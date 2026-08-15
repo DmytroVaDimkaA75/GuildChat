@@ -302,7 +302,7 @@ const SwipeableScheduleItem = ({ schedule, onPress, onDelete }) => {
             <Text style={styles.scheduleTitle}>{schedule.title}</Text>
             <Text style={styles.scheduleSubtitle}>{schedule.subtitle}</Text>
           </View>
-          <MaterialIcons name="chevron-right" size={24} color="#A0D8FF" />
+          <MaterialIcons name="chevron-right" size={24} color="#82c6ff" />
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -401,7 +401,7 @@ const AddSchedule = () => {
 
         <TouchableOpacity style={styles.suggestedItem} onPress={handleSleepSchedule}>
           <Text style={styles.suggestedText}>{t('addSchedule.activityTime')}</Text>
-          <MaterialIcons name="add" size={24} color="#3498db" />
+          <MaterialIcons name="add" size={24} color="#4ea1ff" />
         </TouchableOpacity>
       </View>
     </View>
@@ -412,12 +412,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#121212',
+    backgroundColor: '#0f1115',
   },
   header: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#E0E0E0',
+    color: '#f4f7fb',
     marginBottom: 8,
   },
   description: {
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   scheduleContainer: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     padding: 15,
     borderRadius: 12,
     marginBottom: 12,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   scheduleTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#E0E0E0',
+    color: '#f4f7fb',
   },
   scheduleSubtitle: {
     fontSize: 14,
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   },
   scheduleItem: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -488,11 +488,11 @@ const styles = StyleSheet.create({
   suggestedTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#A0D8FF',
+    color: '#82c6ff',
     marginBottom: 8,
   },
   suggestedItem: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   },
   suggestedText: {
     fontSize: 16,
-    color: '#E0E0E0',
+    color: '#f4f7fb',
   },
   emptyText: {
     fontSize: 14,
@@ -512,14 +512,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   pickerContainer: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#152330',
     padding: 10,
     borderRadius: 10,
   },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#E0E0E0',
+    color: '#f4f7fb',
   },
 });
 

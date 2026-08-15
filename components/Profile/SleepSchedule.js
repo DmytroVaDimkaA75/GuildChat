@@ -23,7 +23,7 @@ const ROLLING_ANCHOR_DATE = "2026-01-04";
 const ROLLING_SCHEDULE_VERSION = 2;
 
 const THEME = {
-  background: "#121212",
+  background: "#0f1115",
   surface: "#1c1c1c",
   ring: "#242424",
   dial: "#151515",
@@ -31,7 +31,7 @@ const THEME = {
   tickMinor: "#2f2f2f",
   textPrimary: "#f5f5f5",
   textSecondary: "#b0b0b0",
-  accent: "#3498db",
+  accent: "#4ea1ff",
 };
 
 // ---- helpers for stable keys (NO numeric-only keys) ----

@@ -11,7 +11,7 @@ height: 24,
 width: 24,
 borderRadius: 4,
 borderWidth: 2,
-borderColor: checked ? '#007AFF' : '#ccc',
+borderColor: checked ? '#4ea1ff' : '#ccc',
 justifyContent: 'center',
 alignItems: 'center',
 backgroundColor: 'transparent',
@@ -21,7 +21,7 @@ backgroundColor: 'transparent',
 <Icon
 name="check"
 size={25}
-color="#007AFF"
+color="#4ea1ff"
 style={{ position: 'absolute', top: -2, left: 4 }}
 />
 )}
