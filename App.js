@@ -23,6 +23,7 @@ import i18n from "./i18n";
 import { parsePlayerBlock } from "./parsePlayerBlock";
 
 import AdminSettingsScreen from "./components/AdminSettingsScreen";
+import AppUpdateChecker from "./components/AppUpdate/AppUpdateChecker";
 import MainContent from "./components/MainContent";
 import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
@@ -608,6 +609,7 @@ export default function App() {
   return (
     <GuildProvider>
       <SafeAreaProvider>
+        <AppUpdateChecker />
         <StatusBar barStyle="light-content" backgroundColor={DarkThemeColors.background} />
         <SafeAreaView style={styles.appSafeArea} edges={['bottom']}>
           <AppContent />

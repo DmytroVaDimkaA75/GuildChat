@@ -24,7 +24,7 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": ["RECORD_AUDIO", "REQUEST_INSTALL_PACKAGES"]
     },
     "ios": {
       "infoPlist": {
