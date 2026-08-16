@@ -69,6 +69,7 @@ import storage from '@react-native-firebase/storage';
 import DatePicker from 'react-native-date-picker';
 import moment from 'moment-timezone';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
+import { filterGbgBots } from '../../src/utils/guildBots';
 import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
@@ -247,7 +248,7 @@ const safeFormat = (ts, fmt, locale) => {
 // --------------------
 // Rich Text Web Input (WebView + contenteditable)
 // --------------------
-const RichTextWebInput = React.forwardRef(function RichTextWebInput(
+export const RichTextWebInput = React.forwardRef(function RichTextWebInput(
   { placeholder = 'Повідомлення...', minHeight = 40, maxHeight = 100, onChange },
   ref
 ) {
@@ -1409,8 +1410,8 @@ const ChatWindow = ({ route, navigation }) => {
   useEffect(() => {
     if (!guildId) return;
     const ref = database().ref(`guilds/${guildId}/guildUsers`);
-    const listener = ref.on('value', (snap) => {
-      const data = snap.val() || {};
+    const listener = ref.on('value', async (snap) => {
+      const data = await filterGbgBots(guildId, snap.val() || {});
       const list = Object.entries(data)
         .map(([id, user]) => ({
           id,

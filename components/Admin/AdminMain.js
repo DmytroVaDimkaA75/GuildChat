@@ -8,12 +8,15 @@ import * as Clipboard from 'expo-clipboard';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   Animated,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -40,6 +43,11 @@ const AdminMain = ({ canAccessTasks = false }) => {
   const [notifyNextActions, setNotifyNextActions] = useState(false);
   const [upgradeBranches, setUpgradeBranches] = useState([]);
   const [gbgGoalMaxPoints, setGbgGoalMaxPoints] = useState(true);
+  const [showBotSettings, setShowBotSettings] = useState(false);
+  const [gbgBotPickerVisible, setGbgBotPickerVisible] = useState(false);
+  const [selectedGbgBotId, setSelectedGbgBotId] = useState(null);
+  const [gbObserverId, setGbObserverId] = useState('');
+  const [savingBot, setSavingBot] = useState(false);
   const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
@@ -211,6 +219,9 @@ const AdminMain = ({ canAccessTasks = false }) => {
           })
         );
         setGuildMembersList(membersWithRoles);
+        setSelectedGbgBotId(
+          membersWithRoles.find((member) => member.role === USER_ROLES.GBG_BOT)?.id || null
+        );
       } else {
         setGuildMembersList([]);
       }
@@ -220,7 +231,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
   };
 
   useEffect(() => {
-    if (showMembers) {
+    if (showMembers || showBotSettings) {
       (async () => {
         const guildId = await AsyncStorage.getItem('guildId');
         if (guildId) {
@@ -228,7 +239,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
         }
       })();
     }
-  }, [showMembers]);
+  }, [showBotSettings, showMembers]);
   
   const handleRoleChange = async (userId, checked) => {
     try {
@@ -243,6 +254,69 @@ const AdminMain = ({ canAccessTasks = false }) => {
       );
     } catch (e) {
       Alert.alert('Ошибка', 'Не удалось обновить роль');
+    }
+  };
+
+  const confirmGbgBot = (member) => {
+    Alert.alert(
+      'Підтвердити бота ПБГ',
+      `Призначити ${member.userName || member.id} ботом полів битви гільдій?`,
+      [
+        { text: 'Скасувати', style: 'cancel' },
+        {
+          text: 'Підтвердити',
+          onPress: async () => {
+            const guildId = await AsyncStorage.getItem('guildId');
+            if (!guildId || savingBot) return;
+            setSavingBot(true);
+            try {
+              const updates = {};
+              guildMembersList.forEach((candidate) => {
+                if (candidate.role === USER_ROLES.GBG_BOT && candidate.id !== member.id) {
+                  updates[`users/${candidate.id}/${guildId}/role`] = USER_ROLES.MEMBER;
+                }
+              });
+              updates[`users/${member.id}/${guildId}/role`] = USER_ROLES.GBG_BOT;
+              await database().ref().update(updates);
+              setGuildMembersList((current) => current.map((candidate) => ({
+                ...candidate,
+                role: candidate.id === member.id
+                  ? USER_ROLES.GBG_BOT
+                  : candidate.role === USER_ROLES.GBG_BOT
+                    ? USER_ROLES.MEMBER
+                    : candidate.role,
+              })));
+              setSelectedGbgBotId(member.id);
+              setGbgBotPickerVisible(false);
+            } catch (_error) {
+              Alert.alert('Помилка', 'Не вдалося призначити бота ПБГ.');
+            } finally {
+              setSavingBot(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmGbObserver = async () => {
+    const botId = gbObserverId.trim();
+    const guildId = await AsyncStorage.getItem('guildId');
+    if (!/^\d+$/.test(botId) || !guildId || savingBot) {
+      Alert.alert('Некоректний ID', 'Введіть числовий ID бота.');
+      return;
+    }
+    const worldId = String(guildId).split('_')[0];
+    setSavingBot(true);
+    try {
+      const response = await fetch(`https://foe.scoredb.io/${worldId}/Player/${botId}`);
+      if (!response.ok) throw new Error(`scoredb-${response.status}`);
+      await database().ref(`/users/${botId}/${guildId}/role`).set(USER_ROLES.GB_BOT);
+      Alert.alert('Готово', `Гравцю ${botId} надано роль GBbot.`);
+    } catch (_error) {
+      Alert.alert('Гравця не знайдено', `ScoreDB не підтвердив гравця ${botId} у світі ${worldId}.`);
+    } finally {
+      setSavingBot(false);
     }
   };
   
@@ -343,6 +417,67 @@ const AdminMain = ({ canAccessTasks = false }) => {
       )}
 
       <View style={styles.section}>
+        <TouchableOpacity style={styles.botSettingsHeader} onPress={() => setShowBotSettings((value) => !value)}>
+          <View>
+            <Text style={styles.sectionTitle}>Налаштування ботів</Text>
+            <Text style={styles.botSettingsSubtitle}>ПБГ та спостерігач за ВС</Text>
+          </View>
+          <Ionicons name={showBotSettings ? 'chevron-up' : 'chevron-down'} size={22} color="#4ea1ff" />
+        </TouchableOpacity>
+        {showBotSettings && (
+          <View style={styles.botSettingsContent}>
+            <Text style={styles.botFieldLabel}>Поля битви гільдій</Text>
+            <TouchableOpacity style={styles.botSelect} onPress={() => setGbgBotPickerVisible(true)}>
+              <Text style={styles.botSelectText} numberOfLines={1}>
+                {guildMembersList.find((member) => member.id === selectedGbgBotId)?.userName || 'Обрати члена гільдії'}
+              </Text>
+              <Ionicons name="chevron-down" size={19} color="#9aa3b2" />
+            </TouchableOpacity>
+
+            <Text style={[styles.botFieldLabel, { marginTop: 16 }]}>Спостерігач за ВС</Text>
+            <View style={styles.botObserverRow}>
+              <TextInput
+                keyboardType="number-pad"
+                onChangeText={setGbObserverId}
+                placeholder="ID бота"
+                placeholderTextColor="#687789"
+                style={styles.botInput}
+                value={gbObserverId}
+              />
+              <TouchableOpacity disabled={savingBot} onPress={confirmGbObserver} style={styles.botConfirmButton}>
+                {savingBot ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="checkmark" size={22} color="#fff" />}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+
+      <Modal visible={gbgBotPickerVisible} transparent animationType="fade" onRequestClose={() => setGbgBotPickerVisible(false)}>
+        <View style={styles.botModalOverlay}>
+          <View style={styles.botModalCard}>
+            <View style={styles.botModalHeader}>
+              <Text style={styles.botModalTitle}>Оберіть бота ПБГ</Text>
+              <TouchableOpacity onPress={() => setGbgBotPickerVisible(false)}>
+                <Ionicons name="close" size={24} color="#9aa3b2" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.botCandidateList}>
+              {guildMembersList.map((member) => (
+                <TouchableOpacity key={member.id} onPress={() => confirmGbgBot(member)} style={styles.botCandidate}>
+                  {member.imageUrl ? <Image source={{ uri: member.imageUrl }} style={styles.botCandidateAvatar} /> : null}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.botCandidateName}>{member.userName || member.id}</Text>
+                    <Text style={styles.botCandidateId}>{member.id}</Text>
+                  </View>
+                  {member.id === selectedGbgBotId && <Ionicons name="checkmark-circle" size={22} color="#4ea1ff" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.section}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={styles.sectionTitle}>Члени гільдії</Text>
           <TouchableOpacity onPress={() => setShowMembers(v => !v)}>
@@ -387,7 +522,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
                 overflow: 'hidden',
                 height: membersHeightAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [ 0, guildMembersList.length * 44 ],
+                  outputRange: [0, guildMembersList.filter((member) => member.role !== USER_ROLES.GBG_BOT).length * 44],
                 }),
                 opacity: membersHeightAnim.interpolate({
                   inputRange: [0, 1],
@@ -397,10 +532,10 @@ const AdminMain = ({ canAccessTasks = false }) => {
                 marginBottom: 0,
               }}
             >
-              {guildMembersList.length === 0 ? (
+              {guildMembersList.filter((member) => member.role !== USER_ROLES.GBG_BOT).length === 0 ? (
                 <Text style={styles.mainText}>немає членів гільдії</Text>
               ) : (
-                guildMembersList.map((member) => (
+                guildMembersList.filter((member) => member.role !== USER_ROLES.GBG_BOT).map((member) => (
                   <View
                     key={member.id}
                     style={{
@@ -601,6 +736,24 @@ const styles = StyleSheet.create({
     color: '#82c6ff',
     marginBottom: 6,
   },
+  botSettingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  botSettingsSubtitle: { color: '#9aa3b2', fontSize: 12 },
+  botSettingsContent: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', marginTop: 12, paddingTop: 12 },
+  botFieldLabel: { color: '#dce5ef', fontSize: 13, fontWeight: '700', marginBottom: 7 },
+  botSelect: { minHeight: 46, borderWidth: 1, borderColor: '#36516a', borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center' },
+  botSelectText: { flex: 1, color: '#f4f7fb', fontSize: 14 },
+  botObserverRow: { flexDirection: 'row', gap: 9 },
+  botInput: { flex: 1, minHeight: 46, borderWidth: 1, borderColor: '#36516a', borderRadius: 10, paddingHorizontal: 12, color: '#f4f7fb', fontSize: 14 },
+  botConfirmButton: { width: 48, minHeight: 46, borderRadius: 10, backgroundColor: '#3188ef', alignItems: 'center', justifyContent: 'center' },
+  botModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  botModalCard: { width: '100%', maxWidth: 420, maxHeight: '75%', backgroundColor: '#152330', borderWidth: 1, borderColor: '#36516a', borderRadius: 16, padding: 15 },
+  botModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  botModalTitle: { color: '#f4f7fb', fontSize: 18, fontWeight: '800' },
+  botCandidateList: { flexGrow: 0 },
+  botCandidate: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)', paddingVertical: 7 },
+  botCandidateAvatar: { width: 38, height: 38, borderRadius: 19, marginRight: 10 },
+  botCandidateName: { color: '#f4f7fb', fontSize: 14, fontWeight: '600' },
+  botCandidateId: { color: '#7f8794', fontSize: 11, marginTop: 2 },
   upgradeBranchesHeader: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
 import LinkPreviewCard, { extractPreviewUrls } from '../CustomElements/LinkPreviewCard';
+import { RichTextWebInput } from '../Chat/ChatWindow';
 import {
   MessageReactions,
   ReactionActionIcon,
@@ -65,38 +66,81 @@ const getProfileAvatarUrl = (profile) => {
 };
 
 const FORMATS = [
-  { icon: 'format-bold', prefix: '**', suffix: '**', label: 'Жирний' },
-  { icon: 'format-italic', prefix: '_', suffix: '_', label: 'Курсив' },
-  { icon: 'format-underlined', prefix: '__', suffix: '__', label: 'Підкреслений' },
-  { icon: 'strikethrough-s', prefix: '~~', suffix: '~~', label: 'Закреслений' },
+  { icon: 'format-bold', command: 'bold', label: 'Жирний' },
+  { icon: 'format-italic', command: 'italic', label: 'Курсив' },
+  { icon: 'format-underlined', command: 'underline', label: 'Підкреслений' },
+  { icon: 'strikethrough-s', command: 'strikeThrough', label: 'Закреслений' },
 ];
+
+const parseFormattedText = (text) => {
+  const parts = [];
+  const regex = /(\*\*(.*?)\*\*|__(.*?)__|_([^_]+)_|~~(.*?)~~)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(String(text || ''))) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'normal', content: String(text).slice(lastIndex, match.index) });
+    }
+    const content = match[2] || match[3] || match[4] || match[5] || '';
+    const type = match[2] ? 'bold' : match[3] ? 'underline' : match[4] ? 'italic' : 'strikethrough';
+    parts.push({ type, content: parseFormattedText(content) });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < String(text || '').length) {
+    parts.push({ type: 'normal', content: String(text).slice(lastIndex) });
+  }
+  return parts;
+};
+
+const buildTextStyle = (activeStyles) => {
+  const style = {};
+  if (activeStyles.includes('bold')) style.fontWeight = '700';
+  if (activeStyles.includes('italic')) style.fontStyle = 'italic';
+  const underline = activeStyles.includes('underline');
+  const strike = activeStyles.includes('strikethrough');
+  if (underline && strike) style.textDecorationLine = 'underline line-through';
+  else if (underline) style.textDecorationLine = 'underline';
+  else if (strike) style.textDecorationLine = 'line-through';
+  return style;
+};
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const renderFormattedParts = (parts, memberNames, activeStyles = [], keyPrefix = '') =>
+  parts.map((part, index) => {
+    const key = `${keyPrefix}-${index}`;
+    const nextStyles = part.type === 'normal' ? activeStyles : [...activeStyles, part.type];
+    if (part.type === 'normal') {
+      const names = Array.from(memberNames).sort((a, b) => b.length - a.length);
+      const mentionPattern = names.length
+        ? new RegExp(`(@(?:${names.map(escapeRegExp).join('|')})(?![\\p{L}\\p{N}]))`, 'giu')
+        : null;
+      const pieces = mentionPattern ? String(part.content).split(mentionPattern).filter(Boolean) : [String(part.content)];
+      return pieces.map((piece, pieceIndex) => (
+        <Text
+          key={`${key}-${pieceIndex}`}
+          style={[
+            buildTextStyle(nextStyles),
+            piece.startsWith('@') && memberNames.has(piece.slice(1).toLowerCase()) && styles.mentionText,
+          ]}
+        >
+          {piece}
+        </Text>
+      ));
+    }
+    return (
+      <Text key={key} style={buildTextStyle(nextStyles)}>
+        {renderFormattedParts(part.content, memberNames, nextStyles, key)}
+      </Text>
+    );
+  });
 
 const FormattedMessage = ({ value, members }) => {
   const memberNames = new Set(members.map((item) => String(item.userName).toLowerCase()));
-  const escapedNames = members
-    .map((item) => String(item.userName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .sort((a, b) => b.length - a.length);
-  const mentionPattern = escapedNames.length ? `|@(?:${escapedNames.join('|')})(?![\\p{L}\\p{N}])` : '';
-  const tokenPattern = new RegExp(`(\\*\\*[^*]+\\*\\*|__[^_]+__|_[^_]+_|~~[^~]+~~${mentionPattern})`, 'gu');
-  const parts = String(value || '').split(tokenPattern).filter(Boolean);
   return (
     <Text style={styles.messageText}>
-      {parts.map((part, index) => {
-        let text = part;
-        const textStyle = [];
-        if (part.startsWith('**') && part.endsWith('**')) {
-          text = part.slice(2, -2); textStyle.push({ fontWeight: '700' });
-        } else if (part.startsWith('__') && part.endsWith('__')) {
-          text = part.slice(2, -2); textStyle.push({ textDecorationLine: 'underline' });
-        } else if (part.startsWith('~~') && part.endsWith('~~')) {
-          text = part.slice(2, -2); textStyle.push({ textDecorationLine: 'line-through' });
-        } else if (part.startsWith('_') && part.endsWith('_')) {
-          text = part.slice(1, -1); textStyle.push({ fontStyle: 'italic' });
-        } else if (part.startsWith('@') && memberNames.has(part.slice(1).trim().toLowerCase())) {
-          textStyle.push(styles.mentionText);
-        }
-        return <Text key={`${index}-${part}`} style={textStyle}>{text}</Text>;
-      })}
+      {renderFormattedParts(parseFormattedText(value), memberNames)}
     </Text>
   );
 };
@@ -109,6 +153,8 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
+  const [messageHtml, setMessageHtml] = useState('');
+  const [messagePlain, setMessagePlain] = useState('');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [replyTo, setReplyTo] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]);
@@ -139,6 +185,8 @@ export default function CommunityChannelsScreen({ route, navigation }) {
   const [memberRoleBusyId, setMemberRoleBusyId] = useState('');
   const [membersError, setMembersError] = useState('');
   const messageListRef = useRef(null);
+  const composerRef = useRef(null);
+  const composerCaretIndex = selection.start ?? 0;
 
   useEffect(() => {
     navigation.setOptions({ title: communityName || 'Спільнота' });
@@ -271,11 +319,11 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     [messages]
   );
   const mentionSuggestions = useMemo(() => {
-    const match = message.slice(0, selection.start).match(/(?:^|\s)@([^@\s]*)$/u);
+    const match = messagePlain.slice(0, selection.start).match(/(?:^|\s)@([^@\s]*)$/u);
     if (!match) return [];
     const query = match[1].toLowerCase();
     return memberRows.filter((item) => item.userName.toLowerCase().includes(query)).slice(0, 6);
-  }, [memberRows, message, selection.start]);
+  }, [memberRows, messagePlain, selection.start]);
 
   useEffect(() => {
     if (!communityMemberIds.length) return undefined;
@@ -515,6 +563,7 @@ export default function CommunityChannelsScreen({ route, navigation }) {
       }
       await messageRef.set({
         text,
+        html: messageHtml || null,
         imageUrls,
         senderId: identity.userId,
         senderName: identity.userName,
@@ -528,6 +577,10 @@ export default function CommunityChannelsScreen({ route, navigation }) {
           .catch((error) => console.warn('Не вдалося визначити мову повідомлення:', error?.message));
       }
       setMessage('');
+      setMessageHtml('');
+      setMessagePlain('');
+      setSelection({ start: 0, end: 0 });
+      composerRef.current?.clear?.();
       setSelectedImages([]);
       setReplyTo(null);
     } catch (error) {
@@ -549,23 +602,13 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     if (!result.canceled) setSelectedImages(result.assets.map((asset) => asset.uri).slice(0, 6));
   };
 
-  const applyFormat = ({ prefix, suffix }) => {
-    const start = selection.start ?? message.length;
-    const end = selection.end ?? start;
-    const selected = message.slice(start, end);
-    setMessage(`${message.slice(0, start)}${prefix}${selected}${suffix}${message.slice(end)}`);
-    setSelection({ start: start + prefix.length, end: start + prefix.length + selected.length });
-  };
-
   const insertMention = (member) => {
-    const beforeCaret = message.slice(0, selection.start);
+    const beforeCaret = messagePlain.slice(0, selection.start);
     const match = beforeCaret.match(/@[^@\s]*$/u);
     if (!match) return;
     const start = selection.start - match[0].length;
     const insertion = `@${member.userName} `;
-    setMessage(`${message.slice(0, start)}${insertion}${message.slice(selection.start)}`);
-    const caret = start + insertion.length;
-    setSelection({ start: caret, end: caret });
+    composerRef.current?.replaceRange?.(start, selection.start, insertion);
   };
 
   const togglePin = async (item) => {
@@ -1039,34 +1082,41 @@ export default function CommunityChannelsScreen({ route, navigation }) {
         <TouchableOpacity
           accessibilityLabel="Згадати учасника"
           onPress={() => {
-            const caret = selection.start ?? message.length;
-            setMessage(`${message.slice(0, caret)}@${message.slice(caret)}`);
-            setSelection({ start: caret + 1, end: caret + 1 });
+            composerRef.current?.replaceRange?.(composerCaretIndex, composerCaretIndex, '@');
           }}
           style={styles.formatButton}
         >
           <MaterialIcons name="alternate-email" size={20} color={COLORS.muted} />
         </TouchableOpacity>
         {FORMATS.map((format) => (
-          <TouchableOpacity key={format.label} accessibilityLabel={format.label} onPress={() => applyFormat(format)} style={styles.formatButton}>
+          <TouchableOpacity
+            key={format.label}
+            accessibilityLabel={format.label}
+            onPress={() => composerRef.current?.cmd?.(format.command)}
+            style={styles.formatButton}
+          >
             <MaterialIcons name={format.icon} size={20} color={COLORS.muted} />
           </TouchableOpacity>
         ))}
       </View>
 
       <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={message}
-          onChangeText={setMessage}
-          selection={selection}
-          onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
-          onFocus={() => setChannelMenuExpanded(false)}
-          placeholder={`Написати в #${selectedChannel?.name || ''}`}
-          placeholderTextColor={COLORS.muted}
-          multiline
-          maxLength={2000}
-        />
+        <View style={styles.input}>
+          <RichTextWebInput
+            ref={composerRef}
+            placeholder={`Написати в #${selectedChannel?.name || ''}`}
+            minHeight={40}
+            maxHeight={100}
+            onChange={({ html, marked, text, caretIndex }) => {
+              setMessage(marked);
+              setMessageHtml(html);
+              setMessagePlain(text || '');
+              const caret = Number.isFinite(caretIndex) ? caretIndex : 0;
+              setSelection({ start: caret, end: caret });
+              setChannelMenuExpanded(false);
+            }}
+          />
+        </View>
         <TouchableOpacity
           style={[styles.sendButton, ((!message.trim() && !selectedImages.length) || sending) && styles.sendButtonDisabled]}
           disabled={(!message.trim() && !selectedImages.length) || sending}

@@ -3,6 +3,8 @@ export const USER_ROLES = Object.freeze({
   TESTER: "tester",
   DEVELOPER: "developer",
   MEMBER: "member",
+  GBG_BOT: "GBGbot",
+  GB_BOT: "GBbot",
 });
 
 export const hasTesterFeatures = (role) =>
@@ -24,6 +26,10 @@ export const getUkrainianRoleLabel = (role) => {
       return "Розробник";
     case USER_ROLES.MEMBER:
       return "Користувач";
+    case USER_ROLES.GBG_BOT:
+      return "Бот ПБГ";
+    case USER_ROLES.GB_BOT:
+      return "Спостерігач за ВС";
     default:
       return role;
   }

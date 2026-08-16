@@ -7,6 +7,7 @@ import { MultiSelect } from 'react-native-element-dropdown';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import database from '@react-native-firebase/database';
 import CustomCheckBox from '../CustomElements/CustomCheckBox3';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 const NewGBChat = () => {
   const { t, i18n } = useTranslation();
@@ -73,8 +74,8 @@ const NewGBChat = () => {
       }
       console.log('Guild ID:', guildId);
       membersRef = database().ref(`guilds/${guildId}/guildUsers`);
-      handleMembers = (snapshot) => {
-        const data = snapshot.val();
+      handleMembers = async (snapshot) => {
+        const data = await filterGbgBots(guildId, snapshot.val() || {});
         console.log('Дані з guildUsers:', data);
         if (data) {
           const membersArray = Object.keys(data).map((key) => ({

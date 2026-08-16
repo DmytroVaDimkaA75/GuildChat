@@ -3,6 +3,7 @@ import database from '@react-native-firebase/database';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 const COLORS = {
   background: '#0f1115',
@@ -100,8 +101,8 @@ const GBCenterScreen = ({ navigation }) => {
         }
 
         greatBuildRef = database().ref(`guilds/${guildId}/guildUsers`);
-        handleGreatBuildingsChange = (snapshot) => {
-          const guildUsers = snapshot.val() || {};
+        handleGreatBuildingsChange = async (snapshot) => {
+          const guildUsers = await filterGbgBots(guildId, snapshot.val() || {});
           setMyGBCount(Object.keys(guildUsers[userId]?.greatBuild || {}).length);
           const arcLevel = Number(guildUsers[userId]?.greatBuild?.['The Arc']?.level) || 0;
           let visibleGuarantees = 0;

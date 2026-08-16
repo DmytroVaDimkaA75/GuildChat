@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 const COLORS = { background: '#07111b', surface: '#0d1925', surfaceSoft: '#102235', border: '#2d3a48', divider: '#263646', primary: '#2f87ff', primaryLight: '#62a7ff', text: '#f4f7fb', muted: '#a9b3c3' };
 
@@ -60,7 +61,7 @@ const GBExpress = () => {
         .filter((entry) => Number(entry.scheduleTime) > now));
       setLoading(false);
     };
-    const handleUsers = (snapshot) => setGuildUsers(snapshot.val() || {});
+    const handleUsers = async (snapshot) => setGuildUsers(await filterGbgBots(guildId, snapshot.val() || {}));
     const handleError = () => setLoading(false);
     expressRef.on('value', handleExpress, handleError);
     usersRef.on('value', handleUsers);

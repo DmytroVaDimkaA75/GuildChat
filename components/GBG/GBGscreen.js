@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  AppState,
   Dimensions,
   Modal,
   ScrollView,
@@ -28,6 +29,7 @@ import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 import { getGbgSeasonEndMs, getMoscowDayEndMs } from "./gbgMuteTime";
+import { getGbgBotIds } from "../../src/utils/guildBots";
 
 const { height, width } = Dimensions.get("window");
 const HALF_HEIGHT = height * 0.5;
@@ -618,6 +620,38 @@ const GVG = () => {
   }, []);
 
   useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        setCurrentTime(Math.floor(Date.now() / 1000));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const mutedUntil = Number(sectorOpenMute.mutedUntil) || 0;
+    if (!mutedUntil) return undefined;
+
+    const now = Date.now() + (serverTimeOffsetMs ?? 0);
+    const remainingMs = mutedUntil - now;
+    if (remainingMs <= 0) {
+      setSectorOpenMute({ mutedUntil: 0, scope: "all" });
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      setCurrentTime(Math.floor(Date.now() / 1000));
+      setSectorOpenMute((current) =>
+        Number(current.mutedUntil) === mutedUntil
+          ? { mutedUntil: 0, scope: "all" }
+          : current
+      );
+    }, remainingMs + 50);
+
+    return () => clearTimeout(timeout);
+  }, [sectorOpenMute.mutedUntil, serverTimeOffsetMs]);
+
+  useEffect(() => {
     let mapRef;
     let onMapUpdate;
     mapDataGuildIdRef.current = "";
@@ -1137,6 +1171,7 @@ const GVG = () => {
         database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/PlayerLeaderboard`).once("value"),
       ]);
       const usersRaw = usersSnap.exists() ? usersSnap.val() || {} : {};
+      const gbgBotIds = await getGbgBotIds(storedGuildId, Object.keys(usersRaw));
       const storedRaw = storedSnap.exists() ? storedSnap.val() || {} : {};
 
       const currentMapId = raw?.mapId;
@@ -1145,6 +1180,7 @@ const GVG = () => {
 
       const rows = Object.entries(raw).map(([playerId, entry]) => {
         if (playerId === "mapId") return null;
+        if (gbgBotIds.has(String(playerId))) return null;
         const negotiationsWon = Number(entry?.negotiationsWon) || 0;
         const battlesWon = Number(entry?.battlesWon) || 0;
         const attrition = Number(entry?.attrition) || 0;
@@ -1520,7 +1556,7 @@ const styles = StyleSheet.create({
   emptyListText: { fontSize: 16, color: UI.muted, fontStyle: "italic" },
 
   infoTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF", marginBottom: 20, textAlign: "center" },
-  infoList: { maxHeight: HALF_HEIGHT * 0.7 },
+  infoList: { flex: 1 },
   infoEmpty: { textAlign: "center", color: "#999", paddingVertical: 15, fontSize: 16 },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   infoColor: { width: 22, height: 22, borderRadius: 6, marginRight: 12, borderWidth: 1, borderColor: "#555" },
@@ -1597,7 +1633,7 @@ const styles = StyleSheet.create({
   },
 
   battlesOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", zIndex: 30 },
-  battlesModal: { width: "94%", maxHeight: HALF_HEIGHT * 1.6, backgroundColor: UI.surface, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: UI.border },
+  battlesModal: { width: "94%", height: height * 0.75, backgroundColor: UI.surface, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: UI.border },
   statsTabsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
   statsTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 12, backgroundColor: UI.surfaceElevated, borderWidth: 1, borderColor: UI.border },
   statsTabActive: { backgroundColor: "#17354a", borderWidth: 1, borderColor: UI.primary },
@@ -1610,7 +1646,7 @@ const styles = StyleSheet.create({
   battlesCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   battlesCheckboxChecked: { borderColor: UI.success, backgroundColor: "rgba(78,219,120,0.16)" },
   battlesCheckboxMark: { color: UI.success, fontSize: 12, fontWeight: "900", lineHeight: 14 },
-  battlesScroll: { maxHeight: HALF_HEIGHT * 1.2 },
+  battlesScroll: { flex: 1 },
   battlesHeaderRow: {
     flexDirection: "row",
     borderBottomWidth: 1,

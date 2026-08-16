@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 // --- ИЗМЕНЕНО: Правильный импорт ---
 import database from '@react-native-firebase/database';
 import { getPresenceStatusLabel } from './presenceUtils';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 // --- УДАЛЕНЫ неверные импорты ---
 // import { get, getDatabase, ref } from 'firebase/database';
@@ -34,9 +35,9 @@ const GuildMembersList = () => {
 
         // --- ИЗМЕНЕНО: Синтаксис `ref` и `once` для @react-native-firebase ---
         guildRef = database().ref(`guilds/${guildId}/guildUsers`);
-        listener = guildRef.on('value', (snapshot) => {
+        listener = guildRef.on('value', async (snapshot) => {
           if (snapshot.exists()) {
-            const guildMembersData = snapshot.val();
+            const guildMembersData = await filterGbgBots(guildId, snapshot.val() || {});
             const guildMembers = [];
             
             Object.keys(guildMembersData).forEach((memberId) => {

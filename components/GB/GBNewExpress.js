@@ -6,10 +6,10 @@ import { useTranslation } from 'react-i18next';
 import {
   Image,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View
@@ -23,6 +23,47 @@ import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import database from '@react-native-firebase/database';
 
 const FALLBACK_CONTRIBUTION_MULTIPLIER = 1.9;
+
+const LevelStepper = ({ value, onDecrease, onIncrease, minValue = 0, maxValue = 200 }) => {
+  const canDecrease = value > minValue;
+  const canIncrease = value < maxValue;
+
+  return (
+    <View style={styles.stepperContainer}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Зменшити кількість рівнів"
+        disabled={!canDecrease}
+        hitSlop={8}
+        onPress={onDecrease}
+        style={({ pressed }) => [
+          styles.stepButton,
+          !canDecrease && styles.stepButtonDisabled,
+          pressed && canDecrease && styles.stepButtonPressed,
+        ]}
+      >
+        <Text maxFontSizeMultiplier={1} style={styles.stepButtonText}>−</Text>
+      </Pressable>
+      <View style={styles.valueInput}>
+        <Text maxFontSizeMultiplier={1} style={styles.valueText}>{value}</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Збільшити кількість рівнів"
+        disabled={!canIncrease}
+        hitSlop={8}
+        onPress={onIncrease}
+        style={({ pressed }) => [
+          styles.stepButton,
+          !canIncrease && styles.stepButtonDisabled,
+          pressed && canIncrease && styles.stepButtonPressed,
+        ]}
+      >
+        <Text maxFontSizeMultiplier={1} style={styles.stepButtonText}>+</Text>
+      </Pressable>
+    </View>
+  );
+};
 
 const normalizeRuleList = (value) => {
   if (value == null) return [];
@@ -105,6 +146,8 @@ const GBNewExpress = ({ route, navigation }) => {
 
   // Паралельне отримання даних для розрахунку вартості прокачки
   useEffect(() => {
+    let cancelled = false;
+
     const fetchApiAndLevelAndCalculate = async () => {
       const buildId = buildingId || allowedGB;
       if (buildId && levelThreshold > 1) {
@@ -169,13 +212,18 @@ const GBNewExpress = ({ route, navigation }) => {
           const costs = await Promise.all(levelPromises);
           S = costs.reduce((a, b) => a + b, 0);
           console.log("Загальна вартість прокачки:", S);
-          setTotalCost(S);
+          if (!cancelled) setTotalCost(S);
         } catch (error) {
           // Не виводимо помилки
         }
       }
     };
-    fetchApiAndLevelAndCalculate();
+    const calculationTimer = setTimeout(fetchApiAndLevelAndCalculate, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(calculationTimer);
+    };
   }, [buildingId, allowedGB, levelThreshold]);
 
   useEffect(() => {
@@ -262,74 +310,6 @@ const GBNewExpress = ({ route, navigation }) => {
     const newPlaceLimit = [...placeLimit];
     newPlaceLimit[index] = !newPlaceLimit[index];
     setPlaceLimit(newPlaceLimit);
-  };
-
-  const Stepper = ({ value, onValueChange, buttonSize = 40, minValue = 0, maxValue = 200 }) => {
-    const [inputValue, setInputValue] = useState(String(value));
-
-    const clampValue = (nextValue) => Math.min(maxValue, Math.max(minValue, nextValue));
-    const parseInputValue = () => {
-      const parsed = parseInt(inputValue, 10);
-      return Number.isFinite(parsed) ? parsed : minValue;
-    };
-
-    const handleIncrement = () => {
-      const newValue = clampValue(parseInputValue() + 1);
-      onValueChange(newValue);
-      setInputValue(String(newValue));
-    };
-
-    const handleDecrement = () => {
-      const newValue = clampValue(parseInputValue() - 1);
-      onValueChange(newValue);
-      setInputValue(String(newValue));
-    };
-
-    const handleInputChange = (text) => {
-      if (/^\d*$/.test(text)) {
-        setInputValue(text);
-        if (text !== '') {
-          const parsedValue = clampValue(parseInt(text, 10));
-          onValueChange(parsedValue);
-        }
-      }
-    };
-
-    const handleEndEditing = () => {
-      const nextValue = clampValue(parseInputValue());
-      onValueChange(nextValue);
-      setInputValue(String(nextValue));
-    };
-
-    useEffect(() => {
-      setInputValue(String(value));
-    }, [value]);
-
-    return (
-      <View style={styles.stepperContainer}>
-        <TouchableOpacity
-          onPress={handleDecrement}
-          style={[styles.stepButton, { width: buttonSize, height: buttonSize }]}
-        >
-          <Text style={styles.stepButtonText}>-</Text>
-        </TouchableOpacity>
-        <TextInput
-          style={[styles.valueInput, { height: buttonSize, flex: 1 }]}
-          keyboardType="numeric"
-          value={inputValue}
-          onChangeText={handleInputChange}
-          onEndEditing={handleEndEditing}
-          maxLength={String(maxValue).length}
-          editable={true}
-        />
-        <TouchableOpacity
-          onPress={handleIncrement}
-          style={[styles.stepButton, { width: buttonSize, height: buttonSize }]}
-        >
-          <Text style={styles.stepButtonText}>+</Text>
-        </TouchableOpacity>
-      </View>
-    );
   };
 
   const getFullDate = useCallback((dayIndex, hour, minute) => {
@@ -547,10 +527,10 @@ const GBNewExpress = ({ route, navigation }) => {
             <Text maxFontSizeMultiplier={1.15} style={styles.blockLabel}>Кількість рівнів</Text>
             <Ionicons name="information-circle-outline" size={20} color="#9aa3b2" />
           </View>
-          <Stepper
+          <LevelStepper
             value={parseInt(levelThreshold, 10) || 0}
-            onValueChange={(val) => setLevelThreshold(val)}
-            buttonSize={62}
+            onDecrease={() => setLevelThreshold((current) => Math.max(0, (Number(current) || 0) - 1))}
+            onIncrease={() => setLevelThreshold((current) => Math.min(200, (Number(current) || 0) + 1))}
             minValue={0}
             maxValue={200}
           />
@@ -597,18 +577,19 @@ const GBNewExpress = ({ route, navigation }) => {
               <Text maxFontSizeMultiplier={1.15} style={styles.blockLabel}>Дата і час запуску</Text>
               <Ionicons name="information-circle-outline" size={20} color="#9aa3b2" />
             </View>
-            <View style={styles.datePanel}>
-              <TouchableOpacity style={styles.dateRow} onPress={openDateTimeModal}>
-                <Ionicons name="calendar-outline" size={22} color="#b8c7dc" />
-                <Text maxFontSizeMultiplier={1.15} style={styles.dateButtonText}>{selectedDateLabel}</Text>
-                <Ionicons name="chevron-forward" size={21} color="#b8c7dc" />
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.dateRow, styles.dateRowDivided]} onPress={openDateTimeModal}>
-                <Ionicons name="time-outline" size={23} color="#b8c7dc" />
-                <Text maxFontSizeMultiplier={1.15} style={styles.dateButtonText}>{selectedTimeLabel}</Text>
-                <Ionicons name="chevron-forward" size={21} color="#b8c7dc" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.datePanel} onPress={openDateTimeModal}>
+              {selectedHour === null || selectedMinute === null ? (
+                <Text maxFontSizeMultiplier={1.15} style={styles.assignTimeText}>Призначте час</Text>
+              ) : (
+                <View style={styles.selectedDateTime}>
+                  <Ionicons name="calendar-outline" size={22} color="#b8c7dc" />
+                  <Text maxFontSizeMultiplier={1.15} style={styles.selectedDateTimeText}>{selectedDateLabel}</Text>
+                  <Ionicons name="time-outline" size={23} color="#b8c7dc" />
+                  <Text maxFontSizeMultiplier={1.15} style={styles.selectedDateTimeText}>{selectedTimeLabel}</Text>
+                </View>
+              )}
+              <Ionicons name="chevron-forward" size={21} color="#b8c7dc" />
+            </TouchableOpacity>
             <Text style={styles.scheduleHint}>Експрес запускається лише за розкладом</Text>
           </View>
         )}
@@ -667,7 +648,7 @@ const GBNewExpress = ({ route, navigation }) => {
           <View style={styles.summaryRow}>
             <Ionicons name="stats-chart-outline" size={20} color="#4ea1ff" />
             <Text maxFontSizeMultiplier={1.15} style={styles.summaryText}>
-              {levelThreshold || 0} рівнів  ·  місця {placeLimit.map((checked, index) => checked ? index + 1 : null).filter(Boolean).join(', ') || '—'}
+              {levelThreshold || 0} рівнів
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -759,38 +740,33 @@ const styles = StyleSheet.create({
       borderColor: '#2d3a48',
       borderRadius: 11,
       overflow: 'hidden',
+      height: 44,
     },
     stepButton: {
+      width: 52,
+      height: 44,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: '#4ea1ff',
     },
+    stepButtonPressed: { backgroundColor: '#247ae7' },
+    stepButtonDisabled: { opacity: 0.45 },
     stepButtonText: {
       color: '#fff',
-      fontSize: 25,
+      fontSize: 18,
+      lineHeight: 21,
     },
     valueInput: {
-      textAlign: 'center',
+      flex: 1,
+      height: 44,
       backgroundColor: '#091522',
       borderColor: '#2d3a48',
       borderLeftWidth: 1,
       borderRightWidth: 1,
-      fontSize: 27,
-      fontWeight: '700',
-      color: '#e6e9ef',
-    },
-    dateButton: {
-      backgroundColor: '#4ea1ff',
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      borderRadius: 6,
       alignItems: 'center',
+      justifyContent: 'center',
     },
-    dateButtonText: {
-      flex: 1,
-      color: '#c5cfdd',
-      fontSize: 15,
-    },
+    valueText: { color: '#e6e9ef', fontSize: 17, lineHeight: 20, fontWeight: '700' },
     upgradeCostText: {
       fontSize: 15,
       color: '#9aa3b2'
@@ -874,17 +850,18 @@ const styles = StyleSheet.create({
     nextLevelText: { color: '#4ea1ff' },
     blockTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
     quickSteps: { flexDirection: 'row', gap: 9, justifyContent: 'center', marginTop: 10 },
-    quickStep: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: '#4ea1ff', borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    quickStep: { flex: 1, minHeight: 32, borderWidth: 1, borderColor: '#4ea1ff', borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
     quickStepActive: { backgroundColor: '#247ae7' },
-    quickStepText: { color: '#e6e9ef', fontSize: 15 },
+    quickStepText: { color: '#e6e9ef', fontSize: 13 },
     costRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
     costStrong: { color: '#2f87ff', fontWeight: '700' },
     placeButton: { flex: 1, aspectRatio: 1.25, borderRadius: 12, borderWidth: 1, borderColor: '#4ea1ff', alignItems: 'center', justifyContent: 'center' },
     placeButtonActive: { backgroundColor: '#247ae7' },
     placeButtonText: { color: '#f4f7fb', fontSize: 18, fontWeight: '600' },
-    datePanel: { borderWidth: 1, borderColor: '#2d3a48', borderRadius: 12, overflow: 'hidden' },
-    dateRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
-    dateRowDivided: { borderTopWidth: 1, borderTopColor: '#2d3a48' },
+    datePanel: { minHeight: 54, borderWidth: 1, borderColor: '#2d3a48', borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13 },
+    assignTimeText: { flex: 1, color: '#c5cfdd', fontSize: 15 },
+    selectedDateTime: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    selectedDateTimeText: { color: '#c5cfdd', fontSize: 14, marginRight: 5 },
     scheduleHint: { color: '#748298', fontSize: 12, marginTop: 9 },
     summaryCard: { width: '94%', backgroundColor: '#0d1925', borderColor: '#2d3a48', borderRadius: 14, borderWidth: 1, padding: 13, gap: 8, marginBottom: 12 },
     summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },

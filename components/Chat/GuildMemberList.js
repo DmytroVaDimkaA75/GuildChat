@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getPresenceStatusLabel } from './presenceUtils';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 const GuildMembersList = () => {
   const [members, setMembers] = useState([]);
@@ -24,14 +25,14 @@ const GuildMembersList = () => {
         }
 
         guildRef = database().ref(`guilds/${guildId}/guildUsers`);
-        listener = guildRef.on('value', (snapshot) => {
+        listener = guildRef.on('value', async (snapshot) => {
           if (snapshot.exists()) {
             const guildMembers = [];
-            snapshot.forEach((childSnapshot) => {
-              if (childSnapshot.key !== userId) {
-                const memberData = childSnapshot.val();
+            const visibleMembers = await filterGbgBots(guildId, snapshot.val() || {});
+            Object.entries(visibleMembers).forEach(([memberId, memberData]) => {
+              if (memberId !== userId) {
                 guildMembers.push({
-                  id: childSnapshot.key,
+                  id: memberId,
                   name: memberData.userName,
                   avatarUrl: memberData.imageUrl,
                   presence: memberData.presence || null,

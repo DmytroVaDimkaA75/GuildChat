@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
+import { filterGbgBots } from '../../src/utils/guildBots';
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -266,8 +267,8 @@ const GBGuaranteesScreen = ({ isDeveloper = false, navigation }) => {
     setError(null);
     const guildUsersRef = database().ref(`guilds/${guildId}/guildUsers`);
     const catalogRef = database().ref('greatBuildings');
-    const onGuildUsers = (snapshot) => {
-      setGuildUsers(snapshot.val() || {});
+    const onGuildUsers = async (snapshot) => {
+      setGuildUsers(await filterGbgBots(guildId, snapshot.val() || {}));
       setRefreshing(false);
     };
     const onCatalog = (snapshot) => {

@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
+import { getGbgBotIds } from '../../src/utils/guildBots';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import MyGBDistributionTable, {
   DISTRIBUTION_HEADER_HEIGHT,
@@ -164,6 +165,41 @@ const InfoItem = ({ icon, label, value }) => (
   </View>
 );
 
+const ExtraContributorsModal = ({ contributors, visible, onClose }) => (
+  <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <TouchableOpacity activeOpacity={1} onPress={onClose} style={styles.contributorsModalOverlay}>
+      <TouchableOpacity activeOpacity={1} style={styles.contributorsModalCard}>
+        <Text style={styles.contributorsModalTitle}>Інші вкладники</Text>
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.contributorsModalContent}
+          showsVerticalScrollIndicator={contributors.length > 5}
+        >
+          {contributors.map((contributor) => (
+            <View key={contributor.id} style={styles.contributorModalRow}>
+              <View
+                style={[
+                  styles.contributorModalAvatar,
+                  contributor.isGuildMember ? styles.guildAvatar : styles.externalAvatar,
+                ]}
+              >
+                {contributor.imageUrl ? (
+                  <Image source={{ uri: contributor.imageUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Ionicons name="person" size={19} color={COLORS.muted} />
+                )}
+              </View>
+              <Text numberOfLines={1} style={styles.contributorModalName}>
+                {contributor.name || contributor.id}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  </Modal>
+);
+
 const getGuaranteeBadge = (building, forgePointsUnit) => {
   if (building.totalLevelCost > 0 && building.totalContribution > building.totalLevelCost) {
     return { label: 'Перелив', type: 'danger' };
@@ -249,6 +285,7 @@ function BuildingCard({
   const remaining = Math.max(0, building.totalLevelCost - building.totalContribution);
   const badge = getGuaranteeBadge(building, forgePointsUnit);
   const [expanded, setExpanded] = useState(false);
+  const [showExtraContributors, setShowExtraContributors] = useState(false);
   const expansion = useRef(new Animated.Value(0)).current;
   const distributionRowCount = Math.max(
     MIN_DISTRIBUTION_ROWS,
@@ -319,10 +356,17 @@ function BuildingCard({
                 )}
               </View>
             ))}
-            {building.extraContributors > 0 && (
-              <View style={[styles.extraAvatar, styles.overlapAvatar]}>
-                <Text style={styles.extraText}>+{building.extraContributors}</Text>
-              </View>
+            {building.hiddenContributors.length > 0 && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Показати ще ${building.hiddenContributors.length} вкладників`}
+                activeOpacity={0.7}
+                hitSlop={5}
+                onPress={() => setShowExtraContributors(true)}
+                style={[styles.extraAvatar, styles.overlapAvatar]}
+              >
+                <Text style={styles.extraText}>+{building.hiddenContributors.length}</Text>
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -383,6 +427,11 @@ function BuildingCard({
           <Text style={styles.scheduleExpressButtonText}>Запланувати експрес</Text>
         </TouchableOpacity>
       </Animated.View>
+      <ExtraContributorsModal
+        contributors={building.hiddenContributors}
+        visible={showExtraContributors}
+        onClose={() => setShowExtraContributors(false)}
+      />
     </View>
   );
 }
@@ -441,6 +490,7 @@ const MyGBCenterScreen = ({ navigation }) => {
           try {
             const guildUsersSnapshot = await database().ref(`guilds/${guildId}/guildUsers`).once('value');
             const guildUsers = guildUsersSnapshot.val() || {};
+            const gbgBotIds = await getGbgBotIds(guildId, Object.keys(guildUsers));
             const worldId = String(guildId).split('_')[0];
             const loadedBuildings = await Promise.all(
               Object.entries(userBuilds).map(async ([buildId, userBuild]) => {
@@ -478,11 +528,12 @@ const MyGBCenterScreen = ({ navigation }) => {
                   : 0;
                 const contributorEntries = Object.entries(contributors)
                   .filter(([contributorId]) => contributorId !== userId)
+                  .filter(([contributorId]) => !gbgBotIds.has(String(contributorId)))
                   .sort(([, first], [, second]) =>
                     (Number(second?.forgePoints) || 0) - (Number(first?.forgePoints) || 0)
                   );
-                const visibleContributors = await Promise.all(
-                  contributorEntries.slice(0, 5).map(async ([contributorId, contributor]) => {
+                const loadedContributors = await Promise.all(
+                  contributorEntries.map(async ([contributorId, contributor]) => {
                     const isGuildMember = Object.prototype.hasOwnProperty.call(guildUsers, contributorId);
                     const imageUrl = isGuildMember
                       ? guildUsers[contributorId]?.imageUrl || null
@@ -490,6 +541,16 @@ const MyGBCenterScreen = ({ navigation }) => {
 
                     return {
                       id: contributorId,
+                      name: isGuildMember
+                        ? guildUsers[contributorId]?.userName
+                          || guildUsers[contributorId]?.login
+                          || contributor?.playerName
+                          || contributorId
+                        : contributor?.playerName
+                          || contributor?.userName
+                          || contributor?.login
+                          || contributor?.name
+                          || contributorId,
                       forgePoints: Number(contributor?.forgePoints) || 0,
                       imageUrl,
                       isGuildMember,
@@ -512,8 +573,8 @@ const MyGBCenterScreen = ({ navigation }) => {
                   progress,
                   updateAt: userBuild?.guarant?.calculatedAt,
                   guarant: userBuild?.guarant || null,
-                  contributors: visibleContributors,
-                  extraContributors: Math.max(0, contributorEntries.length - 5),
+                  contributors: loadedContributors.slice(0, 5),
+                  hiddenContributors: loadedContributors.slice(5),
                 };
               })
             );
@@ -746,6 +807,52 @@ const styles = StyleSheet.create({
   overlapAvatar: { marginLeft: -11 },
   extraAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#29313d' },
   extraText: { color: '#79baff', fontSize: 12, fontWeight: '700' },
+  contributorsModalOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+  },
+  contributorsModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    maxHeight: '68%',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+  },
+  contributorsModalTitle: {
+    marginBottom: 12,
+    color: COLORS.primary,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  contributorsModalContent: { paddingBottom: 2 },
+  contributorModalRow: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  contributorModalAvatar: {
+    width: 42,
+    height: 42,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 21,
+    borderWidth: 2,
+    backgroundColor: COLORS.primarySoft,
+  },
+  contributorModalName: {
+    flex: 1,
+    marginLeft: 12,
+    color: COLORS.text,
+    fontSize: 16,
+  },
   expandButton: {
     width: 36,
     height: 36,

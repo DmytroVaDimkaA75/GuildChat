@@ -6,6 +6,7 @@ import database from '@react-native-firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faChevronRight, faUserGroup, faCommentDots } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
+import { filterGbgBots } from '../../src/utils/guildBots';
 
 const CHAT_COLORS = {
   background: '#0f1115',
@@ -303,9 +304,8 @@ const ChatList = ({ chats, guildId, userId }) => {
     if (!guildId) return;
 
     const usersRef = database().ref(`guilds/${guildId}/guildUsers`);
-    const onUserChange = usersRef.on('value', snapshot => {
-      const data = snapshot.val();
-      setUsersMap(data || {});
+    const onUserChange = usersRef.on('value', async snapshot => {
+      setUsersMap(await filterGbgBots(guildId, snapshot.val() || {}));
     });
 
     return () => usersRef.off('value', onUserChange);
