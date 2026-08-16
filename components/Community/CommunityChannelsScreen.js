@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
@@ -24,7 +25,12 @@ import {
 } from 'react-native';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
 import LinkPreviewCard, { extractPreviewUrls } from '../CustomElements/LinkPreviewCard';
-import { MessageReactions, ReactionPicker } from '../CustomElements/MessageReactions';
+import {
+  MessageReactions,
+  ReactionActionIcon,
+  ReactionPicker,
+  toggleExclusiveUserReaction,
+} from '../CustomElements/MessageReactions';
 
 const COLORS = {
   background: '#0f1115',
@@ -97,6 +103,7 @@ const FormattedMessage = ({ value, members }) => {
 
 export default function CommunityChannelsScreen({ route, navigation }) {
   const headerHeight = useHeaderHeight();
+  const safeAreaInsets = useSafeAreaInsets();
   const { communityId, communityName } = route.params || {};
   const [community, setCommunity] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -729,8 +736,8 @@ export default function CommunityChannelsScreen({ route, navigation }) {
     if (!communityId || !selectedChannel?.id || !item?.id || !identity.userId || !reactionKey) return;
     try {
       await database()
-        .ref(`communityMessages/${communityId}/${selectedChannel.id}/${item.id}/reactions/${reactionKey}/${identity.userId}`)
-        .transaction((current) => current ? null : true);
+        .ref(`communityMessages/${communityId}/${selectedChannel.id}/${item.id}/reactions`)
+        .transaction((current) => toggleExclusiveUserReaction(current, identity.userId, reactionKey));
     } catch (error) {
       console.warn('Не вдалося змінити реакцію у спільноті:', error?.message || String(error));
     }
@@ -1088,10 +1095,10 @@ export default function CommunityChannelsScreen({ route, navigation }) {
 
       <Modal visible={Boolean(actionMessage)} transparent animationType="fade" onRequestClose={() => setActionMessage(null)}>
         <TouchableOpacity activeOpacity={1} style={styles.actionOverlay} onPress={() => setActionMessage(null)}>
-          <View style={styles.actionSheet}>
+          <View style={[styles.actionSheet, { paddingBottom: Math.max(24, safeAreaInsets.bottom + 12) }]}>
             <Text style={styles.actionTitle}>Дії з повідомленням</Text>
             {[
-              { label: 'Додати реакцію', icon: 'emoji-emotions', show: true, action: () => setReactionMessage(actionMessage) },
+              { label: 'Додати реакцію', reactionIcon: true, show: true, action: () => setReactionMessage(actionMessage) },
               { label: 'Відповісти', icon: 'reply', show: true, action: () => setReplyTo(actionMessage) },
               { label: 'Редагувати', icon: 'edit', show: actionMessage?.senderId === identity.userId && Boolean(actionMessage?.text), action: () => { setEditingMessage(actionMessage); setEditText(actionMessage.text); } },
               { label: 'Перекласти', icon: 'translate', show: Boolean(actionMessage?.text), action: () => handleTranslate(actionMessage) },
@@ -1104,7 +1111,11 @@ export default function CommunityChannelsScreen({ route, navigation }) {
                 style={styles.actionRow}
                 onPress={() => { const action = item.action; setActionMessage(null); action(); }}
               >
-                <MaterialIcons name={item.icon} size={21} color={item.destructive ? '#ff7070' : COLORS.text} />
+                {item.reactionIcon ? (
+                  <ReactionActionIcon />
+                ) : (
+                  <MaterialIcons name={item.icon} size={21} color={item.destructive ? '#ff7070' : COLORS.text} />
+                )}
                 <Text style={[styles.actionText, item.destructive && styles.actionTextDestructive]}>{item.label}</Text>
               </TouchableOpacity>
             ))}

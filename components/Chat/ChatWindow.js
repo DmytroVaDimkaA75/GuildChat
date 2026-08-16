@@ -61,7 +61,7 @@ import {
   TouchableWithoutFeedback
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
@@ -73,8 +73,14 @@ import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
 import { getPresenceStatusLabel } from './presenceUtils';
-import LinkPreviewCard from '../CustomElements/LinkPreviewCard';
-import { MessageReactions, ReactionPicker } from '../CustomElements/MessageReactions';
+import { isChatMessageVisible } from './chatDeletion';
+import LinkPreviewCard, { extractPreviewUrls, getYouTubeVideoId, stripPreviewUrls } from '../CustomElements/LinkPreviewCard';
+import {
+  MessageReactions,
+  ReactionActionIcon,
+  ReactionPicker,
+  toggleExclusiveUserReaction,
+} from '../CustomElements/MessageReactions';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const WAVEFORM_BAR_COUNT = 60;
@@ -95,7 +101,7 @@ const clampInputHeight = (height) =>
 
 const normalizeLanguageCode = (code) => String(code || '').trim().toLowerCase().split(/[-_]/)[0];
 
-const isYouTubeURL = (url) => (url || '').includes('youtube.com') || (url || '').includes('youtu.be');
+const isYouTubeURL = (url) => Boolean(getYouTubeVideoId(url));
 const isDocsURL = (url) => (url || '').includes('docs.google.com');
 
 const getDocsIcon = (url) => {
@@ -123,16 +129,11 @@ const extractUrlsFromHtml = (html = '') => {
 };
 
 const extractUrlsFromText = (text = '') => {
-  if (!text) return [];
-  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi;
-  const found = String(text).match(regex) || [];
-  // нормалізуємо (щоб youtu.be без схеми став валідним)
-  return Array.from(new Set(found.map((u) => normalizeUrl(u))));
+  return extractPreviewUrls(text);
 };
 
 const stripUrls = (text = '') => {
-  if (!text) return '';
-  return String(text).replace(/(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.[a-z]{2,}[^\s]*)/gi, '').trim();
+  return stripPreviewUrls(text);
 };
 
 const stripHtml = (html = '') =>
@@ -1041,6 +1042,7 @@ const ImageViewerModal = ({ visible, uri, onClose }) => {
 
 const ChatWindow = ({ route, navigation }) => {
   const headerHeight = useHeaderHeight();
+  const safeAreaInsets = useSafeAreaInsets();
   const {
     chatId,
     guildId: routeGuildId,
@@ -1099,6 +1101,7 @@ const ChatWindow = ({ route, navigation }) => {
   const [localeCode, setLocaleCode] = useState('uk');
   const [isChatMember, setIsChatMember] = useState(false);
   const [isChatSoundEnabled, setIsChatSoundEnabled] = useState(true);
+  const [chatDeletedAt, setChatDeletedAt] = useState(null);
   const isChatMemberRef = useRef(false);
   const isChatSoundEnabledRef = useRef(true);
 
@@ -1272,10 +1275,12 @@ const ChatWindow = ({ route, navigation }) => {
   useEffect(() => {
     if (!chatId || !guildId || !userId) return;
 
+    setChatDeletedAt(null);
     const chatRef = database().ref(`guilds/${guildId}/chats/${chatId}`);
     const listener = chatRef.on('value', (snap) => {
       const data = snap.val();
       if (!data) return;
+      setChatDeletedAt(Number(data.deletedFor?.[userId] || 0));
       setChatType(data.type || 'private');
       const members = data.members || {};
       const hasMember = Object.prototype.hasOwnProperty.call(members, userId);
@@ -1455,12 +1460,14 @@ const ChatWindow = ({ route, navigation }) => {
   }, [newMessagePlain, composerCaretIndex, guildMembers]);
 
   useEffect(() => {
-    if (!chatId || !guildId) return;
+    if (!chatId || !guildId || !userId || chatDeletedAt === null) return;
 
     const msgRef = database().ref(`guilds/${guildId}/chats/${chatId}/messages`);
     const listener = msgRef.on('value', (snap) => {
       const raw = snap.val() || {};
-      const list = Object.entries(raw).map(([id, msg]) => ({ id, ...msg }));
+      const list = Object.entries(raw)
+        .map(([id, msg]) => ({ id, ...msg }))
+        .filter((message) => isChatMessageVisible(message, chatDeletedAt, userId));
 
       const grouped = list.reduce((acc, msg) => {
         const dateKey = safeFormat(msg.timestamp, 'd MMMM', locale) || '—';
@@ -1480,7 +1487,7 @@ const ChatWindow = ({ route, navigation }) => {
     });
 
     return () => msgRef.off('value', listener);
-  }, [chatId, guildId, locale]);
+  }, [chatDeletedAt, chatId, guildId, locale, userId]);
 
   // ✅ pinned тільки якщо pinnedFor[userId] === true
   const pinnedMessages = useMemo(() => {
@@ -1708,8 +1715,8 @@ const ChatWindow = ({ route, navigation }) => {
     if (!guildId || !chatId || !message?.id || !userId || !reactionKey) return;
     try {
       await database()
-        .ref(`guilds/${guildId}/chats/${chatId}/messages/${message.id}/reactions/${reactionKey}/${userId}`)
-        .transaction((current) => current ? null : true);
+        .ref(`guilds/${guildId}/chats/${chatId}/messages/${message.id}/reactions`)
+        .transaction((current) => toggleExclusiveUserReaction(current, userId, reactionKey));
     } catch (error) {
       console.warn('Не вдалося змінити реакцію:', error?.message || String(error));
     }
@@ -2339,7 +2346,12 @@ const ChatWindow = ({ route, navigation }) => {
                 style={styles.actionOverlay}
                 onPress={() => setActionMessage(null)}
               >
-                <View style={styles.actionSheet}>
+                <View
+                  style={[
+                    styles.actionSheet,
+                    { paddingBottom: Math.max(26, safeAreaInsets.bottom + 12) },
+                  ]}
+                >
                   <View style={styles.actionHandle} />
                   <Text style={styles.actionTitle}>Дії з повідомленням</Text>
                   {renderGroupReadReceiptOption(actionMessage)}
@@ -2428,7 +2440,7 @@ const ChatWindow = ({ route, navigation }) => {
                         }}
                       >
                         {item.reactionIcon ? (
-                          <Text style={styles.actionReactionIcon}>😊</Text>
+                          <ReactionActionIcon />
                         ) : item.translateIcon ? (
                           <TransleteIcon width={19} height={19} fill="#f4f7fb" />
                         ) : (
@@ -3066,7 +3078,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionText: { color: '#f4f7fb', fontSize: 15, marginLeft: 14 },
-  actionReactionIcon: { fontSize: 19, width: 19 },
   actionTextDestructive: { color: '#ff7070' },
   sendOptionsOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
   sendOptionsPopup: {

@@ -24,6 +24,21 @@ test("army-scoped mute only suppresses matching sectors", () => {
   assert.equal(isGbgSectorNotificationMuted({ rawMute, army: "attack", nowMs: 2_000 }), false);
 });
 
+test("removing the mute record restores sector notifications", () => {
+  assert.deepEqual(normalizeGbgNotificationMute(null), {
+    mutedUntil: 0,
+    scope: "all",
+  });
+  assert.equal(
+    isGbgSectorNotificationMuted({ rawMute: null, army: "attack", nowMs: 1_000 }),
+    false
+  );
+  assert.equal(
+    isGbgSectorNotificationMuted({ rawMute: null, army: "defense", nowMs: 1_000 }),
+    false
+  );
+});
+
 test("Moscow day mute ends at 23:59:59.999 Moscow time", () => {
   const now = Date.parse("2026-08-14T18:00:00.000Z"); // 21:00 Moscow.
   assert.equal(getMoscowDayEndMs(now), Date.parse("2026-08-14T20:59:59.999Z"));

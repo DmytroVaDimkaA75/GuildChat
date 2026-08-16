@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Image, PanResponder, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Image, PanResponder, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import database from '@react-native-firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -56,13 +57,15 @@ const formatChatTime = (message) => {
   return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
 };
 
-const { width } = Dimensions.get('window');
-const SWIPE_DELETE_THRESHOLD = 120;
+const SWIPE_DELETE_THRESHOLD = 60;
+const DELETE_ACTION_WIDTH = 84;
 
-const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) => {
+const ChatListItem = ({ chat, index, userId, usersMap, onDeleteChat, onSelectChat }) => {
   const translateY = useMemo(() => new Animated.Value(50), []);
   const opacity = useMemo(() => new Animated.Value(0), []);
   const swipeX = useRef(new Animated.Value(0)).current;
+  const isSwipeOpen = useRef(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { t } = useTranslation();
   const latestMessage = useMemo(() => getLatestMessage(chat), [chat]);
   const latestTime = useMemo(() => formatChatTime(latestMessage), [latestMessage]);
@@ -95,68 +98,93 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
     ]).start();
   }, [index, opacity, translateY]);
 
-  const resetSwipe = () => {
+  const resetSwipe = useCallback(() => {
+    isSwipeOpen.current = false;
     Animated.spring(swipeX, {
       toValue: 0,
       useNativeDriver: true,
     }).start();
-  };
+  }, [swipeX]);
 
-  const confirmDelete = () => {
+  const openSwipe = useCallback(() => {
+    isSwipeOpen.current = true;
+    Animated.spring(swipeX, {
+      toValue: -DELETE_ACTION_WIDTH,
+      useNativeDriver: true,
+    }).start();
+  }, [swipeX]);
+
+  const confirmDelete = useCallback(() => {
     Alert.alert(
-      t('deleteConfirmationTitle'),
-      t('deleteConfirmationMessage'),
+      t('chatList.deleteConfirmationTitle'),
+      t('chatList.deleteConfirmationMessage'),
       [
         {
-          text: t('cancel'),
+          text: t('chatList.cancel'),
           style: 'cancel',
           onPress: resetSwipe,
         },
         {
-          text: t('delete'),
+          text: t('chatList.delete'),
           style: 'destructive',
-          onPress: () => {
-            Animated.timing(swipeX, {
-              toValue: -width,
-              duration: 200,
-              useNativeDriver: true,
-            }).start(() => {
-              if (!guildId) return;
-              database()
-                .ref(`guilds/${guildId}/chats/${chat.id}`)
-                .remove()
-                .catch(error => console.error('Помилка видалення чату:', error));
-            });
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await onDeleteChat(chat);
+            } catch (error) {
+              console.error('Помилка видалення чату:', error);
+              setIsDeleting(false);
+              resetSwipe();
+              Alert.alert(
+                t('chatList.deleteErrorTitle'),
+                t('chatList.deleteErrorMessage')
+              );
+            }
           },
         },
       ],
-      { cancelable: true }
+      { cancelable: true, onDismiss: resetSwipe }
     );
-  };
+  }, [chat, onDeleteChat, resetSwipe, t]);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10,
+          Math.abs(gestureState.dx) > 10 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          (gestureState.dx < 0 || isSwipeOpen.current),
         onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dx < 0) {
-            swipeX.setValue(gestureState.dx);
-          }
+          const startPosition = isSwipeOpen.current ? -DELETE_ACTION_WIDTH : 0;
+          const nextPosition = Math.max(
+            -DELETE_ACTION_WIDTH,
+            Math.min(0, startPosition + gestureState.dx)
+          );
+          swipeX.setValue(nextPosition);
         },
         onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx < -SWIPE_DELETE_THRESHOLD) {
-            confirmDelete();
+          if (isSwipeOpen.current) {
+            if (gestureState.dx > 10) resetSwipe();
+            else openSwipe();
+          } else if (gestureState.dx <= -SWIPE_DELETE_THRESHOLD) {
+            openSwipe();
           } else {
             resetSwipe();
           }
         },
-        onPanResponderTerminate: resetSwipe,
+        onPanResponderTerminate: () => {
+          if (isSwipeOpen.current) openSwipe();
+          else resetSwipe();
+        },
       }),
-    [confirmDelete, resetSwipe, swipeX]
+    [openSwipe, resetSwipe, swipeX]
   );
 
   const handleChatSelect = () => {
+    if (isSwipeOpen.current) {
+      resetSwipe();
+      return;
+    }
     onSelectChat(chat);
   };
 
@@ -241,14 +269,34 @@ const ChatListItem = ({ chat, index, guildId, userId, usersMap, onSelectChat }) 
   };
 
   return (
-    <Animated.View
-      style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
-      {...panResponder.panHandlers}
-    >
-      <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
-        {renderContent()}
+    <View style={styles.swipeContainer}>
+      <TouchableOpacity
+        accessibilityLabel={t('chatList.delete')}
+        accessibilityRole="button"
+        activeOpacity={0.75}
+        disabled={isDeleting}
+        onPress={confirmDelete}
+        style={styles.deleteBackground}
+      >
+        <MaterialIcons name="delete-outline" size={27} color="#fff" />
+        <Text
+          adjustsFontSizeToFit
+          minimumFontScale={0.65}
+          numberOfLines={1}
+          style={styles.deleteText}
+        >
+          {t('chatList.delete')}
+        </Text>
       </TouchableOpacity>
-    </Animated.View>
+      <Animated.View
+        style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
+          {renderContent()}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 };
 
@@ -264,7 +312,7 @@ const ChatList = ({ chats, guildId, userId }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [listOpacity]);
 
   useEffect(() => {
     if (!guildId) return;
@@ -282,13 +330,20 @@ const ChatList = ({ chats, guildId, userId }) => {
     navigation.navigate('ChatWindow', { chatId: chat.id });
   };
 
+  const handleDeleteChat = useCallback(async (chat) => {
+    if (!guildId || !userId || !chat?.id) throw new Error('chat-not-found');
+    await database()
+      .ref(`guilds/${guildId}/chats/${chat.id}/deletedFor/${userId}`)
+      .set(database.ServerValue.TIMESTAMP);
+  }, [guildId, userId]);
+
   const renderItem = ({ item, index }) => (
     <ChatListItem
       chat={item}
       index={index}
-      guildId={guildId}
       userId={userId}
       usersMap={usersMap}
+      onDeleteChat={handleDeleteChat}
       onSelectChat={handleChatSelect}
     />
   );
@@ -328,7 +383,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   chatItem: {
-    marginBottom: 12,
     borderRadius: 24,
     backgroundColor: CHAT_COLORS.surface,
     borderWidth: 1,
@@ -341,6 +395,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 2,
+  },
+  swipeContainer: {
+    borderRadius: 24,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  deleteBackground: {
+    alignItems: 'center',
+    backgroundColor: '#d9363e',
+    bottom: 1,
+    justifyContent: 'center',
+    paddingLeft: 20,
+    position: 'absolute',
+    right: 1,
+    top: 1,
+    width: DELETE_ACTION_WIDTH + 20,
+  },
+  deleteText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    width: DELETE_ACTION_WIDTH - 6,
   },
   chatItemPressable: {
     flexDirection: 'row',

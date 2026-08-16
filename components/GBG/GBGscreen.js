@@ -5,7 +5,7 @@ import database from "@react-native-firebase/database";
 import functions from "@react-native-firebase/functions";
 import { useNavigation } from "@react-navigation/native";
 import { BlurView } from "@react-native-community/blur";
-import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -429,6 +429,7 @@ const GVG = () => {
   const [sectorOpenMute, setSectorOpenMute] = useState({ mutedUntil: 0, scope: "all" });
   const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(null);
   const [isSavingSectorMute, setIsSavingSectorMute] = useState(false);
+  const sectorMuteActionInFlightRef = useRef(false);
 
   const blinkingAnim = useRef(new Animated.Value(0)).current;
   const blinkingLoopRef = useRef(null);
@@ -494,7 +495,8 @@ const GVG = () => {
   }, [guildId]);
 
   const handleSectorMuteOption = async (option) => {
-    if (isSavingSectorMute) return;
+    if (sectorMuteActionInFlightRef.current) return;
+    sectorMuteActionInFlightRef.current = true;
     setIsSavingSectorMute(true);
 
     try {
@@ -545,9 +547,48 @@ const GVG = () => {
         t("gbgScreen.sectorNotifications.saveFailed")
       );
     } finally {
+      sectorMuteActionInFlightRef.current = false;
       setIsSavingSectorMute(false);
     }
   };
+
+  const handleSectorMuteButtonPress = useCallback(async () => {
+    if (sectorMuteActionInFlightRef.current) return;
+    if (!areSectorNotificationsMuted) {
+      setSectorMuteMenuVisible(true);
+      return;
+    }
+
+    sectorMuteActionInFlightRef.current = true;
+    setIsSavingSectorMute(true);
+    try {
+      const userId = await AsyncStorage.getItem("userId");
+      const storedGuildId = await AsyncStorage.getItem("guildId");
+      const effectiveGuildId = guildId || storedGuildId;
+      if (!userId || !effectiveGuildId) {
+        Alert.alert(
+          t("gbgScreen.errors.title"),
+          t("gbgScreen.errors.guildNotFound")
+        );
+        return;
+      }
+
+      await database()
+        .ref(getSectorNotificationMutePath(userId, effectiveGuildId))
+        .remove();
+
+      setSectorOpenMute({ mutedUntil: 0, scope: "all" });
+      setSectorMuteMenuVisible(false);
+    } catch (_error) {
+      Alert.alert(
+        t("gbgScreen.errors.title"),
+        t("gbgScreen.sectorNotifications.saveFailed")
+      );
+    } finally {
+      sectorMuteActionInFlightRef.current = false;
+      setIsSavingSectorMute(false);
+    }
+  }, [areSectorNotificationsMuted, guildId, t]);
 
   useEffect(() => {
     let isActive = true;
@@ -696,11 +737,15 @@ const GVG = () => {
       headerRight: () => (
         <TouchableOpacity
           style={styles.infoButton}
-          onPress={() => setSectorMuteMenuVisible(true)}
+          disabled={isSavingSectorMute}
+          onPress={handleSectorMuteButtonPress}
           activeOpacity={0.8}
           accessibilityRole="button"
+          accessibilityState={{ disabled: isSavingSectorMute }}
           accessibilityLabel={t(
-            "gbgScreen.sectorNotifications.muteTitle"
+            areSectorNotificationsMuted
+              ? "gbgScreen.sectorNotifications.unmuteTitle"
+              : "gbgScreen.sectorNotifications.muteTitle"
           )}
         >
           <FontAwesomeIcon
@@ -724,6 +769,8 @@ const GVG = () => {
     isSectorDataLoaded,
     areOpponentsLoaded,
     areSectorNotificationsMuted,
+    handleSectorMuteButtonPress,
+    isSavingSectorMute,
     t,
   ]);
 
@@ -1525,14 +1572,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   sectorMuteOptionText: {
+    flexShrink: 1,
     color: UI.text,
     fontSize: 17,
     fontWeight: "700",
+    textAlign: "center",
   },
   sectorMuteOptionContent: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
+    width: "100%",
   },
   sectorMuteArmyMarker: {
     borderColor: "rgba(255,255,255,0.45)",

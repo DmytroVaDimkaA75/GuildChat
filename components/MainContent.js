@@ -1,4 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { faYoutube } from '@fortawesome/free-brands-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import notifee, {
   AndroidDefaults,
   AndroidImportance,
@@ -72,6 +74,8 @@ import SleepSchedule from './Profile/SleepSchedule';
 import MapComponent from './Quant/MapComponent';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
+import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
+import { YOUTUBE_CHANNEL_NAME } from './YouTube/youtubeChannel';
 
 // НОВЫЕ ИКОНКИ
 import Admin from "./ico/menu/setting.svg";
@@ -242,6 +246,21 @@ function CommunityStack() {
             </TouchableOpacity>
           ),
         })}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function YouTubeStack() {
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="YouTubeVideos"
+        component={YouTubeVideosScreen}
+        options={{
+          title: YOUTUBE_CHANNEL_NAME,
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        }}
       />
     </Stack.Navigator>
   );
@@ -918,7 +937,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
         {props.state.routes.map((route, index) => {
           const focused = props.state.index === index;
           const { drawerLabel, drawerIconComponent } = props.descriptors[route.key].options;
-          const shouldShowTopSeparator = route.name === 'profile';
+          const shouldShowTopSeparator = route.name === 'youtube' || route.name === 'profile';
 
           const iconColor = focused ? COLORS.primary : COLORS.textSecondary;
           const textColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
@@ -1138,6 +1157,16 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           options={{
             drawerLabel: hasTesterAccess ? t("drawer.culture") : null,
             drawerIconComponent: renderIcon(Boat)
+          }}
+        />
+        <Drawer.Screen
+          name="youtube"
+          component={YouTubeStack}
+          options={{
+            drawerLabel: YOUTUBE_CHANNEL_NAME,
+            drawerIconComponent: ({ color }) => (
+              <FontAwesomeIcon icon={faYoutube} size={24} color={color} />
+            )
           }}
         />
         <Drawer.Screen

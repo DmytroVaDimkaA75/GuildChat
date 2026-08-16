@@ -93,6 +93,7 @@ const ukTranslation = {
     emptySchedule: "Найближчим часом секторів немає",
     sectorNotifications: {
       muteTitle: "Не сигналізувати",
+      unmuteTitle: "Увімкнути сповіщення",
       thirtyMinutes: "30 хвилин",
       oneHour: "1 година",
       threeHours: "3 години",
@@ -380,7 +381,13 @@ const ukTranslation = {
     privateLabel: "Приватний чат",
     groupLabel: "Груповий чат",
     emptyTitle: "Немає доступних чатів",
-    emptySubtitle: "Розпочніть нову розмову вже зараз"
+    emptySubtitle: "Розпочніть нову розмову вже зараз",
+    delete: "Видалити",
+    cancel: "Скасувати",
+    deleteConfirmationTitle: "Видалення чату",
+    deleteConfirmationMessage: "Видалити цей чат і його поточну історію лише для вас? Нове повідомлення поверне чат у список.",
+    deleteErrorTitle: "Не вдалося видалити чат",
+    deleteErrorMessage: "Спробуйте ще раз."
   },
   chatScreen: {
     listenError: "Помилка при прослуховуванні чату"
@@ -459,6 +466,7 @@ const ruTranslation = {
     emptySchedule: "В ближайшее время нет секторов",
     sectorNotifications: {
       muteTitle: "Не уведомлять",
+      unmuteTitle: "Включить уведомления",
       thirtyMinutes: "30 минут",
       oneHour: "1 час",
       threeHours: "3 часа",
@@ -746,7 +754,13 @@ const ruTranslation = {
     privateLabel: "Приватный чат",
     groupLabel: "Групповой чат",
     emptyTitle: "Нет доступных чатов",
-    emptySubtitle: "Начните новый разговор прямо сейчас"
+    emptySubtitle: "Начните новый разговор прямо сейчас",
+    delete: "Удалить",
+    cancel: "Отмена",
+    deleteConfirmationTitle: "Удаление чата",
+    deleteConfirmationMessage: "Удалить этот чат и его текущую историю только для вас? Новое сообщение вернёт чат в список.",
+    deleteErrorTitle: "Не удалось удалить чат",
+    deleteErrorMessage: "Попробуйте ещё раз."
   },
   chatScreen: {
     listenError: "Ошибка при прослушивании чата"
@@ -825,6 +839,7 @@ const beTranslation = {
     emptySchedule: "Бліжэйшым часам сектараў няма",
     sectorNotifications: {
       muteTitle: "Не апавяшчаць",
+      unmuteTitle: "Уключыць апавяшчэнні",
       thirtyMinutes: "30 хвілін",
       oneHour: "1 гадзіна",
       threeHours: "3 гадзіны",
@@ -1112,7 +1127,13 @@ const beTranslation = {
     privateLabel: "Прыватны чат",
     groupLabel: "Групавы чат",
     emptyTitle: "Няма даступных чатаў",
-    emptySubtitle: "Пачніце новую размову ўжо зараз"
+    emptySubtitle: "Пачніце новую размову ўжо зараз",
+    delete: "Выдаліць",
+    cancel: "Скасаваць",
+    deleteConfirmationTitle: "Выдаленне чата",
+    deleteConfirmationMessage: "Выдаліць гэты чат і яго бягучую гісторыю толькі для вас? Новае паведамленне верне чат у спіс.",
+    deleteErrorTitle: "Не ўдалося выдаліць чат",
+    deleteErrorMessage: "Паспрабуйце яшчэ раз."
   },
   chatScreen: {
     listenError: "Памылка пры праслухоўванні чату"
@@ -1191,6 +1212,7 @@ const deTranslation = {
     emptySchedule: "Keine Sektoren in Kürze",
     sectorNotifications: {
       muteTitle: "Nicht benachrichtigen",
+      unmuteTitle: "Benachrichtigungen aktivieren",
       thirtyMinutes: "30 Minuten",
       oneHour: "1 Stunde",
       threeHours: "3 Stunden",
@@ -1478,7 +1500,13 @@ const deTranslation = {
     privateLabel: "Privater Chat",
     groupLabel: "Gruppenchat",
     emptyTitle: "Keine verfügbaren Chats",
-    emptySubtitle: "Starten Sie jetzt ein neues Gespräch"
+    emptySubtitle: "Starten Sie jetzt ein neues Gespräch",
+    delete: "Löschen",
+    cancel: "Abbrechen",
+    deleteConfirmationTitle: "Chat löschen",
+    deleteConfirmationMessage: "Diesen Chat und seinen bisherigen Verlauf nur für Sie löschen? Eine neue Nachricht bringt ihn zurück in die Liste.",
+    deleteErrorTitle: "Chat konnte nicht gelöscht werden",
+    deleteErrorMessage: "Bitte versuchen Sie es erneut."
   },
   chatScreen: {
     listenError: "Fehler beim Anhören des Chats"
@@ -1619,6 +1647,7 @@ const enOverrides = {
     emptySchedule: "No sectors expected soon",
     sectorNotifications: {
       muteTitle: "Do not notify",
+      unmuteTitle: "Enable notifications",
       thirtyMinutes: "30 minutes",
       oneHour: "1 hour",
       threeHours: "3 hours",
@@ -1704,7 +1733,13 @@ const enOverrides = {
     privateLabel: "Private chat",
     groupLabel: "Group chat",
     emptyTitle: "No chats available",
-    emptySubtitle: "Start a new conversation now"
+    emptySubtitle: "Start a new conversation now",
+    delete: "Delete",
+    cancel: "Cancel",
+    deleteConfirmationTitle: "Delete chat",
+    deleteConfirmationMessage: "Delete this chat and its current history only for you? A new message will return it to the list.",
+    deleteErrorTitle: "Could not delete chat",
+    deleteErrorMessage: "Please try again."
   },
   chatScreen: {
     listenError: "Chat listener error"
@@ -1845,6 +1880,7 @@ const plOverrides = {
     emptySchedule: "W najbliższym czasie brak sektorów",
     sectorNotifications: {
       muteTitle: "Nie powiadamiaj",
+      unmuteTitle: "Włącz powiadomienia",
       thirtyMinutes: "30 minut",
       oneHour: "1 godzina",
       threeHours: "3 godziny",
@@ -1914,7 +1950,13 @@ const plOverrides = {
     privateLabel: "Czat prywatny",
     groupLabel: "Czat grupowy",
     emptyTitle: "Brak dostępnych czatów",
-    emptySubtitle: "Rozpocznij nową rozmowę już teraz"
+    emptySubtitle: "Rozpocznij nową rozmowę już teraz",
+    delete: "Usuń",
+    cancel: "Anuluj",
+    deleteConfirmationTitle: "Usuwanie czatu",
+    deleteConfirmationMessage: "Usunąć ten czat i jego bieżącą historię tylko dla Ciebie? Nowa wiadomość przywróci go na listę.",
+    deleteErrorTitle: "Nie udało się usunąć czatu",
+    deleteErrorMessage: "Spróbuj ponownie."
   },
   chatScreen: {
     listenError: "Błąd nasłuchiwania czatu"

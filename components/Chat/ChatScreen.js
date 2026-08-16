@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import ChatList from './ChatList';
 import MessageInput from './ChatMessageInput';
 import MessageList from './ChatMessageList';
+import { getChatMessageTimestamp, isChatMessageVisible } from './chatDeletion';
 
 const ChatScreen = () => {
   const [chats, setChats] = useState([]);
@@ -40,9 +41,16 @@ const ChatScreen = () => {
         Object.keys(chatsData).forEach(chatId => {
           const chat = chatsData[chatId];
           if (chat.members && Object.prototype.hasOwnProperty.call(chat.members, userId)) {
-            const messages = chat.messages ? Object.values(chat.messages) : [];
+            const deletedAt = Number(chat.deletedFor?.[userId] || 0);
+            const visibleMessageEntries = Object.entries(chat.messages || {}).filter(
+              ([, message]) => isChatMessageVisible(message, deletedAt, userId)
+            );
+            if (deletedAt > 0 && visibleMessageEntries.length === 0) return;
+
+            const visibleMessages = Object.fromEntries(visibleMessageEntries);
+            const messages = Object.values(visibleMessages);
             const lastMessageTimestamp = messages.reduce((latest, message) => {
-              const timestamp = Number(message?.timestamp || 0);
+              const timestamp = getChatMessageTimestamp(message);
               return timestamp > latest ? timestamp : latest;
             }, 0);
             const unreadCount = messages.filter(
@@ -52,6 +60,7 @@ const ChatScreen = () => {
             userChats.push({
               id: chatId,
               ...chat,
+              messages: visibleMessages,
               lastMessageTimestamp,
               hasUnread,
               unreadCount,

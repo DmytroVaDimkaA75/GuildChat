@@ -1,6 +1,6 @@
 const { onValueCreated, onValueWritten } = require("firebase-functions/v2/database");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onCall, onRequest } = require("firebase-functions/v2/https");
+const { HttpsError, onCall, onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -23,11 +23,14 @@ const {
   isGbgSectorNotificationMuted,
 } = require("./gbgNotificationMute");
 const { fetchLinkPreview } = require("./linkPreview");
+const { fetchYouTubeChannelFeed } = require("./youtubeFeed");
 
 admin.initializeApp();
 
 const linkPreviewCache = new Map();
 const LINK_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
+const youtubeFeedCache = { value: null, expiresAt: 0 };
+const YOUTUBE_FEED_CACHE_TTL_MS = 15 * 60 * 1000;
 
 exports.getLinkPreview = onCall({ region: "europe-west1", timeoutSeconds: 15, memory: "256MiB" }, async (request) => {
   const requestedUrl = String(request.data?.url || "").trim();
@@ -35,14 +38,40 @@ exports.getLinkPreview = onCall({ region: "europe-west1", timeoutSeconds: 15, me
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
     const value = await fetchLinkPreview(requestedUrl);
-    if (linkPreviewCache.size >= 200) linkPreviewCache.delete(linkPreviewCache.keys().next().value);
-    linkPreviewCache.set(requestedUrl, { value, expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS });
+    if (value.status === "ok") {
+      if (linkPreviewCache.size >= 200) linkPreviewCache.delete(linkPreviewCache.keys().next().value);
+      linkPreviewCache.set(requestedUrl, { value, expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS });
+    }
     return value;
   } catch (error) {
     logger.info("[LINK_PREVIEW] Metadata unavailable", { url: requestedUrl.slice(0, 300), reason: error?.message || String(error) });
-    return { url: requestedUrl, host: "", title: "", description: "", image: "" };
+    return { status: "unavailable", kind: "page", url: requestedUrl, host: "", title: "", description: "", image: "" };
   }
 });
+
+exports.getYouTubeChannelVideos = onCall(
+  { region: "europe-west1", timeoutSeconds: 15, memory: "256MiB" },
+  async () => {
+    if (youtubeFeedCache.value && youtubeFeedCache.expiresAt > Date.now()) {
+      return youtubeFeedCache.value;
+    }
+
+    try {
+      const value = await fetchYouTubeChannelFeed();
+      youtubeFeedCache.value = value;
+      youtubeFeedCache.expiresAt = Date.now() + YOUTUBE_FEED_CACHE_TTL_MS;
+      return value;
+    } catch (error) {
+      logger.warn("[YOUTUBE_FEED] Feed unavailable", {
+        reason: error?.message || String(error),
+      });
+      if (youtubeFeedCache.value) {
+        return { ...youtubeFeedCache.value, stale: true };
+      }
+      throw new HttpsError("unavailable", "Не вдалося завантажити відео каналу.");
+    }
+  }
+);
 
 /**
  * =====================================================================
