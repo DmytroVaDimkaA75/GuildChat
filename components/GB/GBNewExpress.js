@@ -17,11 +17,39 @@ import {
 import { Dropdown } from 'react-native-element-dropdown';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 // import { database } from '../../firebaseConfig'; // <- УДАЛЕНО
-import CustomCheckBox from '../CustomElements/CustomCheckBox3';
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 
 // v-- ДОБАВЛЕНО
 import database from '@react-native-firebase/database';
+
+const FALLBACK_CONTRIBUTION_MULTIPLIER = 1.9;
+
+const normalizeRuleList = (value) => {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return Object.values(value);
+  return [value];
+};
+
+const ruleAllows = (value, expected) => {
+  const values = normalizeRuleList(value);
+  return values.length === 0 || values.map(String).includes(String(expected));
+};
+
+const getMaximumAllowedMultiplier = ({ branches, ownerUserId, buildingId, currentLevel, placeNumber }) => {
+  const multipliers = Object.values(branches || {}).flatMap((branch) => {
+    const rules = branch?.rules || {};
+    const multiplier = Number(rules.contributionMultiplier);
+    const levelThreshold = Number(rules.levelThreshold) || 0;
+    const matches = Number.isFinite(multiplier)
+      && currentLevel >= levelThreshold
+      && ruleAllows(rules.allowedGBs, buildingId)
+      && ruleAllows(rules.placeLimit, placeNumber)
+      && ruleAllows(rules.selectedMembers, ownerUserId);
+    return matches ? [multiplier] : [];
+  });
+  return multipliers.length ? Math.max(...multipliers) : FALLBACK_CONTRIBUTION_MULTIPLIER;
+};
 
 
 const GBNewExpress = ({ route, navigation }) => {
@@ -39,7 +67,7 @@ const GBNewExpress = ({ route, navigation }) => {
   const [buildings, setBuildings] = useState([]);
   const [allowedGB, setAllowedGB] = useState(null);
   const [buildingInfo, setBuildingInfo] = useState(null);
-  const [levelThreshold, setLevelThreshold] = useState(0);
+  const [levelThreshold, setLevelThreshold] = useState(5);
   const [showDateTimeModal, setShowDateTimeModal] = useState(false);
   const [placeLimit, setPlaceLimit] = useState([false, false, false, false, false]);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
@@ -50,6 +78,7 @@ const GBNewExpress = ({ route, navigation }) => {
   const [tempMinuteIndex, setTempMinuteIndex] = useState(0);
   // Стан для загальної вартості прокачки
   const [totalCost, setTotalCost] = useState(0);
+  const [currentBuildingLevel, setCurrentBuildingLevel] = useState(0);
 
   const dayOptions = (() => {
     const currentLang = i18n.language.split('-')[0];
@@ -94,6 +123,9 @@ const GBNewExpress = ({ route, navigation }) => {
             }
           }
 
+          const branchesSnapshot = await database().ref(`guilds/${storedGuildId}/GBChat`).once('value');
+          const branches = branchesSnapshot.val() || {};
+
           // Отримання поточного рівня ВС (НОВИЙ СИНТАКСИС)
           const currentLevelRef = database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/greatBuild/${buildId}`);
           let currentLevel = 0;
@@ -116,11 +148,19 @@ const GBNewExpress = ({ route, navigation }) => {
                 .then(response => response.json())
                 .then(json => {
                   const total_fp = json.response.total_fp;
-                  const forgepointsArray = json.response.patron_bonus.map(item => item.forgepoints);
-                  // Для кожного елемента обчислюємо Math.round(forgepoints * 1.9)
-                  const sumRounded = forgepointsArray.reduce((acc, cur) => acc + Math.round(cur * 1.9), 0);
+                  const placeCosts = json.response.patron_bonus.map((item, index) => {
+                    const placeNumber = Number(item?.rank) || index + 1;
+                    const multiplier = getMaximumAllowedMultiplier({
+                      branches,
+                      ownerUserId: storedUserId,
+                      buildingId: buildId,
+                      currentLevel: K - 1,
+                      placeNumber,
+                    });
+                    return Math.max(1, Math.round((Number(item?.forgepoints) || 0) * multiplier));
+                  });
+                  const sumRounded = placeCosts.reduce((sum, value) => sum + value, 0);
                   const computedCost = total_fp - sumRounded;
-                  console.log(`Рівень ${K}: обчислена вартість: ${computedCost}, forgepoints (округлені): ${forgepointsArray.map(fp => Math.round(fp * 1.9))}`);
                   return computedCost;
                 })
                 .catch(error => 0)
@@ -187,6 +227,12 @@ const GBNewExpress = ({ route, navigation }) => {
           if (snapshot.exists()) {
             setBuildingInfo(snapshot.val());
           }
+          const storedGuildId = await AsyncStorage.getItem('guildId');
+          const storedUserId = await AsyncStorage.getItem('userId');
+          const levelSnapshot = await database()
+            .ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/greatBuild/${buildingId}/level`)
+            .once('value');
+          setCurrentBuildingLevel(Number(levelSnapshot.val()) || 0);
         } catch (error) {
           // Не виводимо помилки
         }
@@ -203,7 +249,8 @@ const GBNewExpress = ({ route, navigation }) => {
       const storedUserId = await AsyncStorage.getItem('userId');
       // НОВИЙ СИНТАКСИС
       const currentLevelRef = database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/greatBuild/${item.value}`);
-      await currentLevelRef.once('value');
+      const levelSnapshot = await currentLevelRef.once('value');
+      setCurrentBuildingLevel(Number(levelSnapshot.val()?.level) || 0);
       const buildingApiRef = database().ref(`greatBuildings/${item.value}`);
       await buildingApiRef.once('value');
     } catch (error) {
@@ -326,16 +373,21 @@ const GBNewExpress = ({ route, navigation }) => {
     setShowDateTimeModal(true);
   };
 
-  const formatDayHourMinute = () => {
-    if (selectedHour === null || selectedMinute === null) {
-      return t('gbNewExpress.setTime');
-    }
-    if (!dayOptions[selectedDayIndex]) return t('gbNewExpress.specify');
-    const labelDay = dayOptions[selectedDayIndex].label;
-    const hh = String(selectedHour).padStart(2, '0');
-    const mm = String(selectedMinute).padStart(2, '0');
-    return `${labelDay}, ${hh}:${mm}`;
-  };
+  const selectedDateLabel = selectedHour === null || !dayOptions[selectedDayIndex]
+    ? t('gbNewExpress.specify')
+    : dayOptions[selectedDayIndex].label;
+  const selectedTimeLabel = selectedHour === null || selectedMinute === null
+    ? t('gbNewExpress.setTime')
+    : `${String(selectedHour).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
+  const selectedBuilding = buildings.find((building) => building.value === allowedGB);
+  const displayedBuilding = buildingId
+    ? {
+        image: typeof buildingInfo?.buildingImage === 'string'
+          ? buildingInfo.buildingImage
+          : buildingInfo?.buildingImage?.uri,
+        label: getLocalizedValue(buildingInfo?.buildingName),
+      }
+    : selectedBuilding;
 
   const formValid = (() => {
     if (!buildingId && scheduleTime) {
@@ -423,24 +475,7 @@ const GBNewExpress = ({ route, navigation }) => {
   return (
     <ScrollView style={{ backgroundColor: '#0f1115' }}>
       <View style={styles.container}>
-        {buildingId && !scheduleTime ? (
-          <View style={styles.block}>
-            {buildingInfo ? (
-              <View style={styles.buildingInfoContainer}>
-                <Image
-                  source={{ uri: buildingInfo.buildingImage }}
-                  style={styles.buildingImage}
-                  resizeMode="contain"
-                />
-                <Text style={styles.buildingItemText}>
-                  {getLocalizedValue(buildingInfo.buildingName)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.mutedText}>{t('gbNewExpress.loadingBuildingInfo') || "Завантаження даних..."}</Text>
-            )}
-          </View>
-        ) : (
+        {buildingId && !scheduleTime ? null : (
           <View style={styles.block}>
             <Text style={styles.blockLabel}>{t('gbNewExpress.selectBuilding')}</Text>
             <Dropdown
@@ -488,42 +523,93 @@ const GBNewExpress = ({ route, navigation }) => {
           </View>
         )}
 
-        <View style={styles.block}>
-          <Text style={styles.blockLabel}>{t('gbNewExpress.levelThresholdLabel')}</Text>
-          <Stepper
-            value={parseInt(levelThreshold, 10) || 0}
-            onValueChange={(val) => setLevelThreshold(val)}
-            buttonSize={40}
-            minValue={0}
-            maxValue={200}
-          />
-          <Text style={styles.upgradeCostText}>
-            Приблизна вартість прокачки {totalCost} СО
-          </Text>
+        <View style={styles.buildingCard}>
+          {displayedBuilding?.image ? (
+            <Image source={{ uri: displayedBuilding.image }} style={styles.buildingImage} resizeMode="contain" />
+          ) : (
+            <View style={styles.buildingPlaceholder}>
+              <Ionicons name="business-outline" size={44} color="#4ea1ff" />
+            </View>
+          )}
+          <View style={styles.buildingCopy}>
+            <Text maxFontSizeMultiplier={1.15} style={styles.buildingItemText}>
+              {displayedBuilding?.label || t('gbNewExpress.loadingBuildingInfo') || 'Виберіть ВС'}
+            </Text>
+            <Text maxFontSizeMultiplier={1.15} style={styles.buildingLevelText}>
+              Рівень {currentBuildingLevel}
+              {levelThreshold > 0 && <Text style={styles.nextLevelText}>  →  {currentBuildingLevel + levelThreshold}</Text>}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.block}>
-          <Text style={styles.blockLabel}>{t('gbNewExpress.placeLimitLabel')}</Text>
+          <View style={styles.blockTitleRow}>
+            <Text maxFontSizeMultiplier={1.15} style={styles.blockLabel}>Кількість рівнів</Text>
+            <Ionicons name="information-circle-outline" size={20} color="#9aa3b2" />
+          </View>
+          <Stepper
+            value={parseInt(levelThreshold, 10) || 0}
+            onValueChange={(val) => setLevelThreshold(val)}
+            buttonSize={62}
+            minValue={0}
+            maxValue={200}
+          />
+          <View style={styles.quickSteps}>
+            {[1, 5, 10, 20].map((step) => (
+              <TouchableOpacity
+                key={step}
+                onPress={() => setLevelThreshold((current) => Math.min(200, (Number(current) || 0) + step))}
+                style={[styles.quickStep, step === 5 && styles.quickStepActive]}
+              >
+                <Text style={styles.quickStepText}>+{step}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.costRow}>
+            <Ionicons name="wallet-outline" size={20} color="#4ea1ff" />
+            <Text maxFontSizeMultiplier={1.15} style={styles.upgradeCostText}>
+              Орієнтовно: <Text style={styles.costStrong}>{Number(totalCost).toLocaleString('uk-UA')} СО</Text>
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.block}>
+          <View style={styles.blockTitleRow}>
+            <Text maxFontSizeMultiplier={1.15} style={styles.blockLabel}>Місця для малюків</Text>
+            <Ionicons name="information-circle-outline" size={20} color="#9aa3b2" />
+          </View>
           <View style={styles.checkboxContainer}>
             {[1, 2, 3, 4, 5].map((value, index) => (
-              <CustomCheckBox
+              <TouchableOpacity
                 key={index}
-                title={`${value}`}
-                checked={placeLimit[index]}
                 onPress={() => handleCheckBoxChange(index)}
-              />
+                style={[styles.placeButton, placeLimit[index] && styles.placeButtonActive]}
+              >
+                <Text style={styles.placeButtonText}>{value}</Text>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
 
         {!( !buildingId && scheduleTime ) && (
           <View style={styles.block}>
-            <Text style={styles.blockLabel}>{t('gbNewExpress.scheduleTime')}</Text>
-            <TouchableOpacity style={styles.dateButton} onPress={openDateTimeModal}>
-              <Text style={styles.dateButtonText}>
-                {formatDayHourMinute()}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.blockTitleRow}>
+              <Text maxFontSizeMultiplier={1.15} style={styles.blockLabel}>Дата і час запуску</Text>
+              <Ionicons name="information-circle-outline" size={20} color="#9aa3b2" />
+            </View>
+            <View style={styles.datePanel}>
+              <TouchableOpacity style={styles.dateRow} onPress={openDateTimeModal}>
+                <Ionicons name="calendar-outline" size={22} color="#b8c7dc" />
+                <Text maxFontSizeMultiplier={1.15} style={styles.dateButtonText}>{selectedDateLabel}</Text>
+                <Ionicons name="chevron-forward" size={21} color="#b8c7dc" />
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dateRow, styles.dateRowDivided]} onPress={openDateTimeModal}>
+                <Ionicons name="time-outline" size={23} color="#b8c7dc" />
+                <Text maxFontSizeMultiplier={1.15} style={styles.dateButtonText}>{selectedTimeLabel}</Text>
+                <Ionicons name="chevron-forward" size={21} color="#b8c7dc" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.scheduleHint}>Експрес запускається лише за розкладом</Text>
           </View>
         )}
 
@@ -576,35 +662,57 @@ const GBNewExpress = ({ route, navigation }) => {
             </TouchableWithoutFeedback>
           </Modal>
         )}
+
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <Ionicons name="stats-chart-outline" size={20} color="#4ea1ff" />
+            <Text maxFontSizeMultiplier={1.15} style={styles.summaryText}>
+              {levelThreshold || 0} рівнів  ·  місця {placeLimit.map((checked, index) => checked ? index + 1 : null).filter(Boolean).join(', ') || '—'}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Ionicons name="wallet-outline" size={20} color="#4ea1ff" />
+            <Text maxFontSizeMultiplier={1.15} style={styles.summaryText}>≈ {Number(totalCost).toLocaleString('uk-UA')} СО</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          disabled={!formValid}
+          onPress={handleSave}
+          style={[styles.createButton, !formValid && styles.createButtonDisabled]}
+        >
+          <Text maxFontSizeMultiplier={1.1} style={styles.createButtonText}>Створити експрес</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
 };
 
-// Стили остаются без изменений
 const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#0f1115',
+      backgroundColor: '#07111b',
       alignItems: 'center',
-      paddingTop: 20,
+      paddingTop: 14,
+      paddingBottom: 28,
     },
     block: {
-      backgroundColor: '#152330',
-      padding: 10,
-      marginBottom: 20,
-      borderRadius: 8,
+      backgroundColor: '#0d1925',
+      padding: 15,
+      marginBottom: 12,
+      borderRadius: 17,
       borderWidth: 1,
-      borderColor: '#1b2b3b',
-      width: '90%',
+      borderColor: '#2d3a48',
+      width: '94%',
     },
     dropdown: {
       borderWidth: 1,
       backgroundColor: '#0f1115',
       padding: 10,
-      borderRadius: 6,
+      borderRadius: 10,
       borderColor: '#4ea1ff',
-      height: 50,
+      height: 52,
       flexDirection: 'row',
       alignItems: 'center',
     },
@@ -634,12 +742,13 @@ const styles = StyleSheet.create({
       alignItems: 'center',
     },
     buildingImage: {
-      width: 70,
-      height: 70,
-      marginRight: 10,
+      width: 120,
+      height: 110,
+      marginRight: 14,
     },
     buildingItemText: {
-      fontSize: 20,
+      fontSize: 18,
+      fontWeight: '600',
       color: '#e6e9ef',
     },
     stepperContainer: {
@@ -647,8 +756,8 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       width: '100%',
       borderWidth: 1,
-      borderColor: '#4ea1ff',
-      borderRadius: 4,
+      borderColor: '#2d3a48',
+      borderRadius: 11,
       overflow: 'hidden',
     },
     stepButton: {
@@ -658,15 +767,16 @@ const styles = StyleSheet.create({
     },
     stepButtonText: {
       color: '#fff',
-      fontSize: 12,
+      fontSize: 25,
     },
     valueInput: {
       textAlign: 'center',
-      backgroundColor: '#0f1115',
-      borderColor: '#4ea1ff',
+      backgroundColor: '#091522',
+      borderColor: '#2d3a48',
       borderLeftWidth: 1,
       borderRightWidth: 1,
-      fontSize: 16,
+      fontSize: 27,
+      fontWeight: '700',
       color: '#e6e9ef',
     },
     dateButton: {
@@ -677,12 +787,12 @@ const styles = StyleSheet.create({
       alignItems: 'center',
     },
     dateButtonText: {
-      color: '#fff',
-      fontSize: 16,
+      flex: 1,
+      color: '#c5cfdd',
+      fontSize: 15,
     },
     upgradeCostText: {
-      marginTop: 10,
-      fontSize: 12,
+      fontSize: 15,
       color: '#9aa3b2'
     },
     modalBackground: {
@@ -738,12 +848,50 @@ const styles = StyleSheet.create({
     },
     checkboxContainer: {
       flexDirection: 'row',
-      justifyContent: 'space-around',
+      justifyContent: 'space-between',
+      gap: 9,
     },
     blockLabel: {
-      marginBottom: 10,
       color: '#e6e9ef',
+      fontSize: 17,
+      fontWeight: '700',
     },
+    buildingCard: {
+      width: '94%',
+      minHeight: 132,
+      backgroundColor: '#0d1925',
+      borderColor: '#2d3a48',
+      borderRadius: 17,
+      borderWidth: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 14,
+      marginBottom: 12,
+    },
+    buildingPlaceholder: { width: 120, height: 100, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+    buildingCopy: { flex: 1 },
+    buildingLevelText: { color: '#93a0b3', fontSize: 15, marginTop: 8 },
+    nextLevelText: { color: '#4ea1ff' },
+    blockTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+    quickSteps: { flexDirection: 'row', gap: 9, justifyContent: 'center', marginTop: 10 },
+    quickStep: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: '#4ea1ff', borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    quickStepActive: { backgroundColor: '#247ae7' },
+    quickStepText: { color: '#e6e9ef', fontSize: 15 },
+    costRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
+    costStrong: { color: '#2f87ff', fontWeight: '700' },
+    placeButton: { flex: 1, aspectRatio: 1.25, borderRadius: 12, borderWidth: 1, borderColor: '#4ea1ff', alignItems: 'center', justifyContent: 'center' },
+    placeButtonActive: { backgroundColor: '#247ae7' },
+    placeButtonText: { color: '#f4f7fb', fontSize: 18, fontWeight: '600' },
+    datePanel: { borderWidth: 1, borderColor: '#2d3a48', borderRadius: 12, overflow: 'hidden' },
+    dateRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
+    dateRowDivided: { borderTopWidth: 1, borderTopColor: '#2d3a48' },
+    scheduleHint: { color: '#748298', fontSize: 12, marginTop: 9 },
+    summaryCard: { width: '94%', backgroundColor: '#0d1925', borderColor: '#2d3a48', borderRadius: 14, borderWidth: 1, padding: 13, gap: 8, marginBottom: 12 },
+    summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+    summaryText: { color: '#aeb9ca', fontSize: 15 },
+    createButton: { width: '94%', minHeight: 54, borderRadius: 11, backgroundColor: '#2783f5', alignItems: 'center', justifyContent: 'center' },
+    createButtonDisabled: { opacity: 0.45 },
+    createButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
     mutedText: {
       color: '#9aa3b2',
     },

@@ -20,7 +20,7 @@ const {
   writeIfCurrent,
 } = require("./gbGuarantee");
 const {
-  isGbgSectorNotificationMuted,
+  isGbgNotificationSoundMuted,
 } = require("./gbgNotificationMute");
 const { fetchLinkPreview } = require("./linkPreview");
 const { fetchYouTubeChannelFeed } = require("./youtubeFeed");
@@ -2167,13 +2167,11 @@ async function sendPushAndMarkSent({
           .once("value"),
       ]);
 
-      if (isGbgSectorNotificationMuted({
+      const isSoundMuted = isGbgNotificationSoundMuted({
         rawMute: muteUntilSnap.val(),
         army: effectiveArmy,
         nowMs,
-      })) {
-        return { uid, token: null, sound: false, muted: true };
-      }
+      });
 
       const token = tokenSnap.exists() ? tokenSnap.val() : null;
       if (!token) return { uid, token: null, sound: false };
@@ -2186,7 +2184,7 @@ async function sendPushAndMarkSent({
         soundBySchedule = false;
       }
 
-      return { uid, token, sound: !!soundBySchedule };
+      return { uid, token, sound: !isSoundMuted && !!soundBySchedule };
     })
   );
 
@@ -2594,9 +2592,10 @@ exports.processGbgSectorBuildChecks = onSchedule(
               const nowMs = Date.now();
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
-                  const [roleSnap, tokenSnap] = await Promise.all([
+                  const [roleSnap, tokenSnap, muteSnap] = await Promise.all([
                     db.ref(`/users/${uid}/${guildId}/role`).once("value"),
                     db.ref(`/users/${uid}/fcmToken`).once("value"),
+                    db.ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`).once("value"),
                   ]);
                   const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
                   if (
@@ -2624,7 +2623,11 @@ exports.processGbgSectorBuildChecks = onSchedule(
                     soundBySchedule = false;
                   }
 
-                  return { uid, token, sound: !!soundBySchedule };
+                  const isSoundMuted = isGbgNotificationSoundMuted({
+                    rawMute: muteSnap.val(),
+                    nowMs,
+                  });
+                  return { uid, token, sound: !isSoundMuted && !!soundBySchedule };
                 })
               );
 
@@ -2750,7 +2753,10 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
   const memberIds = Object.keys(membersSnap.val());
   const nowMs = Date.now();
   const tokensPromises = memberIds.map(async (uid) => {
-    const tokenSnap = await db.ref(`/users/${uid}/fcmToken`).once("value");
+    const [tokenSnap, muteSnap] = await Promise.all([
+      db.ref(`/users/${uid}/fcmToken`).once("value"),
+      db.ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`).once("value"),
+    ]);
     const token = tokenSnap.exists() ? tokenSnap.val() : null;
     if (!token) return null;
 
@@ -2762,7 +2768,11 @@ exports.sendGbgHelpNotification = onCall({ region: "europe-west1" }, async (requ
       soundBySchedule = false;
     }
 
-    return { uid, token, sound: !!soundBySchedule };
+    const isSoundMuted = isGbgNotificationSoundMuted({
+      rawMute: muteSnap.val(),
+      nowMs,
+    });
+    return { uid, token, sound: !isSoundMuted && !!soundBySchedule };
   });
   const recipients = (await Promise.all(tokensPromises)).filter(Boolean);
 

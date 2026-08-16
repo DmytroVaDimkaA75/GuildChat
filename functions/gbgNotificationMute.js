@@ -24,7 +24,18 @@ const isGbgSectorNotificationMuted = ({ rawMute, army, nowMs = Date.now() }) => 
   return mute.scope === String(army || "").trim().toLowerCase();
 };
 
+// Non-sector GBG events (build recommendations and help calls) have no army
+// scope. Only an active global mute should silence them.
+const isGbgNotificationSoundMuted = ({ rawMute, army = null, nowMs = Date.now() }) => {
+  const mute = normalizeGbgNotificationMute(rawMute);
+  if (mute.mutedUntil <= nowMs) return false;
+  if (mute.scope === "all") return true;
+  if (!army) return false;
+  return mute.scope === String(army).trim().toLowerCase();
+};
+
 module.exports = {
+  isGbgNotificationSoundMuted,
   isGbgSectorNotificationMuted,
   normalizeGbgNotificationMute,
 };

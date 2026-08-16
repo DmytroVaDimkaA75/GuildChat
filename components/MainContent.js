@@ -312,7 +312,7 @@ function GBStack({ isDeveloper = false }) {
         name="GBScreen"
         component={GBScreen}
         options={({ navigation }) => ({
-          title: t("gbScreen.gbTitle"),
+          title: 'Прокачка Великих Споруд',
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
           headerRight: () => (
             <TouchableOpacity onPress={() => navigation.navigate('NewGBChat', { from: 'GBChatList' })} style={{ marginRight: 15 }}>
@@ -357,7 +357,7 @@ function GBStack({ isDeveloper = false }) {
         name="GBExpress"
         component={GBExpress}
         options={({ navigation }) => ({
-          title: t("gbScreen.gbTitle"),
+          title: 'Експрес прокачка',
           headerLeft: () => (
             <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
               <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
@@ -387,7 +387,7 @@ function GBStack({ isDeveloper = false }) {
         name="GBNewExpress"
         component={GBNewExpress}
         options={({ navigation }) => ({
-          title: t("gbScreen.gbTitle"),
+          title: 'Прокачка Великих Споруд',
           headerLeft: () => (
             <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>
               <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
@@ -628,7 +628,7 @@ function ProfileStack() {
         name="GBNewExpress"
         component={GBNewExpress}
         options={({ navigation }) => ({
-          title: t("profileStack.gbNewExpressTitle"),
+          title: 'Прокачка Великих Споруд',
           headerTintColor: COLORS.textPrimary,
           headerLeft: () => (
             <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 15 }}>

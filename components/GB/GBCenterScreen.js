@@ -29,10 +29,10 @@ const sections = [
     count: '4',
   },
   {
-    icon: 'chatbubbles-outline',
-    title: 'Чат прокачки',
-    subtitle: 'Координація внесків і швидкий перехід до чату',
-    count: '3',
+    icon: 'flash-outline',
+    title: 'Експрес прокачки',
+    subtitle: 'Долучитися до найближчої експрес-прокачки',
+    count: '0',
   },
 ];
 
@@ -76,10 +76,13 @@ function MainSection({ icon, title, subtitle, count, onPress }) {
 const GBCenterScreen = ({ navigation }) => {
   const [myGBCount, setMyGBCount] = useState(0);
   const [guaranteeCount, setGuaranteeCount] = useState(0);
+  const [expressCount, setExpressCount] = useState(0);
 
   useEffect(() => {
     let greatBuildRef;
     let handleGreatBuildingsChange;
+    let expressRef;
+    let handleExpressChange;
     let isCancelled = false;
 
     const subscribeToGreatBuildings = async () => {
@@ -124,6 +127,18 @@ const GBCenterScreen = ({ navigation }) => {
           setGuaranteeCount(visibleGuarantees);
         };
         greatBuildRef.on('value', handleGreatBuildingsChange);
+
+        expressRef = database().ref(`guilds/${guildId}/express`);
+        handleExpressChange = (snapshot) => {
+          const now = Date.now();
+          const futureTimes = new Set(
+            Object.values(snapshot.val() || {})
+              .map((express) => Number(express?.scheduleTime) || 0)
+              .filter((scheduleTime) => scheduleTime > now)
+          );
+          setExpressCount(futureTimes.size);
+        };
+        expressRef.on('value', handleExpressChange);
       } catch (error) {
         if (isCancelled) return;
         console.error('Не вдалося завантажити кількість ВС:', error);
@@ -137,6 +152,9 @@ const GBCenterScreen = ({ navigation }) => {
       isCancelled = true;
       if (greatBuildRef && handleGreatBuildingsChange) {
         greatBuildRef.off('value', handleGreatBuildingsChange);
+      }
+      if (expressRef && handleExpressChange) {
+        expressRef.off('value', handleExpressChange);
       }
     };
   }, []);
@@ -154,14 +172,16 @@ const GBCenterScreen = ({ navigation }) => {
                   ? myGBCount
                   : item.title === 'Гаранти'
                     ? guaranteeCount
-                    : item.count
+                    : expressCount
               }
               onPress={
                 item.title === 'Мої ВС'
                   ? () => navigation.navigate('MyGBCenter')
                   : item.title === 'Гаранти'
                     ? () => navigation.navigate('GBGuarantees')
-                    : undefined
+                    : expressCount > 0
+                      ? () => navigation.navigate('GBExpress')
+                      : undefined
               }
             />
           ))}

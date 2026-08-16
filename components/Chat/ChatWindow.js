@@ -43,6 +43,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Image,
@@ -1154,7 +1155,9 @@ const ChatWindow = ({ route, navigation }) => {
 
   // highlight
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
-  const highlightTimerRef = useRef(null);
+  const highlightPulse = useRef(new Animated.Value(0)).current;
+  const highlightAnimationRef = useRef(null);
+  const [activePinnedIndex, setActivePinnedIndex] = useState(0);
 
   const flatListRef = useRef(null);
   const recordingRef = useRef(null);
@@ -1228,7 +1231,7 @@ const ChatWindow = ({ route, navigation }) => {
 
   useEffect(() => {
     return () => {
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightAnimationRef.current?.stop();
     };
   }, []);
 
@@ -1497,6 +1500,12 @@ const ChatWindow = ({ route, navigation }) => {
     return pinned.sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
   }, [groups, userId]);
 
+  useEffect(() => {
+    setActivePinnedIndex((current) =>
+      Math.min(current, Math.max(0, pinnedMessages.length - 1))
+    );
+  }, [pinnedMessages.length]);
+
   // --- FLAT DATA: щоб можна було точно scrollToMessage(id) ---
   const flatData = useMemo(() => {
     const data = [];
@@ -1534,13 +1543,29 @@ const ChatWindow = ({ route, navigation }) => {
 
   const highlightMessage = useCallback((messageId) => {
     if (!messageId) return;
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-
+    highlightAnimationRef.current?.stop();
+    highlightPulse.setValue(0);
     setHighlightedMessageId(messageId);
-    highlightTimerRef.current = setTimeout(() => {
-      setHighlightedMessageId(null);
-    }, 1600);
-  }, []);
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(highlightPulse, {
+          toValue: 1,
+          duration: 360,
+          useNativeDriver: false,
+        }),
+        Animated.timing(highlightPulse, {
+          toValue: 0,
+          duration: 360,
+          useNativeDriver: false,
+        }),
+      ]),
+      { iterations: 6 }
+    );
+    highlightAnimationRef.current = animation;
+    animation.start(({ finished }) => {
+      if (finished) setHighlightedMessageId(null);
+    });
+  }, [highlightPulse]);
 
   const scrollToMessage = useCallback(
     (messageId) => {
@@ -2107,6 +2132,7 @@ const ChatWindow = ({ route, navigation }) => {
                   showsHorizontalScrollIndicator={false}
                   onMomentumScrollEnd={(e) => {
                     const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                    setActivePinnedIndex(page);
                     const msg = pinnedMessages[page];
                     if (msg?.id) scrollToMessage(msg.id);
                   }}
@@ -2119,15 +2145,46 @@ const ChatWindow = ({ route, navigation }) => {
                       onPress={() => msg?.id && scrollToMessage(msg.id)}
                     >
                       <View style={styles.pinnedItemInner}>
-                        <View style={styles.pinnedBar} />
+                        <View style={styles.pinnedRail}>
+                          {pinnedMessages.map((pinnedMessage, segmentIndex) => (
+                            <View
+                              key={pinnedMessage.id}
+                              style={[
+                                styles.pinnedRailSegment,
+                                segmentIndex === activePinnedIndex && styles.pinnedRailSegmentActive,
+                              ]}
+                            />
+                          ))}
+                        </View>
 
                         {/* ✅ "Закріплено" і текст — різні рядки */}
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.pinnedTextContainer}>
                           <Text style={styles.pinnedLabel}>Закріплено</Text>
 
                           {/* ✅ превʼю без "Посилання", без "youtu.be" як fallback (беремо title), з thumbnail для фото */}
                           <CompactMessagePreview message={msg} lines={1} />
                         </View>
+
+                        <TouchableOpacity
+                          accessibilityLabel="Відкріпити повідомлення"
+                          accessibilityRole="button"
+                          activeOpacity={0.7}
+                          onPress={(event) => {
+                            event.stopPropagation?.();
+                            setSelectedMessageId(msg.id);
+                            setMessageToPin(msg);
+                            if (msg?.pinned?.forAll) setUnpinModalVisible(true);
+                            else handleUnpin(false, msg);
+                          }}
+                          style={styles.pinnedUnpinButton}
+                        >
+                          <FontAwesomeIcon icon={faThumbtack} size={18} color="#9aa3b2" />
+                          <View style={styles.pinnedUnpinLines}>
+                            <View style={styles.pinnedUnpinLine} />
+                            <View style={styles.pinnedUnpinLine} />
+                            <View style={styles.pinnedUnpinLine} />
+                          </View>
+                        </TouchableOpacity>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -2189,12 +2246,24 @@ const ChatWindow = ({ route, navigation }) => {
                           setActionMessage(msg);
                         }}
                       >
-                        <View
+                        <Animated.View
                           style={[
                             styles.bubble,
                             isMe ? styles.bubbleMe : styles.bubbleThem,
                             msg.replyTo ? styles.bubbleReply : null,
-                            isHighlighted ? styles.bubbleHighlighted : null
+                            isHighlighted ? styles.bubbleHighlighted : null,
+                            isHighlighted
+                              ? {
+                                  borderColor: highlightPulse.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: ['#4ea1ff', '#d8ecff'],
+                                  }),
+                                  shadowOpacity: highlightPulse.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.1, 0.9],
+                                  }),
+                                }
+                              : null,
                           ]}
                         >
                           {chatType === 'group' && !isMe && (
@@ -2319,7 +2388,7 @@ const ChatWindow = ({ route, navigation }) => {
                               />
                             )}
                           </View>
-                        </View>
+                        </Animated.View>
                       </TouchableOpacity>
 
                       {readUsersPopupFor === msg.id && (
@@ -2833,12 +2902,41 @@ const styles = StyleSheet.create({
   },
   pinnedItemPage: { width: screenWidth, paddingHorizontal: 10 },
 
-  // ✅ робимо контейнер рядком: бар + контент-колонка
+  // ✅ робимо контейнер рядком: сегментована шкала + текст + дія
   pinnedItemInner: { flexDirection: 'row', alignItems: 'center', width: '100%' },
-
-  // зафіксовано як ти просив:
-  pinnedBar: { width: 4, height: 30, backgroundColor: '#4ea1ff', borderRadius: 2, marginRight: 10 },
+  pinnedRail: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    width: 5,
+    marginRight: 10,
+    gap: 2,
+  },
+  pinnedRailSegment: {
+    flex: 1,
+    maxHeight: 12,
+    minHeight: 3,
+    backgroundColor: 'rgba(78,161,255,0.38)',
+    borderRadius: 3,
+  },
+  pinnedRailSegmentActive: { backgroundColor: '#4ea1ff' },
+  pinnedTextContainer: { flex: 1, minWidth: 0 },
   pinnedLabel: { color: '#4ea1ff', fontSize: 11, fontWeight: 'bold' },
+  pinnedUnpinButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginLeft: 8,
+    minHeight: 40,
+    minWidth: 52,
+    paddingHorizontal: 8,
+  },
+  pinnedUnpinLines: { gap: 3, marginLeft: 5 },
+  pinnedUnpinLine: {
+    backgroundColor: '#9aa3b2',
+    borderRadius: 1,
+    height: 2,
+    width: 13,
+  },
 
   dateBadgeContainer: { alignItems: 'center', marginVertical: 15 },
   dateBadge: {
@@ -2872,7 +2970,11 @@ const styles = StyleSheet.create({
   // підсвітка знайденого/цільового повідомлення
   bubbleHighlighted: {
     borderColor: '#4ea1ff',
-    borderWidth: 2
+    borderWidth: 3,
+    elevation: 8,
+    shadowColor: '#4ea1ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 8,
   },
 
   senderName: { color: '#4ea1ff', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },

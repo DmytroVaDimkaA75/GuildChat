@@ -1,539 +1,223 @@
-import { faUserGroup } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
-// import { get, getDatabase, onValue, ref, set } from 'firebase/database'; // <- УДАЛЕНО
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-// v-- ДОБАВЛЕНО
 import database from '@react-native-firebase/database';
+import { useNavigation } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
+const COLORS = { background: '#07111b', surface: '#0d1925', surfaceSoft: '#102235', border: '#2d3a48', divider: '#263646', primary: '#2f87ff', primaryLight: '#62a7ff', text: '#f4f7fb', muted: '#a9b3c3' };
+
+const getLocalizedValue = (value, language) => {
+  if (!value || typeof value !== 'object') return value || '';
+  const normalized = String(language || 'uk').split('-')[0];
+  return value[normalized] || value.uk || value.ua || value.en || Object.values(value)[0] || '';
+};
+
+const formatSchedule = (timestamp) => new Date(timestamp).toLocaleString('uk-UA', {
+  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+});
+
+const getParticipantIds = (group) => {
+  const ids = new Set();
+  group.chats.forEach((chat) => Object.entries(chat.allowedUsers || {}).forEach(([userId, allowed]) => {
+    if (allowed) ids.add(userId);
+  }));
+  return ids;
+};
 
 const GBExpress = () => {
-  const [groupedChats, setGroupedChats] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [buildingImages, setBuildingImages] = useState({});
-  const [buildingNames, setBuildingNames] = useState({});
-  const [userNames, setUserNames] = useState({});
-  const [userLanguage, setUserLanguage] = useState(null); // Наприклад, "ua" або "en"
-  const [guildId, setGuildId] = useState(null);
-  // Поточний користувач для інших перевірок (напр., де кнопка "Взяти участь" деактивується)
-  const [currentUserId, setCurrentUserId] = useState(null);
-  // Стан для збереження рівнів ВС користувача для кожного buildID
-  const [userBuildLevels, setUserBuildLevels] = useState({});
-
-  // Стан модального вікна
-  const [modalVisible, setModalVisible] = useState(false);
-  // Стан групи чатів, для якої відкрили модальне вікно
-  const [modalGroup, setModalGroup] = useState(null);
-
-  // Використовуємо useRef для кешування отриманих даних
-  const buildingImagesRef = useRef({});
-  const buildingNamesRef = useRef({});
-  const userNamesRef = useRef({});
-  const userBuildLevelsRef = useRef({});
-
   const navigation = useNavigation();
+  const [guildId, setGuildId] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [userLanguage, setUserLanguage] = useState('uk');
+  const [expressEntries, setExpressEntries] = useState([]);
+  const [buildingCatalog, setBuildingCatalog] = useState({});
+  const [guildUsers, setGuildUsers] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [pendingGroup, setPendingGroup] = useState(null);
+  const [updatingSchedule, setUpdatingSchedule] = useState(null);
 
-  // Вивід усіх значень з AsyncStorage у форматі "ключ - значення"
   useEffect(() => {
-    const logAsyncStorage = async () => {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const stores = await AsyncStorage.multiGet(keys);
-        stores.forEach(([key, value]) => {
-          console.log(`${key} - ${value}`);
-        });
-      } catch (error) {
-        // Обробка помилки при потребі
-      }
-    };
-    logAsyncStorage();
+    let active = true;
+    AsyncStorage.multiGet(['guildId', 'userId', 'userLanguage']).then((values) => {
+      if (!active) return;
+      const stored = Object.fromEntries(values);
+      setGuildId(stored.guildId || null);
+      setCurrentUserId(stored.userId || null);
+      setUserLanguage(stored.userLanguage || 'uk');
+      if (!stored.guildId || !stored.userId) setLoading(false);
+    }).catch(() => setLoading(false));
+    return () => { active = false; };
   }, []);
 
-  // Отримуємо userLanguage з AsyncStorage за ключем "userLanguage" (fallback "ua")
   useEffect(() => {
-    const fetchUserLanguage = async () => {
-      try {
-        const storedLanguage = await AsyncStorage.getItem('userLanguage');
-        setUserLanguage(storedLanguage || 'ua');
-      } catch (error) {
-        setUserLanguage('ua');
-      }
-    };
-    fetchUserLanguage();
-  }, []);
-
-  // Отримуємо guildId та currentUserId з AsyncStorage (для перевірки кнопки)
-  useEffect(() => {
-    const fetchGuildAndUser = async () => {
-      try {
-        const storedGuildId = await AsyncStorage.getItem('guildId');
-        const storedUserId = await AsyncStorage.getItem('userId');
-        setGuildId(storedGuildId);
-        setCurrentUserId(storedUserId);
-      } catch (error) {
-        // Обробка помилки
-      }
-    };
-    fetchGuildAndUser();
-  }, []);
-
-  // Завантаження чатів, даних для ВС, користувачів та рівнів ВС
-  useEffect(() => {
-    if (!userLanguage || !guildId || !currentUserId) return;
-
-    // НОВИЙ СИНТАКСИС
-    const chatsRef = database().ref(`guilds/${guildId}/express`);
-
-    const onChatsValueChange = (snapshot) => {
-      if (snapshot.exists()) {
-        const chatEntries = Object.entries(snapshot.val()).map(([key, value]) => ({ id: key, ...value }));
-        const currentTime = Date.now();
-
-        const filteredChats = chatEntries.filter(
-          (chat) => chat.scheduleTime && chat.scheduleTime > currentTime
-        );
-
-        const grouped = filteredChats.reduce((acc, chat) => {
-          const timeKey = chat.scheduleTime;
-          if (!acc[timeKey]) {
-            acc[timeKey] = { scheduleTime: timeKey, chats: [] };
-          }
-          acc[timeKey].chats.push(chat);
-          return acc;
-        }, {});
-        const groupedList = Object.values(grouped).sort((a, b) => a.scheduleTime - b.scheduleTime);
-        setGroupedChats(groupedList);
-
-        const buildUserMapping = {};
-        filteredChats.forEach((chat) => {
-          if (chat.allowedGB && !buildUserMapping[chat.allowedGB]) {
-            buildUserMapping[chat.allowedGB] = chat.user;
-          }
-        });
-
-        const uniqueBuildIDs = new Set();
-        filteredChats.forEach((chat) => {
-          if (chat.allowedGB) uniqueBuildIDs.add(chat.allowedGB);
-        });
-
-        uniqueBuildIDs.forEach((buildID) => {
-          if (!buildingImagesRef.current.hasOwnProperty(buildID)) {
-            // НОВИЙ СИНТАКСИС
-            database().ref(`greatBuildings/${buildID}`).once('value')
-              .then((snap) => {
-                if (snap.exists()) {
-                  const buildingData = snap.val();
-                  const { buildingImage, buildingName } = buildingData;
-
-                  if (typeof buildingImage === 'string') {
-                    buildingImagesRef.current[buildID] = buildingImage;
-                  } else if (buildingImage && typeof buildingImage === 'object' && buildingImage.uri) {
-                    buildingImagesRef.current[buildID] = buildingImage.uri;
-                  } else {
-                    buildingImagesRef.current[buildID] = null;
-                  }
-                  setBuildingImages({ ...buildingImagesRef.current });
-
-                  if (buildingName && typeof buildingName === 'object') {
-                    buildingNamesRef.current[buildID] = buildingName[userLanguage];
-                  } else {
-                    buildingNamesRef.current[buildID] = buildingName || null;
-                  }
-                  setBuildingNames({ ...buildingNamesRef.current });
-                } else {
-                  buildingImagesRef.current[buildID] = null;
-                  buildingNamesRef.current[buildID] = null;
-                  setBuildingImages({ ...buildingImagesRef.current });
-                  setBuildingNames({ ...buildingNamesRef.current });
-                }
-              })
-              .catch((error) => { /* Обробка помилки */ });
-          }
-        });
-
-        uniqueBuildIDs.forEach((buildID) => {
-          if (!userBuildLevelsRef.current.hasOwnProperty(buildID)) {
-            const chatUserId = buildUserMapping[buildID];
-            // НОВИЙ СИНТАКСИС
-            database().ref(`guilds/${guildId}/guildUsers/${chatUserId}/greatBuild/${buildID}`).once('value')
-              .then((snap) => {
-                if (snap.exists()) {
-                  const buildData = snap.val();
-                  userBuildLevelsRef.current[buildID] = buildData.level;
-                } else {
-                  userBuildLevelsRef.current[buildID] = 0;
-                }
-                setUserBuildLevels({ ...userBuildLevelsRef.current });
-              })
-              .catch((error) => {
-                userBuildLevelsRef.current[buildID] = 0;
-                setUserBuildLevels({ ...userBuildLevelsRef.current });
-              });
-          }
-        });
-
-        const uniqueUserIDs = new Set();
-        filteredChats.forEach((chat) => {
-          if (chat.user) uniqueUserIDs.add(chat.user);
-        });
-        uniqueUserIDs.forEach((userId) => {
-          if (!userNamesRef.current.hasOwnProperty(userId)) {
-            // НОВИЙ СИНТАКСИС
-            database().ref(`users/${userId}`).once('value')
-              .then((snap) => {
-                if (snap.exists()) {
-                  const userData = snap.val();
-                  userNamesRef.current[userId] = userData.userName;
-                  setUserNames({ ...userNamesRef.current });
-                } else {
-                  userNamesRef.current[userId] = null;
-                  setUserNames({ ...userNamesRef.current });
-                }
-              })
-              .catch((error) => { /* Обробка помилки */ });
-          }
-        });
-      } else {
-        setGroupedChats([]);
-      }
+    if (!guildId || !currentUserId) return undefined;
+    const expressRef = database().ref(`guilds/${guildId}/express`);
+    const usersRef = database().ref(`guilds/${guildId}/guildUsers`);
+    const handleExpress = (snapshot) => {
+      const now = Date.now();
+      setExpressEntries(Object.entries(snapshot.val() || {}).map(([id, value]) => ({ id, ...value }))
+        .filter((entry) => Number(entry.scheduleTime) > now));
       setLoading(false);
     };
+    const handleUsers = (snapshot) => setGuildUsers(snapshot.val() || {});
+    const handleError = () => setLoading(false);
+    expressRef.on('value', handleExpress, handleError);
+    usersRef.on('value', handleUsers);
+    return () => {
+      expressRef.off('value', handleExpress);
+      usersRef.off('value', handleUsers);
+    };
+  }, [currentUserId, guildId]);
 
-    chatsRef.on('value', onChatsValueChange);
+  const groupedExpresses = useMemo(() => {
+    const groups = new Map();
+    expressEntries.forEach((entry) => {
+      const scheduleTime = Number(entry.scheduleTime);
+      if (!groups.has(scheduleTime)) groups.set(scheduleTime, { scheduleTime, chats: [] });
+      groups.get(scheduleTime).chats.push(entry);
+    });
+    return Array.from(groups.values()).sort((a, b) => a.scheduleTime - b.scheduleTime);
+  }, [expressEntries]);
 
-    // Функція для відписки від слухача при розмонтуванні компонента
-    return () => chatsRef.off('value', onChatsValueChange);
-  }, [userLanguage, guildId, currentUserId]);
+  useEffect(() => {
+    const ids = Array.from(new Set(expressEntries.map((entry) => entry.allowedGB).filter(Boolean)));
+    const missing = ids.filter((id) => !buildingCatalog[id]);
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    Promise.all(missing.map(async (id) => {
+      const snapshot = await database().ref(`greatBuildings/${id}`).once('value');
+      return [id, snapshot.val() || {}];
+    })).then((records) => {
+      if (!cancelled) setBuildingCatalog((current) => ({ ...current, ...Object.fromEntries(records) }));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [buildingCatalog, expressEntries]);
 
-  const handleJoinPress = (group) => {
-    setModalGroup(group);
-    setModalVisible(true);
-  };
-
-  const handleAccept = async () => {
-    if (!guildId || !modalGroup) return;
-
-    for (const chat of modalGroup.chats) {
-      // НОВИЙ СИНТАКСИС
-      await database()
-        .ref(`guilds/${guildId}/express/${chat.id}/allowedUsers/${chat.user}`)
-        .set(true);
+  const updateParticipation = useCallback(async (group, participating) => {
+    if (!guildId || !currentUserId || !group) return;
+    setUpdatingSchedule(group.scheduleTime);
+    try {
+      const updates = {};
+      group.chats.forEach((chat) => { updates[`${chat.id}/allowedUsers/${currentUserId}`] = participating ? true : null; });
+      await database().ref(`guilds/${guildId}/express`).update(updates);
+      setPendingGroup(null);
+    } catch (_error) {
+      Alert.alert('Помилка', 'Не вдалося змінити участь в експрес-прокачці.');
+    } finally {
+      setUpdatingSchedule(null);
     }
-    setModalVisible(false);
+  }, [currentUserId, guildId]);
+
+  const renderBuilding = (chat, index) => {
+    const owner = guildUsers[chat.user] || {};
+    const building = buildingCatalog[chat.allowedGB] || {};
+    const currentLevel = Number(owner?.greatBuild?.[chat.allowedGB]?.level) || 0;
+    const levelCount = Number(chat.levelThreshold) || 0;
+    const image = typeof building.buildingImage === 'string' ? building.buildingImage : building.buildingImage?.uri;
+    const ownerName = owner.userName || owner.name || chat.user || 'Учасник';
+    const buildingName = getLocalizedValue(building.buildingName, userLanguage) || chat.allowedGB || 'ВС';
+    return (
+      <View key={chat.id} style={[styles.buildingRow, index > 0 && styles.buildingDivider]}>
+        <View style={styles.buildingVisual}>
+          {image ? <Image source={{ uri: image }} resizeMode="contain" style={styles.buildingImage} />
+            : <Ionicons name="business-outline" size={58} color={COLORS.primaryLight} />}
+        </View>
+        <View style={styles.buildingDetails}>
+          <View style={styles.detailRow}>
+            <Ionicons name="business-outline" size={20} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.buildingTitle} numberOfLines={2}><Text style={styles.ownerName}>{ownerName}</Text> ({buildingName})</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="trending-up-outline" size={20} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.detailText}>Орієнтовно <Text style={styles.detailStrong}>{levelCount}</Text> рівнів</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name="arrow-forward-outline" size={20} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.levelRange}>{currentLevel + 1} → {currentLevel + levelCount}</Text>
+          </View>
+        </View>
+      </View>
+    );
   };
 
-  const handleCancel = () => {
-    setModalVisible(false);
+  const renderGroup = ({ item }) => {
+    const participantIds = getParticipantIds(item);
+    const isParticipating = participantIds.has(currentUserId);
+    const isUpdating = updatingSchedule === item.scheduleTime;
+    const ownsEveryExpress = item.chats.every((chat) => chat.user === currentUserId);
+    return (
+      <View style={styles.card}>
+        <View style={styles.scheduleRow}>
+          <View style={styles.scheduleCopy}>
+            <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.scheduleText}>Запланований час: {formatSchedule(item.scheduleTime)}</Text>
+          </View>
+          <View style={styles.participants}>
+            <Ionicons name="people-outline" size={21} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.15} style={styles.participantCount}>{participantIds.size}</Text>
+          </View>
+        </View>
+        <View style={styles.divider} />
+        {item.chats.map(renderBuilding)}
+        <View style={styles.actions}>
+          <TouchableOpacity activeOpacity={0.78} disabled={isUpdating || ownsEveryExpress}
+            onPress={() => isParticipating ? updateParticipation(item, false) : setPendingGroup(item)}
+            style={[styles.actionButton, !isParticipating && !ownsEveryExpress && styles.actionButtonPrimary, ownsEveryExpress && styles.actionButtonDisabled]}>
+            {isUpdating ? <ActivityIndicator size="small" color="#fff" /> : <>
+              <Ionicons name={isParticipating ? 'checkmark-circle-outline' : 'checkmark-sharp'} size={22} color="#fff" />
+              <Text maxFontSizeMultiplier={1.1} style={styles.actionText}>{ownsEveryExpress ? 'Ваш експрес' : isParticipating ? 'Скасувати' : 'Взяти участь'}</Text>
+            </>}
+          </TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.78} onPress={() => navigation.navigate('GBNewExpress', { scheduleTime: item.scheduleTime })} style={styles.actionButton}>
+            <Ionicons name="add-circle-outline" size={23} color={COLORS.primary} />
+            <Text maxFontSizeMultiplier={1.1} style={[styles.actionText, styles.actionTextOutline]}>Додати свій експрес</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
-  const handleAddExpress = (scheduleTime) => {
-    navigation.navigate('GBNewExpress', { scheduleTime });
-  };
+  if (loading) return <View style={styles.centered}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
 
   return (
     <View style={styles.container}>
-      {/* Модальне вікно */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={handleCancel}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalText}>
-              Ваша ставка успішно прийнята! Якщо ваша Арка увійде до п’ятірки, що задовольняють умови експресу, ви отримаєте нагадування за 5 хвилин до його початку.
-            </Text>
-            <View style={styles.modalButtons}>
-              <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel}>
-                <Text style={styles.modalButtonText}>Відміна</Text>
-              </Pressable>
-              <Pressable style={[styles.modalButton, styles.acceptButton]} onPress={handleAccept}>
-                <Text style={styles.modalButtonText}>Прийняти</Text>
-              </Pressable>
+      <FlatList contentContainerStyle={styles.content} data={groupedExpresses} keyExtractor={(item) => String(item.scheduleTime)} renderItem={renderGroup} showsVerticalScrollIndicator={false}
+        ListHeaderComponent={<View style={styles.intro}>
+          <View style={styles.introIcon}><Ionicons name="shield-checkmark-outline" size={25} color={COLORS.primary} /></View>
+          <Text maxFontSizeMultiplier={1.15} style={styles.introText}>Підтвердьте участь в експресі. Якщо рівень вашої Арки відповідає умовам, ви отримаєте нагадування за 5 хвилин до початку.</Text>
+        </View>}
+        ListEmptyComponent={<View style={styles.emptyCard}>
+          <Ionicons name="flash-outline" size={42} color={COLORS.primaryLight} />
+          <Text style={styles.emptyTitle}>Немає запланованих експресів</Text>
+          <Text style={styles.emptyText}>Нові експрес-прокачки з’являться тут після створення.</Text>
+        </View>}
+      />
+      <Modal animationType="fade" onRequestClose={() => setPendingGroup(null)} transparent visible={Boolean(pendingGroup)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPendingGroup(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalIcon}><Ionicons name="shield-checkmark-outline" size={34} color={COLORS.primary} /></View>
+            <Text style={styles.modalTitle}>Підтвердити участь?</Text>
+            <Text style={styles.modalText}>Якщо ваша Арка відповідатиме умовам експресу, ви отримаєте нагадування за 5 хвилин до початку.</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setPendingGroup(null)}><Text style={styles.modalCancelText}>Скасувати</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirm} onPress={() => updateParticipation(pendingGroup, true)}><Text style={styles.modalConfirmText}>Взяти участь</Text></TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#0088cc" />
-      ) : groupedChats.length === 0 ? (
-        <Text style={styles.emptyText}>Немає доступних чатів</Text>
-      ) : (
-        <FlatList
-          data={groupedChats}
-          keyExtractor={(item) => item.scheduleTime.toString()}
-          renderItem={({ item }) => {
-            const scheduleDate = new Date(item.scheduleTime);
-            const today = new Date();
-            const tomorrow = new Date();
-            tomorrow.setDate(today.getDate() + 1);
-
-            const timeString = scheduleDate.toLocaleTimeString('uk-UA', {
-              hour: 'numeric',
-              minute: 'numeric',
-            });
-
-            let formattedDate = '';
-            if (
-              scheduleDate.getFullYear() === today.getFullYear() &&
-              scheduleDate.getMonth() === today.getMonth() &&
-              scheduleDate.getDate() === today.getDate()
-            ) {
-              formattedDate = `сьогодні, ${timeString}`;
-            } else if (
-              scheduleDate.getFullYear() === tomorrow.getFullYear() &&
-              scheduleDate.getMonth() === tomorrow.getMonth() &&
-              scheduleDate.getDate() === tomorrow.getDate()
-            ) {
-              formattedDate = `завтра, ${timeString}`;
-            } else {
-              formattedDate = scheduleDate.toLocaleString('uk-UA', {
-                year: 'numeric',
-                month: 'numeric',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-              });
-            }
-
-            const isOwnGroup = item.chats.every((chat) => chat.user === currentUserId);
-
-            let badgeCount = 0;
-            if (
-              item.chats &&
-              item.chats.length > 0 &&
-              item.chats[0].allowedUsers &&
-              typeof item.chats[0].allowedUsers === 'object'
-            ) {
-              badgeCount = Object.keys(item.chats[0].allowedUsers).length;
-            }
-
-            return (
-              <View style={styles.groupContainer}>
-                <View style={styles.groupHeader}>
-                  <Text style={styles.groupTime}>Запланований час: {formattedDate}</Text>
-                  <View style={styles.iconContainer}>
-                    <FontAwesomeIcon icon={faUserGroup} size={20} style={styles.groupIcon} />
-                    {badgeCount > 0 && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{badgeCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                {item.chats.map((chat, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.chatItem,
-                      chat.user === currentUserId && styles.ownChatItem
-                    ]}
-                  >
-                    <View style={styles.chatRow}>
-                      {buildingImages[chat.allowedGB] ? (
-                        <Image
-                          source={{ uri: buildingImages[chat.allowedGB] }}
-                          style={styles.chatImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <View style={styles.chatImagePlaceholder} />
-                      )}
-                      <View style={styles.chatTextContainer}>
-                        <Text style={styles.chatTitle}>
-                          {userNames[chat.user]} ({buildingNames[chat.allowedGB]})
-                        </Text>
-                        <Text style={styles.chatDescription}>
-                          Орієнтовно <Text style={styles.boldText}>{chat.levelThreshold}</Text> рівнів (
-                          <Text style={styles.boldText}>
-                            {userBuildLevels[chat.allowedGB] !== undefined ? userBuildLevels[chat.allowedGB] + 1 : 1}
-                          </Text>{' '}
-                          →{' '}
-                          <Text style={styles.boldText}>
-                            {userBuildLevels[chat.allowedGB] !== undefined
-                              ? userBuildLevels[chat.allowedGB] + chat.levelThreshold
-                              : chat.levelThreshold}
-                          </Text>
-                          )
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-                <View style={styles.buttonContainer}>
-                  <TouchableOpacity
-                    style={[styles.button, isOwnGroup && styles.disabledButton]}
-                    onPress={() => !isOwnGroup && handleJoinPress(item)}
-                    disabled={isOwnGroup}
-                  >
-                    <Text style={styles.buttonText}>Взяти участь</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.button} onPress={() => handleAddExpress(item.scheduleTime)}>
-                    <Text style={styles.buttonText}>Додати свій експрес</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          }}
-        />
-      )}
     </View>
   );
 };
 
-// Стили остаются без изменений
 const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#0f1115',
-      padding: 10,
-    },
-    groupContainer: {
-      marginBottom: 15,
-      padding: 10,
-      backgroundColor: '#152330',
-      borderRadius: 10,
-    },
-    groupHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 5,
-    },
-    groupTime: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#e6e9ef',
-    },
-    iconContainer: {
-      position: 'relative',
-    },
-    groupIcon: {
-      marginLeft: 10,
-    },
-    badge: {
-      position: 'absolute',
-      top: -5,
-      right: -10,
-      backgroundColor: '#4ea1ff',
-      borderRadius: 8,
-      minWidth: 16,
-      height: 16,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: 3,
-    },
-    badgeText: {
-      color: '#fff',
-      fontSize: 8,
-      fontWeight: 'bold',
-    },
-    chatItem: {
-      padding: 10,
-      marginVertical: 4,
-      backgroundColor: '#222733',
-      borderRadius: 8,
-    },
-    ownChatItem: {
-      backgroundColor: '#1e3f54',
-    },
-    chatRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    chatImage: {
-      width: 50,
-      height: 50,
-      marginRight: 10,
-    },
-    chatImagePlaceholder: {
-      width: 50,
-      height: 50,
-      marginRight: 10,
-      backgroundColor: '#1b2b3b',
-    },
-    chatTextContainer: {
-      flex: 1,
-    },
-    chatTitle: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#e6e9ef',
-    },
-    chatDescription: {
-      fontSize: 14,
-      color: '#9aa3b2',
-    },
-    boldText: {
-      fontWeight: 'bold',
-    },
-    emptyText: {
-      fontSize: 16,
-      textAlign: 'center',
-      marginTop: 20,
-      color: '#9aa3b2',
-    },
-    buttonContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginTop: 10,
-    },
-    button: {
-      flex: 1,
-      padding: 10,
-      backgroundColor: '#4ea1ff',
-      borderRadius: 5,
-      alignItems: 'center',
-      marginHorizontal: 5,
-    },
-    disabledButton: {
-      backgroundColor: '#36516a',
-    },
-    buttonText: {
-      color: '#fff',
-      fontWeight: 'bold',
-    },
-    modalOverlay: {
-      flex: 1,
-      justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      padding: 20,
-    },
-    modalContainer: {
-      backgroundColor: '#152330',
-      borderRadius: 10,
-      padding: 20,
-    },
-    modalText: {
-      fontSize: 16,
-      marginBottom: 20,
-      color: '#e6e9ef',
-    },
-    modalButtons: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-    },
-    modalButton: {
-      marginLeft: 10,
-      paddingHorizontal: 15,
-      paddingVertical: 8,
-      borderRadius: 5,
-    },
-    cancelButton: {
-      backgroundColor: '#36516a',
-    },
-    acceptButton: {
-      backgroundColor: '#4ea1ff',
-    },
-    modalButtonText: {
-      color: '#fff',
-      fontWeight: 'bold',
-    },
-  });
+  container: { flex: 1, backgroundColor: COLORS.background }, centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.background }, content: { padding: 12, paddingBottom: 24 },
+  intro: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, paddingHorizontal: 2 }, introIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceSoft, marginRight: 11 }, introText: { flex: 1, color: '#c2cad6', fontSize: 13, lineHeight: 19 },
+  card: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: 17, borderWidth: 1, marginBottom: 12, padding: 12 }, scheduleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, scheduleCopy: { flex: 1, flexDirection: 'row', alignItems: 'center' }, scheduleText: { flex: 1, color: '#c6ceda', fontSize: 13, lineHeight: 17, marginLeft: 8 }, participants: { flexDirection: 'row', alignItems: 'center', marginLeft: 6 }, participantCount: { color: COLORS.text, fontSize: 14, marginLeft: 5 }, divider: { height: 1, backgroundColor: COLORS.divider, marginVertical: 11 },
+  buildingRow: { flexDirection: 'row', minHeight: 120, alignItems: 'center' }, buildingDivider: { borderTopWidth: 1, borderTopColor: COLORS.divider, paddingTop: 10, marginTop: 10 }, buildingVisual: { width: 102, alignItems: 'center', justifyContent: 'center', marginRight: 7 }, buildingImage: { width: 102, height: 116 }, buildingDetails: { flex: 1, gap: 8 }, detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, buildingTitle: { flex: 1, color: COLORS.text, fontSize: 14, lineHeight: 19 }, ownerName: { fontWeight: '800' }, detailText: { color: COLORS.muted, fontSize: 13 }, detailStrong: { color: COLORS.text, fontWeight: '700' }, levelRange: { color: COLORS.primary, fontSize: 16, fontWeight: '500' },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 12 }, actionButton: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 }, actionButtonPrimary: { backgroundColor: COLORS.primary }, actionButtonDisabled: { borderColor: COLORS.border, opacity: 0.55 }, actionText: { color: COLORS.text, fontSize: 13, fontWeight: '700', textAlign: 'center' }, actionTextOutline: { color: COLORS.primary },
+  emptyCard: { alignItems: 'center', padding: 30, borderRadius: 18, backgroundColor: COLORS.surface }, emptyTitle: { color: COLORS.text, fontSize: 19, fontWeight: '700', marginTop: 14 }, emptyText: { color: COLORS.muted, fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 7 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 22 }, modalCard: { width: '100%', maxWidth: 390, backgroundColor: COLORS.surface, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 22 }, modalIcon: { alignSelf: 'center', width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceSoft }, modalTitle: { color: COLORS.text, fontSize: 21, fontWeight: '800', textAlign: 'center', marginTop: 15 }, modalText: { color: COLORS.muted, fontSize: 15, lineHeight: 23, textAlign: 'center', marginTop: 10 }, modalActions: { flexDirection: 'row', gap: 10, marginTop: 22 }, modalCancel: { flex: 1, minHeight: 48, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border }, modalCancelText: { color: COLORS.muted, fontSize: 15, fontWeight: '700' }, modalConfirm: { flex: 1, minHeight: 48, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primary }, modalConfirmText: { color: '#fff', fontSize: 15, fontWeight: '800' }
+});
 
 export default GBExpress;

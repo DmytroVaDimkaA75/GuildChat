@@ -114,38 +114,21 @@ const ChatListItem = ({ chat, index, userId, usersMap, onDeleteChat, onSelectCha
     }).start();
   }, [swipeX]);
 
-  const confirmDelete = useCallback(() => {
-    Alert.alert(
-      t('chatList.deleteConfirmationTitle'),
-      t('chatList.deleteConfirmationMessage'),
-      [
-        {
-          text: t('chatList.cancel'),
-          style: 'cancel',
-          onPress: resetSwipe,
-        },
-        {
-          text: t('chatList.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await onDeleteChat(chat);
-            } catch (error) {
-              console.error('Помилка видалення чату:', error);
-              setIsDeleting(false);
-              resetSwipe();
-              Alert.alert(
-                t('chatList.deleteErrorTitle'),
-                t('chatList.deleteErrorMessage')
-              );
-            }
-          },
-        },
-      ],
-      { cancelable: true, onDismiss: resetSwipe }
-    );
-  }, [chat, onDeleteChat, resetSwipe, t]);
+  const handleDelete = useCallback(async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteChat(chat);
+    } catch (error) {
+      console.error('Помилка видалення чату:', error);
+      setIsDeleting(false);
+      resetSwipe();
+      Alert.alert(
+        t('chatList.deleteErrorTitle'),
+        t('chatList.deleteErrorMessage')
+      );
+    }
+  }, [chat, isDeleting, onDeleteChat, resetSwipe, t]);
 
   const panResponder = useMemo(
     () =>
@@ -269,13 +252,15 @@ const ChatListItem = ({ chat, index, userId, usersMap, onDeleteChat, onSelectCha
   };
 
   return (
-    <View style={styles.swipeContainer}>
+    <Animated.View
+      style={[styles.swipeContainer, { opacity, transform: [{ translateY }] }]}
+    >
       <TouchableOpacity
         accessibilityLabel={t('chatList.delete')}
         accessibilityRole="button"
         activeOpacity={0.75}
         disabled={isDeleting}
-        onPress={confirmDelete}
+        onPress={handleDelete}
         style={styles.deleteBackground}
       >
         <MaterialIcons name="delete-outline" size={27} color="#fff" />
@@ -289,14 +274,14 @@ const ChatListItem = ({ chat, index, userId, usersMap, onDeleteChat, onSelectCha
         </Text>
       </TouchableOpacity>
       <Animated.View
-        style={[styles.chatItem, { opacity, transform: [{ translateY }, { translateX: swipeX }] }]}
+        style={[styles.chatItem, { transform: [{ translateX: swipeX }] }]}
         {...panResponder.panHandlers}
       >
         <TouchableOpacity style={styles.chatItemPressable} onPress={handleChatSelect} activeOpacity={0.7}>
           {renderContent()}
         </TouchableOpacity>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 };
 

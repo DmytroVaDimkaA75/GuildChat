@@ -1,9 +1,23 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  isGbgNotificationSoundMuted,
   isGbgSectorNotificationMuted,
   normalizeGbgNotificationMute,
 } = require("./gbgNotificationMute");
+
+test("global GBG mute silences every GBG notification type", () => {
+  const rawMute = { mutedUntil: 2_000, scope: "all" };
+  assert.equal(isGbgNotificationSoundMuted({ rawMute, nowMs: 1_000 }), true);
+  assert.equal(isGbgNotificationSoundMuted({ rawMute, army: "attack", nowMs: 1_000 }), true);
+});
+
+test("army mute only silences matching sector notifications", () => {
+  const rawMute = { mutedUntil: 2_000, scope: "attack" };
+  assert.equal(isGbgNotificationSoundMuted({ rawMute, nowMs: 1_000 }), false);
+  assert.equal(isGbgNotificationSoundMuted({ rawMute, army: "attack", nowMs: 1_000 }), true);
+  assert.equal(isGbgNotificationSoundMuted({ rawMute, army: "defense", nowMs: 1_000 }), false);
+});
 const {
   getGbgSeasonEndMs,
   getMoscowDayEndMs,
