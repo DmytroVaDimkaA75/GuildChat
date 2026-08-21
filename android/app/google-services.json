@@ -1,22 +1,21 @@
 {
   "project_info": {
-    "project_number": "220187331504",
-    "firebase_url": "https://guildchat-5d8c1-default-rtdb.europe-west1.firebasedatabase.app",
-    "project_id": "guildchat-5d8c1",
-    "storage_bucket": "guildchat-5d8c1.appspot.com"
+    "project_number": "12707765363",
+    "project_id": "foechat-b903e",
+    "storage_bucket": "foechat-b903e.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:220187331504:android:da5c77c879e5e647946475",
+        "mobilesdk_app_id": "1:12707765363:android:6330d73cbd9ac686745e06",
         "android_client_info": {
-          "package_name": "com.vadimkaa75.guildchat"
+          "package_name": "com.foechat.mobile"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC5S5-xMX5HA93xesJ1M4OEAxl5y6331Ko"
+          "current_key": "AIzaSyAooqmkwSQOjXrHN8PtMpg012Xp9ulsLBM"
         }
       ],
       "services": {

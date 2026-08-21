@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat.widgets
+package com.foechat.mobile.widgets
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
@@ -9,7 +9,7 @@ import androidx.work.WorkerParameters
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
-import com.vadimkaa75.guildchat.R
+import com.foechat.mobile.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets

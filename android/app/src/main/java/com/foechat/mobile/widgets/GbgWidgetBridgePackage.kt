@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat.widgets
+package com.foechat.mobile.widgets
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat
+package com.foechat.mobile
 
 import android.app.Application
 import android.content.res.Configuration
@@ -16,8 +16,8 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-import com.vadimkaa75.guildchat.widgets.GbgWidgetBridgePackage
-import com.vadimkaa75.guildchat.widgets.GbgWidgetRefreshScheduler
+import com.foechat.mobile.widgets.GbgWidgetBridgePackage
+import com.foechat.mobile.widgets.GbgWidgetRefreshScheduler
 
 class MainApplication : Application(), ReactApplication {
 

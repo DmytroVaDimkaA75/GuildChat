@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat.widgets
+package com.foechat.mobile.widgets
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -6,7 +6,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
-import com.vadimkaa75.guildchat.R
+import com.foechat.mobile.R
 import org.json.JSONArray
 import org.json.JSONObject
 

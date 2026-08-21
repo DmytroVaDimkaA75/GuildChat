@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat
+package com.foechat.mobile
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

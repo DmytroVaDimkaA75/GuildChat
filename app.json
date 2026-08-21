@@ -20,7 +20,7 @@
         "foregroundImage": "./assets/foechat.png",
         "backgroundColor": "#ffffff"        
       },
-      "package": "com.vadimkaa75.guildchat",
+      "package": "com.foechat.mobile",
       "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",

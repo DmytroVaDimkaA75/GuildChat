@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat.widgets
+package com.foechat.mobile.widgets
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -10,7 +10,7 @@ import android.graphics.Canvas
 import android.widget.RemoteViews
 import android.view.View
 import android.app.PendingIntent
-import com.vadimkaa75.guildchat.R
+import com.foechat.mobile.R
 import com.caverock.androidsvg.SVG
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,7 +69,7 @@ class GBGMapWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_REFRESH =
-            "com.vadimkaa75.guildchat.widgets.ACTION_REFRESH"
+            "com.foechat.mobile.widgets.ACTION_REFRESH"
 
         fun render(context: Context, views: RemoteViews) {
             views.setTextViewText(R.id.widgetTitle, "ПБГ • Мапа")

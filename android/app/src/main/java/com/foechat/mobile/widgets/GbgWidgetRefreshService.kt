@@ -1,4 +1,4 @@
-package com.vadimkaa75.guildchat.widgets
+package com.foechat.mobile.widgets
 
 import android.content.Intent
 import com.facebook.react.HeadlessJsTaskService
