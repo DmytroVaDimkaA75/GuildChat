@@ -280,6 +280,7 @@ function BuildingCard({
   onToggleLock,
   lockUpdating,
   onScheduleExpress,
+  expressScheduled,
 }) {
   const forgePointsUnit = getForgePointsUnit(language);
   const remaining = Math.max(0, building.totalLevelCost - building.totalContribution);
@@ -393,7 +394,7 @@ function BuildingCard({
             </View>
           )}
         </View>
-        <TouchableOpacity
+        {!expressScheduled && <TouchableOpacity
           style={styles.expandButton}
           onPress={toggleExpanded}
           accessibilityRole="button"
@@ -403,7 +404,7 @@ function BuildingCard({
           <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
             <Ionicons name="chevron-down" size={31} color={COLORS.primary} />
           </Animated.View>
-        </TouchableOpacity>
+        </TouchableOpacity>}
       </View>
 
       <Animated.View
@@ -441,11 +442,31 @@ const MyGBCenterScreen = ({ navigation }) => {
   const [buildings, setBuildings] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [updatingLockId, setUpdatingLockId] = useState(null);
+  const [activeExpressIds, setActiveExpressIds] = useState(new Set());
   const filters = [
     { id: 'all', label: 'Усі' },
     { id: 'guaranteed', label: 'З гарантом' },
     { id: 'needs_fp', label: `Потребують ${getForgePointsUnit(i18n.language)}` },
   ];
+
+  useEffect(() => {
+    let expressRef;
+    let handler;
+    AsyncStorage.getItem('guildId').then((guildId) => {
+      if (!guildId) return;
+      expressRef = database().ref(`guilds/${guildId}/express`);
+      handler = (snapshot) => {
+        const ids = new Set();
+        Object.values(snapshot.val() || {}).forEach((record) => {
+          if (record?.gbs) Object.values(record.gbs).forEach((gb) => ids.add(String(gb.allowedGB)));
+          else if (record?.allowedGB) ids.add(String(record.allowedGB));
+        });
+        setActiveExpressIds(ids);
+      };
+      expressRef.on('value', handler);
+    });
+    return () => { if (expressRef && handler) expressRef.off('value', handler); };
+  }, []);
 
   useEffect(() => {
     let greatBuildRef;
@@ -671,6 +692,7 @@ const MyGBCenterScreen = ({ navigation }) => {
               building={building}
               language={i18n.language}
               lockUpdating={updatingLockId === building.id}
+              expressScheduled={activeExpressIds.has(String(building.id))}
               onToggleLock={() => toggleBuildingLock(building)}
               onScheduleExpress={() => navigation.navigate('GBNewExpress', {
                 buildingId: building.id,

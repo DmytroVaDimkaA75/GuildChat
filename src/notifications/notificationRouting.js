@@ -30,6 +30,7 @@ export const normalizeNotificationRoute = (source) => {
       "gbg_build_plan",
       "gbg_help",
       "culture_build_ready",
+      "express_upgrade",
     ].includes(type)
   ) {
     return null;

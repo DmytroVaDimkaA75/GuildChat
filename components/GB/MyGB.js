@@ -145,7 +145,9 @@ const MyGB = () => {
         const merged = buildsList.map(b => {
           const scheduled = Object
             .values(expressData)
-            .some(rec => rec.allowedGB === b.id && rec.user === userId);
+            .some(rec => rec?.gbs
+              ? Object.values(rec.gbs).some((gb) => gb.allowedGB === b.id && gb.user === userId)
+              : rec.allowedGB === b.id && rec.user === userId);
           return {
             ...b,
             ...(buildingsData[b.id] || {}),

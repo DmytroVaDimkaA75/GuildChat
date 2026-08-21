@@ -24,6 +24,8 @@ const {
 } = require("./gbgNotificationMute");
 const { fetchLinkPreview } = require("./linkPreview");
 const { fetchYouTubeChannelFeed } = require("./youtubeFeed");
+const { ARC_CONTRIBUTION_BOOSTS } = require("./arcLevels");
+const { PUSH: EXPRESS_PUSH, advanceExpress, uniqueAvailableIds } = require("./expressWorkflow");
 
 admin.initializeApp();
 
@@ -2954,4 +2956,119 @@ exports.calculateGreatBuildingGuaranteeOnUpdatedAt = onValueWritten(
     region: "europe-west1",
   },
   handleGreatBuildingGuaranteeRefresh("updatedAt")
+);
+
+/** Scheduled express-upgrade state machine. The transaction makes every minute tick idempotent. */
+const getExpressMultiplier = (guildUsers, uid, record = {}) => {
+  const level = Math.max(0, Math.trunc(Number(guildUsers?.[uid]?.greatBuild?.["The Arc"]?.level) || 0));
+  const boost = level > 0 ? ARC_CONTRIBUTION_BOOSTS[Math.min(level, ARC_CONTRIBUTION_BOOSTS.length) - 1] : 0;
+  const calculated = 1 + Number(boost || 0) / 100;
+  return Number.isFinite(calculated) ? calculated : Number(record.contributionMultiplier) || 1;
+};
+
+const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
+  const ledgerRef = db.ref(`/expressNotificationLedger/${guildId}/${chatId}/${notice.event}_${notice.userId}`);
+  const claim = await ledgerRef.transaction((current) => current ? undefined : ({
+    claimedAt: admin.database.ServerValue.TIMESTAMP,
+    status: "claimed",
+  }), undefined, false);
+  if (!claim.committed) return;
+  const tokenSnap = await db.ref(`/users/${notice.userId}/fcmToken`).once("value");
+  const token = tokenSnap.val();
+  if (!token) {
+    await ledgerRef.update({ status: "no_token", completedAt: admin.database.ServerValue.TIMESTAMP });
+    return;
+  }
+  const title = "Експрес прокачка";
+  await admin.messaging().send({
+    token,
+    data: {
+      type: "express_upgrade",
+      screen: "GBExpress",
+      guildId: String(guildId),
+      chatId: String(chatId),
+      title,
+      body: notice.body,
+      sound: "1",
+      notificationEventId: `${chatId}_${notice.event}_${notice.userId}`,
+    },
+    android: {
+      priority: "high",
+      notification: { title, body: notice.body, channelId: "express_upgrade", sound: "kirpich" },
+    },
+    apns: { payload: { aps: { alert: { title, body: notice.body }, sound: "kirpich.mp3", "content-available": 1 } } },
+  });
+  await ledgerRef.update({ status: "sent", completedAt: admin.database.ServerValue.TIMESTAMP });
+};
+
+exports.processScheduledExpressUpgrades = onSchedule(
+  { schedule: "every 1 minutes", region: "europe-west1", timeZone: "UTC", timeoutSeconds: 120, memory: "512MiB" },
+  async () => {
+    const db = admin.database();
+    const guildsSnap = await db.ref("/guilds").once("value");
+    const now = Date.now();
+    await Promise.all(Object.entries(guildsSnap.val() || {}).map(async ([guildId, guild]) => {
+      const guildUsers = guild?.guildUsers || {};
+      await Promise.all(Object.entries(guild?.express || {}).map(async ([chatId, rawGroup]) => {
+        // Legacy flat records remain readable by old clients but cannot be safely deadline-processed.
+        if ((!rawGroup?.gbs && !rawGroup?.postponementAudience) || !rawGroup?.scheduleTime) return;
+        const notices = [];
+        let shouldDelete = false;
+        const ref = db.ref(`/guilds/${guildId}/express/${chatId}`);
+        const result = await ref.transaction((current) => {
+          if (!current) return current;
+          const advanced = advanceExpress(current, now, (uid, record) => getExpressMultiplier(guildUsers, uid, record));
+          notices.splice(0, notices.length, ...advanced.notices);
+          shouldDelete = advanced.deleteGroup;
+          if (advanced.deleteGroup) return { ...current, workflow: { ...(current.workflow || {}), stage: "deleting", deletingAt: now } };
+          return advanced.group;
+        }, undefined, false);
+        if (!result.committed || !result.snapshot.exists()) return;
+        const current = result.snapshot.val();
+        if (current.postponementAudience && !current.workflow?.postponementPushSentAt) {
+          Object.keys(current.postponementAudience).forEach((uid) => notices.push({ event: "postponed", userId: uid, body: EXPRESS_PUSH.postponed }));
+          await Promise.all(notices.filter((notice) => notice.event === "postponed").map((notice) => sendExpressPush({ db, guildId, chatId, notice })));
+          await ref.update({ postponementAudience: null, "workflow/postponementPushSentAt": admin.database.ServerValue.TIMESTAMP });
+          if (!current.gbs || !Object.keys(current.gbs).length) {
+            await ref.remove();
+            return;
+          }
+        }
+        if (current.workflow?.recruitmentNeeded && !current.workflow?.recruitmentNoticesQueuedAt) {
+          const excluded = uniqueAvailableIds(current);
+          Object.keys(guildUsers).filter((uid) => !excluded.has(uid)).forEach((uid) => notices.push({ event: "recruit", userId: uid, body: EXPRESS_PUSH.recruit }));
+          await ref.child("workflow/recruitmentNoticesQueuedAt").set(admin.database.ServerValue.TIMESTAMP);
+        }
+        await Promise.all(notices.map((notice) => sendExpressPush({ db, guildId, chatId, notice }).catch((error) => logger.error("[EXPRESS_PUSH]", { guildId, chatId, userId: notice.userId, error: error?.message }))));
+        if (shouldDelete) await ref.remove();
+      }));
+    }));
+    return null;
+  }
+);
+
+exports.notifyExpressOwnerCancellation = onValueWritten(
+  { ref: "/guilds/{guildId}/express/{chatId}", region: "europe-west1" },
+  async (event) => {
+    const before = event.data.before.val();
+    const after = event.data.after.val();
+    if (!before?.gbs) return null;
+    const stage = before.workflow?.stage || "open";
+    if (["open", "postponement", "deleting"].includes(stage)) return null;
+    const afterGbs = after?.gbs || {};
+    const removedOwners = new Set(Object.entries(before.gbs).filter(([id]) => !afterGbs[id]).map(([, gb]) => String(gb.user)));
+    if (!removedOwners.size) return null;
+    const recipients = Object.entries(before.interested || {}).filter(([, record]) => Number(record?.confirmationTime) > 0).map(([uid]) => uid);
+    const db = admin.database();
+    await Promise.all(recipients.map((userId) => sendExpressPush({
+      db,
+      guildId: event.params.guildId,
+      chatId: event.params.chatId,
+      notice: { event: `manual_cancel_${event.id}`, userId, body: EXPRESS_PUSH.ownerCancel },
+    })));
+    if (after?.workflow?.pendingManualDelete && !Object.keys(afterGbs).length) {
+      await event.data.after.ref.remove();
+    }
+    return null;
+  }
 );

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Image,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -96,7 +97,7 @@ const getMaximumAllowedMultiplier = ({ branches, ownerUserId, buildingId, curren
 const GBNewExpress = ({ route, navigation }) => {
   const { t, i18n } = useTranslation();
   // Отримання buildingId та scheduleTime з route.params
-  const { buildingId, scheduleTime } = route.params;
+  const { buildingId, scheduleTime, chatId, postpone = false, originalChatId, originalScheduleTime, selectedGbs = [] } = route.params || {};
 
   const getLocalizedValue = (value) => {
     if (value && typeof value === 'object') {
@@ -120,6 +121,15 @@ const GBNewExpress = ({ route, navigation }) => {
   // Стан для загальної вартості прокачки
   const [totalCost, setTotalCost] = useState(0);
   const [currentBuildingLevel, setCurrentBuildingLevel] = useState(0);
+
+  useEffect(() => {
+    if (!postpone || !originalScheduleTime || selectedHour !== null) return;
+    const suggested = new Date(Number(originalScheduleTime) + 30 * 60 * 1000);
+    const index = dayOptions.findIndex((option) => option.date.toDateString() === suggested.toDateString());
+    setSelectedDayIndex(index < 0 ? 0 : index);
+    setSelectedHour(suggested.getHours());
+    setSelectedMinute(suggested.getMinutes());
+  }, [postpone, originalScheduleTime, selectedHour]);
 
   const dayOptions = (() => {
     const currentLang = i18n.language.split('-')[0];
@@ -239,7 +249,14 @@ const GBNewExpress = ({ route, navigation }) => {
         const snapshot = await dbRef.once('value');
         if (snapshot.exists()) {
           const data = snapshot.val();
-          const buildingIds = Object.keys(data);
+          const expressSnapshot = await database().ref(`guilds/${storedGuildId}/express`).once('value');
+          const activeIds = new Set();
+          Object.values(expressSnapshot.val() || {}).forEach((record) => {
+            if (record?.gbs) Object.values(record.gbs).forEach((gb) => activeIds.add(String(gb.allowedGB)));
+            else if (record?.allowedGB) activeIds.add(String(record.allowedGB));
+          });
+          const postponedIds = new Set(selectedGbs.map((gb) => String(gb.allowedGB)));
+          const buildingIds = Object.keys(data).filter((id) => !activeIds.has(String(id)) || postponedIds.has(String(id)));
           const buildingPromises = buildingIds.map(async (id) => {
             // НОВИЙ СИНТАКСИС
             const buildingRef = database().ref(`greatBuildings/${id}`);
@@ -319,7 +336,7 @@ const GBNewExpress = ({ route, navigation }) => {
 
   const handleSaveDateTime = () => {
     let newDt = getFullDate(tempDayIndex, tempHourIndex, tempMinuteIndex);
-    const minDt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const minDt = new Date(postpone ? Number(originalScheduleTime) + 30 * 60 * 1000 : Date.now() + 2 * 60 * 60 * 1000);
     if (newDt < minDt) {
       newDt = minDt;
     }
@@ -338,7 +355,7 @@ const GBNewExpress = ({ route, navigation }) => {
   };
 
   const openDateTimeModal = () => {
-    const minTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const minTime = new Date(postpone ? Number(originalScheduleTime) + 30 * 60 * 1000 : Date.now() + 2 * 60 * 60 * 1000);
     let foundIndex = dayOptions.findIndex(opt =>
       opt.date.getFullYear() === minTime.getFullYear() &&
       opt.date.getMonth() === minTime.getMonth() &&
@@ -370,7 +387,9 @@ const GBNewExpress = ({ route, navigation }) => {
     : selectedBuilding;
 
   const formValid = (() => {
-    if (!buildingId && scheduleTime) {
+    if (postpone) {
+      return selectedGbs.length > 0 && selectedHour !== null && selectedMinute !== null;
+    } else if (!buildingId && scheduleTime) {
       return allowedGB !== null && levelThreshold > 1;
     } else if (buildingId && !scheduleTime) {
       return selectedHour !== null && selectedMinute !== null && levelThreshold > 1;
@@ -392,7 +411,30 @@ const GBNewExpress = ({ route, navigation }) => {
         timestamp: Date.now(),
         user: userId
       };
-      if (!buildingId && scheduleTime) {
+      const expressRootRef = database().ref(`guilds/${storedGuildId}/express`);
+      if (postpone) {
+        const newScheduleTime = getFullDate(selectedDayIndex, selectedHour, selectedMinute).getTime();
+        const minimum = Number(originalScheduleTime) + 30 * 60 * 1000;
+        if (newScheduleTime < minimum) throw new Error('Оберіть час не раніше ніж через 30 хвилин від початкового часу.');
+        const originalRef = database().ref(`guilds/${storedGuildId}/express/${originalChatId}`);
+        const originalSnapshot = await originalRef.once('value');
+        const original = originalSnapshot.val();
+        if (!original) throw new Error('Початковий експрес уже змінено.');
+        const selectedIds = new Set(selectedGbs.map((gb) => String(gb.id)));
+        const packageGbs = Object.fromEntries(Object.entries(original.gbs || {}).filter(([id, gb]) => selectedIds.has(String(id)) && String(gb.user) === String(userId)));
+        if (!Object.keys(packageGbs).length) throw new Error('Вибрані ВС уже недоступні.');
+        const newRef = expressRootRef.push();
+        const updates = { [`${newRef.key}`]: { scheduleTime: newScheduleTime, gbs: packageGbs, workflow: { stage: 'open', createdAt: database.ServerValue.TIMESTAMP } } };
+        Object.keys(packageGbs).forEach((id) => { updates[`${originalChatId}/gbs/${id}`] = null; });
+        if (!original.workflow?.postponementNotifiedAt) {
+          updates[`${originalChatId}/postponementAudience`] = original.interested || {};
+          updates[`${originalChatId}/interested`] = null;
+          updates[`${originalChatId}/workflow/postponementNotifiedAt`] = database.ServerValue.TIMESTAMP;
+        }
+        await expressRootRef.update(updates);
+        navigation.goBack();
+        return;
+      } else if (!buildingId && scheduleTime) {
         dataToSave.allowedGB = allowedGB;
         dataToSave.scheduleTime = scheduleTime;
       } else if (buildingId && !scheduleTime) {
@@ -403,7 +445,6 @@ const GBNewExpress = ({ route, navigation }) => {
       }
       
       // НОВИЙ СИНТАКСИС
-      const expressRootRef = database().ref(`guilds/${storedGuildId}/express`);
       const snapshotAll = await expressRootRef.once('value');
       
       if (snapshotAll.exists()) {
@@ -419,12 +460,25 @@ const GBNewExpress = ({ route, navigation }) => {
       }
 
       // НОВИЙ СИНТАКСИС
-      const expressRef = database().ref(`guilds/${storedGuildId}/express`).push();
-      await expressRef.set(dataToSave);
+      const targetKey = chatId || expressRootRef.push().key;
+      const gbKey = expressRootRef.child(targetKey).child('gbs').push().key;
+      let duplicate = false;
+      await expressRootRef.transaction((current) => {
+        current = current || {};
+        duplicate = Object.values(current).some((record) => record?.gbs
+          ? Object.values(record.gbs).some((gb) => String(gb.allowedGB) === String(dataToSave.allowedGB) && String(gb.user) === String(userId))
+          : String(record?.allowedGB) === String(dataToSave.allowedGB) && String(record?.user) === String(userId));
+        if (duplicate) return;
+        current[targetKey] = current[targetKey] || { scheduleTime: dataToSave.scheduleTime, gbs: {}, workflow: { stage: 'open' } };
+        current[targetKey].gbs = current[targetKey].gbs || {};
+        current[targetKey].gbs[gbKey] = dataToSave;
+        return current;
+      });
+      if (duplicate) throw new Error('Ця ВС вже має активну експрес-прокачку.');
       
       navigation.goBack();
     } catch (error) {
-      // Не виводимо помилки
+      Alert.alert('Помилка', error?.message || 'Не вдалося зберегти експрес.');
     }
   }, [
     allowedGB,
@@ -435,6 +489,11 @@ const GBNewExpress = ({ route, navigation }) => {
     placeLimit,
     buildingId,
     scheduleTime,
+    chatId,
+    postpone,
+    originalChatId,
+    originalScheduleTime,
+    selectedGbs,
     navigation,
     getFullDate
   ]);
@@ -455,7 +514,22 @@ const GBNewExpress = ({ route, navigation }) => {
   return (
     <ScrollView style={{ backgroundColor: '#0f1115' }}>
       <View style={styles.container}>
-        {buildingId && !scheduleTime ? null : (
+        {postpone && (
+          <View style={styles.block}>
+            <Text style={styles.blockLabel}>ВС для відтермінування</Text>
+            <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
+              {selectedGbs.map((gb, index) => (
+                <View key={gb.id} style={[styles.dropdownItemContainer, index > 0 && { borderTopWidth: 1, borderTopColor: '#2d3a48' }]}>
+                  {gb.image ? <Image source={{ uri: gb.image }} style={styles.dropdownImage} resizeMode="contain" /> : null}
+                  <Text style={styles.dropdownItemText}>{gb.name} · {gb.levelThreshold || 0} рівнів</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <Text style={styles.scheduleHint}>Нові дата й час будуть застосовані до всіх вибраних ВС</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ color: '#4ea1ff', marginTop: 10 }}>Змінити вибір</Text></TouchableOpacity>
+          </View>
+        )}
+        {postpone || (buildingId && !scheduleTime) ? null : (
           <View style={styles.block}>
             <Text style={styles.blockLabel}>{t('gbNewExpress.selectBuilding')}</Text>
             <Dropdown

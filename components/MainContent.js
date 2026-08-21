@@ -1549,6 +1549,8 @@ export default function MainContent() {
             route.settlementName,
             route.guildId
           );
+        } else if (route.type === 'express_upgrade') {
+          navigationRef.navigate('GB', { screen: 'GBExpress' });
         }
 
         if (
@@ -1860,6 +1862,13 @@ export default function MainContent() {
           lights: false,
         });
 
+        await notifee.createChannel({
+          id: 'express_upgrade',
+          name: 'Express Upgrade Notifications',
+          importance: AndroidImportance.HIGH,
+          sound: 'kirpich',
+        });
+
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
           console.log("Your FCM Token is:", fcmToken);
@@ -1924,6 +1933,7 @@ export default function MainContent() {
           'gbg_help',
           'culture_build_ready',
           'chat_message',
+          'express_upgrade',
         ].includes(messageType);
         const displaySilently = scheduleAwareMessage && !soundFlag;
 
@@ -1938,6 +1948,8 @@ export default function MainContent() {
               ? (soundFlag ? 'culture_settlement_kolokol' : 'culture_settlement_silent')
             : messageType === 'chat_message'
               ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
+            : messageType === 'express_upgrade'
+              ? 'express_upgrade'
               : 'default';
 
         const notificationData = {
