@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "12707765363",
+    "firebase_url": "https://foechat-b903e-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "foechat-b903e",
     "storage_bucket": "foechat-b903e.firebasestorage.app"
   },
