@@ -277,9 +277,9 @@ const formatTimestamp = (timestamp) => {
         });
         console.log('Створено запис у patrons:', patronId);
 
-        // Додаємо запис у users/${userId}/${guildId}/myInvest (НОВИЙ СИНТАКСИС)
+        // Додаємо запис у users/${userId}/userGuilds/${guildId}/myInvest
         const myInvestId = uuidv4();
-        const myInvestRef = database().ref(`users/${userId}/${guildId}/myInvest/${myInvestId}`);
+        const myInvestRef = database().ref(`users/${userId}/userGuilds/${guildId}/myInvest/${myInvestId}`);
         await myInvestRef.set({
           owner: ownerId,
           greatBuild: buildId,

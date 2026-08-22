@@ -43,7 +43,7 @@ const ProfileMain = () => {
       if (userId && guildId) {
         // ИЗМЕНЕНО
         await database()
-          .ref(`/users/${userId}/${guildId}/culture/productionPreference`)
+          .ref(`/users/${userId}/userGuilds/${guildId}/culture/productionPreference`)
           .set(idx);
       }
     } catch (e) {
@@ -60,7 +60,7 @@ const ProfileMain = () => {
       if (userId && guildId) {
         // ИЗМЕНЕНО
         await database()
-          .ref(`/users/${userId}/${guildId}/culture/cultureAlarm`)
+          .ref(`/users/${userId}/userGuilds/${guildId}/culture/cultureAlarm`)
           .set(newVal);
       }
     } catch (e) {
@@ -92,7 +92,7 @@ const ProfileMain = () => {
         
         if (userId && guildId) {
           // ИЗМЕНЕНО
-          const cultureSnap = await database().ref(`/users/${userId}/${guildId}/culture`).once('value');
+          const cultureSnap = await database().ref(`/users/${userId}/userGuilds/${guildId}/culture`).once('value');
           if (cultureSnap.exists()) {
             const data = cultureSnap.val();
             if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
@@ -116,10 +116,11 @@ const ProfileMain = () => {
         const snap = await database().ref(`/users/${userId}`).once('value');
         if (!snap.exists()) return;
         const data = snap.val();
-        const keys = Object.keys(data).filter(k => k.includes('_'));
+        const userGuilds = data.userGuilds || {};
+        const keys = Object.keys(userGuilds);
         const arr = await Promise.all(
           keys.map(async id => {
-            const role = data[id].role;
+            const role = userGuilds[id].role;
             // ИЗМЕНЕНО
             const worldSnap = await database().ref(`/guilds/${id}/worldName`).once('value');
             return { guildId: id, role, worldName: worldSnap.val() || 'Не знайдено' };

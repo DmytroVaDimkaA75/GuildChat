@@ -283,25 +283,17 @@ const getPushWorldContext = async ({ db, guildId, userIds }) => {
   const result = new Map(uniqueUserIds.map((uid) => [uid, { hasMultipleGuilds: false, worldName: "" }]));
   if (!guildId || !uniqueUserIds.length) return result;
 
-  const guildsSnap = await db.ref("/guilds").once("value");
-  if (!guildsSnap.exists()) return result;
-
-  const guilds = guildsSnap.val() || {};
-  const membershipCounts = new Map(uniqueUserIds.map((uid) => [uid, 0]));
-
-  Object.values(guilds).forEach((guild) => {
-    const guildUsers = guild?.guildUsers || {};
-    uniqueUserIds.forEach((uid) => {
-      if (Object.prototype.hasOwnProperty.call(guildUsers, uid)) {
-        membershipCounts.set(uid, (membershipCounts.get(uid) || 0) + 1);
-      }
-    });
-  });
-
-  const worldName = String(guilds?.[guildId]?.worldName || "").trim();
-  uniqueUserIds.forEach((uid) => {
+  const [worldNameSnap, ...userGuildSnapshots] = await Promise.all([
+    db.ref(`/guilds/${guildId}/worldName`).once("value"),
+    ...uniqueUserIds.map((uid) =>
+      db.ref(`/users/${uid}/userGuilds`).once("value")
+    ),
+  ]);
+  const worldName = String(worldNameSnap.val() || "").trim();
+  uniqueUserIds.forEach((uid, index) => {
+    const userGuilds = userGuildSnapshots[index].val() || {};
     result.set(uid, {
-      hasMultipleGuilds: (membershipCounts.get(uid) || 0) > 1,
+      hasMultipleGuilds: Object.keys(userGuilds).length > 1,
       worldName,
     });
   });
@@ -1282,12 +1274,12 @@ const buildCultureQueueEntries = ({ userId, guildId, settlement, building, index
 
 const rebuildCultureNotificationQueue = async ({ db, userId, guildId }) => {
   const [settlementSnap, cultureSnap, currentQueueSnap] = await Promise.all([
-    db.ref(`/users/${userId}/${guildId}/settlement`).once("value"),
-    db.ref(`/users/${userId}/${guildId}/culture`).once("value"),
-    db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`).once("value"),
+    db.ref(`/users/${userId}/userGuilds/${guildId}/settlement`).once("value"),
+    db.ref(`/users/${userId}/userGuilds/${guildId}/culture`).once("value"),
+    db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`).once("value"),
   ]);
 
-  const queueRef = db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`);
+  const queueRef = db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`);
   if (!settlementSnap.exists()) {
     await queueRef.remove();
     return null;
@@ -1329,7 +1321,7 @@ const rebuildCultureNotificationQueue = async ({ db, userId, guildId }) => {
 const markBuildingTaskNotified = async ({ db, userId, guildId, instanceId, taskType }) => {
   if (!instanceId || !taskType) return false;
 
-  const placedBuildingsRef = db.ref(`/users/${userId}/${guildId}/settlement/placedBuildings`);
+  const placedBuildingsRef = db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/placedBuildings`);
   const snapshot = await placedBuildingsRef.once("value");
   if (!snapshot.exists()) return false;
 
@@ -1358,10 +1350,10 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
   const primaryTask = safeTasks[safeTasks.length - 1] || null;
   if (!primaryTask || !safeQueuePaths.length) return null;
 
-  const cultureSnap = await db.ref(`/users/${userId}/${guildId}/culture`).once("value");
+  const cultureSnap = await db.ref(`/users/${userId}/userGuilds/${guildId}/culture`).once("value");
   const culture = cultureSnap.exists() ? (cultureSnap.val() || {}) : {};
   if (culture?.cultureAlarm !== true) {
-    return db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`).remove();
+    return db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`).remove();
   }
 
   const tokenSnap = await db.ref(`/users/${userId}/fcmToken`).once("value");
@@ -1773,7 +1765,7 @@ exports.sendChatNotification = onValueCreated(
 
 exports.syncCultureNotifications = onValueWritten(
   {
-    ref: "/users/{userId}/{guildId}/settlement",
+    ref: "/users/{userId}/userGuilds/{guildId}/settlement",
     region: "europe-west1",
   },
   async (event) => {
@@ -1792,7 +1784,7 @@ exports.syncCultureNotifications = onValueWritten(
 
 exports.syncCultureNotificationsOnAlarmChange = onValueWritten(
   {
-    ref: "/users/{userId}/{guildId}/culture/cultureAlarm",
+    ref: "/users/{userId}/userGuilds/{guildId}/culture/cultureAlarm",
     region: "europe-west1",
   },
   async (event) => {
@@ -1819,7 +1811,7 @@ exports.processCultureNotificationQueue = onSchedule(
           const memberIds = Object.keys(membersSnap.val() || {});
           await Promise.all(
             memberIds.map(async (userId) => {
-            const queueRef = db.ref(`/users/${userId}/${guildId}/settlement/cultureNotificationQueue`);
+            const queueRef = db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`);
             const snapshot = await queueRef.once("value");
             if (!snapshot.exists()) return;
 
@@ -1828,7 +1820,7 @@ exports.processCultureNotificationQueue = onSchedule(
               queueItems.push({
                 ...child.val(),
                 queueKey: child.key,
-                queuePath: `/users/${userId}/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
+                queuePath: `/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
               });
             });
 
@@ -2595,7 +2587,7 @@ exports.processGbgSectorBuildChecks = onSchedule(
               const leaderInfos = await Promise.all(
                 memberIds.map(async (uid) => {
                   const [roleSnap, tokenSnap, muteSnap] = await Promise.all([
-                    db.ref(`/users/${uid}/${guildId}/role`).once("value"),
+                    db.ref(`/users/${uid}/userGuilds/${guildId}/role`).once("value"),
                     db.ref(`/users/${uid}/fcmToken`).once("value"),
                     db.ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`).once("value"),
                   ]);

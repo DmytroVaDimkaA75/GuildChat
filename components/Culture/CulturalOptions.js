@@ -37,7 +37,7 @@ const CulturalOptions = () => {
       const guildId = await AsyncStorage.getItem('guildId');
       if (!userId || !guildId) return;
 
-      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const basePath = `/users/${userId}/userGuilds/${guildId}/settlement`;
       const [techSnap, obstacleSnap] = await Promise.all([
         database().ref(`${basePath}/tech`).once('value'),
         database().ref(`${basePath}/sectorObstaclesStatic`).once('value'),
@@ -59,7 +59,7 @@ const CulturalOptions = () => {
         return false;
       }
 
-      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const basePath = `/users/${userId}/userGuilds/${guildId}/settlement`;
       const [techSnap, obstacleSnap] = await Promise.all([
         database().ref(`${basePath}/tech`).once('value'),
         database().ref(`${basePath}/sectorObstaclesStatic`).once('value'),

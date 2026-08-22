@@ -180,21 +180,21 @@ const Menu = ({ menuOpen, toggleMenu, setSelectedTitle, setSelectedComponent }) 
                 if (!userData) return;
 
                 setUserName(userData.userName || "Гравець");
-                setUserImageUrl(userData[guildId]?.imageUrl || null);
-                setUserRole(userData[guildId]?.role);
+                setUserImageUrl(userData.userGuilds?.[guildId]?.imageUrl || null);
+                setUserRole(userData.userGuilds?.[guildId]?.role);
 
                 const newAdditionalMenuOptions = [];
                 const tempWorldsData = {};
 
-                Object.keys(userData).forEach(key => {
+                Object.keys(userData.userGuilds || {}).forEach(key => {
                     if (guildsData[key]) {
                         tempWorldsData[key] = {
                             worldName: guildsData[key].worldName,
-                            imageUrl: userData[key].imageUrl,
+                            imageUrl: userData.userGuilds[key].imageUrl,
                         };
                         newAdditionalMenuOptions.push({
                             text: guildsData[key].worldName,
-                            icon: userData[key].imageUrl ? <Image source={{ uri: userData[key].imageUrl }} style={styles.roundIcon} /> : <View style={[styles.roundIcon, {backgroundColor: '#444'}]} />,
+                            icon: userData.userGuilds[key].imageUrl ? <Image source={{ uri: userData.userGuilds[key].imageUrl }} style={styles.roundIcon} /> : <View style={[styles.roundIcon, {backgroundColor: '#444'}]} />,
                         });
                     }
                 });

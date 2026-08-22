@@ -768,7 +768,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
           }
 
           const otherGuilds = {};
-          for (let key in usersData) {
+          for (let key in (usersData.userGuilds || {})) {
             if (key.includes('_') && key !== guildId) {
               const otherGuildRef = database().ref(`guilds/${key}`);
               const otherGuildSnapshot = await otherGuildRef.once('value');
@@ -839,7 +839,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
         return;
       }
 
-      const settlementPath = `users/${userId}/${activeGuildId}/settlement`;
+      const settlementPath = `users/${userId}/userGuilds/${activeGuildId}/settlement`;
       const settlementSnap = await database().ref(settlementPath).once('value');
 
       if (!settlementSnap.exists()) {
@@ -1031,7 +1031,7 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
         if (cancelled) return;
 
         userRoleRef = database().ref(
-          `users/${userId}/${activeGuildId}/role`
+          `users/${userId}/userGuilds/${activeGuildId}/role`
         );
         roleListener = (snapshot) => {
           if (cancelled) return;
@@ -1365,7 +1365,7 @@ export default function MainContent() {
     } else if (route.type === 'culture_build_ready') {
       requests.push(
         database()
-          .ref(`users/${userId}/${route.guildId}/role`)
+          .ref(`users/${userId}/userGuilds/${route.guildId}/role`)
           .once('value')
       );
     }

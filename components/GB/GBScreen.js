@@ -30,7 +30,7 @@ const GBScreen = ({ navigation }) => {
         if (!guildId) throw new Error(t("gbScreen.guildIdError")); // "Не вдалося отримати guildId"
 
         // Отримання ролі користувача з Firebase (НОВИЙ СИНТАКСИС)
-        const roleRef = database().ref(`users/${userId}/${guildId}/role`);
+        const roleRef = database().ref(`users/${userId}/userGuilds/${guildId}/role`);
         const roleSnapshot = await roleRef.once('value');
         
         if (!roleSnapshot.exists()) {

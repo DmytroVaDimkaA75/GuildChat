@@ -23,7 +23,7 @@ test("developer has the same Telegram guild-management access as tester", async 
   const userId = "developer_42";
   const values = new Map([
     [`/guilds/${guildId}/guildUsers/${userId}`, true],
-    [`/users/${userId}/${guildId}/role`, "developer"],
+    [`/users/${userId}/userGuilds/${guildId}/role`, "developer"],
   ]);
   const database = () => ({
     ref: (path) => ({
@@ -308,7 +308,7 @@ const createSuccessfulWebhookHarness = () => {
       },
     ],
     [`/guilds/${guildId}/guildUsers/${userId}`, true],
-    [`/users/${userId}/${guildId}/role`, "guildLeader"],
+    [`/users/${userId}/userGuilds/${guildId}/role`, "guildLeader"],
     [`/guilds/${guildId}/guildName`, "Test guild"],
   ]);
   const activeListeners = new Map();

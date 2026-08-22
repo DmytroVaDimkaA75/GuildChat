@@ -1,0 +1,147 @@
+
+=== Deploying to 'foechat-b903e'...
+
+i  deploying functions
+i  functions: preparing codebase default for deployment
+i  functions: ensuring required API cloudfunctions.googleapis.com is enabled...
+i  functions: ensuring required API cloudbuild.googleapis.com is enabled...
+i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled...
+⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory.
+⚠  functions: Please note that there will be breaking changes when you upgrade.
+i  functions: Loading and analyzing source code for codebase default to determine what to deploy
+Serving at port 8803
+
+i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled...
+i  functions: preparing functions directory for uploading...
+i  functions: packaged /workspaces/GuildChat/functions (145.42 KB) for uploading
+i  functions: ensuring required API cloudscheduler.googleapis.com is enabled...
+i  functions: ensuring required API run.googleapis.com is enabled...
+i  functions: ensuring required API eventarc.googleapis.com is enabled...
+i  functions: ensuring required API pubsub.googleapis.com is enabled...
+i  functions: ensuring required API storage.googleapis.com is enabled...
+i  functions: generating the service identity for pubsub.googleapis.com...
+i  functions: generating the service identity for eventarc.googleapis.com...
+i  functions: ensuring required API secretmanager.googleapis.com is enabled...
+⚠  functions: The following functions will newly be retried in case of failure: ensureGbgWidgetSnapshotForSubscription(europe-west1), onGbgMapWrite(europe-west1), onGbgOpponentsWrite(europe-west1), onGbgSectorOwnerChange(europe-west1). Retried executions are billed as any other execution, and functions are retried repeatedly until they either successfully execute or the maximum retry period has elapsed, which can be up to 7 days. For safety, you might want to ensure that your functions are idempotent; see https://firebase.google.com/docs/functions/retries to learn more.
+[34m?[39m [1mWould you like to proceed with deployment?[22m [2m(Y/n)[22m[52G[53G[2K[G[34m?[39m [1mWould you like to proceed with deployment?[22m [2m(Y/n)[22m y[53G[52G[2K[G[32m✔[39m [1mWould you like to proceed with deployment?[22m [36mYes[39m[49G
+[?25hi  functions: ensuring 12707765363-compute@developer.gserviceaccount.com access to secret TELEGRAM_BOT_TOKEN.
+✔  secretmanager: Granted roles/secretmanager.secretAccessor on projects/foechat-b903e/secrets/TELEGRAM_BOT_TOKEN to 12707765363-compute@developer.gserviceaccount.com
+✔  functions: ensured 12707765363-compute@developer.gserviceaccount.com access to TELEGRAM_BOT_TOKEN.
+✔  functions: functions source uploaded successfully
+i  functions: Skipping the deploy of unchanged functions.
+i  functions: creating Node.js 22 (2nd Gen) function createTelegramBindingCode(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function testTelegramGuildConnection(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function disconnectTelegramGuild(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function telegramWebhook(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function onGbgOpponentsWrite(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function onGbgMapWrite(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function onGbgSectorOwnerChange(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function ensureGbgWidgetSnapshotForSubscription(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function sendChatNotification(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function syncCultureNotifications(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function syncCultureNotificationsOnAlarmChange(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function processCultureNotificationQueue(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function sendScheduledMessages(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function syncGbgNotifications(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function processGbgNotificationQueue(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function scheduleGbgSectorBuildCheck(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function processGbgSectorBuildChecks(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function sendGbgHelpNotification(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function calculateGreatBuildingGuarantee(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function calculateGreatBuildingGuaranteeOnUpdatedAt(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function notifyExpressOwnerCancellation(europe-west1)...
+i  functions: creating Node.js 22 (2nd Gen) function processScheduledExpressUpgrades(europe-west1)...
+✔  functions[getLinkPreview(europe-west1)] Skipped (No changes detected)
+✔  functions[getYouTubeChannelVideos(europe-west1)] Skipped (No changes detected)
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=calculateGreatBuildingGuarantee had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/calculategreatbuildingguarantee-347511: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/calculateGreatBuildingGuarantee
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/calculateGreatBuildingGuarantee
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=onGbgSectorOwnerChange had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/ongbgsectorownerchange-268142: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgSectorOwnerChange
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgSectorOwnerChange
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=syncGbgNotifications had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/syncgbgnotifications-449702: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncGbgNotifications
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncGbgNotifications
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=onGbgOpponentsWrite had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/ongbgopponentswrite-115064: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgOpponentsWrite
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgOpponentsWrite
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=syncCultureNotificationsOnAlarmChange had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/syncculturenotificationsonalarmchange-784316: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncCultureNotificationsOnAlarmChange
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncCultureNotificationsOnAlarmChange
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=scheduleGbgSectorBuildCheck had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/schedulegbgsectorbuildcheck-161313: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/scheduleGbgSectorBuildCheck
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/scheduleGbgSectorBuildCheck
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=syncCultureNotifications had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/syncculturenotifications-041849: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncCultureNotifications
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/syncCultureNotifications
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=notifyExpressOwnerCancellation had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/notifyexpressownercancellation-242481: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/notifyExpressOwnerCancellation
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/notifyExpressOwnerCancellation
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=sendChatNotification had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/sendchatnotification-554431: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/sendChatNotification
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/sendChatNotification
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=ensureGbgWidgetSnapshotForSubscription had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/ensuregbgwidgetsnapshotforsubscription-789473: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/ensureGbgWidgetSnapshotForSubscription
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/ensureGbgWidgetSnapshotForSubscription
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=calculateGreatBuildingGuaranteeOnUpdatedAt had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/calculategreatbuildingguaranteeonupdatedat-293955: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/calculateGreatBuildingGuaranteeOnUpdatedAt
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/calculateGreatBuildingGuaranteeOnUpdatedAt
+✔  functions[createTelegramBindingCode(europe-west1)] Successful create operation.
+⚠  functions: Request to https://cloudfunctions.googleapis.com/v2/projects/foechat-b903e/locations/europe-west1/functions?functionId=onGbgMapWrite had HTTP Error: 400, Validation failed for trigger projects/foechat-b903e/locations/europe-west1/triggers/ongbgmapwrite-422956: Invalid resource state for "": Permission denied while using the Eventarc Service Agent. If you recently started to use Eventarc, it may take a few minutes before all necessary permissions are propagated to the Service Agent. Otherwise, verify that it has Eventarc Service Agent role.
+⚠  functions: Since this is your first time using 2nd gen functions, we need a little bit longer to finish setting everything up. Retry the deployment in a few minutes.
+⚠  functions:  failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgMapWrite
+Failed to create function projects/foechat-b903e/locations/europe-west1/functions/onGbgMapWrite
+✔  functions[disconnectTelegramGuild(europe-west1)] Successful create operation.
+✔  functions[testTelegramGuildConnection(europe-west1)] Successful create operation.
+✔  functions[sendGbgHelpNotification(europe-west1)] Successful create operation.
+✔  functions[telegramWebhook(europe-west1)] Successful create operation.
+✔  functions[processGbgSectorBuildChecks(europe-west1)] Successful create operation.
+✔  functions[sendScheduledMessages(europe-west1)] Successful create operation.
+✔  functions[processGbgNotificationQueue(europe-west1)] Successful create operation.
+✔  functions[processCultureNotificationQueue(europe-west1)] Successful create operation.
+✔  functions[processScheduledExpressUpgrades(europe-west1)] Successful create operation.
+
+Functions deploy had errors with the following functions:
+	calculateGreatBuildingGuarantee(europe-west1)
+	calculateGreatBuildingGuaranteeOnUpdatedAt(europe-west1)
+	ensureGbgWidgetSnapshotForSubscription(europe-west1)
+	notifyExpressOwnerCancellation(europe-west1)
+	onGbgMapWrite(europe-west1)
+	onGbgOpponentsWrite(europe-west1)
+	onGbgSectorOwnerChange(europe-west1)
+	scheduleGbgSectorBuildCheck(europe-west1)
+	sendChatNotification(europe-west1)
+	syncCultureNotifications(europe-west1)
+	syncCultureNotificationsOnAlarmChange(europe-west1)
+	syncGbgNotifications(europe-west1)
+Function URL (telegramWebhook(europe-west1)): https://europe-west1-foechat-b903e.cloudfunctions.net/telegramWebhook
+⚠  functions: No cleanup policy detected for repositories in europe-west1. This may result in a small monthly bill as container images accumulate over time.
+[34m?[39m [1mHow many days do you want to keep container images before they're deleted?[22m [2m(1)[22m
+[1A[82G[1B[2K[1A[2K[G[34m?[39m [1mHow many days do you want to keep container images before they're deleted?[22m [2m(1)[22m
+[1A[82G[1B[2K[1A[2K[G[34m?[39m [1mHow many days do you want to keep container images before they're deleted?[22m 1[79G[2K[G[32m✔[39m [1mHow many days do you want to keep container images before they're deleted?[22m [36m1[39m[79G
+[?25hi  functions: Configuring cleanup policy for repository in europe-west1. Images older than 1 days will be automatically deleted.
+i  functions: Configured cleanup policy for repository in europe-west1.
+Error: There was an error deploying functions:
+- Error Failed to create function calculateGreatBuildingGuarantee in region europe-west1
+- Error Failed to create function onGbgSectorOwnerChange in region europe-west1
+- Error Failed to create function syncGbgNotifications in region europe-west1
+- Error Failed to create function onGbgOpponentsWrite in region europe-west1
+- Error Failed to create function syncCultureNotificationsOnAlarmChange in region europe-west1
+- Error Failed to create function scheduleGbgSectorBuildCheck in region europe-west1
+- Error Failed to create function syncCultureNotifications in region europe-west1
+- Error Failed to create function notifyExpressOwnerCancellation in region europe-west1
+- Error Failed to create function sendChatNotification in region europe-west1
+- Error Failed to create function ensureGbgWidgetSnapshotForSubscription in region europe-west1
+- Error Failed to create function calculateGreatBuildingGuaranteeOnUpdatedAt in region europe-west1
+- Error Failed to create function onGbgMapWrite in region europe-west1

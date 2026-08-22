@@ -6,7 +6,7 @@ export const getGbgBotIds = async (guildId, memberIds) => {
   if (!guildId || !memberIds?.length) return new Set();
   const roles = await Promise.all(memberIds.map(async (userId) => {
     try {
-      const snapshot = await database().ref(`users/${userId}/${guildId}/role`).once('value');
+      const snapshot = await database().ref(`users/${userId}/userGuilds/${guildId}/role`).once('value');
       return snapshot.val() === GBG_BOT_ROLE ? String(userId) : null;
     } catch (_error) {
       return null;

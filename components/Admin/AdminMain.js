@@ -63,7 +63,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
       const userId = await AsyncStorage.getItem('userId');
       const guildId = await AsyncStorage.getItem('guildId');
       if (userId && guildId) {
-        await database().ref(`/users/${userId}/${guildId}/culture/productionPreference`).set(idx);
+        await database().ref(`/users/${userId}/userGuilds/${guildId}/culture/productionPreference`).set(idx);
       }
     } catch (e) {
       console.error(e);
@@ -77,7 +77,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
       const userId = await AsyncStorage.getItem('userId');
       const guildId = await AsyncStorage.getItem('guildId');
       if (userId && guildId) {
-        await database().ref(`/users/${userId}/${guildId}/culture/cultureAlarm`).set(newVal);
+        await database().ref(`/users/${userId}/userGuilds/${guildId}/culture/cultureAlarm`).set(newVal);
       }
     } catch (e) {
       console.error(e);
@@ -116,7 +116,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
             });
           }
           if (userId && guildId) {
-            const cultureSnap = await database().ref(`/users/${userId}/${guildId}/culture`).once('value');
+            const cultureSnap = await database().ref(`/users/${userId}/userGuilds/${guildId}/culture`).once('value');
             if (cultureSnap.exists()) {
               const data = cultureSnap.val();
               if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
@@ -140,10 +140,11 @@ const AdminMain = ({ canAccessTasks = false }) => {
           if (!snap.exists()) return;
           
           const data = snap.val();
-          const keys = Object.keys(data).filter(k => k.includes('_'));
+          const userGuilds = data.userGuilds || {};
+          const keys = Object.keys(userGuilds);
           const arr = await Promise.all(
             keys.map(async id => {
-              const role = data[id].role;
+              const role = userGuilds[id].role;
               const worldSnap = await database().ref(`/guilds/${id}/worldName`).once('value');
               return { guildId: id, role, worldName: worldSnap.val() || 'Не знайдено' };
             })
@@ -207,7 +208,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
             let role = '';
             let password = '';
             try {
-              const roleSnap = await database().ref(`/users/${member.id}/${guildId}/role`).once('value');
+              const roleSnap = await database().ref(`/users/${member.id}/userGuilds/${guildId}/role`).once('value');
               if (roleSnap.exists()) role = roleSnap.val();
 
               const passSnap = await database().ref(`/users/${member.id}/password`).once('value');
@@ -248,7 +249,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
       const newRole = checked
         ? USER_ROLES.GUILD_LEADER
         : USER_ROLES.MEMBER;
-      await database().ref(`/users/${userId}/${guildId}/role`).set(newRole);
+      await database().ref(`/users/${userId}/userGuilds/${guildId}/role`).set(newRole);
       setGuildMembersList(prev =>
         prev.map(m => (m.id === userId ? { ...m, role: newRole } : m))
       );
@@ -273,10 +274,10 @@ const AdminMain = ({ canAccessTasks = false }) => {
               const updates = {};
               guildMembersList.forEach((candidate) => {
                 if (candidate.role === USER_ROLES.GBG_BOT && candidate.id !== member.id) {
-                  updates[`users/${candidate.id}/${guildId}/role`] = USER_ROLES.MEMBER;
+                  updates[`users/${candidate.id}/userGuilds/${guildId}/role`] = USER_ROLES.MEMBER;
                 }
               });
-              updates[`users/${member.id}/${guildId}/role`] = USER_ROLES.GBG_BOT;
+              updates[`users/${member.id}/userGuilds/${guildId}/role`] = USER_ROLES.GBG_BOT;
               await database().ref().update(updates);
               setGuildMembersList((current) => current.map((candidate) => ({
                 ...candidate,
@@ -311,7 +312,7 @@ const AdminMain = ({ canAccessTasks = false }) => {
     try {
       const response = await fetch(`https://foe.scoredb.io/${worldId}/Player/${botId}`);
       if (!response.ok) throw new Error(`scoredb-${response.status}`);
-      await database().ref(`/users/${botId}/${guildId}/role`).set(USER_ROLES.GB_BOT);
+      await database().ref(`/users/${botId}/userGuilds/${guildId}/role`).set(USER_ROLES.GB_BOT);
       Alert.alert('Готово', `Гравцю ${botId} надано роль GBbot.`);
     } catch (_error) {
       Alert.alert('Гравця не знайдено', `ScoreDB не підтвердив гравця ${botId} у світі ${worldId}.`);

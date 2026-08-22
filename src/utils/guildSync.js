@@ -91,7 +91,7 @@ export const syncGuildMembers = async ({
       await Promise.all(
         missingMembers.map(async ({ userId }) => {
           const updates = {
-            [`/users/${userId}/${guildId}`]: null,
+            [`/users/${userId}/userGuilds/${guildId}`]: null,
             [`/guilds/${guildId}/guildUsers/${userId}`]: null,
             ...buildChatRemovalUpdates(guildId, chatsData, userId),
           };
@@ -114,7 +114,7 @@ export const syncGuildMembers = async ({
           const userRef = database().ref(`users/${userId}`);
           const snapshot = await userRef.once('value');
           const guildData = {
-            [guildId]: {
+            [`userGuilds/${guildId}`]: {
               imageUrl: imageUrl,
               role: 'member',
             },
@@ -127,7 +127,7 @@ export const syncGuildMembers = async ({
               userId,
               'your-encryption-key'
             ).toString();
-            await userRef.set({
+            await userRef.update({
               userName,
               password: encryptedUserId,
               ...guildData,

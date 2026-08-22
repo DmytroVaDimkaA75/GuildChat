@@ -38,37 +38,61 @@ const AdminSelectScreen = ({
   const [pendingAccount, setPendingAccount] = useState(null);
   const { setGuildId } = useContext(GuildContext);
 
+  const getCreationErrorMessage = (error, stage) => {
+    const errorCode = String(error?.code || "").trim();
+    const errorMessage = String(error?.message || error || "").trim();
+    const details = [stage, errorCode, errorMessage].filter(Boolean).join(" · ");
+
+    return details
+      ? `${t("adminSelect.creationErrorMessage")}\n\n${details}`
+      : t("adminSelect.creationErrorMessage");
+  };
+
   const handleItemPress = (item) => {
     setSelectedMember(item);
   };
 
   const handleConfirm = async () => {
     if (!selectedMember || isCreating) return;
-
-    const selectedUserId = selectedMember.linkUrl.split("/").pop();
-    const formattedGuildId = `${uril}_${guildId}`;
-
-    // ИСПРАВЛЕНО: Правильный синтаксис
-    const guildRef = database().ref(`guilds/${formattedGuildId}`);
-    const guildInfo = {
-      guildName: clanCaption,
-      worldName: selectedWorld,
-      guildUsers: Object.fromEntries(
-        guildData.map((member) => {
-          const userId = member.linkUrl.split("/").pop();
-          return [
-            userId,
-            {
-              userName: member.name,
-              imageUrl: `https://foe.scoredb.io${member.imageUrl}`,
-            },
-          ];
-        })
-      ),
-    };
+    let creationStage = "validation";
 
     try {
       setIsCreating(true);
+      const selectedUserId = String(
+        selectedMember.linkUrl?.split("/").filter(Boolean).pop() || ""
+      ).trim();
+      const formattedGuildId = `${uril}_${guildId}`.trim();
+      const validMembers = guildData
+        .map((member) => ({
+          ...member,
+          userId: String(
+            member.linkUrl?.split("/").filter(Boolean).pop() || ""
+          ).trim(),
+        }))
+        .filter(({ userId }) => userId);
+
+      if (!selectedUserId || !formattedGuildId || validMembers.length === 0) {
+        throw new Error("Invalid guild or player data");
+      }
+
+      const guildRef = database().ref(`guilds/${formattedGuildId}`);
+      const guildInfo = {
+        guildName: clanCaption,
+        worldName: selectedWorld,
+        guildUsers: Object.fromEntries(
+          validMembers.map((member) => [
+            member.userId,
+            {
+              userName: member.name,
+              imageUrl: member.imageUrl
+                ? `https://foe.scoredb.io${member.imageUrl}`
+                : "",
+            },
+          ])
+        ),
+      };
+
+      creationStage = "read guild settings";
       const gbgGoalSnapshot = await guildRef
         .child("setting/GBGGoal")
         .once("value");
@@ -81,17 +105,20 @@ const AdminSelectScreen = ({
       }
 
       // 3. Оновлюємо лише базові дані, не стираючи налаштування та контент гільдії
+      creationStage = "write guild";
       await guildRef.update(guildUpdates);
       console.log(`Дані гільдії оновлено для id: ${formattedGuildId}`);
 
       // 4. Оновлюємо / створюємо користувачів у Firebase
       const userAccounts = await Promise.all(
-        guildData.map(async (member) => {
-          const userId = member.linkUrl.split("/").pop();
-          const imageUrl = `https://foe.scoredb.io${member.imageUrl}`;
+        validMembers.map(async (member) => {
+          const userId = member.userId;
+          const imageUrl = member.imageUrl
+            ? `https://foe.scoredb.io${member.imageUrl}`
+            : "";
 
           const userGuildData = {
-            [formattedGuildId]: {
+            [`userGuilds/${formattedGuildId}`]: {
               imageUrl: imageUrl,
               role:
                 userId === selectedUserId
@@ -101,7 +128,8 @@ const AdminSelectScreen = ({
           };
 
           const userRef = database().ref(`users/${userId}`);
-          const snapshot = await userRef.once('value');
+          creationStage = `read user ${userId}`;
+          const snapshot = await userRef.once("value");
           const existingUser = snapshot.exists() ? snapshot.val() || {} : {};
           const existingAccessCode =
             typeof existingUser.password === "string"
@@ -114,6 +142,7 @@ const AdminSelectScreen = ({
               "your-encryption-key"
             ).toString();
 
+          creationStage = `write user ${userId}`;
           await userRef.update({
             ...(!snapshot.exists() ? { userName: member.name } : {}),
             ...(!existingAccessCode ? { password: accessCode } : {}),
@@ -131,6 +160,7 @@ const AdminSelectScreen = ({
       }
 
       console.log("Запрашиваю FCM токен і кешую перед збереженням облікового запису...");
+      creationStage = "notifications";
       await cachePushToken();
       await uploadPushToken(selectedUserId);
 
@@ -144,7 +174,7 @@ const AdminSelectScreen = ({
       console.error("Помилка при оновленні даних:", error);
       Alert.alert(
         t("adminSelect.creationErrorTitle"),
-        t("adminSelect.creationErrorMessage")
+        getCreationErrorMessage(error, creationStage)
       );
     } finally {
       setIsCreating(false);

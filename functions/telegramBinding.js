@@ -307,7 +307,7 @@ const createTelegramBindingFunctions = ({
         .ref(`/guilds/${normalizedGuildId}/guildUsers/${normalizedUserId}`)
         .once("value"),
       db()
-        .ref(`/users/${normalizedUserId}/${normalizedGuildId}/role`)
+        .ref(`/users/${normalizedUserId}/userGuilds/${normalizedGuildId}/role`)
         .once("value"),
     ]);
     const role = roleSnapshot.exists() ? String(roleSnapshot.val() || "") : "";

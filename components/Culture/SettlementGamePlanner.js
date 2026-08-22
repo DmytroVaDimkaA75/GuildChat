@@ -865,7 +865,7 @@ const SettlementGamePlanner = () => {
             style: 'destructive',
             onPress: async () => {
               try {
-                await database().ref(`/users/${userId}/${guildId}/settlement`).remove();
+                await database().ref(`/users/${userId}/userGuilds/${guildId}/settlement`).remove();
                 navigation.navigate('CulturalSettlements');
               } catch (error) {
                 console.error('Не вдалося видалити settlement:', error);
@@ -928,7 +928,7 @@ const SettlementGamePlanner = () => {
         };
         settingRef.on('value', onSettingValue);
 
-        cultureTestingRef = database().ref(`/users/${userId}/${guildId}/culture/testing`);
+        cultureTestingRef = database().ref(`/users/${userId}/userGuilds/${guildId}/culture/testing`);
         onCultureTestingValue = (snapshot) => {
           const testingData = snapshot.exists() ? snapshot.val() || {} : {};
           if (isMounted) {
@@ -945,7 +945,7 @@ const SettlementGamePlanner = () => {
         };
         cultureTestingRef.on('value', onCultureTestingValue, onCultureTestingError);
 
-        settlementRef = database().ref(`/users/${userId}/${guildId}/settlement`);
+        settlementRef = database().ref(`/users/${userId}/userGuilds/${guildId}/settlement`);
         onValueHandler = (snapshot) => {
           const settlementData = snapshot.exists() ? snapshot.val() : {};
 
@@ -1344,7 +1344,7 @@ const SettlementGamePlanner = () => {
       setActionError('Перешкоди можна лише видаляти.');
       return;
     }
-    const settlementPath = `/users/${identity.userId}/${identity.guildId}/settlement`;
+    const settlementPath = `/users/${identity.userId}/userGuilds/${identity.guildId}/settlement`;
 
     try {
       setActionError('');

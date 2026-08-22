@@ -140,7 +140,7 @@ const GBChatList = () => {
         const storedUserId = await AsyncStorage.getItem('userId');
         if (storedGuildId && storedUserId) {
           // НОВИЙ СИНТАКСИС
-          investRef = database().ref(`users/${storedUserId}/${storedGuildId}/myInvest`);
+          investRef = database().ref(`users/${storedUserId}/userGuilds/${storedGuildId}/myInvest`);
           onInvestChange = (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -290,7 +290,7 @@ const GBChatList = () => {
       const storedUserId = await AsyncStorage.getItem('userId');
       if (storedGuildId && storedUserId && investId) {
         // НОВИЙ СИНТАКСИС
-        const investRef = database().ref(`users/${storedUserId}/${storedGuildId}/myInvest/${investId}`);
+        const investRef = database().ref(`users/${storedUserId}/userGuilds/${storedGuildId}/myInvest/${investId}`);
         await investRef.remove();
       }
     } catch (e) {

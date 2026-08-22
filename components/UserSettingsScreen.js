@@ -123,9 +123,9 @@ const UserSettingsScreen = ({ fetch }) => {
     const allGuilds = guildSnapshot.val();
     return Object.keys(allGuilds)
       .map((guildId) => {
-        if (user[guildId]) {
+        if (user.userGuilds?.[guildId]) {
           return {
-            ...user[guildId],
+            ...user.userGuilds[guildId],
             guildId,
             ...allGuilds[guildId],
           };

@@ -123,7 +123,7 @@ const TechnologyCosts = () => {
         return false;
       }
 
-      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const basePath = `/users/${userId}/userGuilds/${guildId}/settlement`;
       await database().ref(`${basePath}/tech`).set(payload);
       await database().ref(basePath).update({
         settlementName: settlementName || null,
@@ -153,7 +153,7 @@ const TechnologyCosts = () => {
           return;
         }
 
-        const techSnap = await database().ref(`/users/${userId}/${guildId}/settlement/tech`).once('value');
+        const techSnap = await database().ref(`/users/${userId}/userGuilds/${guildId}/settlement/tech`).once('value');
         const techData = techSnap.exists() ? techSnap.val() : {};
         const nextInputs = {};
 

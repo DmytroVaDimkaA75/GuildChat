@@ -188,7 +188,7 @@ const ObstaclesMap = () => {
           return;
         }
 
-        const snap = await database().ref(`/users/${userId}/${guildId}/settlement/sectorObstaclesStatic`).once('value');
+        const snap = await database().ref(`/users/${userId}/userGuilds/${guildId}/settlement/sectorObstaclesStatic`).once('value');
         const data = snap.exists() ? snap.val() : {};
         const restoredObstacles = [];
 
@@ -241,7 +241,7 @@ const ObstaclesMap = () => {
         return false;
       }
 
-      const basePath = `/users/${userId}/${guildId}/settlement`;
+      const basePath = `/users/${userId}/userGuilds/${guildId}/settlement`;
       await database().ref(`${basePath}/sectorObstaclesStatic`).set(buildObstaclePayload());
       await database().ref(basePath).update({
         settlementName: settlementName || null,

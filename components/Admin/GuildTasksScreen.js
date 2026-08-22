@@ -151,7 +151,7 @@ export default function GuildTasksScreen({ navigation }) {
             return;
           }
 
-          roleRef = database().ref(`users/${userId}/${guildId}/role`);
+          roleRef = database().ref(`users/${userId}/userGuilds/${guildId}/role`);
           roleListener = (roleSnapshot) => {
             if (!active) return;
             const role = roleSnapshot.exists() ? roleSnapshot.val() : null;
