@@ -14,7 +14,7 @@ import {
   DrawerContentScrollView,
   DrawerToggleButton
 } from '@react-navigation/drawer';
-import { createNavigationContainerRef, DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { createNavigationContainerRef, DarkTheme, NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -90,6 +90,7 @@ const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
 const navigationRef = createNavigationContainerRef();
 const NOTIFICATION_ROUTE_VALIDATION_TIMEOUT_MS = 12000;
+const GREAT_BUILDINGS_REFRESH_COOLDOWN_MS = 60 * 1000;
 
 const createPermanentNotificationRouteError = (message) => {
   const error = new Error(message);
@@ -298,6 +299,47 @@ function GBGStack() {
 
 function GBStack({ isDeveloper = false }) {
   const { t } = useTranslation();
+
+  // This hook belongs to the GB drawer route, not to GBCenterScreen. The
+  // drawer route stays focused while navigating through its child screens,
+  // so returning from a child does not request another refresh.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const requestRefresh = async () => {
+        try {
+          const guildId = String(
+            (await AsyncStorage.getItem('guildId')) || ''
+          ).trim();
+          if (!guildId || cancelled) return;
+
+          const requestedAt = Date.now();
+          await database()
+            .ref(`guilds/${guildId}/refreshTriggers/greatBuildings`)
+            .transaction((current) => {
+              const previousRequestedAt = Number(current) || 0;
+              return requestedAt - previousRequestedAt < GREAT_BUILDINGS_REFRESH_COOLDOWN_MS
+                ? undefined
+                : requestedAt;
+            }, undefined, false);
+        } catch (error) {
+          if (!cancelled) {
+            console.warn(
+              'Не вдалося створити тригер оновлення ВС:',
+              error?.message || error
+            );
+          }
+        }
+      };
+
+      requestRefresh();
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
   return (
     <Stack.Navigator screenOptions={defaultHeaderOptions}>
       <Stack.Screen

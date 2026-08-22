@@ -1930,17 +1930,25 @@ exports.syncGbgNotifications = onValueWritten(
     const mapNameSnap = await db.ref(`/guilds/${guildId}/GBG/map`).once("value");
     const mapName = mapNameSnap.exists() ? mapNameSnap.val() : "volcano_archipelago";
 
-    const [allSectorsSnap, mapTopologySnap, currentQueueSnap] = await Promise.all([
+    const [allSectorsSnap, currentQueueSnap] = await Promise.all([
       db.ref(`/guilds/${guildId}/GBG/sectors`).once("value"),
-      db.ref(`maps/${mapName}`).once("value"),
       db.ref(`/guilds/${guildId}/GBG/gbgNotificationQueue`).once("value"),
     ]);
 
-    if (!allSectorsSnap.exists() || !mapTopologySnap.exists()) return null;
+    if (!allSectorsSnap.exists()) return null;
 
     const allSectors = allSectorsSnap.val();
-    const mapTopology = mapTopologySnap.val();
+    const normalizedMapName = normalizeWidgetMapKey(mapName);
+    const mapTopology = WIDGET_MAP_NEIGHBORS[normalizedMapName];
     const currentQueue = currentQueueSnap.exists() ? currentQueueSnap.val() : {};
+
+    if (String(mapName || "").toLowerCase() !== normalizedMapName) {
+      logger.warn("[GBG] Unknown map name; using bundled topology", {
+        guildId,
+        mapName: String(mapName || ""),
+        fallbackMapName: normalizedMapName,
+      });
+    }
 
     const mySectors = [];
     Object.keys(allSectors).forEach((key) => {

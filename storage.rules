@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isImage(maxSizeBytes) {
+      return request.resource != null
+        && request.resource.size <= maxSizeBytes
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function isAudio(maxSizeBytes) {
+      return request.resource != null
+        && request.resource.size <= maxSizeBytes
+        && (
+          request.resource.contentType.matches('audio/.*')
+          || request.resource.contentType == 'application/octet-stream'
+        );
+    }
+
+    // Images attached to ordinary guild-chat messages.
+    match /images/{fileName} {
+      allow read: if true;
+      allow create, update: if isImage(15 * 1024 * 1024);
+    }
+
+    // Voice messages recorded in guild chats.
+    match /voiceMessages/{chatId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isAudio(25 * 1024 * 1024);
+    }
+
+    // Group-chat avatar.
+    match /guilds/{guildId}/chats/{chatId}/groupAvatar.jpg {
+      allow read: if true;
+      allow create, update: if isImage(5 * 1024 * 1024);
+    }
+
+    // Community avatar.
+    match /communities/{communityId}/avatar.jpg {
+      allow read: if true;
+      allow create, update: if isImage(5 * 1024 * 1024);
+    }
+
+    // Images attached to community-channel posts. The application also
+    // removes these objects when their posts are deleted.
+    match /communityImages/{communityId}/{channelId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isImage(15 * 1024 * 1024);
+      allow delete: if true;
+    }
+
+    // Kept for the legacy ImageUploader component.
+    match /chatImages/{fileName} {
+      allow read: if true;
+      allow create, update: if isImage(15 * 1024 * 1024);
+    }
+  }
+}
