@@ -9,7 +9,6 @@ import {
   FlatList,
   Image,
   Platform,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +16,8 @@ import {
   View,
 } from 'react-native';
 import CameraIcon from "../ico/camera.svg";
+import { DarkThemeColors as C } from '../../constants/theme';
+import { getGbgBotIds } from '../../src/utils/guildBots';
 
 const CreateGroupScreen = () => {
   const navigation = useNavigation();
@@ -116,11 +117,26 @@ const CreateGroupScreen = () => {
         members[memberId] = true;
       });
 
+      const guildUsersSnapshot = await database().ref(`guilds/${guildId}/guildUsers`).once('value');
+      const botIds = await getGbgBotIds(
+        guildId,
+        Object.keys(guildUsersSnapshot.val() || {})
+      );
+      const hiddenMembers = {};
+      botIds.forEach((botId) => {
+        members[botId] = true;
+        hiddenMembers[botId] = true;
+      });
+
       const chatData = {
         type: 'group',
         name: groupName || 'Новая группа',
         members,
       };
+
+      if (Object.keys(hiddenMembers).length > 0) {
+        chatData.hiddenMembers = hiddenMembers;
+      }
 
       if (chatImage) {
         const avatarRef = storage().ref(`guilds/${guildId}/chats/${newChatRef.key}/groupAvatar.jpg`);
@@ -167,10 +183,10 @@ const CreateGroupScreen = () => {
       headerRight: () => (
         <TouchableOpacity
           onPress={handleCreateGroup}
-          style={{ marginRight: 15, opacity: groupName ? 1 : 0.5 }}
-          disabled={!groupName}
+          style={[styles.headerAction, !groupName.trim() && styles.headerActionDisabled]}
+          disabled={!groupName.trim()}
         >
-          <Ionicons name="checkmark" size={24} color="white" />
+          <Ionicons name="checkmark" size={21} color="#fff" />
         </TouchableOpacity>
       ),
     });
@@ -200,21 +216,28 @@ const CreateGroupScreen = () => {
           {chatImage ? (
             <Image source={{ uri: chatImage }} style={styles.chatImage} />
           ) : (
-            <CameraIcon width={40} height={40} fill="#fff" style={styles.placeholderIcon} />
+            <CameraIcon width={30} height={30} fill={C.primarySoft} style={styles.placeholderIcon} />
           )}
+          <View style={styles.cameraBadge}>
+            <Ionicons name="add" size={14} color="#fff" />
+          </View>
         </TouchableOpacity>
-        <TextInput
-          style={styles.groupNameInput}
-          placeholder={guildName}
-          value={groupName}
-          onChangeText={setGroupName}
-        />
+        <View style={styles.nameField}>
+          <Text style={styles.inputLabel}>Назва групи</Text>
+          <TextInput
+            autoCapitalize="sentences"
+            placeholder={guildName || 'Введіть назву'}
+            placeholderTextColor={C.textSecondary}
+            selectionColor={C.primary}
+            style={styles.groupNameInput}
+            value={groupName}
+            onChangeText={setGroupName}
+          />
+        </View>
       </View>
 
-      <View style={styles.divider} />
-
       <Text style={styles.membersTitle}>
-        {membersInfo.length} участников
+        Учасники · {membersInfo.length}
       </Text>
 
       <FlatList
@@ -222,6 +245,7 @@ const CreateGroupScreen = () => {
         keyExtractor={(item) => item.id}
         renderItem={renderMember}
         style={styles.membersList}
+        contentContainerStyle={styles.membersListContent}
       />
     </View>
   );
@@ -230,49 +254,79 @@ const CreateGroupScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f1115',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    backgroundColor: C.background,
   },
   topSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    margin: 14,
+    padding: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
   },
   chatImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#0088cc',
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: C.surfaceElevated,
+    borderWidth: 1,
+    borderColor: C.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
     overflow: 'hidden',
   },
   chatImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
   },
   placeholderIcon: {
     backgroundColor: 'transparent',
   },
-  groupNameInput: {
-    flex: 1,
-    fontSize: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#0088cc',
-    paddingVertical: 8,
+  cameraBadge: {
+    position: 'absolute',
+    right: 3,
+    bottom: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.primary,
+    borderWidth: 2,
+    borderColor: C.surface,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#ddd',
-    marginHorizontal: 16,
+  nameField: { flex: 1 },
+  inputLabel: {
+    color: C.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  groupNameInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: C.text,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
+    backgroundColor: C.background,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 11,
   },
   membersTitle: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    fontSize: 16,
-    color: '#9aa3b2',
+    marginHorizontal: 18,
+    marginTop: 2,
+    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: '800',
+    color: C.primarySoft,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   membersList: {
     flex: 1,
@@ -280,42 +334,61 @@ const styles = StyleSheet.create({
   memberItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    minHeight: 70,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    paddingHorizontal: 13,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
   },
   avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#0088cc',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: C.surfaceElevated,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
   },
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
   },
   noAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ccc',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: C.surfaceElevated,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarInitials: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: C.primarySoft,
+    fontWeight: '800',
   },
   memberName: {
     fontSize: 16,
-    color: '#f4f7fb',
+    fontWeight: '700',
+    color: C.text,
   },
+  membersListContent: {
+    paddingBottom: 20,
+  },
+  headerAction: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.primary,
+  },
+  headerActionDisabled: { opacity: 0.35 },
 });
 
 export default CreateGroupScreen;

@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import database from '@react-native-firebase/database';
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +18,7 @@ import { GuildContext } from "../GuildContext";
 import { DarkThemeColors } from "../constants/theme";
 import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
 
-const UserSettingsScreen = ({ fetch }) => {
+const UserSettingsScreen = ({ fetch, navigation }) => {
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [guilds, setGuilds] = useState([]);
@@ -137,19 +138,31 @@ const UserSettingsScreen = ({ fetch }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{t("userSettings.requestAccessCode")}</Text>
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          onChangeText={setPassword}
-          value={password}
-          placeholder={t("userSettings.accessCodePlaceholder")}
-          placeholderTextColor={DarkThemeColors.textSecondary}
-        />
-      </View>
-      <TouchableOpacity style={styles.button} onPress={apply}>
-        <Text style={styles.buttonText}>{t("userSettings.apply")}</Text>
+      <TouchableOpacity activeOpacity={0.8} onPress={() => navigation?.goBack()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={22} color={DarkThemeColors.text} />
       </TouchableOpacity>
+      <View style={styles.card}>
+        <View style={styles.iconBox}><Ionicons name="key-outline" size={29} color={DarkThemeColors.primary} /></View>
+        <Text style={styles.title}>{t("userSettings.requestAccessCode")}</Text>
+        <Text style={styles.subtitle}>Введіть код, отриманий від керівника вашої гільдії</Text>
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color={DarkThemeColors.textSecondary} />
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectionColor={DarkThemeColors.primary}
+            style={styles.input}
+            onChangeText={setPassword}
+            value={password}
+            placeholder={t("userSettings.accessCodePlaceholder")}
+            placeholderTextColor={DarkThemeColors.textSecondary}
+          />
+        </View>
+        <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={apply}>
+          <Text style={styles.buttonText}>{t("userSettings.apply")}</Text>
+          <Ionicons name="arrow-forward" size={19} color="#fff" />
+        </TouchableOpacity>
+      </View>
       <Modal
         visible={guilds.length > 0}
         animationType="slide"
@@ -158,6 +171,7 @@ const UserSettingsScreen = ({ fetch }) => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{t("userSettings.selectGuildTitle")}</Text>
             <FlatList
               data={guilds}
@@ -167,19 +181,17 @@ const UserSettingsScreen = ({ fetch }) => {
                   style={[styles.modalButton, { marginBottom: 10 }]}
                   onPress={() => selectGuild(item)}
                 >
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.flagImage}
-                  />
+                  {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.flagImage} /> : <View style={styles.guildIcon}><Ionicons name="shield-outline" size={20} color={DarkThemeColors.primary} /></View>}
                   <Text style={styles.modalButtonText}>{item.guildName}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={DarkThemeColors.textSecondary} />
                 </TouchableOpacity>
               )}
             />
             <TouchableOpacity
-              style={[styles.modalButton, { marginBottom: 10 }]}
+              style={styles.closeButton}
               onPress={() => setGuilds([])}
             >
-              <Text style={styles.modalButtonText}>{t("userSettings.close")}</Text>
+              <Text style={styles.closeButtonText}>{t("userSettings.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -191,39 +203,50 @@ const UserSettingsScreen = ({ fetch }) => {
 const styles = StyleSheet.create({
     container: {
       flex: 1,
-      padding: 40,
+      paddingHorizontal: 22,
       width: "100%",
       justifyContent: "center",
-      alignItems: "center",
       backgroundColor: DarkThemeColors.background,
     },
+    card: { width: "100%", maxWidth: 460, alignSelf: "center", backgroundColor: DarkThemeColors.surface, borderWidth: 1, borderColor: DarkThemeColors.border, borderRadius: 22, padding: 20 },
+    backButton: { position: "absolute", top: 18, left: 18, zIndex: 5, width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: DarkThemeColors.surface, borderWidth: 1, borderColor: DarkThemeColors.border },
+    iconBox: { width: 56, height: 56, borderRadius: 18, backgroundColor: DarkThemeColors.surfaceElevated, alignItems: "center", justifyContent: "center", alignSelf: "center", marginBottom: 16 },
     title: {
       fontSize: 24,
       fontWeight: "bold",
-      marginBottom: 20,
+      marginBottom: 7,
       textAlign: "center",
       color: DarkThemeColors.text,
     },
+    subtitle: { color: DarkThemeColors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: "center", marginBottom: 20 },
     inputContainer: {
-      marginBottom: 10,
+      minHeight: 52,
+      marginBottom: 12,
       width: "100%",
-    },
-    input: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 14,
       borderWidth: 1,
       borderColor: DarkThemeColors.border,
-      padding: 10,
-      borderRadius: 5,
-      backgroundColor: DarkThemeColors.surface,
+      borderRadius: 13,
+      backgroundColor: DarkThemeColors.background,
+    },
+    input: {
+      flex: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
       color: DarkThemeColors.text,
-      width: "100%",
+      fontSize: 15,
     },
     button: {
       backgroundColor: DarkThemeColors.primary,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderRadius: 5,
-      marginBottom: 10,
+      minHeight: 50,
+      paddingHorizontal: 18,
+      borderRadius: 13,
       alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
       width: "100%",
     },
     buttonText: {
@@ -239,20 +262,25 @@ const styles = StyleSheet.create({
     modalContent: {
       backgroundColor: DarkThemeColors.surface,
       padding: 20,
-      borderTopLeftRadius: 10,
-      borderTopRightRadius: 10,
-      maxHeight: "50%",
+      paddingTop: 10,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      borderWidth: 1,
+      borderColor: DarkThemeColors.border,
+      maxHeight: "65%",
     },
+    modalHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: DarkThemeColors.border, alignSelf: "center", marginBottom: 18 },
     modalTitle: {
       fontSize: 20,
       fontWeight: "bold",
-      marginBottom: 10,
+      marginBottom: 16,
       color: DarkThemeColors.text,
     },
     modalButton: {
-      backgroundColor: DarkThemeColors.primary,
-      padding: 10,
-      borderRadius: 5,
+      backgroundColor: DarkThemeColors.surfaceElevated,
+      minHeight: 58,
+      paddingHorizontal: 13,
+      borderRadius: 13,
       marginBottom: 10,
       borderColor: DarkThemeColors.border,
       borderWidth: 1,
@@ -262,15 +290,18 @@ const styles = StyleSheet.create({
     modalButtonText: {
       color: DarkThemeColors.text,
       fontSize: 16,
-      fontWeight: "bold",
-      textAlign: "center",
+      fontWeight: "700",
       flex: 1,
     },
     flagImage: {
-      width: 36,
-      height: 24,
-      marginRight: 10,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      marginRight: 12,
     },
+    guildIcon: { width: 40, height: 40, borderRadius: 12, marginRight: 12, alignItems: "center", justifyContent: "center", backgroundColor: DarkThemeColors.background },
+    closeButton: { minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: DarkThemeColors.border, alignItems: "center", justifyContent: "center", marginTop: 4 },
+    closeButtonText: { color: DarkThemeColors.primarySoft, fontSize: 15, fontWeight: "800" },
   });
 
 export default UserSettingsScreen;

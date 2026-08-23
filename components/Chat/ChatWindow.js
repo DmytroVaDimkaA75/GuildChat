@@ -69,7 +69,7 @@ import storage from '@react-native-firebase/storage';
 import DatePicker from 'react-native-date-picker';
 import moment from 'moment-timezone';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
-import { filterGbgBots } from '../../src/utils/guildBots';
+import { filterGbgBots, getGbgBotIds } from '../../src/utils/guildBots';
 import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
@@ -1281,7 +1281,7 @@ const ChatWindow = ({ route, navigation }) => {
 
     setChatDeletedAt(null);
     const chatRef = database().ref(`guilds/${guildId}/chats/${chatId}`);
-    const listener = chatRef.on('value', (snap) => {
+    const listener = chatRef.on('value', async (snap) => {
       const data = snap.val();
       if (!data) return;
       setChatDeletedAt(Number(data.deletedFor?.[userId] || 0));
@@ -1300,10 +1300,16 @@ const ChatWindow = ({ route, navigation }) => {
         }
       } else {
         setHeaderUserId(null);
+        const memberIds = Object.keys(data.members || {});
+        const roleBasedBotIds = await getGbgBotIds(guildId, memberIds);
+        const hiddenMemberIds = new Set([
+          ...Object.keys(data.hiddenMembers || {}),
+          ...roleBasedBotIds,
+        ]);
         setGroupHeader({
           name: data.name || '',
           groupAvatar: data.groupAvatar || null,
-          memberCount: Object.keys(data.members || {}).length
+          memberCount: memberIds.filter((memberId) => !hiddenMemberIds.has(String(memberId))).length
         });
       }
     });

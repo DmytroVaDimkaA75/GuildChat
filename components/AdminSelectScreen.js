@@ -273,6 +273,7 @@ const AdminSelectScreen = ({
     // ... (JSX не меняется)
     <View style={styles.container}>
       <Text style={styles.title}>{t("adminSelect.title")}</Text>
+      <Text style={styles.subtitle}>Оберіть свій профіль, щоб завершити створення гільдії</Text>
       <FlatList
         data={guildData}
         renderItem={renderItem}
@@ -282,6 +283,7 @@ const AdminSelectScreen = ({
             {t("adminSelect.emptyMessage")}
           </Text>
         }
+        contentContainerStyle={styles.listContent}
       />
 
       <Modal
@@ -291,6 +293,7 @@ const AdminSelectScreen = ({
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
             {selectedMember && (
               <>
                 <Image
@@ -320,7 +323,7 @@ const AdminSelectScreen = ({
                   <TouchableOpacity
                     disabled={isCreating}
                     onPress={handleCancel}
-                    style={styles.button}
+                    style={[styles.button, styles.secondaryButton]}
                   >
                     <Text style={styles.buttonText}>{t("adminSelect.cancelButton")}</Text>
                   </TouchableOpacity>
@@ -339,6 +342,7 @@ const AdminSelectScreen = ({
       >
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, styles.accessCodeModal]}>
+            <View style={styles.modalHandle} />
             <Text style={styles.accessCodeTitle}>
               {t("adminSelect.accessCodeTitle")}
             </Text>
@@ -389,34 +393,31 @@ const styles = StyleSheet.create({
     },
     title: {
       fontSize: 20,
-      fontWeight: "bold",
+      fontWeight: "800",
       textAlign: "center",
-      marginBottom: 20,
+      marginBottom: 6,
       color: DarkThemeColors.text,
     },
+    subtitle: { color: DarkThemeColors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: "center", marginBottom: 18 },
+    listContent: { paddingBottom: 20 },
     itemButton: {
-      marginBottom: 10,
+      marginBottom: 8,
     },
     itemContainer: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 15,
-      paddingVertical: 10,
-      borderRadius: 5,
-      backgroundColor: DarkThemeColors.surfaceElevated,
+      minHeight: 68,
+      paddingHorizontal: 13,
+      paddingVertical: 9,
+      borderRadius: 14,
+      backgroundColor: DarkThemeColors.surface,
       borderColor: DarkThemeColors.border,
       borderWidth: 1,
-      marginBottom: 10,
-      elevation: 2,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.2,
-      shadowRadius: 1,
     },
     imageContainer: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       overflow: "hidden",
       marginRight: 15,
     },
@@ -426,6 +427,7 @@ const styles = StyleSheet.create({
     },
     name: {
       fontSize: 16,
+      fontWeight: "700",
       color: DarkThemeColors.text,
     },
     modalContainer: {
@@ -439,9 +441,12 @@ const styles = StyleSheet.create({
       borderColor: DarkThemeColors.border,
       borderWidth: 1,
       padding: 20,
-      borderRadius: 10,
+      borderRadius: 20,
       alignItems: "center",
+      width: "88%",
+      maxWidth: 420,
     },
+    modalHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: DarkThemeColors.border, alignSelf: "center", marginBottom: 18 },
     accessCodeModal: {
       width: "90%",
       maxWidth: 440,
@@ -470,7 +475,7 @@ const styles = StyleSheet.create({
       alignSelf: "stretch",
       backgroundColor: DarkThemeColors.surfaceElevated,
       borderColor: DarkThemeColors.border,
-      borderRadius: 8,
+      borderRadius: 12,
       borderWidth: 1,
       color: DarkThemeColors.text,
       fontSize: 14,
@@ -486,10 +491,10 @@ const styles = StyleSheet.create({
       justifyContent: "center",
     },
     modalImage: {
-      width: 100,
-      height: 100,
-      marginBottom: 10,
-      borderRadius: 50,
+      width: 88,
+      height: 88,
+      marginBottom: 12,
+      borderRadius: 44,
     },
     modalName: {
       fontSize: 18,
@@ -504,18 +509,25 @@ const styles = StyleSheet.create({
     },
     buttonContainer: {
       flexDirection: "row",
-      justifyContent: "space-around",
+      justifyContent: "center",
       marginTop: 20,
+      alignSelf: "stretch",
     },
     button: {
       backgroundColor: DarkThemeColors.primary,
-      padding: 10,
-      borderRadius: 5,
+      minHeight: 46,
+      paddingHorizontal: 16,
+      borderRadius: 12,
       marginHorizontal: 5,
+      alignItems: "center",
+      justifyContent: "center",
+      flex: 1,
     },
+    secondaryButton: { backgroundColor: DarkThemeColors.surfaceElevated, borderWidth: 1, borderColor: DarkThemeColors.border },
     buttonText: {
       color: DarkThemeColors.text,
       textAlign: "center",
+      fontWeight: "800",
     },
     errorText: {
       textAlign: "center",

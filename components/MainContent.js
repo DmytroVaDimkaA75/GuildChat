@@ -11,14 +11,13 @@ import database from '@react-native-firebase/database';
 import messaging from '@react-native-firebase/messaging';
 import {
   createDrawerNavigator,
-  DrawerContentScrollView,
   DrawerToggleButton
 } from '@react-navigation/drawer';
 import { createNavigationContainerRef, DarkTheme, NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Animated, AppState, Easing, Image, NativeModules, Platform, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, NativeModules, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext } from '../GuildContext';
@@ -34,10 +33,10 @@ import {
   readPendingNotificationRoute,
   savePendingNotificationRoute,
 } from '../src/notifications/notificationRouting';
-import { syncGuildMembers } from '../src/utils/guildSync';
 
 // Импорт компонентов
 import AdminMain from './Admin/AdminMain';
+import AdminSettingsScreen from './AdminSettingsScreen';
 import GuildTasksScreen from './Admin/GuildTasksScreen';
 import ChatScreen from "./Chat/ChatScreen";
 import ChatWindow from './Chat/ChatWindow';
@@ -71,7 +70,6 @@ import LanguageSelector from './Profile/LanguageSelector';
 import ProfileData from './Profile/ProfileData';
 import ProfileMain from './Profile/ProfileMain';
 import SleepSchedule from './Profile/SleepSchedule';
-import MapComponent from './Quant/MapComponent';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -834,13 +832,14 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
   }, [selectedGuildId, guildId, t]);
 
   useEffect(() => {
+    const expandedHeight = Math.min(Object.keys(tempData).length * 56 + 56, 224);
     Animated.timing(animatedHeight, {
-      toValue: isWorldSelectVisible ? (Object.keys(tempData).length * 56 + 56) : 0,
+      toValue: isWorldSelectVisible ? expandedHeight : 0,
       duration: 300,
       easing: Easing.inOut(Easing.ease),
       useNativeDriver: false,
     }).start();
-  }, [isWorldSelectVisible, tempData]);
+  }, [animatedHeight, isWorldSelectVisible, tempData]);
 
   useEffect(() => {
     Animated.timing(rotation, {
@@ -848,7 +847,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [isWorldSelectVisible]);
+  }, [isWorldSelectVisible, rotation]);
 
   const handleChevronPress = () => {
     setIsWorldSelectVisible(!isWorldSelectVisible);
@@ -926,7 +925,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
   };
 
   return (
-    <DrawerContentScrollView {...props} style={styles.drawerContent} contentContainerStyle={{ paddingTop: 0 }}>
+    <View style={styles.drawerContent}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
       <View style={styles.header}>
@@ -954,7 +953,11 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
       </View>
 
       <Animated.View style={[styles.worldSelectContainer, { height: animatedHeight }]}>
-        <View style={styles.worldsInner}>
+        <ScrollView
+          contentContainerStyle={styles.worldsInner}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+        >
           {Object.keys(tempData).map(key => (
             <TouchableOpacity key={key} style={styles.worldItem} onPress={() => handleGuildPress(key)}>
               {tempData[key].imageUrl ?
@@ -964,19 +967,31 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
               <Text style={styles.worldItemText}>{tempData[key].guildName}</Text>
             </TouchableOpacity>
           ))}
-          <View style={styles.worldItem}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              setIsWorldSelectVisible(false);
+              props.navigation.navigate('AddWorld');
+            }}
+            style={styles.worldItem}
+          >
             <View style={styles.addWorldIcon}>
               <MaterialIcons name="add" size={20} color="#FFF" />
             </View>
             <Text style={[styles.worldItemText, { color: COLORS.primary }]}>{t("customDrawer.addWorld")}</Text>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </ScrollView>
       </Animated.View>
 
-      <Text style={styles.sectionTitle}>{"ОСНОВНЕ"}</Text>
+      <ScrollView
+        style={styles.navigationScroll}
+        contentContainerStyle={styles.navigationScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.sectionTitle}>{"ОСНОВНЕ"}</Text>
 
-      <View style={styles.menuContainer}>
-        {props.state.routes.map((route, index) => {
+        <View style={styles.menuContainer}>
+          {props.state.routes.map((route, index) => {
           const focused = props.state.index === index;
           const { drawerLabel, drawerIconComponent } = props.descriptors[route.key].options;
           const shouldShowTopSeparator = route.name === 'youtube' || route.name === 'profile';
@@ -1005,13 +1020,10 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
               </TouchableOpacity>
             </React.Fragment>
           );
-        })}
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>СУРМА UA</Text>
-      </View>
-    </DrawerContentScrollView>
+          })}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1021,34 +1033,6 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
   const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
   const [hasTesterAccess, setHasTesterAccess] = React.useState(false);
   const [isDeveloper, setIsDeveloper] = React.useState(false);
-
-  const confirmDeletion = (members) =>
-    new Promise((resolve) => {
-      const names = members.map((member) => member.userName).join(', ');
-      Alert.alert(
-        'Підтвердження видалення',
-        `У гільдії знайдено користувачів, яких немає на сайті: ${names}. Видалити?`,
-        [
-          { text: 'Скасувати', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Видалити', style: 'destructive', onPress: () => resolve(true) },
-        ],
-        { cancelable: true }
-      );
-    });
-
-  const confirmAddition = (members) =>
-    new Promise((resolve) => {
-      const names = members.map((member) => member.userName).join(', ');
-      Alert.alert(
-        'Підтвердження додавання',
-        `На сайті знайдено нових користувачів: ${names}. Додати в базу?`,
-        [
-          { text: 'Скасувати', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Додати', onPress: () => resolve(true) },
-        ],
-        { cancelable: true }
-      );
-    });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1084,18 +1068,6 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           setHasTesterAccess(hasTesterFeatures(role));
           setIsDeveloper(canAccessGuildTasks(role));
 
-          if (canUseLeaderFeatures) {
-            syncGuildMembers({
-              guildId: activeGuildId,
-              confirmDeletion,
-              confirmAddition,
-            }).catch((error) => {
-              console.log(
-                '❌ Помилка синхронізації учасників гільдії:',
-                error?.message || String(error)
-              );
-            });
-          }
         };
         userRoleRef.on('value', roleListener, resetRoleAccess);
       } catch (_error) {
@@ -1152,6 +1124,18 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           drawerStyle: { backgroundColor: COLORS.background, width: 320 }
         }}
       >
+        <Drawer.Screen
+          name="AddWorld"
+          options={{ drawerLabel: null }}
+        >
+          {(screenProps) => (
+            <AdminSettingsScreen
+              {...screenProps}
+              addWorldMode
+              onBeforeGuildSwitch={onManualGuildSwitch}
+            />
+          )}
+        </Drawer.Screen>
         <Drawer.Screen
           name="ChatList"
           component={ChatStack}
@@ -2166,6 +2150,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     letterSpacing: 1,
   },
+  navigationScroll: {
+    flex: 1,
+  },
+  navigationScrollContent: {
+    paddingBottom: 24,
+  },
   menuContainer: {
     marginBottom: 20,
   },
@@ -2201,16 +2191,4 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     marginHorizontal: 24,
   },
-  footer: {
-    padding: 20,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.surfaceHighlight,
-    marginBottom: 20
-  },
-  footerText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  }
 });

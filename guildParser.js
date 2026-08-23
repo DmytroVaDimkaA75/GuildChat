@@ -43,37 +43,3 @@ export async function parseGuildData(url) {
     return { success: false, error: error.message };
   }
 }
-
-/**
- * Парсить список членів гільдії зі сторінки Members
- * @param {string} url - адреса сторінки Members
- * @returns {Promise<{ success: boolean, data?: Array<{ userId: string, name: string, imageUrl: string|null, linkUrl: string|null }>, error?: string }>}
- */
-export async function parseGuildMembers(url) {
-  try {
-    const response = await axios.get(url);
-    const html = response.data;
-
-    const doc = parseDocument(html);
-    const rows = selectAll('table.table tbody tr', doc);
-    const members = rows
-      .map(row => {
-        const linkElem = selectOne('td:nth-child(2) a', row);
-        const nameElem = selectOne('td:nth-child(2) a', row);
-        const imgElem = selectOne('td:nth-child(2) a img', row);
-
-        const linkUrl = linkElem?.attribs?.href || null;
-        const userId = linkUrl ? linkUrl.split('/').pop() : '';
-        const name = nameElem?.children?.find(c => c.type === 'text')?.data.trim() || '';
-        const imageUrl = imgElem?.attribs?.src || null;
-
-        if (!userId) return null;
-        return { userId, name, imageUrl, linkUrl };
-      })
-      .filter(Boolean);
-
-    return { success: true, data: members };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-}
