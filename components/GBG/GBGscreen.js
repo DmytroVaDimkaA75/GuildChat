@@ -5,7 +5,7 @@ import database from "@react-native-firebase/database";
 import functions from "@react-native-firebase/functions";
 import { useNavigation } from "@react-navigation/native";
 import { BlurView } from "@react-native-community/blur";
-import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,12 +20,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { G, Path } from "react-native-svg";
+import Svg, { Defs, G, LinearGradient, Path, Stop } from "react-native-svg";
 import { useTranslation } from "react-i18next";
 import { GuildContext } from "../../GuildContext";
 import GVGIcon from "../ico/menu/GVG.svg";
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
+import {
+  createSectorGradientId,
+  getSectorGradient,
+} from "./gbgSectorGradients";
 
 import { writeFullMapToCache, writeNext5ToCache } from "./widgetCache";
 import { getGbgSeasonEndMs, getMoscowDayEndMs } from "./gbgMuteTime";
@@ -755,6 +759,20 @@ const GVG = () => {
         .join(" "),
   });
 
+  const sectorGradients = useMemo(() => {
+    const data = MAP_DATA[mapKey] || {};
+    return Object.entries(data).map(([sectorId, config]) => {
+      const baseColor = sectorColors[sectorId]
+        || config?.fill?.style?.fill
+        || "#FFFFFF";
+      return {
+        sectorId,
+        id: createSectorGradientId(mapKey, sectorId),
+        colors: getSectorGradient(baseColor),
+      };
+    });
+  }, [mapKey, sectorColors]);
+
   useLayoutEffect(() => {
     if (!navigation) return;
     navigation.setOptions({
@@ -813,9 +831,8 @@ const GVG = () => {
     return Object.entries(data).map(([sectorId, config]) => {
       const { fill, text, icon } = config;
       const fillStyle = { ...(fill?.style || {}) };
-      const color = sectorColors[sectorId];
-
-      if (color) fillStyle.fill = color;
+      delete fillStyle.fill;
+      const gradientId = createSectorGradientId(mapKey, sectorId);
 
       fillStyle.stroke = "#0f1115";
       fillStyle.strokeWidth = mapKey === "volcanic_archipelago" ? 0.7 : 1.5;
@@ -836,6 +853,7 @@ const GVG = () => {
             <AnimatedPath
               {...fill.props}
               d={fill.d}
+              fill={`url(#${gradientId})`}
               onPressIn={(e) => handleShapePress(sectorId, e)}
               style={fillStyle}
               fillOpacity={animatedFillOpacity}
@@ -1277,6 +1295,15 @@ const GVG = () => {
 
       <Animated.View style={[styles.mapContainer, { opacity: fadeAnim, aspectRatio: mapDimensions.width / mapDimensions.height }]}>
         <Svg width="100%" height="100%" viewBox={viewBox}>
+          <Defs>
+            {sectorGradients.map(({ sectorId, id, colors }) => (
+              <LinearGradient key={sectorId} id={id} x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor={colors[0]} />
+                <Stop offset="48%" stopColor={colors[1]} />
+                <Stop offset="100%" stopColor={colors[2]} />
+              </LinearGradient>
+            ))}
+          </Defs>
           {renderMapPaths()}
         </Svg>
       </Animated.View>

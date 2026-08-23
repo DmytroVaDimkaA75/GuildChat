@@ -1,5 +1,9 @@
 import { VOLCANIC_ARCHIPELAGO_DATA } from "./volcanicData";
 import { WATERFALL_ARCHIPELAGO_DATA } from "./waterfallData";
+import {
+  createSectorGradientId,
+  getSectorGradient,
+} from "./gbgSectorGradients";
 
 const VOLCANIC_SVG_WIDTH = 248.83203;
 const VOLCANIC_SVG_HEIGHT = 248.83203;
@@ -88,6 +92,21 @@ export const buildGbgMapSvgStringFromState = ({ mapKey, sectorColors, sectorStaf
   const viewBox = `0 0 ${w} ${h}`;
   const strokeWidth = effectiveKey === "volcanic_archipelago" ? 0.7 : 1.5;
 
+  const gradientDefs = Object.entries(mapData)
+    .map(([sectorId, config]) => {
+      const baseColor = sectorColors?.[sectorId]
+        || config?.fill?.style?.fill
+        || "#FFFFFF";
+      const gradientId = createSectorGradientId(effectiveKey, sectorId);
+      const [highlightColor, mainColor, shadowColor] = getSectorGradient(baseColor);
+      return `<linearGradient id="${escapeXmlAttr(gradientId)}" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="${highlightColor}" />
+<stop offset="48%" stop-color="${mainColor}" />
+<stop offset="100%" stop-color="${shadowColor}" />
+</linearGradient>`;
+    })
+    .join("\n");
+
   const body = Object.entries(mapData)
     .map(([sectorId, config]) => {
       if (!config || typeof config !== "object") return "";
@@ -95,8 +114,7 @@ export const buildGbgMapSvgStringFromState = ({ mapKey, sectorColors, sectorStaf
       const { fill, text, icon } = config;
 
       const fillStyle = { ...(fill?.style || {}) };
-      const color = sectorColors?.[sectorId];
-      if (color) fillStyle.fill = color;
+      fillStyle.fill = `url(#${createSectorGradientId(effectiveKey, sectorId)})`;
 
       fillStyle.stroke = "#0f1115";
       fillStyle.strokeWidth = strokeWidth;
@@ -142,6 +160,9 @@ export const buildGbgMapSvgStringFromState = ({ mapKey, sectorColors, sectorStaf
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${viewBox}">
+<defs>
+${gradientDefs}
+</defs>
 ${body}
 </svg>`;
 };
