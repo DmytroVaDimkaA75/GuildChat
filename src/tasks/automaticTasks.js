@@ -1,11 +1,30 @@
 import moment from 'moment-timezone';
 
 const DEFAULT_SERVER_TIME_ZONE = 'UTC';
-const SERVER_TIME_ZONES = {
-  ru: 'Europe/Moscow',
-};
-const QUANTUM_INVASIONS_FIRST_APPEARANCE = '2026-08-05T08:00:00';
-const GBG_START_FIRST_APPEARANCE = '2026-07-29T08:00:00';
+const SERVER_TIME_ZONES = { ru: 'Europe/Moscow' };
+
+export const DEFAULT_AUTOMATIC_TASK_LEAD_MINUTES = 24 * 60;
+
+export const AUTOMATIC_TASK_DEFINITIONS = [
+  {
+    key: 'gbgStart',
+    idPrefix: 'automatic-gbg-start',
+    firstAppearanceAt: '2026-07-29T08:00:00',
+    title: 'Початок ПБГ',
+    text: 'о 8:00 починаються ПБГ',
+    systemIcon: 'gbg',
+    color: '#4ea1ff',
+  },
+  {
+    key: 'quantumInvasions',
+    idPrefix: 'automatic-quantum-invasions',
+    firstAppearanceAt: '2026-08-05T08:00:00',
+    title: 'Квантові вторгнення',
+    text: 'о 8:00 починаються квантові вторгнення, підвищіть рівні споруд для збільшення бонусів',
+    systemIcon: 'quantum',
+    color: '#8b65d6',
+  },
+];
 
 const getServerRegion = (guildId) => {
   const worldId = String(guildId || '').split('_')[0];
@@ -16,82 +35,98 @@ export const getServerTimeZone = (guildId) => (
   SERVER_TIME_ZONES[getServerRegion(guildId)] || DEFAULT_SERVER_TIME_ZONE
 );
 
-const getFortnightlyTask = ({
-  nowMs,
-  serverTimeZone,
-  firstAppearanceAt,
-  idPrefix,
-  title,
-  text,
-  icon,
-  color,
-}) => {
-  const firstAppearance = moment.tz(firstAppearanceAt, serverTimeZone);
-  const nowOnServer = moment(nowMs).tz(serverTimeZone);
-  const daysFromFirstAppearance = nowOnServer
-    .clone()
-    .startOf('day')
-    .diff(firstAppearance.clone().startOf('day'), 'days');
-
-  if (daysFromFirstAppearance < 0) return null;
-
-  const cycleNumber = Math.floor(daysFromFirstAppearance / 14);
-  const appearanceAt = firstAppearance.clone().add(cycleNumber * 14, 'days');
-  const disappearsAt = appearanceAt.clone().add(24, 'hours');
-
-  if (nowMs < appearanceAt.valueOf() || nowMs >= disappearsAt.valueOf()) {
-    return null;
-  }
-
-  const dayWord = nowOnServer.isSame(appearanceAt, 'day') ? 'Завтра' : 'Сьогодні';
-
-  return {
-    id: `${idPrefix}-${appearanceAt.format('YYYY-MM-DD')}`,
-    title,
-    description: `${dayWord} ${text}`,
-    audience: 'Уся гільдія',
-    filter: 'Гільдія',
-    status: 'Автоматичне',
-    due: `До ${disappearsAt.format('DD.MM, HH:mm')}`,
-    progress: 0,
-    progressLabel: '',
-    icon,
-    color,
-    automatic: true,
-  };
+const normalizeLeadMinutes = (value) => {
+  const minutes = Number(value);
+  return Number.isFinite(minutes) && minutes >= 0
+    ? Math.round(minutes)
+    : DEFAULT_AUTOMATIC_TASK_LEAD_MINUTES;
 };
 
-const getQuantumInvasionsTask = (nowMs, serverTimeZone) => (
-  getFortnightlyTask({
-    nowMs,
-    serverTimeZone,
-    firstAppearanceAt: QUANTUM_INVASIONS_FIRST_APPEARANCE,
-    idPrefix: 'automatic-quantum-invasions',
-    title: 'Квантові вторгнення',
-    text: 'о 8:00 починаються квантові вторгнення, підвищіть рівні споруд для збільшення бонусів',
-    icon: 'atom',
-    color: '#8b65d6',
-  })
+const getNextOccurrence = (definition, nowMs, serverTimeZone) => {
+  const firstOccurrence = moment.tz(definition.firstAppearanceAt, serverTimeZone);
+  if (nowMs <= firstOccurrence.valueOf()) return firstOccurrence;
+
+  const elapsedDays = moment(nowMs).tz(serverTimeZone).diff(firstOccurrence, 'days', true);
+  const completedCycles = Math.floor(elapsedDays / 14);
+  const occurrence = firstOccurrence.clone().add(completedCycles * 14, 'days');
+  return occurrence.valueOf() >= nowMs ? occurrence : occurrence.add(14, 'days');
+};
+
+const getPreviousOrCurrentOccurrence = (definition, nowMs, serverTimeZone) => {
+  const firstOccurrence = moment.tz(definition.firstAppearanceAt, serverTimeZone);
+  if (nowMs < firstOccurrence.valueOf()) return null;
+  const elapsedDays = moment(nowMs).tz(serverTimeZone).diff(firstOccurrence, 'days', true);
+  return firstOccurrence.clone().add(Math.floor(elapsedDays / 14) * 14, 'days');
+};
+
+const getLeadMinutes = (settings, definition) => normalizeLeadMinutes(
+  settings?.[definition.key]?.showBeforeMinutes
 );
 
-const getGbgStartTask = (nowMs, serverTimeZone) => (
-  getFortnightlyTask({
-    nowMs,
-    serverTimeZone,
-    firstAppearanceAt: GBG_START_FIRST_APPEARANCE,
-    idPrefix: 'automatic-gbg-start',
-    title: 'Початок ПБГ',
-    text: 'о 8:00 починаються ПБГ',
-    icon: 'sword-cross',
-    color: '#4ea1ff',
-  })
-);
+const getTaskText = (settings, definition) => {
+  const savedText = settings?.[definition.key]?.text;
+  return typeof savedText === 'string' && savedText.trim()
+    ? savedText.trim()
+    : definition.text;
+};
 
-export const getActiveAutomaticTasks = (nowMs = Date.now(), guildId = '') => {
+export const getAutomaticTaskTemplates = (nowMs = Date.now(), guildId = '', settings = {}) => {
   const serverTimeZone = getServerTimeZone(guildId);
-  const tasks = [
-    getQuantumInvasionsTask(nowMs, serverTimeZone),
-    getGbgStartTask(nowMs, serverTimeZone),
-  ];
-  return tasks.filter(Boolean);
+  return AUTOMATIC_TASK_DEFINITIONS.map((definition) => {
+    const nextOccurrence = getNextOccurrence(definition, nowMs, serverTimeZone);
+    return {
+      id: `template-${definition.key}`,
+      templateKey: definition.key,
+      title: definition.title,
+      description: getTaskText(settings, definition),
+      audience: 'Уся гільдія',
+      filter: 'Гільдія',
+      status: 'Автоматичне',
+      due: `Наступний початок: ${nextOccurrence.format('DD.MM.YYYY, HH:mm')}`,
+      nextOccurrenceAt: nextOccurrence.valueOf(),
+      showBeforeMinutes: getLeadMinutes(settings, definition),
+      progress: 0,
+      progressLabel: '',
+      systemIcon: definition.systemIcon,
+      color: definition.color,
+      automatic: true,
+      template: true,
+    };
+  });
+};
+
+export const getActiveAutomaticTasks = (nowMs = Date.now(), guildId = '', settings = {}) => {
+  const serverTimeZone = getServerTimeZone(guildId);
+  return AUTOMATIC_TASK_DEFINITIONS.map((definition) => {
+    const nextOccurrence = getNextOccurrence(definition, nowMs, serverTimeZone);
+    const currentOccurrence = getPreviousOrCurrentOccurrence(definition, nowMs, serverTimeZone);
+    const showBeforeMinutes = getLeadMinutes(settings, definition);
+    const candidate = currentOccurrence
+      && nowMs < currentOccurrence.clone().add(24, 'hours').valueOf()
+      ? currentOccurrence
+      : nextOccurrence;
+    const visibleFrom = candidate.clone().subtract(showBeforeMinutes, 'minutes');
+    const disappearsAt = candidate.clone().add(24, 'hours');
+    if (nowMs < visibleFrom.valueOf() || nowMs >= disappearsAt.valueOf()) return null;
+
+    const serverNow = moment(nowMs).tz(serverTimeZone);
+    const startsInFuture = nowMs < candidate.valueOf();
+    const dayWord = startsInFuture
+      ? (serverNow.isSame(candidate, 'day') ? 'Сьогодні' : 'Незабаром')
+      : 'Сьогодні';
+    return {
+      id: `${definition.idPrefix}-${candidate.format('YYYY-MM-DD')}`,
+      title: definition.title,
+      description: `${dayWord} ${getTaskText(settings, definition)}`,
+      audience: 'Уся гільдія',
+      filter: 'Гільдія',
+      status: 'Автоматичне',
+      due: `Початок: ${candidate.format('DD.MM.YYYY, HH:mm')}`,
+      progress: 0,
+      progressLabel: '',
+      systemIcon: definition.systemIcon,
+      color: definition.color,
+      automatic: true,
+    };
+  }).filter(Boolean);
 };

@@ -8,65 +8,15 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // import { database } from '../../firebaseConfig'; // УДАЛЕНО
 import { getUkrainianRoleLabel } from '../../constants/roles';
-import CustomCheckBox from '../CustomElements/CustomCheckBox3';
-import GBIcon from '../ico/GB.svg';
-import BoatIcon from '../ico/boat.svg';
 
 const ProfileMain = () => {
   const [userName, setUserName] = useState('');
   const [activeWorld, setActiveWorld] = useState('');
   const [guilds, setGuilds] = useState([]);
 
-  const [isCultureSettingsOpen, setCultureSettingsOpen] = useState(false);
-  const [isProductionOpen, setProductionOpen] = useState(false);
-
-  // Збережені налаштування
-  const [selectedProductionTime, setSelectedProductionTime] = useState(null); // null = жоден
-  const [notifyNextActions, setNotifyNextActions] = useState(false);
-
-  const productionTimeOptions = ['5 хв.', '15 хв.', '1 год.', '5 год.', '10 год.', '20 год.'];
   const navigation = useNavigation();
 
   const convertRole = getUkrainianRoleLabel;
-
-  // toggles
-  const toggleCultureSettings = () => setCultureSettingsOpen(prev => !prev);
-  const toggleProductionOpen = () => setProductionOpen(prev => !prev);
-
-  // Обробники взаємодії
-  const selectProductionTime = async (time) => {
-    const idx = productionTimeOptions.indexOf(time);
-    setSelectedProductionTime(time);
-    try {
-      const userId = await AsyncStorage.getItem('userId');
-      const guildId = await AsyncStorage.getItem('guildId');
-      if (userId && guildId) {
-        // ИЗМЕНЕНО
-        await database()
-          .ref(`/users/${userId}/userGuilds/${guildId}/culture/productionPreference`)
-          .set(idx);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const toggleCultureAlarm = async () => {
-    const newVal = !notifyNextActions;
-    setNotifyNextActions(newVal);
-    try {
-      const userId = await AsyncStorage.getItem('userId');
-      const guildId = await AsyncStorage.getItem('guildId');
-      if (userId && guildId) {
-        // ИЗМЕНЕНО
-        await database()
-          .ref(`/users/${userId}/userGuilds/${guildId}/culture/cultureAlarm`)
-          .set(newVal);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   useEffect(() => {
     const listeners = [];
@@ -90,19 +40,6 @@ const ProfileMain = () => {
           listeners.push({ ref: worldNameRef, callback: onWorldNameUpdate });
         }
         
-        if (userId && guildId) {
-          // ИЗМЕНЕНО
-          const cultureSnap = await database().ref(`/users/${userId}/userGuilds/${guildId}/culture`).once('value');
-          if (cultureSnap.exists()) {
-            const data = cultureSnap.val();
-            if (typeof data.productionPreference === 'number' && data.productionPreference < productionTimeOptions.length) {
-              setSelectedProductionTime(productionTimeOptions[data.productionPreference]);
-            }
-            if (typeof data.cultureAlarm === 'boolean') {
-              setNotifyNextActions(data.cultureAlarm);
-            }
-          }
-        }
       } catch (e) {
         console.error(e);
       }
@@ -197,60 +134,6 @@ const ProfileMain = () => {
           <Text style={styles.mainText}>Мова</Text>
         </TouchableOpacity>
       </View>
-
-      <View style={styles.divider} />
-
-      {/* Налаштування світу */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Налаштування світу</Text>
-        <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('MyGB')}>
-          <GBIcon width={20} height={20} color="#A0A6AD" style={styles.iconSpacing} />
-          <Text style={styles.mainText}>Налаштування ВС</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.itemRow} onPress={toggleCultureSettings}>
-          <BoatIcon width={20} height={20} style={styles.iconSpacing} />
-          <Text style={styles.mainText}>Налаштування культурних поселень</Text>
-          <Ionicons
-            name={isCultureSettingsOpen ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color="#A0A6AD"
-            style={styles.marginAutoLeft}
-          />
-        </TouchableOpacity>
-        {isCultureSettingsOpen && (
-          <>
-            {/* Переважний час виробництв */}
-            <View style={styles.subHeaderRow}>
-              <Text style={styles.mainText}>Переважний час виробництв</Text>
-              <TouchableOpacity onPress={toggleProductionOpen} style={styles.marginAutoLeft}>
-                <Ionicons name="ellipsis-horizontal" size={20} color="#A0A6AD" />
-              </TouchableOpacity>
-            </View>
-            {isProductionOpen && productionTimeOptions.map(time => (
-              <TouchableOpacity
-                key={time}
-                style={styles.subItemRow}
-                onPress={() => selectProductionTime(time)}
-              >
-                {selectedProductionTime === time ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#4ea1ff" style={{ marginRight: 8 }} />
-                ) : (
-                  <View style={styles.radioUnselected} />
-                )}
-                <Text style={styles.mainText}>{time}</Text>
-              </TouchableOpacity>
-            ))}
-            {/* Сигналізувати про наступні дії */}
-            <View style={styles.subItemRowDisabled}>
-              <Text style={styles.mainText}>Сигналізувати про наступні дії</Text>
-              <CustomCheckBox
-                checked={notifyNextActions}
-                onPress={toggleCultureAlarm}
-              />
-            </View>
-          </>
-        )}
-      </View>
     </ScrollView>
   );
 };
@@ -310,36 +193,5 @@ const styles = StyleSheet.create({
   },
   rowContent: { flexDirection: 'row', alignItems: 'center' },
   mainText: { fontSize: 14, marginLeft: 8, color: '#f4f7fb' },
-  subHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingLeft: 56,
-  },
-  subItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 56,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  subItemRowDisabled: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: 56,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  radioUnselected: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: '#4ea1ff',
-    marginRight: 8,
-  },
   iconSpacing: { marginRight: 10 },
-  marginAutoLeft: { marginLeft: 'auto' },
 });

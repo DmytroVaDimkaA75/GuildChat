@@ -267,9 +267,18 @@ const GBGuaranteesScreen = ({ isDeveloper = false, navigation }) => {
     setError(null);
     const guildUsersRef = database().ref(`guilds/${guildId}/guildUsers`);
     const catalogRef = database().ref('greatBuildings');
+    let disposed = false;
+    let filterVersion = 0;
     const onGuildUsers = async (snapshot) => {
-      setGuildUsers(await filterGbgBots(guildId, snapshot.val() || {}));
+      const version = ++filterVersion;
+      const rawUsers = snapshot.val() || {};
+      // Основний список показуємо відразу; визначення службових ботів не блокує екран.
+      setGuildUsers(Object.fromEntries(
+        Object.entries(rawUsers).filter(([, user]) => user?.role !== 'GBGbot')
+      ));
       setRefreshing(false);
+      const filteredUsers = await filterGbgBots(guildId, rawUsers);
+      if (!disposed && version === filterVersion) setGuildUsers(filteredUsers);
     };
     const onCatalog = (snapshot) => {
       setCatalog(snapshot.val() || {});
@@ -282,6 +291,7 @@ const GBGuaranteesScreen = ({ isDeveloper = false, navigation }) => {
     guildUsersRef.on('value', onGuildUsers, onError);
     catalogRef.on('value', onCatalog, onError);
     return () => {
+      disposed = true;
       guildUsersRef.off('value', onGuildUsers);
       catalogRef.off('value', onCatalog);
     };

@@ -4,6 +4,7 @@ import database from '@react-native-firebase/database';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Modal,
   Pressable,
@@ -19,7 +20,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GuildContext } from '../../GuildContext';
 import { canAccessGuildTasks } from '../../constants/roles';
 import { DarkThemeColors as C } from '../../constants/theme';
-import { getActiveAutomaticTasks } from '../../src/tasks/automaticTasks';
+import GVGTaskIcon from '../ico/menu/GVG.svg';
+import QuantumTaskIcon from '../ico/menu/quant.svg';
+import {
+  DEFAULT_AUTOMATIC_TASK_LEAD_MINUTES,
+  getAutomaticTaskTemplates,
+} from '../../src/tasks/automaticTasks';
 
 const seedTasks = [];
 
@@ -47,18 +53,36 @@ function SummaryItem({ icon, color, label, value }) {
   );
 }
 
-function TaskCard({ task, onToggleDone }) {
+const formatLeadTime = (minutes) => {
+  if (minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return `${days} ${days === 1 ? 'день' : 'днів'}`;
+  }
+  if (minutes % 60 === 0) return `${minutes / 60} год`;
+  return `${minutes} хв`;
+};
+
+function TaskCard({ task, onToggleDone, onEditAutomatic }) {
   const statusColor = statusColors[task.status] || C.primary;
+  const SystemIcon = task.systemIcon === 'gbg'
+    ? GVGTaskIcon
+    : task.systemIcon === 'quantum'
+      ? QuantumTaskIcon
+      : null;
   return (
     <TouchableOpacity
       activeOpacity={0.82}
-      disabled={task.automatic}
-      onPress={() => onToggleDone(task.id)}
+      disabled={task.automatic && !task.template}
+      onPress={() => (task.template ? onEditAutomatic(task) : onToggleDone(task.id))}
       style={styles.card}
     >
       <View style={styles.cardTop}>
-        <View style={[styles.taskIcon, { backgroundColor: `${task.color}2b` }]}>
-          <MaterialCommunityIcons name={task.icon} size={26} color={task.color} />
+        <View
+          style={[styles.taskIcon, { backgroundColor: `${task.color}2b` }]}
+        >
+          {SystemIcon
+            ? <SystemIcon width={29} height={29} />
+            : <MaterialCommunityIcons name={task.icon} size={26} color={task.color} />}
         </View>
         <View style={styles.cardHeading}>
           <Text style={styles.taskTitle}>{task.title}</Text>
@@ -70,8 +94,23 @@ function TaskCard({ task, onToggleDone }) {
             <Text style={styles.metaText}>{task.audience}</Text>
           </View>
         </View>
-        <Ionicons name="ellipsis-vertical" size={20} color={C.textSecondary} />
+        {task.template ? (
+          <View style={styles.editTemplateButton}>
+            <Ionicons name="create-outline" size={21} color={C.primary} />
+          </View>
+        ) : (
+          <Ionicons name="ellipsis-vertical" size={20} color={C.textSecondary} />
+        )}
       </View>
+
+      {task.template && (
+        <View style={styles.templateSettingRow}>
+          <Ionicons name="eye-outline" size={18} color={C.primary} />
+          <Text style={styles.templateSettingText}>
+            Показувати користувачам за {formatLeadTime(task.showBeforeMinutes)} до початку
+          </Text>
+        </View>
+      )}
 
       <View style={styles.detailsRow}>
         <View style={[styles.statusPill, { borderColor: statusColor, backgroundColor: `${statusColor}18` }]}>
@@ -113,6 +152,11 @@ export default function GuildTasksScreen({ navigation }) {
   const [createVisible, setCreateVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [audience, setAudience] = useState('Уся гільдія');
+  const [automaticSettings, setAutomaticSettings] = useState({});
+  const [editingAutomaticTask, setEditingAutomaticTask] = useState(null);
+  const [leadHours, setLeadHours] = useState('24');
+  const [automaticTaskText, setAutomaticTaskText] = useState('');
+  const [savingLeadTime, setSavingLeadTime] = useState(false);
 
   useEffect(() => {
     const refreshNow = () => setNowMs(Date.now());
@@ -128,6 +172,22 @@ export default function GuildTasksScreen({ navigation }) {
       appStateSubscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!guildId) {
+      setAutomaticSettings({});
+      return undefined;
+    }
+
+    const settingsRef = database().ref(`guilds/${guildId}/taskSettings/automatic`);
+    const listener = settingsRef.on('value', (snapshot) => {
+      setAutomaticSettings(snapshot.val() || {});
+    }, (error) => {
+      console.error('Не вдалося завантажити налаштування автоматичних завдань:', error);
+    });
+
+    return () => settingsRef.off('value', listener);
+  }, [guildId]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -183,9 +243,14 @@ export default function GuildTasksScreen({ navigation }) {
     }, [guildId])
   );
 
+  const automaticTaskTemplates = useMemo(
+    () => getAutomaticTaskTemplates(nowMs, guildId, automaticSettings),
+    [automaticSettings, guildId, nowMs]
+  );
+
   const allTasks = useMemo(
-    () => [...getActiveAutomaticTasks(nowMs, guildId), ...tasks],
-    [guildId, nowMs, tasks]
+    () => [...automaticTaskTemplates, ...tasks],
+    [automaticTaskTemplates, tasks]
   );
 
   const visibleTasks = useMemo(() => {
@@ -201,9 +266,11 @@ export default function GuildTasksScreen({ navigation }) {
 
   const counts = useMemo(() => ({
     active: allTasks.filter((task) => (
-      task.status === 'Активне'
-      || task.status === 'Високий пріоритет'
-      || task.status === 'Автоматичне'
+      !task.template && (
+        task.status === 'Активне'
+        || task.status === 'Високий пріоритет'
+        || task.status === 'Автоматичне'
+      )
     )).length,
     overdue: allTasks.filter((task) => task.status === 'Прострочено').length,
     done: allTasks.filter((task) => task.status === 'Виконано').length,
@@ -234,6 +301,36 @@ export default function GuildTasksScreen({ navigation }) {
     }, ...current]);
     setTitle('');
     setCreateVisible(false);
+  };
+
+  const openAutomaticTaskEditor = (task) => {
+    setEditingAutomaticTask(task);
+    setLeadHours(String(task.showBeforeMinutes / 60));
+    setAutomaticTaskText(task.description || '');
+  };
+
+  const normalizedLeadHours = Number(String(leadHours).replace(',', '.'));
+  const isLeadTimeValid = Number.isFinite(normalizedLeadHours) && normalizedLeadHours >= 0;
+  const isAutomaticTaskTextValid = !!automaticTaskText.trim();
+
+  const saveAutomaticTaskLeadTime = async () => {
+    if (!editingAutomaticTask || !guildId || !isLeadTimeValid || !isAutomaticTaskTextValid) return;
+
+    setSavingLeadTime(true);
+    try {
+      await database()
+        .ref(`guilds/${guildId}/taskSettings/automatic/${editingAutomaticTask.templateKey}`)
+        .update({
+          showBeforeMinutes: Math.round(normalizedLeadHours * 60),
+          text: automaticTaskText.trim(),
+        });
+      setEditingAutomaticTask(null);
+    } catch (error) {
+      console.error('Не вдалося зберегти автоматичне завдання:', error);
+      Alert.alert('Не вдалося зберегти', 'Перевірте з’єднання та спробуйте ще раз.');
+    } finally {
+      setSavingLeadTime(false);
+    }
   };
 
   if (accessState !== 'allowed') {
@@ -318,7 +415,12 @@ export default function GuildTasksScreen({ navigation }) {
         )}
 
         {visibleTasks.map((task) => (
-          <TaskCard key={task.id} task={task} onToggleDone={toggleDone} />
+          <TaskCard
+            key={task.id}
+            task={task}
+            onToggleDone={toggleDone}
+            onEditAutomatic={openAutomaticTaskEditor}
+          />
         ))}
         {visibleTasks.length === 0 && (
           <View style={styles.empty}>
@@ -371,6 +473,64 @@ export default function GuildTasksScreen({ navigation }) {
               style={[styles.publishButton, !title.trim() && styles.publishButtonDisabled]}
             >
               <Text style={styles.publishText}>Створити завдання</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!editingAutomaticTask}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditingAutomaticTask(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditingAutomaticTask(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Редагування завдання</Text>
+              <TouchableOpacity onPress={() => setEditingAutomaticTask(null)}>
+                <Ionicons name="close" size={25} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.automaticEditorTitle}>{editingAutomaticTask?.title}</Text>
+            <Text style={styles.automaticEditorDescription}>
+              Налаштуйте текст і час його появи для користувачів. Періодичність події не змінюється.
+            </Text>
+            <Text style={styles.inputLabel}>Текст завдання</Text>
+            <TextInput
+              multiline
+              value={automaticTaskText}
+              onChangeText={setAutomaticTaskText}
+              placeholder="Текст, який побачать користувачі"
+              placeholderTextColor={C.textSecondary}
+              style={[styles.modalInput, styles.automaticTaskTextInput]}
+            />
+            <Text style={styles.inputLabel}>Годин до початку</Text>
+            <View style={styles.leadTimeInputRow}>
+              <TextInput
+                autoFocus
+                keyboardType="decimal-pad"
+                value={leadHours}
+                onChangeText={setLeadHours}
+                placeholder={String(DEFAULT_AUTOMATIC_TASK_LEAD_MINUTES / 60)}
+                placeholderTextColor={C.textSecondary}
+                style={[styles.modalInput, styles.leadTimeInput]}
+              />
+              <Text style={styles.leadTimeUnit}>годин</Text>
+            </View>
+            <TouchableOpacity
+              disabled={savingLeadTime || !isLeadTimeValid || !isAutomaticTaskTextValid}
+              onPress={saveAutomaticTaskLeadTime}
+              style={[
+                styles.publishButton,
+                (savingLeadTime || !isLeadTimeValid || !isAutomaticTaskTextValid)
+                  && styles.publishButtonDisabled,
+              ]}
+            >
+              {savingLeadTime
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.publishText}>Зберегти</Text>}
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -448,6 +608,10 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'flex-start' },
   taskIcon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   cardHeading: { flex: 1, marginHorizontal: 12 },
+  editTemplateButton: {
+    width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: `${C.primary}18`,
+  },
   taskTitle: { color: C.text, fontSize: 17, fontWeight: '750', lineHeight: 22 },
   taskDescription: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 7 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 7 },
@@ -461,6 +625,11 @@ const styles = StyleSheet.create({
   progressTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: C.surfaceElevated },
   progressFill: { height: '100%', borderRadius: 3 },
   progressText: { minWidth: 35, textAlign: 'right', color: C.text, fontSize: 14, fontWeight: '700' },
+  templateSettingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 13,
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border,
+  },
+  templateSettingText: { flex: 1, color: C.text, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   empty: { alignItems: 'center', paddingVertical: 50 },
   emptyTitle: { color: C.text, fontSize: 17, fontWeight: '700', marginTop: 10 },
   emptyText: { color: C.textSecondary, fontSize: 13, marginTop: 4 },
@@ -478,11 +647,17 @@ const styles = StyleSheet.create({
   modalHandle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 2, backgroundColor: C.border, marginBottom: 17 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 },
   modalTitle: { color: C.text, fontSize: 22, fontWeight: '800' },
+  automaticEditorTitle: { color: C.text, fontSize: 18, fontWeight: '750', marginBottom: 8 },
+  automaticEditorDescription: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  automaticTaskTextInput: { minHeight: 92, height: 'auto', paddingTop: 13, textAlignVertical: 'top' },
   inputLabel: { color: C.text, fontSize: 13, fontWeight: '650', marginBottom: 8 },
   modalInput: {
     height: 50, color: C.text, backgroundColor: C.background, borderWidth: 1,
     borderColor: C.border, borderRadius: 13, paddingHorizontal: 14, fontSize: 15, marginBottom: 18,
   },
+  leadTimeInputRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 22 },
+  leadTimeInput: { flex: 1, marginBottom: 0 },
+  leadTimeUnit: { color: C.textSecondary, fontSize: 15, minWidth: 48 },
   audienceRow: { flexDirection: 'row', gap: 9, marginBottom: 24 },
   audienceChip: {
     flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 11,

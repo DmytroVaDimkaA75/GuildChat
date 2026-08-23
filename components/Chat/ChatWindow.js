@@ -66,7 +66,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import uuid from 'react-native-uuid';
 import database from '@react-native-firebase/database';
 import storage from '@react-native-firebase/storage';
-import DatePicker from 'react-native-date-picker';
 import moment from 'moment-timezone';
 import translateMessage, { detectMessageLanguage } from '../../translateMessage';
 import { filterGbgBots, getGbgBotIds } from '../../src/utils/guildBots';
@@ -74,6 +73,7 @@ import CalendarclockIcon from '../ico/calendarclock.svg';
 import ClockIcon from '../ico/clock.svg';
 import TransleteIcon from '../ico/translete.svg';
 import UsercheckIcon from '../ico/usercheck.svg';
+import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
 import { getPresenceStatusLabel } from './presenceUtils';
 import { isChatMessageVisible } from './chatDeletion';
 import LinkPreviewCard, { extractPreviewUrls, getYouTubeVideoId, stripPreviewUrls } from '../CustomElements/LinkPreviewCard';
@@ -182,7 +182,14 @@ const getHostLabel = (url = '') => {
   }
 };
 
-const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSelected }) => {
+const SendOptionsPopup = ({
+  visible,
+  chatType,
+  onClose,
+  onSendLater,
+  onSendTemporary,
+  onSendToSelected,
+}) => {
   if (!visible) return null;
   return (
     <TouchableOpacity activeOpacity={1} style={styles.sendOptionsOverlay} onPress={onClose}>
@@ -202,7 +209,7 @@ const SendOptionsPopup = ({ visible, chatType, onClose, onSendLater, onSendToSel
         <TouchableOpacity
           style={styles.sendOptionButton}
           onPress={() => {
-            onSendLater();
+            onSendTemporary();
             onClose();
           }}
         >
@@ -1141,7 +1148,23 @@ const ChatWindow = ({ route, navigation }) => {
   const languageDetectionInProgressRef = useRef(new Set());
 
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const [timingMode, setTimingMode] = useState('scheduled');
+  const [timingDayIndex, setTimingDayIndex] = useState(0);
+  const [timingHourIndex, setTimingHourIndex] = useState(0);
+  const [timingMinuteIndex, setTimingMinuteIndex] = useState(0);
   const [sendOptionsPopupVisible, setSendOptionsPopupVisible] = useState(false);
+
+  const timingDayOptions = useMemo(() => Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+    const label = index === 0
+      ? 'Сьогодні'
+      : index === 1
+        ? 'Завтра'
+        : format(date, 'EEE, d MMM', { locale });
+    return { date, label };
+  }), [locale]);
 
   const [isLinkModalVisible, setIsLinkModalVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -1925,6 +1948,23 @@ const ChatWindow = ({ route, navigation }) => {
     });
   };
 
+  const openTimingPicker = (mode) => {
+    if (!newMessage.trim()) {
+      Alert.alert('Помилка', 'Спочатку введіть текст повідомлення.');
+      return;
+    }
+    const initialDate = new Date(Date.now() + 5 * 60 * 1000);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const initialDay = new Date(initialDate);
+    initialDay.setHours(0, 0, 0, 0);
+    setTimingMode(mode);
+    setTimingDayIndex(Math.max(0, Math.min(6, Math.round((initialDay - today) / 86400000))));
+    setTimingHourIndex(initialDate.getHours());
+    setTimingMinuteIndex(initialDate.getMinutes());
+    setIsDatePickerVisible(true);
+  };
+
   const handleScheduleSend = (date) => {
     setIsDatePickerVisible(false);
     if (!newMessage.trim()) {
@@ -1964,6 +2004,60 @@ const ChatWindow = ({ route, navigation }) => {
       .catch((error) => {
         Alert.alert('Помилка планування', error.message);
       });
+  };
+
+  const handleTemporarySend = async (expiresAt) => {
+    setIsDatePickerVisible(false);
+    if (!newMessage.trim() || !guildId || !chatId || !userId) return;
+    if (expiresAt.getTime() <= Date.now()) {
+      Alert.alert('Невірний час', 'Час видалення має бути в майбутньому.');
+      return;
+    }
+
+    const messageRef = database().ref(`guilds/${guildId}/chats/${chatId}/messages`).push();
+    const messageId = messageRef.key;
+    const messageData = {
+      senderId: userId,
+      text: newMessage,
+      html: newMessageHtml || null,
+      timestamp: database.ServerValue.TIMESTAMP,
+      status: 'sent',
+      deliverySource: 'temporary',
+      expiresAt: expiresAt.getTime(),
+      replyTo: replyToMessage?.id || null,
+    };
+
+    try {
+      await database().ref(`guilds/${guildId}`).update({
+        [`chats/${chatId}/messages/${messageId}`]: messageData,
+        [`temporaryMessages/${messageId}`]: {
+          chatId,
+          expiresAt: expiresAt.getTime(),
+          status: 'pending',
+        },
+      });
+      cacheMessageLanguage(messageId, newMessage);
+      setNewMessage('');
+      setNewMessagePlain('');
+      setNewMessageHtml('');
+      setReplyToMessage(null);
+      setComposerSelectionActive(false);
+      composerRef.current?.clear?.();
+      Alert.alert('Надіслано', `Повідомлення буде видалено ${format(expiresAt, 'dd.MM.yyyy о HH:mm')}`);
+    } catch (error) {
+      Alert.alert('Помилка', error?.message || 'Не вдалося надіслати тимчасове повідомлення.');
+    }
+  };
+
+  const handleTimingConfirm = () => {
+    const selectedDay = timingDayOptions[timingDayIndex]?.date || new Date();
+    const selectedDate = new Date(selectedDay);
+    selectedDate.setHours(timingHourIndex, timingMinuteIndex, 0, 0);
+    if (timingMode === 'temporary') {
+      handleTemporarySend(selectedDate);
+    } else {
+      handleScheduleSend(selectedDate);
+    }
   };
 
   const handleSend = async () => {
@@ -2704,7 +2798,8 @@ const ChatWindow = ({ route, navigation }) => {
                 visible={sendOptionsPopupVisible}
                 chatType={chatType}
                 onClose={() => setSendOptionsPopupVisible(false)}
-                onSendLater={() => setIsDatePickerVisible(true)}
+                onSendLater={() => openTimingPicker('scheduled')}
+                onSendTemporary={() => openTimingPicker('temporary')}
                 onSendToSelected={() => Alert.alert('Функція', 'Надіслати обраним')}
               />
             </View>
@@ -2879,19 +2974,72 @@ const ChatWindow = ({ route, navigation }) => {
           </View>
         </Modal>
 
-        <DatePicker
-          modal
-          open={isDatePickerVisible}
-          date={new Date()}
-          mode="datetime"
-          onConfirm={handleScheduleSend}
-          onCancel={() => setIsDatePickerVisible(false)}
-          title="Запланувати відправку"
-          confirmText="Підтвердити"
-          cancelText="Скасувати"
-          minimumDate={new Date()}
-          theme="dark"
-        />
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isDatePickerVisible}
+          onRequestClose={() => setIsDatePickerVisible(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setIsDatePickerVisible(false)}>
+            <View style={styles.timingModalOverlay}>
+              <TouchableWithoutFeedback>
+                <View
+                  style={[
+                    styles.timingModalCard,
+                    { paddingBottom: Math.max(20, safeAreaInsets.bottom + 12) },
+                  ]}
+                >
+                  <View style={styles.timingModalHandle} />
+                  <Text style={styles.timingModalTitle}>
+                    {timingMode === 'temporary'
+                      ? 'Тимчасове повідомлення'
+                      : 'Надіслати пізніше'}
+                  </Text>
+                  <Text style={styles.timingModalHint}>
+                    {timingMode === 'temporary'
+                      ? 'Оберіть час автоматичного видалення'
+                      : 'Оберіть час відправлення'}
+                  </Text>
+                  <View style={styles.timingWheelRow}>
+                    <View style={styles.timingDayWheel}>
+                      <SimpleWheelPicker
+                        data={timingDayOptions.map((item) => item.label)}
+                        selectedIndex={timingDayIndex}
+                        onValueChange={(_, index) => setTimingDayIndex(index)}
+                      />
+                    </View>
+                    <View style={styles.timingNumberWheel}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'))}
+                        selectedIndex={timingHourIndex}
+                        onValueChange={(_, index) => setTimingHourIndex(index)}
+                      />
+                    </View>
+                    <Text style={styles.timingSeparator}>:</Text>
+                    <View style={styles.timingNumberWheel}>
+                      <SimpleWheelPicker
+                        data={Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'))}
+                        selectedIndex={timingMinuteIndex}
+                        onValueChange={(_, index) => setTimingMinuteIndex(index)}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.timingModalActions}>
+                    <TouchableOpacity
+                      onPress={() => setIsDatePickerVisible(false)}
+                      style={styles.timingCancelButton}
+                    >
+                      <Text style={styles.timingCancelText}>Скасувати</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleTimingConfirm} style={styles.timingConfirmButton}>
+                      <Text style={styles.timingConfirmText}>Підтвердити</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
       </SafeAreaView>
   );
 };
@@ -3241,6 +3389,62 @@ const styles = StyleSheet.create({
   modalBtnCancel: { flex: 1, padding: 14, backgroundColor: '#333', borderRadius: 12, alignItems: 'center', marginRight: 10 },
   modalBtnPrimary: { flex: 1, padding: 14, backgroundColor: '#4ea1ff', borderRadius: 12, alignItems: 'center' },
   actionBtn: { paddingVertical: 16, alignItems: 'center', borderBottomWidth: 1, borderColor: '#333' },
+
+  timingModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.72)',
+  },
+  timingModalCard: {
+    backgroundColor: '#152330',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: '#36516a',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  timingModalHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#36516a',
+    marginBottom: 16,
+  },
+  timingModalTitle: { color: '#f4f7fb', fontSize: 21, fontWeight: '800', textAlign: 'center' },
+  timingModalHint: { color: '#9aa3b2', fontSize: 13, textAlign: 'center', marginTop: 6 },
+  timingWheelRow: {
+    height: 180,
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timingDayWheel: { width: 185, height: 180, overflow: 'hidden' },
+  timingNumberWheel: { width: 58, height: 180, overflow: 'hidden' },
+  timingSeparator: { color: '#9aa3b2', fontSize: 22, marginHorizontal: 1 },
+  timingModalActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  timingCancelButton: {
+    flex: 1,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    backgroundColor: '#1b2b3b',
+    borderWidth: 1,
+    borderColor: '#36516a',
+  },
+  timingConfirmButton: {
+    flex: 1,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    backgroundColor: '#4ea1ff',
+  },
+  timingCancelText: { color: '#d5dbe5', fontSize: 15, fontWeight: '700' },
+  timingConfirmText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   translatedText: { fontSize: 16, color: '#fff', lineHeight: 22 },
   uploadThumb: { width: 70, height: 70, borderRadius: 10, marginRight: 10 },

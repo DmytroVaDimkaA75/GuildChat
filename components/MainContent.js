@@ -1108,6 +1108,7 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
       onReady={onReady}
     >
       <Drawer.Navigator
+        backBehavior="history"
         drawerContent={(props) => (
           <CustomDrawerContent
             {...props}
@@ -1124,18 +1125,6 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           drawerStyle: { backgroundColor: COLORS.background, width: 320 }
         }}
       >
-        <Drawer.Screen
-          name="AddWorld"
-          options={{ drawerLabel: null }}
-        >
-          {(screenProps) => (
-            <AdminSettingsScreen
-              {...screenProps}
-              addWorldMode
-              onBeforeGuildSwitch={onManualGuildSwitch}
-            />
-          )}
-        </Drawer.Screen>
         <Drawer.Screen
           name="ChatList"
           component={ChatStack}
@@ -1214,6 +1203,18 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
             {() => <AdmintStack canAccessTasks={isDeveloper} />}
           </Drawer.Screen>
         )}
+        <Drawer.Screen
+          name="AddWorld"
+          options={{ drawerLabel: null }}
+        >
+          {(screenProps) => (
+            <AdminSettingsScreen
+              {...screenProps}
+              addWorldMode
+              onBeforeGuildSwitch={onManualGuildSwitch}
+            />
+          )}
+        </Drawer.Screen>
       </Drawer.Navigator>
     </NavigationContainer>
   );
@@ -1864,6 +1865,14 @@ export default function MainContent() {
           sound: 'smeh_minonovhasms',
         });
 
+        // Повідомлення в чаті від користувача з роллю GBGbot
+        await notifee.createChannel({
+          id: 'chat_messages_gbg_bot_alarm',
+          name: 'GBG Bot Chat Messages',
+          importance: AndroidImportance.HIGH,
+          sound: 'alarm',
+        });
+
         // ✅ Канал чату без звуку
         await notifee.createChannel({
           id: 'chat_messages_silent',
@@ -1973,7 +1982,11 @@ export default function MainContent() {
             : messageType === 'culture_build_ready'
               ? (soundFlag ? 'culture_settlement_kolokol' : 'culture_settlement_silent')
             : messageType === 'chat_message'
-              ? (soundFlag ? 'chat_messages' : 'chat_messages_silent')
+              ? (soundFlag
+                ? (remoteMessage?.data?.chatSound === 'gbg_bot_alarm'
+                  ? 'chat_messages_gbg_bot_alarm'
+                  : 'chat_messages')
+                : 'chat_messages_silent')
             : messageType === 'express_upgrade'
               ? 'express_upgrade'
               : 'default';

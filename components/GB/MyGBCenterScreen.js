@@ -74,6 +74,23 @@ const sortBuildings = (items) => [...items].sort((first, second) =>
 );
 
 const SCOREDB_BASE_URL = 'https://foe.scoredb.io';
+const EXTERNAL_REQUEST_TIMEOUT_MS = 6000;
+const LEVEL_COST_CACHE_TTL_MS = 10 * 60 * 1000;
+const AVATAR_CACHE_TTL_MS = 60 * 60 * 1000;
+const levelCostCache = new Map();
+const avatarCache = new Map();
+const levelCostRequests = new Map();
+const avatarRequests = new Map();
+
+const fetchWithTimeout = async (url, timeoutMs = EXTERNAL_REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const extractScoreDbAvatarUrl = (html) => {
   const frameIndex = html.search(
@@ -94,16 +111,121 @@ const extractScoreDbAvatarUrl = (html) => {
 const fetchScoreDbAvatar = async (worldId, investorId) => {
   if (!worldId || !investorId) return null;
 
-  try {
-    const response = await fetch(
-      `${SCOREDB_BASE_URL}/${encodeURIComponent(worldId)}/Player/${encodeURIComponent(investorId)}`
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return extractScoreDbAvatarUrl(await response.text());
-  } catch (error) {
-    console.error(`Не вдалося отримати аватар вкладника ${investorId}:`, error);
-    return null;
-  }
+  const cacheKey = `${worldId}:${investorId}`;
+  const cached = avatarCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (avatarRequests.has(cacheKey)) return avatarRequests.get(cacheKey);
+
+  const request = (async () => {
+    try {
+      const response = await fetchWithTimeout(
+        `${SCOREDB_BASE_URL}/${encodeURIComponent(worldId)}/Player/${encodeURIComponent(investorId)}`
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const value = extractScoreDbAvatarUrl(await response.text());
+      avatarCache.set(cacheKey, { value, expiresAt: Date.now() + AVATAR_CACHE_TTL_MS });
+      return value;
+    } catch (error) {
+      console.error(`Не вдалося отримати аватар вкладника ${investorId}:`, error);
+      return null;
+    } finally {
+      avatarRequests.delete(cacheKey);
+    }
+  })();
+  avatarRequests.set(cacheKey, request);
+  return request;
+};
+
+const fetchLevelCost = async (levelBase, nextLevel) => {
+  if (!levelBase) return 0;
+  const url = `${levelBase}${nextLevel}`;
+  const cached = levelCostCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (levelCostRequests.has(url)) return levelCostRequests.get(url);
+  const request = (async () => {
+    try {
+      const response = await fetchWithTimeout(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const apiData = await response.json();
+      const value = Number(apiData?.response?.total_fp ?? apiData?.total_fp) || 0;
+      levelCostCache.set(url, { value, expiresAt: Date.now() + LEVEL_COST_CACHE_TTL_MS });
+      return value;
+    } catch (error) {
+      console.error(`Не вдалося отримати вартість рівня ${nextLevel}:`, error);
+      return 0;
+    } finally {
+      levelCostRequests.delete(url);
+    }
+  })();
+  levelCostRequests.set(url, request);
+  return request;
+};
+
+const buildBuildingRecord = ({
+  buildId,
+  userBuild,
+  buildingInfo,
+  userId,
+  guildUsers,
+  gbgBotIds = new Set(),
+  language,
+  totalLevelCost = 0,
+  externalAvatars = {},
+}) => {
+  const contributors = userBuild?.contributors && typeof userBuild.contributors === 'object'
+    ? userBuild.contributors
+    : {};
+  const ownContributor = contributors[userId] || {};
+  const ownContribution = Number(ownContributor.forgePoints) || 0;
+  const totalContribution = Object.values(contributors).reduce(
+    (sum, contributor) => sum + (Number(contributor?.forgePoints) || 0),
+    0
+  );
+  const currentLevel = Number(ownContributor.level ?? userBuild?.level) || 0;
+  const progress = totalLevelCost > 0
+    ? Math.min(100, Math.max(0, Math.round((totalContribution / totalLevelCost) * 100)))
+    : 0;
+  const loadedContributors = Object.entries(contributors)
+    .filter(([contributorId]) => contributorId !== userId)
+    .filter(([contributorId]) => !gbgBotIds.has(String(contributorId)))
+    .sort(([, first], [, second]) =>
+      (Number(second?.forgePoints) || 0) - (Number(first?.forgePoints) || 0)
+    )
+    .map(([contributorId, contributor]) => {
+      const isGuildMember = Object.prototype.hasOwnProperty.call(guildUsers, contributorId);
+      return {
+        id: contributorId,
+        name: isGuildMember
+          ? guildUsers[contributorId]?.userName || guildUsers[contributorId]?.login
+            || contributor?.playerName || contributorId
+          : contributor?.playerName || contributor?.userName || contributor?.login
+            || contributor?.name || contributorId,
+        forgePoints: Number(contributor?.forgePoints) || 0,
+        imageUrl: isGuildMember
+          ? guildUsers[contributorId]?.imageUrl || null
+          : externalAvatars[contributorId] || null,
+        isGuildMember,
+      };
+    });
+
+  return {
+    id: buildId,
+    lock: totalContribution === 0 && userBuild?.lock === true,
+    lockEligible: totalContribution === 0,
+    name: getLocalizedBuildingName(buildingInfo.buildingName, language, buildId),
+    image: typeof buildingInfo.buildingImage === 'string'
+      ? buildingInfo.buildingImage
+      : buildingInfo.buildingImage?.uri || null,
+    level: currentLevel,
+    ownContribution,
+    totalContribution,
+    totalLevelCost,
+    progress,
+    updateAt: userBuild?.guarant?.calculatedAt,
+    guarant: userBuild?.guarant || null,
+    contributors: loadedContributors.slice(0, 5),
+    hiddenContributors: loadedContributors.slice(5),
+  };
 };
 
 const formatFreshness = (value) => {
@@ -295,7 +417,7 @@ function BuildingCard({
   const expandedAreaHeight = 14
     + DISTRIBUTION_HEADER_HEIGHT
     + distributionRowCount * DISTRIBUTION_ROW_HEIGHT
-    + 58;
+    + (expressScheduled ? 0 : 58);
   const chevronRotation = expansion.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg'],
@@ -394,7 +516,7 @@ function BuildingCard({
             </View>
           )}
         </View>
-        {!expressScheduled && <TouchableOpacity
+        <TouchableOpacity
           style={styles.expandButton}
           onPress={toggleExpanded}
           accessibilityRole="button"
@@ -404,7 +526,7 @@ function BuildingCard({
           <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
             <Ionicons name="chevron-down" size={31} color={COLORS.primary} />
           </Animated.View>
-        </TouchableOpacity>}
+        </TouchableOpacity>
       </View>
 
       <Animated.View
@@ -418,15 +540,17 @@ function BuildingCard({
         ]}
       >
         <MyGBDistributionTable guarant={building.guarant} />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Запланувати експрес"
-          activeOpacity={0.75}
-          onPress={onScheduleExpress}
-          style={styles.scheduleExpressButton}
-        >
-          <Text style={styles.scheduleExpressButtonText}>Запланувати експрес</Text>
-        </TouchableOpacity>
+        {!expressScheduled && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Запланувати експрес"
+            activeOpacity={0.75}
+            onPress={onScheduleExpress}
+            style={styles.scheduleExpressButton}
+          >
+            <Text style={styles.scheduleExpressButtonText}>Запланувати експрес</Text>
+          </TouchableOpacity>
+        )}
       </Animated.View>
       <ExtraContributorsModal
         contributors={building.hiddenContributors}
@@ -509,94 +633,65 @@ const MyGBCenterScreen = ({ navigation }) => {
           }
 
           try {
-            const guildUsersSnapshot = await database().ref(`guilds/${guildId}/guildUsers`).once('value');
+            const [guildUsersSnapshot, catalogSnapshot] = await Promise.all([
+              database().ref(`guilds/${guildId}/guildUsers`).once('value'),
+              database().ref('greatBuildings').once('value'),
+            ]);
             const guildUsers = guildUsersSnapshot.val() || {};
-            const gbgBotIds = await getGbgBotIds(guildId, Object.keys(guildUsers));
+            const catalog = catalogSnapshot.val() || {};
             const worldId = String(guildId).split('_')[0];
-            const loadedBuildings = await Promise.all(
-              Object.entries(userBuilds).map(async ([buildId, userBuild]) => {
-                const buildingSnapshot = await database().ref(`greatBuildings/${buildId}`).once('value');
-                const buildingInfo = buildingSnapshot.val() || {};
+            const preliminaryBuildings = Object.entries(userBuilds).map(([buildId, userBuild]) =>
+              buildBuildingRecord({
+                buildId,
+                userBuild,
+                buildingInfo: catalog[buildId] || {},
+                userId,
+                guildUsers,
+                language: i18n.language,
+              })
+            );
 
-                const contributors = userBuild?.contributors && typeof userBuild.contributors === 'object'
-                  ? userBuild.contributors
-                  : {};
-                const ownContributor = contributors[userId] || {};
-                const ownContribution = Number(ownContributor.forgePoints) || 0;
-                const totalContribution = Object.values(contributors).reduce(
-                  (sum, contributor) => sum + (Number(contributor?.forgePoints) || 0),
-                  0
-                );
-                const currentLevel = Number(ownContributor.level ?? userBuild?.level) || 0;
-                const nextLevel = currentLevel + 1;
-                let totalLevelCost = 0;
+            // Firebase-дані показуємо до повільних зовнішніх запитів.
+            if (!isCancelled && currentRequest === requestVersion) {
+              setBuildings(sortBuildings(preliminaryBuildings));
+            }
 
-                if (typeof buildingInfo.levelBase === 'string' && buildingInfo.levelBase) {
-                  try {
-                    const response = await fetch(`${buildingInfo.levelBase}${nextLevel}`);
-                    if (!response.ok) {
-                      throw new Error(`HTTP ${response.status}`);
-                    }
-                    const apiData = await response.json();
-                    totalLevelCost = Number(apiData?.response?.total_fp ?? apiData?.total_fp) || 0;
-                  } catch (error) {
-                    console.error(`Не вдалося отримати вартість рівня для ${buildId}:`, error);
-                  }
+            const externalContributorIds = new Set();
+            Object.values(userBuilds).forEach((userBuild) => {
+              Object.keys(userBuild?.contributors || {}).forEach((contributorId) => {
+                if (contributorId !== userId && !guildUsers[contributorId]) {
+                  externalContributorIds.add(contributorId);
                 }
+              });
+            });
 
-                const progress = totalLevelCost > 0
-                  ? Math.min(100, Math.max(0, Math.round((totalContribution / totalLevelCost) * 100)))
-                  : 0;
-                const contributorEntries = Object.entries(contributors)
-                  .filter(([contributorId]) => contributorId !== userId)
-                  .filter(([contributorId]) => !gbgBotIds.has(String(contributorId)))
-                  .sort(([, first], [, second]) =>
-                    (Number(second?.forgePoints) || 0) - (Number(first?.forgePoints) || 0)
-                  );
-                const loadedContributors = await Promise.all(
-                  contributorEntries.map(async ([contributorId, contributor]) => {
-                    const isGuildMember = Object.prototype.hasOwnProperty.call(guildUsers, contributorId);
-                    const imageUrl = isGuildMember
-                      ? guildUsers[contributorId]?.imageUrl || null
-                      : await fetchScoreDbAvatar(worldId, contributorId);
-
-                    return {
-                      id: contributorId,
-                      name: isGuildMember
-                        ? guildUsers[contributorId]?.userName
-                          || guildUsers[contributorId]?.login
-                          || contributor?.playerName
-                          || contributorId
-                        : contributor?.playerName
-                          || contributor?.userName
-                          || contributor?.login
-                          || contributor?.name
-                          || contributorId,
-                      forgePoints: Number(contributor?.forgePoints) || 0,
-                      imageUrl,
-                      isGuildMember,
-                    };
-                  })
-                );
-
-                return {
-                  id: buildId,
-                  lock: totalContribution === 0 && userBuild?.lock === true,
-                  lockEligible: totalContribution === 0,
-                  name: getLocalizedBuildingName(buildingInfo.buildingName, i18n.language, buildId),
-                  image: typeof buildingInfo.buildingImage === 'string'
-                    ? buildingInfo.buildingImage
-                    : buildingInfo.buildingImage?.uri || null,
-                  level: currentLevel,
-                  ownContribution,
-                  totalContribution,
-                  totalLevelCost,
-                  progress,
-                  updateAt: userBuild?.guarant?.calculatedAt,
-                  guarant: userBuild?.guarant || null,
-                  contributors: loadedContributors.slice(0, 5),
-                  hiddenContributors: loadedContributors.slice(5),
-                };
+            const [gbgBotIds, costEntries, avatarEntries] = await Promise.all([
+              getGbgBotIds(guildId, Object.keys(guildUsers)),
+              Promise.all(Object.entries(userBuilds).map(async ([buildId, userBuild]) => {
+                const buildingInfo = catalog[buildId] || {};
+                const contributors = userBuild?.contributors || {};
+                const currentLevel = Number(contributors[userId]?.level ?? userBuild?.level) || 0;
+                const cost = await fetchLevelCost(buildingInfo.levelBase, currentLevel + 1);
+                return [buildId, cost];
+              })),
+              Promise.all([...externalContributorIds].map(async (contributorId) => [
+                contributorId,
+                await fetchScoreDbAvatar(worldId, contributorId),
+              ])),
+            ]);
+            const costs = Object.fromEntries(costEntries);
+            const externalAvatars = Object.fromEntries(avatarEntries);
+            const loadedBuildings = Object.entries(userBuilds).map(([buildId, userBuild]) =>
+              buildBuildingRecord({
+                buildId,
+                userBuild,
+                buildingInfo: catalog[buildId] || {},
+                userId,
+                guildUsers,
+                gbgBotIds,
+                language: i18n.language,
+                totalLevelCost: costs[buildId] || 0,
+                externalAvatars,
               })
             );
 

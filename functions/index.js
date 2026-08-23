@@ -1645,6 +1645,8 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, mess
   const members = Object.keys(chatData.members);
   const senderProfile = await db.ref(`/users/${senderId}`).once("value");
   const senderName = senderProfile.val()?.userName || "Новое сообщение";
+  const senderGuildRole = senderProfile.val()?.userGuilds?.[normalizedGuildId]?.role;
+  const isGbgBotSender = senderGuildRole === "GBGbot";
 
   // ✅ Отримувачі (без відправника)
   const recipients = members.filter((m) => m !== senderId);
@@ -1659,9 +1661,10 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, mess
       const token = tokenSnap.exists() ? tokenSnap.val() : null;
       if (!token) return { uid, token: null, sound: false };
 
-      // ✅ якщо members/{uid} === true -> звук може бути, інакше завжди тихо
+      // Для GBGbot налаштування звуку конкретного чату не блокує alarm.
+      // Особистий графік активності отримувача перевіряється нижче завжди.
       const chatSoundEnabled = chatData.members?.[uid] === true;
-      if (!chatSoundEnabled) return { uid, token, sound: false };
+      if (!chatSoundEnabled && !isGbgBotSender) return { uid, token, sound: false };
 
       // ✅ якщо графік дозволяє -> зі звуком
       let soundBySchedule = false;
@@ -1698,14 +1701,17 @@ const sendChatNotificationForMessage = async ({ guildId, chatId, messageId, mess
         body: group.body,
         type: "chat_message",
         sound: group.sound ? "1" : "0",
+        chatSound: isGbgBotSender ? "gbg_bot_alarm" : "default",
       },
       android: {
         priority: "high",
         notification: {
           title: titleText,
           body: group.body,
-          ...(group.sound ? { sound: "smeh_minonovhasms" } : {}),
-          channelId: group.sound ? "chat_messages" : "chat_messages_silent",
+          ...(group.sound ? { sound: isGbgBotSender ? "alarm" : "smeh_minonovhasms" } : {}),
+          channelId: group.sound
+            ? (isGbgBotSender ? "chat_messages_gbg_bot_alarm" : "chat_messages")
+            : "chat_messages_silent",
         },
       },
       apns: {
@@ -1865,16 +1871,34 @@ exports.sendScheduledMessages = onSchedule(
       const scheduledMessagesRef = db.ref(`/guilds/${guildId}/scheduledMessages`);
       const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
       const snapshot = await query.once("value");
-      if (!snapshot.exists()) return;
-
       const promises = [];
-      snapshot.forEach((childSnapshot) => {
-        const messageId = childSnapshot.key;
-        const messageData = childSnapshot.val();
-        if (messageData.sendAt <= now) {
-          promises.push(moveMessageToChat({ guildId, messageId, messageData, db }));
-        }
-      });
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          const messageId = childSnapshot.key;
+          const messageData = childSnapshot.val();
+          if (messageData.sendAt <= now) {
+            promises.push(moveMessageToChat({ guildId, messageId, messageData, db }));
+          }
+        });
+      }
+
+      const temporarySnapshot = await db
+        .ref(`/guilds/${guildId}/temporaryMessages`)
+        .orderByChild("status")
+        .equalTo("pending")
+        .once("value");
+      if (temporarySnapshot.exists()) {
+        temporarySnapshot.forEach((childSnapshot) => {
+          const messageId = childSnapshot.key;
+          const temporaryData = childSnapshot.val() || {};
+          if (Number(temporaryData.expiresAt) <= now) {
+            const chatId = String(temporaryData.chatId || "");
+            const updates = { [`temporaryMessages/${messageId}`]: null };
+            if (chatId) updates[`chats/${chatId}/messages/${messageId}`] = null;
+            promises.push(db.ref(`/guilds/${guildId}`).update(updates));
+          }
+        });
+      }
 
       await Promise.all(promises);
     });

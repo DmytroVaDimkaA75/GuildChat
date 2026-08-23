@@ -15,7 +15,9 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  BackHandler,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { parseData } from "../parser";
 import { parseDataNew } from "../worldParser";
@@ -68,6 +70,26 @@ const AdminSettingsScreen = ({
   const [clanCaption, setClanCaption] = useState(null);
 
   const buttonWidth = "100%";
+
+  const closeScreen = React.useCallback(() => {
+    if (isSubmitting) return;
+    if (addWorldMode) {
+      navigation?.reset({ index: 0, routes: [{ name: "GBG" }] });
+    } else {
+      navigation?.goBack();
+    }
+  }, [addWorldMode, isSubmitting, navigation]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!addWorldMode) return undefined;
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        closeScreen();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [addWorldMode, closeScreen])
+  );
 
   useEffect(() => {
     const withTimeout = (promise, timeout = 7000) =>
@@ -392,7 +414,7 @@ const AdminSettingsScreen = ({
 
   return (
     <View style={styles.container}>
-      {!showSelectScreen && <TouchableOpacity activeOpacity={0.8} onPress={() => navigation?.goBack()} style={styles.backButton}><Ionicons name="arrow-back" size={22} color={DarkThemeColors.text} /></TouchableOpacity>}
+      {!showSelectScreen && <TouchableOpacity activeOpacity={0.8} disabled={isSubmitting} onPress={closeScreen} style={[styles.backButton, isSubmitting && styles.disabledButton]}><Ionicons name={addWorldMode ? "close" : "arrow-back"} size={22} color={DarkThemeColors.text} /></TouchableOpacity>}
       {showSelectScreen ? (
         <AdminSelectScreen
           guildData={parsedGuildData}

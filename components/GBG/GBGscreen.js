@@ -854,15 +854,14 @@ const GVG = () => {
     setSectorStaff({});
     setSectorSchedule([]);
     setSectorColors({});
-    setSectorSnapshot(null);
-    setIsSectorDataLoaded(false);
     setBlinkingSector(null);
   }, [currentMap, isMapLoaded]);
 
   useEffect(() => {
-    if (!isMapLoaded) return;
     let sectorsRef;
     let onSectorsUpdate;
+    setSectorSnapshot(null);
+    setIsSectorDataLoaded(false);
 
     (async () => {
       const id = guildId || (await AsyncStorage.getItem("guildId"));
@@ -883,10 +882,10 @@ const GVG = () => {
     return () => {
       if (sectorsRef && onSectorsUpdate) sectorsRef.off("value", onSectorsUpdate);
     };
-  }, [guildId, isMapLoaded]);
+  }, [guildId]);
 
   useEffect(() => {
-    if (!isMapLoaded || !areOpponentsLoaded) return;
+    if (!isMapLoaded) return;
 
     const data = sectorSnapshot && typeof sectorSnapshot === "object" ? sectorSnapshot : {};
     const mapData = MAP_DATA[mapKey] || {};
@@ -1018,7 +1017,7 @@ const GVG = () => {
   }, [blinkingAnim, blinkingSector]);
 
   useEffect(() => {
-    if (isMapLoaded && isSectorDataLoaded && areOpponentsLoaded) {
+    if (isMapLoaded && isSectorDataLoaded) {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     }
   }, [isMapLoaded, isSectorDataLoaded, areOpponentsLoaded]);
@@ -1263,7 +1262,7 @@ const GVG = () => {
   const filteredBattlesRows = battlesActivityOnly ? battlesRows.filter((row) => row.hasDiff) : battlesRows;
 
   // ===== Loader =====
-  if (!isMapLoaded || !isSectorDataLoaded || !areOpponentsLoaded) {
+  if (!isMapLoaded || !isSectorDataLoaded) {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color={UI.primary} />

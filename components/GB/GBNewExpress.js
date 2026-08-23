@@ -16,6 +16,7 @@ import {
   View
 } from 'react-native';
 import { Dropdown } from 'react-native-element-dropdown';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 // import { database } from '../../firebaseConfig'; // <- УДАЛЕНО
 import SimpleWheelPicker from '../CustomElements/SimpleWheelPicker';
@@ -96,6 +97,7 @@ const getMaximumAllowedMultiplier = ({ branches, ownerUserId, buildingId, curren
 
 const GBNewExpress = ({ route, navigation }) => {
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   // Отримання buildingId та scheduleTime з route.params
   const { buildingId, scheduleTime, chatId, postpone = false, originalChatId, originalScheduleTime, selectedGbs = [] } = route.params || {};
 
@@ -677,7 +679,12 @@ const GBNewExpress = ({ route, navigation }) => {
             <TouchableWithoutFeedback onPress={() => setShowDateTimeModal(false)}>
               <View style={styles.modalBackground}>
                 <TouchableWithoutFeedback>
-                  <View style={styles.modalContainer}>
+                  <View
+                    style={[
+                      styles.modalContainer,
+                      { paddingBottom: Math.max(20, insets.bottom + 12) },
+                    ]}
+                  >
                     <Text style={styles.modalTitle}>{t('gbNewExpress.modalTitle')}</Text>
                     <View style={styles.wheelWrapper}>
                       <View style={styles.wheelContainer}>
