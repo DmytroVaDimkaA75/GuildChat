@@ -70,6 +70,7 @@ import LanguageSelector from './Profile/LanguageSelector';
 import ProfileData from './Profile/ProfileData';
 import ProfileMain from './Profile/ProfileMain';
 import SleepSchedule from './Profile/SleepSchedule';
+import QuantScreen from './Quant';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -83,6 +84,7 @@ import GVG from "./ico/menu/GVG.svg";
 import GB from "./ico/menu/GB.svg";
 import Community from "./ico/menu/people.svg";
 import Profile from "./ico/menu/user.svg";
+import QuantIcon from "./ico/quant.svg";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -290,6 +292,21 @@ function GBGStack() {
             </TouchableOpacity>
           ),
         })}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function QuantStack() {
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="QuantScreen"
+        component={QuantScreen}
+        options={{
+          title: 'Квантові вторгнення',
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        }}
       />
     </Stack.Navigator>
   );
@@ -1134,21 +1151,14 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           }}
         />
         <Drawer.Screen
-          name="Community"
-          component={CommunityStack}
+          name="GB"
           options={{
-            drawerLabel: 'Спільнота',
-            drawerIconComponent: () => (
-              <Community
-                width={24}
-                height={24}
-                fill={COLORS.textSecondary}
-                color={COLORS.textSecondary}
-                style={{ color: COLORS.textSecondary }}
-              />
-            )
+            drawerLabel: t("drawer.gbLabel"),
+            drawerIconComponent: renderIcon(GB)
           }}
-        />
+        >
+          {() => <GBStack isDeveloper={isDeveloper} />}
+        </Drawer.Screen>
         <Drawer.Screen
           name="GBG"
           component={GBGStack}
@@ -1158,14 +1168,21 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
           }}
         />
         <Drawer.Screen
-          name="GB"
+          name="Quant"
+          component={QuantStack}
           options={{
-            drawerLabel: t("drawer.gbLabel"),
-            drawerIconComponent: renderIcon(GB)
+            drawerLabel: 'Квантові вторгнення',
+            drawerIconComponent: renderIcon(QuantIcon)
           }}
-        >
-          {() => <GBStack isDeveloper={isDeveloper} />}
-        </Drawer.Screen>
+        />
+        <Drawer.Screen
+          name="Community"
+          component={CommunityStack}
+          options={{
+            drawerLabel: 'Спільнота',
+            drawerIconComponent: renderIcon(Community)
+          }}
+        />
         <Drawer.Screen
           name="culture"
           component={CultureStack}
