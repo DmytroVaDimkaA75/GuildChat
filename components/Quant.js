@@ -11,8 +11,8 @@ const COLORS = {
 };
 const HORIZONTAL_STEP = 51;
 const VERTICAL_STEP = 54;
-const MAP_PADDING = 32;
-const NODE_SIZE = 38;
+const NODE_SIZE = 57;
+const MAP_PADDING = NODE_SIZE / 2 + 12;
 
 const toNodeList = (nodes) => {
   if (Array.isArray(nodes)) return nodes.filter(Boolean);
@@ -39,8 +39,9 @@ const buildMapHtml = (nodes, geometry, selectedNodeId) => `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>
 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:${COLORS.surface}}
-svg{display:block;width:100%;height:100%;touch-action:manipulation}.route{stroke:${COLORS.separator};stroke-width:4;stroke-linecap:round}
+svg{display:block;width:100%;height:100%;touch-action:manipulation}.route{stroke-width:4;stroke-linecap:round}
 .node{cursor:pointer}.shape{stroke:#0f1115;stroke-width:3}.node.avoid .shape{stroke:#ff9f43;stroke-width:4}
+.node.detailed .shape{stroke:#69d2ff;stroke-width:5;filter:drop-shadow(0 0 5px rgba(105,210,255,.9))}
 .node.current .shape,.node.selected .shape{stroke:#fff;stroke-width:5}.label{fill:#fff;font:700 14px Arial,sans-serif;text-anchor:middle;dominant-baseline:central;pointer-events:none}
 </style></head><body>
 <svg id="map" viewBox="0 0 ${geometry.width} ${geometry.height}" preserveAspectRatio="xMidYMid meet" aria-label="Мапа квантових вторгнень"></svg>
@@ -50,14 +51,19 @@ const byId=new Map(nodes.map(n=>[String(n.id),n]));
 const point=n=>({x:${MAP_PADDING + NODE_SIZE / 2}+(Number(n.position.x)-1)*${HORIZONTAL_STEP},y:${MAP_PADDING + NODE_SIZE / 2}+(Number(n.position.y)-1)*${VERTICAL_STEP}});
 const el=(name,attrs)=>{const node=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>node.setAttribute(k,v));return node};
 const list=v=>Array.isArray(v)?v:(v&&typeof v==='object'?Object.values(v):[]);
-const className=n=>String(n.type?.__class__||'').toLowerCase();
-const fightType=n=>String(n.type?.fightType||n.fightType||'').toLowerCase();
-const finalBoss=n=>fightType(n)==='final-boss';
-const start=n=>className(n).includes('start')||String(n.type?.type||'').toLowerCase()==='start';
-const fill=n=>{if(finalBoss(n))return'${COLORS.danger}';if(start(n))return'#42c7e8';const s=String(n.state?.state||'').toLowerCase();if(s==='finished')return'${COLORS.primary}';if(s==='open')return'#35b86b';return'#67717e'};
+const finished=n=>String(n.guildState||'').toLowerCase()==='finished';
+const fill=n=>{
+  if(finished(n))return'#35b86b';
+  const armyType=String(n.type?.armyType||'').toLowerCase();
+  const donationType=String(n.type?.type||'').toLowerCase();
+  if(armyType==='attacking')return'#e5484d';
+  if(armyType==='defending')return'#4e86d8';
+  if(donationType==='resources'||donationType==='goods')return'#f2c94c';
+  return'#35b86b';
+};
 const routes=el('g',{'aria-hidden':'true'}),drawn=new Set();
-nodes.forEach(n=>{if(!n.position)return;list(n.connectedNodes).forEach(c=>{const id=String(c?.targetNodeId||''),target=byId.get(id);if(!target?.position)return;const key=[String(n.id),id].sort().join('-');if(drawn.has(key))return;drawn.add(key);const a=point(n),b=point(target);routes.appendChild(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'route'}))})});map.appendChild(routes);
-const nodeLayer=el('g',{});nodes.forEach(n=>{if(!n.position||!n.id)return;const p=point(n),classes=['node'];if(String(n.state?.indicator?.value||'')==='avoid')classes.push('avoid');if(n.currentNode||n.isCurrent)classes.push('current');if(String(n.id)===String(selected))classes.push('selected');const g=el('g',{class:classes.join(' '),role:'button',tabindex:'0','aria-label':'Вузол '+String(n.id).toUpperCase(),transform:'translate('+p.x+' '+p.y+')'});g.appendChild(el('circle',{r:${NODE_SIZE / 2},fill:fill(n),class:'shape'}));const text=el('text',{x:0,y:1,class:'label'});text.textContent=String(n.id).toUpperCase();g.appendChild(text);const press=()=>window.ReactNativeWebView?.postMessage(JSON.stringify({type:'nodePress',nodeId:String(n.id)}));g.addEventListener('click',press);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')press()});nodeLayer.appendChild(g)});map.appendChild(nodeLayer);
+nodes.forEach(n=>{if(!n.position)return;list(n.connectedNodes).forEach(c=>{const id=String(c?.targetNodeId||''),target=byId.get(id);if(!target?.position)return;const key=[String(n.id),id].sort().join('-');if(drawn.has(key))return;drawn.add(key);const a=point(n),b=point(target),stroke=finished(n)||finished(target)?'#35b86b':'${COLORS.separator}';routes.appendChild(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'route',stroke}))})});map.appendChild(routes);
+const nodeLayer=el('g',{});nodes.forEach(n=>{if(!n.position||!n.id)return;const p=point(n),classes=['node'];if(String(n.state?.indicator?.value||'')==='avoid')classes.push('avoid');if(n.hasNodeDetails)classes.push('detailed');if(n.currentNode||n.isCurrent)classes.push('current');if(String(n.id)===String(selected))classes.push('selected');const g=el('g',{class:classes.join(' '),role:'button',tabindex:'0','aria-label':'Вузол '+String(n.id).toUpperCase(),transform:'translate('+p.x+' '+p.y+')'});g.appendChild(el('circle',{r:${NODE_SIZE / 2},fill:fill(n),class:'shape'}));const text=el('text',{x:0,y:1,class:'label'});text.textContent=String(n.id).toUpperCase();g.appendChild(text);const press=()=>window.ReactNativeWebView?.postMessage(JSON.stringify({type:'nodePress',nodeId:String(n.id)}));g.addEventListener('click',press);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')press()});nodeLayer.appendChild(g)});map.appendChild(nodeLayer);
 </script></body></html>`;
 
 const getNodeTypeLabel = (node) => {
@@ -85,35 +91,21 @@ export default function Quant() {
 
   useEffect(() => {
     if (!guildId) {
+      setConfig(null);
+      setNodes([]);
       setLoading(false);
       setError('Не вибрано гільдію.');
       return undefined;
     }
     setLoading(true);
     setError('');
+    setConfig(null);
+    setNodes([]);
+    setSelectedNodeId(null);
     const configRef = database().ref(`guilds/${guildId}/quantum`);
     const onConfig = (snapshot) => {
       const nextConfig = snapshot.val() || {};
       setConfig(nextConfig);
-      setSelectedNodeId(null);
-      if (!nextConfig.mapKey || nextConfig.difficultyLevel === undefined || nextConfig.difficultyLevel === null) {
-        setNodes([]);
-        setLoading(false);
-        setError('Для гільдії не вказано mapKey або difficultyLevel.');
-        return;
-      }
-      database().ref(`quantumMaps/${nextConfig.mapKey}/${nextConfig.difficultyLevel}/nodes`).once('value')
-        .then((mapSnapshot) => {
-          const nextNodes = toNodeList(mapSnapshot.val());
-          setNodes(nextNodes);
-          setError(nextNodes.length ? '' : 'Мапа не містить вузлів.');
-        })
-        .catch((loadError) => {
-          console.error('Не вдалося завантажити мапу квантових вторгнень:', loadError);
-          setNodes([]);
-          setError('Не вдалося завантажити мапу.');
-        })
-        .finally(() => setLoading(false));
     };
     const onError = (loadError) => {
       console.error('Не вдалося завантажити налаштування квантових вторгнень:', loadError);
@@ -124,10 +116,64 @@ export default function Quant() {
     return () => configRef.off('value', onConfig);
   }, [guildId]);
 
-  const geometry = useMemo(() => getGeometry(nodes), [nodes]);
+  const mapKey = config?.mapKey;
+  const difficultyLevel = config?.difficultyLevel;
+  const isConfigLoaded = config !== null;
+
+  useEffect(() => {
+    if (!isConfigLoaded) return undefined;
+    if (!mapKey || difficultyLevel === undefined || difficultyLevel === null) {
+      setNodes([]);
+      setLoading(false);
+      setError('Для гільдії не вказано mapKey або difficultyLevel.');
+      return undefined;
+    }
+
+    setLoading(true);
+    setError('');
+    const nodesRef = database().ref(`quantumMaps/${mapKey}/${difficultyLevel}/nodes`);
+    const onNodes = (snapshot) => {
+      const nextNodes = toNodeList(snapshot.val());
+      setNodes(nextNodes);
+      setLoading(false);
+      setError(nextNodes.length ? '' : 'Мапа не містить вузлів.');
+    };
+    const onNodesError = (loadError) => {
+      console.error('Не вдалося завантажити мапу квантових вторгнень:', loadError);
+      setNodes([]);
+      setLoading(false);
+      setError('Не вдалося завантажити мапу.');
+    };
+
+    nodesRef.on('value', onNodes, onNodesError);
+    return () => nodesRef.off('value', onNodes);
+  }, [difficultyLevel, isConfigLoaded, mapKey]);
+
+  const renderedNodes = useMemo(() => {
+    const guildNodes = config?.nodes;
+    const nodeDetails = config?.nodeDetails;
+
+    return nodes.map((node) => {
+      const nodeId = String(node.id);
+      const guildNode = guildNodes?.[nodeId];
+      const guildState = typeof guildNode?.state === 'string'
+        ? guildNode.state
+        : guildNode?.state?.state;
+      const hasNodeDetails = Boolean(
+        nodeDetails && Object.prototype.hasOwnProperty.call(nodeDetails, nodeId)
+      );
+
+      return { ...node, guildState, hasNodeDetails };
+    });
+  }, [config?.nodeDetails, config?.nodes, nodes]);
+
+  const geometry = useMemo(() => getGeometry(renderedNodes), [renderedNodes]);
   const mapHeight = Math.max(220, width * 0.96 * geometry.height / geometry.width);
-  const selectedNode = nodes.find((node) => String(node.id) === String(selectedNodeId));
-  const html = useMemo(() => buildMapHtml(nodes, geometry, selectedNodeId), [nodes, geometry, selectedNodeId]);
+  const selectedNode = renderedNodes.find((node) => String(node.id) === String(selectedNodeId));
+  const html = useMemo(
+    () => buildMapHtml(renderedNodes, geometry, selectedNodeId),
+    [renderedNodes, geometry, selectedNodeId]
+  );
 
   const onMapMessage = (event) => {
     try {
