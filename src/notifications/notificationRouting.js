@@ -31,6 +31,7 @@ export const normalizeNotificationRoute = (source) => {
       "gbg_help",
       "culture_build_ready",
       "express_upgrade",
+      "quantum_sector_open",
     ].includes(type)
   ) {
     return null;

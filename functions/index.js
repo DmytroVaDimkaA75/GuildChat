@@ -26,6 +26,11 @@ const { fetchLinkPreview } = require("./linkPreview");
 const { fetchYouTubeChannelFeed } = require("./youtubeFeed");
 const { ARC_CONTRIBUTION_BOOSTS } = require("./arcLevels");
 const { PUSH: EXPRESS_PUSH, advanceExpress, uniqueAvailableIds } = require("./expressWorkflow");
+const {
+  buildQuantumSectorNotification,
+  collectUserFcmTokens,
+  isQuantumSectorOpening,
+} = require("./quantumNotifications");
 
 admin.initializeApp();
 
@@ -317,6 +322,106 @@ const sendMulticastWithoutRecipientLimit = async ({ tokens, ...payload }) => {
   );
 };
 
+exports.notifyQuantumSectorOpen = onValueWritten(
+  {
+    ref: "/guilds/{guildId}/quantum/nodes/{sectorId}/state",
+    region: "europe-west1",
+  },
+  async (event) => {
+    const beforeState = event.data.before.val();
+    const afterState = event.data.after.val();
+    if (!isQuantumSectorOpening(beforeState, afterState)) return null;
+
+    const guildId = String(event.params.guildId || "");
+    const sectorId = String(event.params.sectorId || "");
+    const db = admin.database();
+    const subscriptionsRef = db.ref(
+      `/guilds/${guildId}/quantum/stateNotifications/${sectorId}`
+    );
+    const [subscriptionsSnap, guildMembersSnap] = await Promise.all([
+      subscriptionsRef.once("value"),
+      db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+    ]);
+    const subscriptions = subscriptionsSnap.val() || {};
+    const guildMembers = guildMembersSnap.val() || {};
+    const userIds = Object.keys(subscriptions).filter((userId) =>
+      Object.prototype.hasOwnProperty.call(guildMembers, userId)
+    );
+
+    if (!userIds.length) {
+      await subscriptionsRef.remove();
+      return null;
+    }
+
+    const userSnapshots = await Promise.all(
+      userIds.map((userId) => db.ref(`/users/${userId}`).once("value"))
+    );
+    const userRecords = Object.fromEntries(
+      userSnapshots.map((snapshot, index) => [userIds[index], snapshot.val() || {}])
+    );
+    const worldContexts = await getPushWorldContext({ db, guildId, userIds });
+    const notification = buildQuantumSectorNotification({
+      guildId,
+      sectorId,
+    });
+
+    const deliveries = userIds.map(async (userId) => {
+      const tokens = collectUserFcmTokens({ [userId]: userRecords[userId] });
+      if (!tokens.length) return 0;
+      const body = addWorldNameToPushBody(
+        notification.body,
+        worldContexts.get(userId)
+      );
+      await sendMulticastWithoutRecipientLimit({
+        tokens,
+        data: {
+          ...notification.data,
+          body,
+          notificationEventId: String(event.id || ""),
+        },
+        android: {
+          priority: "high",
+          notification: {
+            title: notification.title,
+            body,
+            channelId: "quantum_sector",
+            sound: "quant",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title: notification.title, body },
+              sound: "default",
+            },
+          },
+        },
+      });
+      return tokens.length;
+    });
+    const tokenCount = (await Promise.all(deliveries)).reduce(
+      (sum, count) => sum + count,
+      0
+    );
+    if (!tokenCount) {
+      logger.warn("[QuantumNotifications] No FCM tokens for subscriptions", {
+        guildId,
+        sectorId,
+        userIds,
+      });
+    }
+
+    await subscriptionsRef.remove();
+    logger.info("[QuantumNotifications] Sector opened", {
+      guildId,
+      sectorId,
+      subscriberCount: userIds.length,
+      tokenCount,
+    });
+    return null;
+  }
+);
+
 const normalizeFcmToken = (value) => {
   const token = String(value || "").trim();
   return token.length >= 20 ? token : "";
@@ -530,6 +635,8 @@ const getSectorOwnerKey = (sectorData) => {
   return String(ownerValue);
 };
 
+const isOwnGbgSector = (sectorData) => sectorData?.isOwn === true;
+
 const createWidgetNeighborMap = (raw) =>
   Object.fromEntries(
     String(raw || "")
@@ -721,7 +828,6 @@ const getWidgetSectorBuildings = (sector) => {
 const calculateWidgetSectorBonus = ({
   sectorId,
   sectors,
-  shortGuildId,
   neighbors,
 }) => {
   const bonuses = [];
@@ -730,7 +836,7 @@ const calculateWidgetSectorBonus = ({
     if (
       !neighbor ||
       typeof neighbor !== "object" ||
-      getSectorOwnerKey(neighbor) !== shortGuildId
+      !isOwnGbgSector(neighbor)
     ) {
       return;
     }
@@ -834,9 +940,8 @@ const buildWidgetSnapshot = ({
     }
   });
 
-  const shortGuildId = String(guildId).split("_").pop();
   const ownSectorIds = sectorIds.filter(
-    (sectorId) => getSectorOwnerKey(sectors[sectorId]) === shortGuildId
+    (sectorId) => isOwnGbgSector(sectors[sectorId])
   );
   const ownSectorSet = new Set(ownSectorIds);
   const adjacentSectorIds = new Set();
@@ -857,7 +962,6 @@ const buildWidgetSnapshot = ({
       const bonus = calculateWidgetSectorBonus({
         sectorId,
         sectors,
-        shortGuildId,
         neighbors,
       });
       return {
@@ -1974,12 +2078,9 @@ exports.syncGbgNotifications = onValueWritten(
       });
     }
 
-    const mySectors = [];
-    Object.keys(allSectors).forEach((key) => {
-      const sec = allSectors[key];
-      const owner = String(sec.owner || sec.ownerId || "0");
-      if (owner === shortGuildId) mySectors.push(key);
-    });
+    const mySectors = Object.keys(allSectors).filter((key) =>
+      isOwnGbgSector(allSectors[key])
+    );
 
     const targetSet = new Set();
 
@@ -2008,12 +2109,11 @@ exports.syncGbgNotifications = onValueWritten(
 
     for (const targetId of targetSet) {
       const sec = allSectors[targetId];
-      const owner = String(sec.owner || sec.ownerId || "0");
       const openTime = Number(sec.openTime);
       const armyRaw = String(sec.army || "").toLowerCase();
       const armyType = armyRaw === "attack" ? "attack" : "defense";
 
-      if (owner !== shortGuildId && !isNaN(openTime) && openTime > 0) {
+      if (!isOwnGbgSector(sec) && !isNaN(openTime) && openTime > 0) {
         if (openTime < nowInSeconds - 300) continue;
 
         const taskId = `${guildId}_${targetId}`;
@@ -2465,15 +2565,12 @@ exports.scheduleGbgSectorBuildCheck = onValueWritten(
     const sectorId = String(event.params.sectorId || "");
     if (!guildId || !sectorId) return null;
 
-    const shortGuildId = guildId.includes("_") ? guildId.split("_").pop() : guildId;
     const before = event.data.before.exists() ? event.data.before.val() : null;
     const after = event.data.after.exists() ? event.data.after.val() : null;
     if (!after || typeof after !== "object") return null;
 
-    const prevOwner = getSectorOwnerKey(before);
-    const nextOwner = getSectorOwnerKey(after);
-    if (nextOwner !== String(shortGuildId)) return null;
-    if (prevOwner === String(shortGuildId)) return null;
+    if (!isOwnGbgSector(after)) return null;
+    if (isOwnGbgSector(before)) return null;
 
     const nowSec = Math.floor(Date.now() / 1000);
     const runAt = nowSec + 300;

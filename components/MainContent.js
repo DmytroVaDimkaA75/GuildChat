@@ -306,6 +306,17 @@ function QuantStack() {
         options={{
           title: 'Квантові вторгнення',
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+          headerRight: () => (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Вимкнути звук квантових вторгнень"
+              activeOpacity={0.7}
+              onPress={() => {}}
+              style={{ marginRight: 16, padding: 6 }}
+            >
+              <MaterialIcons name="volume-off" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ),
         }}
       />
     </Stack.Navigator>
@@ -1595,6 +1606,8 @@ export default function MainContent() {
           );
         } else if (route.type === 'express_upgrade') {
           navigationRef.navigate('GB', { screen: 'GBExpress' });
+        } else if (route.type === 'quantum_sector_open') {
+          navigationRef.navigate('Quant', { screen: 'QuantScreen' });
         }
 
         if (
@@ -1921,6 +1934,13 @@ export default function MainContent() {
           sound: 'kirpich',
         });
 
+        await notifee.createChannel({
+          id: 'quantum_sector',
+          name: 'Quantum Sector Notifications',
+          importance: AndroidImportance.HIGH,
+          sound: 'quant',
+        });
+
         const fcmToken = await messaging().getToken();
         if (fcmToken) {
           console.log("Your FCM Token is:", fcmToken);
@@ -1986,6 +2006,7 @@ export default function MainContent() {
           'culture_build_ready',
           'chat_message',
           'express_upgrade',
+          'quantum_sector_open',
         ].includes(messageType);
         const displaySilently = scheduleAwareMessage && !soundFlag;
 
@@ -2006,6 +2027,8 @@ export default function MainContent() {
                 : 'chat_messages_silent')
             : messageType === 'express_upgrade'
               ? 'express_upgrade'
+            : messageType === 'quantum_sector_open'
+              ? 'quantum_sector'
               : 'default';
 
         const notificationData = {

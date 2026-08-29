@@ -92,12 +92,7 @@ const parseStaffSectors = (rawValue) => {
   return Array.from(sectors);
 };
 
-const getSectorOwnerId = (entry) => {
-  if (!entry || typeof entry !== 'object') return null;
-  const ownerValue = entry.owner ?? entry.ownerId;
-  if (ownerValue === undefined || ownerValue === null) return null;
-  return String(ownerValue);
-};
+const isOwnSector = (entry) => entry?.isOwn === true;
 
 const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== 'object') return [];
@@ -166,21 +161,19 @@ const getNeighborIdsForSectors = (mapKey, sectorIds) => {
   return Array.from(neighbors);
 };
 
-const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
-  if (!mapKey || !sectorId || !sectors || !shortGuildId) return { value: 100, readyAt: null };
+const calculateSectorBonus = ({ mapKey, sectorId, sectors }) => {
+  if (!mapKey || !sectorId || !sectors) return { value: 100, readyAt: null };
 
   const neighborIds = getNeighborIdsForSector(mapKey, sectorId);
   if (neighborIds.length === 0) return { value: 100, readyAt: null };
 
-  const shortId = String(shortGuildId);
   const bonuses = [];
 
   neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== 'object') return;
 
-    const ownerId = getSectorOwnerId(entry);
-    if (!ownerId || ownerId !== shortId) return;
+    if (!isOwnSector(entry)) return;
 
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
@@ -206,12 +199,6 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
   }
 
   return { value: 20, readyAt: targetReadyAt > 0 ? targetReadyAt : null };
-};
-
-const getShortGuildIdFromGuildId = (guildId) => {
-  if (!guildId) return null;
-  const parts = String(guildId).split('_');
-  return parts.length > 1 ? parts[parts.length - 1] : parts[0];
 };
 
 /**
@@ -352,8 +339,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
   });
 
   // 6) Рахуємо next5 (логіка як у GBGscreen)
-  const shortGuildId = getShortGuildIdFromGuildId(gid);
-  const ownSectors = sectorIds.filter((sid) => String(sectors?.[sid]?.owner ?? sectors?.[sid]?.ownerId) === String(shortGuildId));
+  const ownSectors = sectorIds.filter((sid) => isOwnSector(sectors?.[sid]));
   const neighborIds = getNeighborIdsForSectors(mapKey, ownSectors);
 
   const schedule = neighborIds
@@ -367,7 +353,7 @@ export const refreshGbgWidgetCacheFromFirebase = async ({ guildId, reason = '', 
       const armyRaw = String(entry.army || '').trim().toLowerCase();
       const army = (armyRaw === 'attack' || armyRaw === 'defense') ? armyRaw : '';
 
-      const bonusInfo = calculateSectorBonus({ mapKey, sectorId: sid, sectors, shortGuildId });
+      const bonusInfo = calculateSectorBonus({ mapKey, sectorId: sid, sectors });
 
       return {
         sectorId: sid,

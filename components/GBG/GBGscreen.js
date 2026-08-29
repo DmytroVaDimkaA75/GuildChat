@@ -209,12 +209,7 @@ const parseStaffSectors = (rawValue) => {
   return Array.from(sectors);
 };
 
-const getSectorOwnerId = (entry) => {
-  if (!entry || typeof entry !== "object") return null;
-  const ownerValue = entry.owner ?? entry.ownerId;
-  if (ownerValue === undefined || ownerValue === null) return null;
-  return String(ownerValue);
-};
+const isOwnSector = (entry) => entry?.isOwn === true;
 
 const getBuildingsWithBonuses = (entry) => {
   if (!entry || typeof entry !== "object") return [];
@@ -286,8 +281,8 @@ const getNeighborIdsForSector = (mapKey, sectorId) => {
   return neighborList.filter((neighborId) => neighborId && data[neighborId]);
 };
 
-const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
-  if (!mapKey || !sectorId || !sectors || !shortGuildId) {
+const calculateSectorBonus = ({ mapKey, sectorId, sectors }) => {
+  if (!mapKey || !sectorId || !sectors) {
     return {
       value: 100,
       readyAt: null,
@@ -312,13 +307,11 @@ const calculateSectorBonus = ({ mapKey, sectorId, sectors, shortGuildId }) => {
       flatProductionBonusReadyAt: null,
     };
   }
-  const shortId = String(shortGuildId);
   const bonuses = [];
   neighborIds.forEach((neighborId) => {
     const entry = sectors[neighborId];
     if (!entry || typeof entry !== "object") return;
-    const ownerId = getSectorOwnerId(entry);
-    if (!ownerId || ownerId !== shortId) return;
+    if (!isOwnSector(entry)) return;
     bonuses.push(...getBuildingsWithBonuses(entry));
   });
   if (bonuses.length === 0) {
@@ -413,7 +406,6 @@ const GVG = () => {
   const [sectorSchedule, setSectorSchedule] = useState([]);
   const [sectorColors, setSectorColors] = useState({});
   const [sectorSnapshot, setSectorSnapshot] = useState(null);
-  const [shortGuildId, setShortGuildId] = useState(null);
   const [blinkingSector, setBlinkingSector] = useState(null);
   const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
   const [currentMap, setCurrentMap] = useState(null);
@@ -595,28 +587,6 @@ const GVG = () => {
       setIsSavingSectorMute(false);
     }
   }, [areSectorNotificationsMuted, guildId, t]);
-
-  useEffect(() => {
-    let isActive = true;
-    (async () => {
-      try {
-        const storedId = await AsyncStorage.getItem("guildId");
-        const effectiveId = guildId || storedId;
-        if (!isActive || !effectiveId) {
-          setShortGuildId(null);
-          return;
-        }
-        const parts = String(effectiveId).split("_");
-        const shortId = parts.length > 1 ? parts[parts.length - 1] : parts[0];
-        setShortGuildId(shortId);
-      } catch (error) {
-        if (isActive) setShortGuildId(null);
-      }
-    })();
-    return () => {
-      isActive = false;
-    };
-  }, [guildId]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(Math.floor(Date.now() / 1000)), 1000);
@@ -956,7 +926,7 @@ const GVG = () => {
   }, [areOpponentsLoaded, isMapLoaded, mapKey, opponentMapById, opponentStaffSectors, sectorSnapshot]);
 
   useEffect(() => {
-    if (!isMapLoaded || !shortGuildId) {
+    if (!isMapLoaded) {
       setSectorSchedule([]);
       return;
     }
@@ -969,7 +939,7 @@ const GVG = () => {
       return;
     }
 
-    const ownSectors = sectorIds.filter((id) => String(data[id]?.owner ?? data[id]?.ownerId) === String(shortGuildId));
+    const ownSectors = sectorIds.filter((id) => isOwnSector(data[id]));
     if (ownSectors.length === 0) {
       setSectorSchedule([]);
       return;
@@ -990,7 +960,7 @@ const GVG = () => {
         if (!Number.isFinite(openTime) || openTime <= 0) return null;
 
         const armyRaw = String(entry.army || "").trim().toLowerCase();
-        const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data, shortGuildId });
+        const bonusInfo = calculateSectorBonus({ mapKey, sectorId, sectors: data });
 
         return {
           name: sectorId,
@@ -1013,7 +983,7 @@ const GVG = () => {
       .sort((a, b) => a.openTime - b.openTime);
 
     setSectorSchedule(schedule);
-  }, [isMapLoaded, mapKey, sectorSnapshot, shortGuildId]);
+  }, [isMapLoaded, mapKey, sectorSnapshot]);
 
   useEffect(() => {
     if (blinkingLoopRef.current) blinkingLoopRef.current.stop();
