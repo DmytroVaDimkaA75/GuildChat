@@ -336,7 +336,7 @@ exports.notifyQuantumSectorOpen = onValueWritten(
     const sectorId = String(event.params.sectorId || "");
     const db = admin.database();
     const subscriptionsRef = db.ref(
-      `/guilds/${guildId}/quantum/stateNotifications/${sectorId}`
+      `/guilds/${guildId}/quantumStateNotifications/${sectorId}`
     );
     const [subscriptionsSnap, guildMembersSnap] = await Promise.all([
       subscriptionsRef.once("value"),

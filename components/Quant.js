@@ -532,20 +532,41 @@ export default function Quant() {
 
   useEffect(() => {
     let cancelled = false;
-    const syncScheduledSectors = async () => {
+    let subscriptionsRef = null;
+    let onSubscriptions = null;
+
+    setScheduledSectorIds([]);
+    const subscribeToScheduledSectors = async () => {
+      if (!guildId) return;
       const userId = String((await AsyncStorage.getItem('userId')) || '').trim();
       if (cancelled || !userId) return;
-      const subscriptions = config?.stateNotifications || {};
-      const nextSectorIds = Object.entries(subscriptions)
-        .filter(([, users]) => users && Object.prototype.hasOwnProperty.call(users, userId))
-        .map(([sectorId]) => String(sectorId));
-      setScheduledSectorIds(nextSectorIds);
+
+      subscriptionsRef = database().ref(`guilds/${guildId}/quantumStateNotifications`);
+      onSubscriptions = (snapshot) => {
+        if (cancelled) return;
+        const subscriptions = snapshot.val() || {};
+        const nextSectorIds = Object.entries(subscriptions)
+          .filter(([, users]) => users && Object.prototype.hasOwnProperty.call(users, userId))
+          .map(([sectorId]) => String(sectorId));
+        setScheduledSectorIds(nextSectorIds);
+      };
+      const onSubscriptionsError = (syncError) => {
+        if (cancelled) return;
+        console.warn('Не вдалося відновити підписки квантових секторів:', syncError);
+      };
+      subscriptionsRef.on('value', onSubscriptions, onSubscriptionsError);
     };
-    syncScheduledSectors().catch((syncError) => {
+
+    subscribeToScheduledSectors().catch((syncError) => {
       console.warn('Не вдалося відновити підписки квантових секторів:', syncError);
     });
-    return () => { cancelled = true; };
-  }, [config?.stateNotifications]);
+    return () => {
+      cancelled = true;
+      if (subscriptionsRef && onSubscriptions) {
+        subscriptionsRef.off('value', onSubscriptions);
+      }
+    };
+  }, [guildId]);
 
   useEffect(() => {
     if (!isConfigLoaded) return undefined;
@@ -665,7 +686,7 @@ export default function Quant() {
 
       const updates = {};
       normalizedSectorIds.forEach((sectorId) => {
-        updates[`guilds/${guildId}/quantum/stateNotifications/${sectorId}/${userId}`] = {
+        updates[`guilds/${guildId}/quantumStateNotifications/${sectorId}/${userId}`] = {
           userId,
           sectorId,
           expectedState: 'blocked',
