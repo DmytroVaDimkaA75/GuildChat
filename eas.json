@@ -6,7 +6,10 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "12707765363-ul0trq8p9fab4k0ein69qhip5e81u8ol.apps.googleusercontent.com"
+      }
     },
     "preview": {
       "autoIncrement": true,
@@ -15,11 +18,15 @@
         "buildType": "apk"
       },
       "env": {
-        "NODE_OPTIONS": "--max-old-space-size=4096"
+        "NODE_OPTIONS": "--max-old-space-size=4096",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "12707765363-ul0trq8p9fab4k0ein69qhip5e81u8ol.apps.googleusercontent.com"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "12707765363-ul0trq8p9fab4k0ein69qhip5e81u8ol.apps.googleusercontent.com"
+      }
     }
   },
   "submit": {

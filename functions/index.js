@@ -2,8 +2,9 @@ const { onValueCreated, onValueWritten } = require("firebase-functions/v2/databa
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { HttpsError, onCall, onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { createGoogleAuthFunctions } = require("./googleAuth");
 const {
   createTelegramBindingFunctions,
   isValidTelegramBinding,
@@ -33,6 +34,20 @@ const {
 } = require("./quantumNotifications");
 
 admin.initializeApp();
+
+const GOOGLE_WEB_CLIENT_ID = defineString("GOOGLE_WEB_CLIENT_ID");
+const googleAuthFunctions = createGoogleAuthFunctions({
+  admin,
+  HttpsError,
+  onCall,
+  googleWebClientId: GOOGLE_WEB_CLIENT_ID,
+});
+
+exports.authenticateLegacyAccount =
+  googleAuthFunctions.authenticateLegacyAccount;
+exports.getGoogleLinkStatus = googleAuthFunctions.getGoogleLinkStatus;
+exports.loginWithGoogle = googleAuthFunctions.loginWithGoogle;
+exports.unlinkGoogleAccount = googleAuthFunctions.unlinkGoogleAccount;
 
 const linkPreviewCache = new Map();
 const LINK_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;

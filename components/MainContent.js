@@ -17,7 +17,7 @@ import { createNavigationContainerRef, DarkTheme, NavigationContainer, useFocusE
 import { createStackNavigator } from '@react-navigation/stack';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Animated, AppState, Easing, Image, NativeModules, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, Image, NativeModules, Platform, ScrollView, StatusBar, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 import { MenuProvider } from 'react-native-popup-menu';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GuildContext } from '../GuildContext';
@@ -794,7 +794,7 @@ function ProfileStack() {
 }
 
 // --- DRAWER CONTENT ---
-function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
+function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
   const { t } = useTranslation();
   const { guildId, setGuildId } = useContext(GuildContext);
   const [guildName, setGuildName] = useState('');
@@ -803,6 +803,7 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
   const [tempData, setTempData] = useState({});
   const [isWorldSelectVisible, setIsWorldSelectVisible] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState('');
+  const [logoutBusy, setLogoutBusy] = useState(false);
 
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const rotation = useRef(new Animated.Value(0)).current;
@@ -952,6 +953,49 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
     }
   };
 
+  const performLogout = async () => {
+    if (logoutBusy || typeof onLogout !== 'function') return;
+    setLogoutBusy(true);
+
+    try {
+      try {
+        await onManualGuildSwitch?.();
+      } catch (error) {
+        console.warn(
+          'Не вдалося очистити маршрут сповіщення перед виходом:',
+          error?.code || error?.message || 'unknown'
+        );
+      }
+      await onLogout();
+    } catch (error) {
+      console.error(
+        'Помилка під час виходу:',
+        error?.code || error?.message || 'unknown'
+      );
+      setLogoutBusy(false);
+      Alert.alert(
+        t('drawer.logoutErrorTitle'),
+        t('drawer.logoutErrorMessage')
+      );
+    }
+  };
+
+  const handleLogoutPress = () => {
+    if (logoutBusy) return;
+    Alert.alert(
+      t('drawer.logoutTitle'),
+      t('drawer.logoutMessage'),
+      [
+        { text: t('drawer.logoutCancel'), style: 'cancel' },
+        {
+          text: t('drawer.logoutConfirm'),
+          style: 'destructive',
+          onPress: performLogout,
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.drawerContent}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
@@ -1049,13 +1093,34 @@ function CustomDrawerContent({ onManualGuildSwitch, ...props }) {
             </React.Fragment>
           );
           })}
+          <View style={styles.logoutSeparator} />
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t('drawer.logoutLabel')}
+            accessibilityState={{ disabled: logoutBusy }}
+            activeOpacity={0.8}
+            disabled={logoutBusy}
+            onPress={handleLogoutPress}
+            style={[styles.menuItem, logoutBusy && styles.disabledMenuItem]}
+          >
+            <View style={styles.iconWrapper}>
+              {logoutBusy ? (
+                <ActivityIndicator size="small" color={COLORS.danger} />
+              ) : (
+                <MaterialIcons name="logout" size={24} color={COLORS.danger} />
+              )}
+            </View>
+            <Text style={[styles.menuItemText, styles.logoutMenuItemText]}>
+              {t('drawer.logoutLabel')}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-function AppNavigator({ onReady, onManualGuildSwitch }) {
+function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
   const { guildId } = useContext(GuildContext);
   const { t } = useTranslation();
   const [hasLeaderAccess, setHasLeaderAccess] = React.useState(false);
@@ -1140,6 +1205,7 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
         drawerContent={(props) => (
           <CustomDrawerContent
             {...props}
+            onLogout={onLogout}
             onManualGuildSwitch={onManualGuildSwitch}
           />
         )}
@@ -1248,7 +1314,7 @@ function AppNavigator({ onReady, onManualGuildSwitch }) {
   );
 }
 
-export default function MainContent() {
+export default function MainContent({ onLogout }) {
   const { guildId, switchGuild } = useContext(GuildContext);
   const [readyGuildId, setReadyGuildId] = useState(null);
   const [pendingNotificationRoute, setPendingNotificationRoute] = useState(null);
@@ -2080,6 +2146,7 @@ export default function MainContent() {
       <AppNavigator
         onReady={() => setReadyGuildId(String(guildId || ""))}
         onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
+        onLogout={onLogout}
       />
     </MenuProvider>
   );
@@ -2228,6 +2295,13 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 16,
   },
+  logoutMenuItemText: {
+    color: COLORS.danger,
+    fontWeight: '600',
+  },
+  disabledMenuItem: {
+    opacity: 0.4,
+  },
   activeIndicator: {
     position: 'absolute',
     right: 0,
@@ -2242,6 +2316,13 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.surfaceHighlight,
     marginVertical: 10,
+    marginHorizontal: 24,
+  },
+  logoutSeparator: {
+    height: 1,
+    backgroundColor: COLORS.separator,
+    marginTop: 18,
+    marginBottom: 8,
     marginHorizontal: 24,
   },
 });

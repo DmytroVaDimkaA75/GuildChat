@@ -21,6 +21,22 @@ const getWidgetBridge = () => {
   );
 };
 
+const resolveActiveWidgetGuildId = async (sourceGuildId = "") => {
+  const [[, userId], [, activeGuildId]] = await AsyncStorage.multiGet([
+    "userId",
+    "guildId",
+  ]);
+  const normalizedActiveGuildId = String(activeGuildId || "").trim();
+  const normalizedSourceGuildId = String(sourceGuildId || "").trim();
+
+  if (!String(userId || "").trim() || !normalizedActiveGuildId) return "";
+  if (
+    normalizedSourceGuildId &&
+    normalizedSourceGuildId !== normalizedActiveGuildId
+  ) return "";
+  return normalizedActiveGuildId;
+};
+
 export const requestWidgetRefresh = async () => {
   try {
     if (Platform.OS !== "android") return;
@@ -41,7 +57,8 @@ const setUpdatedAt = async () => {
 export const writeNext5ToCache = async (list, { guildId = "" } = {}) => {
   const safe = Array.isArray(list) ? list : [];
   const json = JSON.stringify(safe);
-  const sourceGuildId = String(guildId || "").trim();
+  const sourceGuildId = await resolveActiveWidgetGuildId(guildId);
+  if (!sourceGuildId) return false;
 
   await AsyncStorage.setItem(KEYS.next5, json);
   await setUpdatedAt();
@@ -55,6 +72,7 @@ export const writeNext5ToCache = async (list, { guildId = "" } = {}) => {
   } catch (e) {}
 
   await requestWidgetRefresh();
+  return true;
 };
 
 export const writeFullMapToCache = async ({
@@ -63,7 +81,8 @@ export const writeFullMapToCache = async ({
   sectorStaff,
   guildId = "",
 }) => {
-  const sourceGuildId = String(guildId || "").trim();
+  const sourceGuildId = await resolveActiveWidgetGuildId(guildId);
+  if (!sourceGuildId) return false;
   const state = {
     guildId: sourceGuildId || null,
     mapKey: mapKey || getDefaultMapKey(),
@@ -101,6 +120,7 @@ export const writeFullMapToCache = async ({
   } catch (e) {}
 
   await requestWidgetRefresh();
+  return true;
 };
 
 export const readWidgetCacheDump = async () => {
@@ -135,6 +155,10 @@ export const readWidgetCacheDump = async () => {
 };
 
 export const recordWidgetFcmReceipt = async ({ type, scope, data }) => {
+  const sourceGuildId = String(data?.guildId || "").trim();
+  const activeGuildId = await resolveActiveWidgetGuildId(sourceGuildId);
+  if (!activeGuildId) return false;
+
   const payload = {
     type: type ? String(type) : "",
     scope: scope ? String(scope) : "",
@@ -143,6 +167,7 @@ export const recordWidgetFcmReceipt = async ({ type, scope, data }) => {
   };
 
   await AsyncStorage.setItem(KEYS.lastFcm, JSON.stringify(payload));
+  return true;
 };
 
 /**

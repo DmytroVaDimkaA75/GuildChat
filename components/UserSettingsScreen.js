@@ -1,9 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import database from '@react-native-firebase/database';
-import { useContext, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -14,131 +13,171 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { GuildContext } from "../GuildContext";
 import { DarkThemeColors } from "../constants/theme";
-import { cachePushToken, uploadPushToken } from "../src/notifications/registerToken";
+import {
+  authenticateLegacyAccount,
+  discardAuthenticatedSession,
+} from "../src/auth/googleAuth";
+import { loadGuildsForUser } from "../src/auth/userGuilds";
 
-const UserSettingsScreen = ({ fetch, navigation }) => {
+const createSessionError = (code, message) => {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+};
+
+const UserSettingsScreen = ({ navigation, onCompleteAppSession }) => {
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [guilds, setGuilds] = useState([]);
-  const { setGuildId } = useContext(GuildContext);
+  const [pendingUserId, setPendingUserId] = useState("");
+  const [selectedGuildId, setSelectedGuildId] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+
+  const showLoginError = (error) => {
+    const code = String(error?.code || "");
+    if (
+      code === "functions/unauthenticated" ||
+      code === "google/access-code-required"
+    ) {
+      Alert.alert(
+        t("userSettings.userNotFoundTitle"),
+        t("userSettings.userNotFoundMessage"),
+        [{ text: t("userSettings.ok") }]
+      );
+      return;
+    }
+
+    if (code === "app/session-membership-missing") {
+      Alert.alert(
+        t("userSettings.noGuildsTitle"),
+        t("userSettings.noGuildsMessage")
+      );
+      return;
+    }
+
+    console.error("Помилка входу за кодом:", code || "unknown");
+    Alert.alert(
+      t("userSettings.loginErrorTitle"),
+      t("userSettings.loginErrorMessage")
+    );
+  };
+
+  useEffect(() => {
+    if (!navigation?.addListener) return undefined;
+    return navigation.addListener("beforeRemove", (event) => {
+      if (!isBusy) return;
+      event.preventDefault();
+    });
+  }, [isBusy, navigation]);
+
+  const completeSession = async (userId, guildId) => {
+    if (typeof onCompleteAppSession !== "function") {
+      throw createSessionError(
+        "app/session-unavailable",
+        "Session completion is unavailable"
+      );
+    }
+    await onCompleteAppSession({ userId, guildId });
+  };
 
   const selectGuild = async (guild) => {
+    if (isBusy || !pendingUserId || !guild?.guildId) return;
+    setIsBusy(true);
+    setSelectedGuildId(guild.guildId);
+
     try {
-      await AsyncStorage.setItem("guildId", guild.guildId);
-      setGuildId(guild.guildId);
-      if (typeof fetch === "function") {
-        await fetch(guild.guildId);
-      }
+      await completeSession(pendingUserId, guild.guildId);
+      setGuilds([]);
+      setPendingUserId("");
     } catch (error) {
-      console.error("Помилка при виборі гільдії:", error);
+      await discardAuthenticatedSession();
+      setGuilds([]);
+      setPendingUserId("");
+      showLoginError(error);
+    } finally {
+      setSelectedGuildId("");
+      setIsBusy(false);
     }
   };
 
   const apply = async () => {
-    console.log("--- Начинаю процесс входа по коду доступа ---");
-    console.log("Введенный код доступа (пароль):", `"${password}"`);
-
-    if (!password || password.trim() === "") {
-        console.log("ОШИБКА: Поле ввода пустое.");
-        Alert.alert(t("userSettings.userNotFoundTitle"), t("userSettings.userNotFoundMessage"));
-        return;
+    if (isBusy) return;
+    const accessCode = password.trim();
+    if (!accessCode) {
+      Alert.alert(
+        t("userSettings.userNotFoundTitle"),
+        t("userSettings.userNotFoundMessage")
+      );
+      return;
     }
+
+    setIsBusy(true);
+    let hasAuthenticatedSession = false;
 
     try {
-        console.log("Шаг 1: Ищу пользователя с таким паролем...");
-        const user = await getUser(password);
+      const account = await authenticateLegacyAccount({ accessCode });
+      hasAuthenticatedSession = true;
+      const userId = String(account?.userId || "").trim();
+      if (!userId) {
+        throw createSessionError(
+          "app/session-invalid",
+          "The authenticated user identity is missing"
+        );
+      }
 
-        if (!user) {
-          console.log("РЕЗУЛЬТАТ: Пользователь с таким паролем не найден в базе данных.");
-          Alert.alert(
-            t("userSettings.userNotFoundTitle"),
-            t("userSettings.userNotFoundMessage"),
-            [{ text: t("userSettings.ok") }]
-          );
-          return;
-        }
+      const availableGuilds = await loadGuildsForUser(userId);
+      setPassword("");
 
-        console.log("УСПЕХ! Пользователь найден:", user);
-        
-        console.log("Шаг 2: Запрашиваю FCM токен и кеширую его...");
-        await cachePushToken();
+      if (availableGuilds.length === 0) {
+        await discardAuthenticatedSession();
+        hasAuthenticatedSession = false;
+        Alert.alert(
+          t("userSettings.noGuildsTitle"),
+          t("userSettings.noGuildsMessage"),
+          [{ text: t("userSettings.ok") }]
+        );
+        return;
+      }
 
-        console.log("Шаг 3: Сохраняю userId в AsyncStorage...");
-        await AsyncStorage.setItem("userId", user.userId);
-        console.log("userId сохранен.");
-        
-        console.log("Шаг 4: Регистрирую токен для пуш-уведомлений сразу после входа...");
-        // ИСПРАВЛЕНО: Вызываем правильную функцию `uploadPushToken`
-        await uploadPushToken(user.userId);
-        console.log("Токен зарегистрирован.");
+      if (availableGuilds.length === 1) {
+        await completeSession(userId, availableGuilds[0].guildId);
+        hasAuthenticatedSession = false;
+        return;
+      }
 
-        console.log("Шаг 5: Ищу гильдии, в которых состоит пользователь...");
-        const userGuilds = await getGuildsByUser(user);
-
-        if (userGuilds.length <= 0) {
-          console.log("РЕЗУЛЬТАТ: У пользователя нет привязки ни к одной гильдии.");
-          Alert.alert(
-            t("userSettings.noGuildsTitle"),
-            t("userSettings.noGuildsMessage"),
-            [{ text: t("userSettings.ok") }]
-          );
-          return;
-        }
-
-        console.log("УСПЕХ! Найдены гильдии:", userGuilds);
-
-        if (userGuilds.length === 1) {
-          console.log("Обнаружена одна гильдия, вхожу автоматически...");
-          selectGuild(userGuilds[0]);
-          return;
-        }
-
-        console.log("Обнаружено несколько гильдий, показываю модальное окно выбора...");
-        setGuilds(userGuilds);
-
+      setPendingUserId(userId);
+      setGuilds(availableGuilds);
+      hasAuthenticatedSession = false;
     } catch (error) {
-        console.error("КРИТИЧЕСКАЯ ОШИБКА в функции apply:", error);
-        Alert.alert("Ошибка", "Произошла непредвиденная ошибка.");
+      if (hasAuthenticatedSession) {
+        await discardAuthenticatedSession();
+      }
+      setPassword("");
+      showLoginError(error);
+    } finally {
+      setIsBusy(false);
     }
   };
 
-  const getUser = async (password) => {
-    const snapshot = await database().ref("users").once('value');
-    if (!snapshot.exists()) return null;
-
-    const allUsers = snapshot.val();
-    const userId = Object.keys(allUsers).find(
-      (key) => allUsers[key].password === password
-    );
-
-    if (!userId) return null;
-    return { ...allUsers[userId], userId };
-  };
-
-  const getGuildsByUser = async (user) => {
-    const guildSnapshot = await database().ref("guilds").once('value');
-    if (!guildSnapshot.exists()) return [];
-
-    const allGuilds = guildSnapshot.val();
-    return Object.keys(allGuilds)
-      .map((guildId) => {
-        if (user.userGuilds?.[guildId]) {
-          return {
-            ...user.userGuilds[guildId],
-            guildId,
-            ...allGuilds[guildId],
-          };
-        }
-        return null;
-      })
-      .filter(Boolean);
+  const closeGuildModal = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    await discardAuthenticatedSession();
+    setGuilds([]);
+    setPendingUserId("");
+    setIsBusy(false);
   };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity activeOpacity={0.8} onPress={() => navigation?.goBack()} style={styles.backButton}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        activeOpacity={0.8}
+        disabled={isBusy}
+        onPress={() => navigation?.goBack()}
+        style={[styles.backButton, isBusy && styles.disabledButton]}
+      >
         <Ionicons name="arrow-back" size={22} color={DarkThemeColors.text} />
       </TouchableOpacity>
       <View style={styles.card}>
@@ -150,24 +189,40 @@ const UserSettingsScreen = ({ fetch, navigation }) => {
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
+            secureTextEntry
+            editable={!isBusy}
             selectionColor={DarkThemeColors.primary}
             style={styles.input}
             onChangeText={setPassword}
             value={password}
             placeholder={t("userSettings.accessCodePlaceholder")}
             placeholderTextColor={DarkThemeColors.textSecondary}
+            returnKeyType="done"
+            onSubmitEditing={apply}
           />
         </View>
-        <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={apply}>
-          <Text style={styles.buttonText}>{t("userSettings.apply")}</Text>
-          <Ionicons name="arrow-forward" size={19} color="#fff" />
+        <TouchableOpacity
+          accessibilityRole="button"
+          activeOpacity={0.8}
+          disabled={isBusy}
+          style={[styles.button, isBusy && styles.disabledButton]}
+          onPress={apply}
+        >
+          {isBusy ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.buttonText}>{t("userSettings.apply")}</Text>
+              <Ionicons name="arrow-forward" size={19} color="#fff" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
       <Modal
         visible={guilds.length > 0}
         animationType="slide"
         transparent
-        onRequestClose={() => setGuilds([])}
+        onRequestClose={closeGuildModal}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -176,20 +231,37 @@ const UserSettingsScreen = ({ fetch, navigation }) => {
             <FlatList
               data={guilds}
               keyExtractor={(item) => item.guildId}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.modalButton, { marginBottom: 10 }]}
-                  onPress={() => selectGuild(item)}
-                >
-                  {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.flagImage} /> : <View style={styles.guildIcon}><Ionicons name="shield-outline" size={20} color={DarkThemeColors.primary} /></View>}
-                  <Text style={styles.modalButtonText}>{item.guildName}</Text>
-                  <Ionicons name="chevron-forward" size={20} color={DarkThemeColors.textSecondary} />
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) => {
+                const isSelected = selectedGuildId === item.guildId;
+                return (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    disabled={isBusy}
+                    style={[styles.modalButton, isBusy && styles.disabledButton]}
+                    onPress={() => selectGuild(item)}
+                  >
+                    {item.imageUrl ? (
+                      <Image source={{ uri: item.imageUrl }} style={styles.flagImage} />
+                    ) : (
+                      <View style={styles.guildIcon}>
+                        <Ionicons name="shield-outline" size={20} color={DarkThemeColors.primary} />
+                      </View>
+                    )}
+                    <Text style={styles.modalButtonText}>{item.guildName}</Text>
+                    {isSelected ? (
+                      <ActivityIndicator size="small" color={DarkThemeColors.primary} />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={20} color={DarkThemeColors.textSecondary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setGuilds([])}
+              accessibilityRole="button"
+              disabled={isBusy}
+              style={[styles.closeButton, isBusy && styles.disabledButton]}
+              onPress={closeGuildModal}
             >
               <Text style={styles.closeButtonText}>{t("userSettings.close")}</Text>
             </TouchableOpacity>
@@ -253,6 +325,9 @@ const styles = StyleSheet.create({
       color: DarkThemeColors.text,
       fontSize: 16,
       fontWeight: "bold",
+    },
+    disabledButton: {
+      opacity: 0.4,
     },
     modalContainer: {
       flex: 1,

@@ -13,7 +13,28 @@
           "package_name": "com.foechat.mobile"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "12707765363-duj1vldgllnvahddj37shi2hmban273p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.foechat.mobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "12707765363-i80vub2997a112sd15mcdmp518u138ua.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.foechat.mobile",
+            "certificate_hash": "bbdf13e78ff72b7d5f6335b6d1f8fd2a349f138f"
+          }
+        },
+        {
+          "client_id": "12707765363-ul0trq8p9fab4k0ein69qhip5e81u8ol.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAooqmkwSQOjXrHN8PtMpg012Xp9ulsLBM"
@@ -21,7 +42,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "12707765363-ul0trq8p9fab4k0ein69qhip5e81u8ol.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

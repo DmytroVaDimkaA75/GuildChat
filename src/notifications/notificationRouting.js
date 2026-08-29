@@ -99,13 +99,17 @@ export const savePendingNotificationRoute = async (routeOrSource) => {
   const route = normalizeNotificationRoute(routeOrSource);
   if (!route) return null;
 
-  await enqueueStorageMutation(() =>
-    AsyncStorage.setItem(
+  let saved = false;
+  await enqueueStorageMutation(async () => {
+    const userId = await AsyncStorage.getItem("userId");
+    if (!userId) return;
+    await AsyncStorage.setItem(
       PENDING_NOTIFICATION_ROUTE_KEY,
       JSON.stringify(route)
-    )
-  );
-  return route;
+    );
+    saved = true;
+  });
+  return saved ? route : null;
 };
 
 export const readPendingNotificationRoute = async () => {

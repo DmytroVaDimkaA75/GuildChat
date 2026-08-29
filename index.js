@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import messaging from "@react-native-firebase/messaging";
 import notifee, { EventType } from "@notifee/react-native";
 import { registerRootComponent } from "expo";
@@ -56,8 +57,11 @@ const resolveWidgetMessageTarget = async (data) => {
   const persistedGuildId = await getPersistedWidgetGuildId();
   const messageGuildId = getRemoteMessageGuildId(data);
 
+  if (!persistedGuildId) {
+    return { allowed: false, guildId: null };
+  }
+
   if (
-    persistedGuildId &&
     messageGuildId &&
     persistedGuildId !== messageGuildId
   ) {
@@ -66,12 +70,13 @@ const resolveWidgetMessageTarget = async (data) => {
 
   return {
     allowed: true,
-    guildId: persistedGuildId || messageGuildId || null,
+    guildId: persistedGuildId,
   };
 };
 
 notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type !== EventType.PRESS && type !== EventType.ACTION_PRESS) return;
+  if (!await AsyncStorage.getItem("userId")) return;
 
   const notification = detail?.notification;
   const route = normalizeNotificationRoute({
@@ -88,13 +93,20 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
   try {
-    const guildId = (await getPersistedWidgetGuildId()) || null;
+    const [userId, persistedGuildId] = await Promise.all([
+      AsyncStorage.getItem("userId"),
+      getPersistedWidgetGuildId(),
+    ]);
+    if (!userId || !persistedGuildId) return;
+    const guildId = persistedGuildId;
     await refreshGbgWidgetCacheFromFirebase({ guildId, reason: "periodic-worker" });
   } catch (_error) {}
 });
 
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
+    if (!await AsyncStorage.getItem("userId")) return;
+
     const data = remoteMessage?.data || {};
     const recordType = String(data.kind || data.type || "");
     const isWidgetMessage =

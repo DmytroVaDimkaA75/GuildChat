@@ -233,3 +233,26 @@ export async function removeCachedAndroidUpdate(build) {
     );
   }
 }
+
+/**
+ * Removes every APK downloaded by the in-app updater from the app cache.
+ * Other framework-managed cache files are intentionally left untouched.
+ *
+ * @returns {Promise<void>}
+ */
+export async function clearCachedAndroidUpdates() {
+  if (!FileSystem.cacheDirectory) return;
+
+  const entries = await FileSystem.readDirectoryAsync(FileSystem.cacheDirectory);
+  const updateFiles = entries.filter((name) =>
+    /^FoEChat-update-\d+\.apk$/u.test(String(name || ""))
+  );
+
+  await Promise.all(
+    updateFiles.map((name) =>
+      FileSystem.deleteAsync(`${FileSystem.cacheDirectory}${name}`, {
+        idempotent: true,
+      })
+    )
+  );
+}
