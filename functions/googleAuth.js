@@ -303,16 +303,14 @@ const createGoogleAuthFunctions = ({
 
   const unlinkGoogleAccount = callable(async (request) => {
     const userId = requireAuthenticatedUserId(request);
-    const accessCode = request.data?.accessCode;
-    if (!isValidAccessCode(accessCode)) {
+    const expectedUserId = request.data?.expectedUserId;
+    if (!isValidFirebaseUid(expectedUserId)) {
       throw new HttpsError("invalid-argument", GENERIC_MESSAGES.invalidRequest);
     }
-
-    const matches = await verifyExpectedLegacyAccount({ userId, accessCode });
-    if (!matches) {
+    if (expectedUserId !== userId) {
       throw new HttpsError(
-        "unauthenticated",
-        GENERIC_MESSAGES.legacyAuthenticationFailed
+        "permission-denied",
+        GENERIC_MESSAGES.accountUnavailable
       );
     }
 

@@ -1,14 +1,19 @@
 import database from '@react-native-firebase/database';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { GuildContext } from '../GuildContext';
 import {
   getSectorGradient as getGbgSectorGradient,
   mixColors,
 } from './GBG/gbgSectorGradients';
+import {
+  areSameQuantumSectorSelections,
+  buildQuantumNotificationSelectionUpdates,
+  normalizeQuantumSectorIds,
+} from './quantumNotificationSelection';
 
 const COLORS = {
   background: '#0f1115', surface: '#152330', surfaceHighlight: '#1b2b3b',
@@ -165,18 +170,22 @@ const gradientType=n=>n.gradientType||'standard';
 const fill=n=>'url(#'+${jsonForHtml(gradientIds)}[gradientType(n)]+')';
 const routes=el('g',{'aria-hidden':'true'}),drawn=new Set();
 nodes.forEach(n=>{if(!n.position)return;list(n.connectedNodes).forEach(c=>{const id=String(c?.targetNodeId||''),target=byId.get(id);if(!target?.position)return;const key=[String(n.id),id].sort().join('-');if(drawn.has(key))return;drawn.add(key);const a=point(n),b=point(target),stroke=finished(n)||finished(target)?'#35b86b':'${COLORS.separator}';routes.appendChild(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'route',stroke}))})});map.appendChild(routes);
-const multiIds=new Set();let blinkTimer=null,longPressTimer=null,longPressTriggered=false,suppressClick=false,touchStart=null;
+const multiIds=new Set(),scheduledIds=new Set();let scheduledReview=false,blinkTimer=null,longPressTimer=null,longPressTriggered=false,suppressClick=false,touchStart=null;
 const send=(type,nodeId)=>window.ReactNativeWebView?.postMessage(JSON.stringify({type,nodeId}));
-const sendMultiple=()=>window.ReactNativeWebView?.postMessage(JSON.stringify({type:'multiSelection',nodeIds:Array.from(multiIds)}));
+const sendMultiple=()=>window.ReactNativeWebView?.postMessage(JSON.stringify({type:scheduledReview?'scheduledSelection':'multiSelection',nodeIds:Array.from(multiIds)}));
 const clearNormal=()=>nodeLayer.querySelectorAll('.selected').forEach(node=>node.classList.remove('selected'));
-const clearMultiple=()=>{multiIds.clear();nodeLayer.querySelectorAll('.multiple').forEach(node=>node.classList.remove('multiple'));map.classList.remove('blink-on');if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null}sendMultiple()};
+const stopBlink=()=>{map.classList.remove('blink-on');if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null}};
+const clearMultiple=()=>{scheduledReview=false;multiIds.clear();nodeLayer.querySelectorAll('.multiple').forEach(node=>node.classList.remove('multiple'));stopBlink();sendMultiple()};
 const clearSelection=()=>{clearMultiple();clearNormal();send('clearSelection',null)};
-const removeMultiple=id=>{const normalized=String(id),node=nodeLayer.querySelector('[data-node-id="'+normalized+'"]');multiIds.delete(normalized);node?.classList.remove('multiple');if(!multiIds.size){map.classList.remove('blink-on');if(blinkTimer){clearInterval(blinkTimer);blinkTimer=null}send('clearSelection',null)}sendMultiple()};
+const removeMultiple=id=>{const normalized=String(id),node=nodeLayer.querySelector('[data-node-id="'+normalized+'"]');multiIds.delete(normalized);node?.classList.remove('multiple');if(!multiIds.size){stopBlink();if(!scheduledReview)send('clearSelection',null)}sendMultiple()};
 window.removeQuantumMultiple=removeMultiple;
+window.setQuantumScheduled=ids=>{scheduledIds.clear();list(ids).forEach(id=>scheduledIds.add(String(id)));if(scheduledReview)return;let changed=false;Array.from(multiIds).forEach(id=>{if(!scheduledIds.has(id))return;changed=true;multiIds.delete(id);nodeLayer.querySelector('[data-node-id="'+id+'"]')?.classList.remove('multiple')});if(!changed)return;if(!multiIds.size){stopBlink();send('clearSelection',null)}sendMultiple()};
+window.showQuantumScheduledSelection=ids=>{clearNormal();multiIds.clear();nodeLayer.querySelectorAll('.multiple').forEach(node=>node.classList.remove('multiple'));stopBlink();scheduledReview=true;list(ids).forEach(id=>{const normalized=String(id),node=nodeLayer.querySelector('[data-node-id="'+normalized+'"]');if(!node)return;multiIds.add(normalized);node.classList.add('multiple')});if(!multiIds.size){sendMultiple();return}ensureBlink();send('nodePress',Array.from(multiIds)[0]);sendMultiple()};
 const ensureBlink=()=>{if(blinkTimer)return;map.classList.add('blink-on');blinkTimer=setInterval(()=>map.classList.toggle('blink-on'),500)};
-const addMultiple=(n,g)=>{if(!blocked(n)||gradientType(n)==='standard'||avoid(n))return;clearNormal();multiIds.add(String(n.id));g.classList.add('multiple');ensureBlink();send('nodePress',String(n.id));sendMultiple()};
-const tap=(n,g)=>{if(multiIds.size){if(!blocked(n)){clearSelection();return}if(avoid(n))return;if(gradientType(n)==='standard')clearSelection();else addMultiple(n,g);return}clearNormal();g.classList.add('selected');send('nodePress',String(n.id))};
-const longPress=(n,g)=>{if(!blocked(n)){if(multiIds.size)clearSelection();return}if(avoid(n))return;if(gradientType(n)==='standard'){if(multiIds.size)clearSelection();return}addMultiple(n,g)};
+const scheduled=n=>scheduledIds.has(String(n.id));
+const addMultiple=(n,g)=>{if(!blocked(n)||gradientType(n)==='standard'||avoid(n)||(!scheduledReview&&scheduled(n)))return;clearNormal();multiIds.add(String(n.id));g.classList.add('multiple');ensureBlink();send('nodePress',String(n.id));sendMultiple()};
+const tap=(n,g)=>{if(multiIds.size||scheduledReview){if(!blocked(n)){clearSelection();return}if(avoid(n)||(!scheduledReview&&scheduled(n)))return;if(gradientType(n)==='standard')clearSelection();else addMultiple(n,g);return}clearNormal();g.classList.add('selected');send('nodePress',String(n.id))};
+const longPress=(n,g)=>{if(!scheduledReview&&scheduled(n))return;if(!blocked(n)){if(multiIds.size||scheduledReview)clearSelection();return}if(avoid(n))return;if(gradientType(n)==='standard'){if(multiIds.size||scheduledReview)clearSelection();return}addMultiple(n,g)};
 const nodeLayer=el('g',{});nodes.forEach(n=>{if(!n.position||!n.id)return;const p=point(n),classes=['node'];if(avoid(n))classes.push('avoid');if(n.hasNodeDetails)classes.push('detailed');if(n.currentNode||n.isCurrent)classes.push('current');const g=el('g',{class:classes.join(' '),role:'button',tabindex:'0','data-node-id':String(n.id),'aria-label':'Вузол '+String(n.id).toUpperCase(),transform:'translate('+p.x+' '+p.y+')'});g.appendChild(el('circle',{r:${NODE_SIZE / 2},fill:fill(n),class:'shape'}));g.appendChild(el('circle',{r:${NODE_SIZE / 2},class:'multi-ring'}));const cross=el('g',{class:'avoid-cross'});cross.appendChild(el('line',{x1:-18,y1:-18,x2:18,y2:18,class:'avoid-cross-underlay'}));cross.appendChild(el('line',{x1:18,y1:-18,x2:-18,y2:18,class:'avoid-cross-underlay'}));cross.appendChild(el('line',{x1:-18,y1:-18,x2:18,y2:18,class:'avoid-cross-line'}));cross.appendChild(el('line',{x1:18,y1:-18,x2:-18,y2:18,class:'avoid-cross-line'}));g.appendChild(cross);const text=el('text',{x:0,y:1,class:'label '+gradientType(n)});text.textContent=String(n.id).toUpperCase();g.appendChild(text);g.addEventListener('touchstart',e=>{const touch=e.touches[0];touchStart={x:touch.clientX,y:touch.clientY};longPressTriggered=false;clearTimeout(longPressTimer);longPressTimer=setTimeout(()=>{longPressTriggered=true;suppressClick=true;longPress(n,g)},550)},{passive:true});g.addEventListener('touchmove',e=>{const touch=e.touches[0];if(touchStart&&(Math.abs(touch.clientX-touchStart.x)>10||Math.abs(touch.clientY-touchStart.y)>10))clearTimeout(longPressTimer)},{passive:true});g.addEventListener('touchend',e=>{clearTimeout(longPressTimer);touchStart=null;if(longPressTriggered){e.preventDefault();setTimeout(()=>{suppressClick=false},350)}},{passive:false});g.addEventListener('touchcancel',()=>{clearTimeout(longPressTimer);touchStart=null});g.addEventListener('click',e=>{e.stopPropagation();if(suppressClick)return;tap(n,g)});g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')tap(n,g)});nodeLayer.appendChild(g)});map.appendChild(nodeLayer);
 map.addEventListener('click',()=>clearSelection());
 document.addEventListener('contextmenu',event=>event.preventDefault());document.addEventListener('selectstart',event=>event.preventDefault());
@@ -238,10 +247,16 @@ const toEntries = (value) => {
   return [];
 };
 
-const getSectorParticipants = (node) => {
+const getSectorParticipants = (node, guildUsers = {}) => {
   const guildNode = node?.guildNodeData || {};
   const details = node?.nodeDetailsData || {};
   const responseData = details.responseData || guildNode.responseData || {};
+  const guildUserEntries = Object.entries(guildUsers || {});
+  const guildUsersByName = new Map();
+  guildUserEntries.forEach(([, guildUser]) => {
+    const name = String(guildUser?.userName || guildUser?.login || '').trim().toLowerCase();
+    if (name && !guildUsersByName.has(name)) guildUsersByName.set(name, guildUser);
+  });
   const source = firstDefined(
     details.contributors, details.participants, details.players, details.playerContributions,
     details.contributions, guildNode.contributors, guildNode.participants, guildNode.players,
@@ -251,6 +266,25 @@ const getSectorParticipants = (node) => {
   );
   const participants = toEntries(source).map(([id, raw], index) => {
     const data = raw && typeof raw === 'object' ? raw : { value: raw };
+    const providedName = firstDefined(
+      data.userName, data.playerName, data.displayName, data.name, data.player?.name
+    );
+    const profileIds = [data.userId, data.uid, data.playerId, data.player?.id, id]
+      .filter((value) => value !== undefined && value !== null)
+      .map((value) => String(value));
+    const directProfile = profileIds
+      .map((profileId) => guildUsers?.[profileId])
+      .find(Boolean);
+    const matchedProfile = directProfile || guildUsersByName.get(
+      String(providedName || '').trim().toLowerCase()
+    );
+    const rawImageUrl = firstDefined(
+      data.imageUrl, data.avatarUrl, data.avatar, data.photoURL,
+      data.player?.imageUrl, data.player?.avatarUrl, matchedProfile?.imageUrl
+    );
+    const imageUrl = typeof rawImageUrl === 'string'
+      ? rawImageUrl
+      : firstDefined(rawImageUrl?.url, rawImageUrl?.src, null);
     const amount = Number(firstDefined(
       data.contribution, data.amount, data.value, data.progress, data.points,
       data.currentProgress, data.contributionAmount, data.contributed, data.total, 0
@@ -258,8 +292,10 @@ const getSectorParticipants = (node) => {
     return {
       id,
       rank: Number(firstDefined(data.rank, data.place, index + 1)) || index + 1,
-      name: String(firstDefined(data.userName, data.playerName, data.displayName, data.name, data.player?.name, id)),
-      imageUrl: firstDefined(data.imageUrl, data.avatarUrl, data.avatar, data.photoURL, data.player?.imageUrl, data.player?.avatarUrl),
+      name: String(firstDefined(
+        providedName, matchedProfile?.userName, matchedProfile?.login, id
+      )),
+      imageUrl,
       amount,
       raw: data,
     };
@@ -332,7 +368,49 @@ const ParticipantsCard = ({ participants, title }) => (
   </View>
 );
 
-const SectorDetails = ({ node, isNotificationScheduled, isSchedulingNotification, onNotify }) => {
+const QuantumDialog = ({ dialog, onClose }) => {
+  const isError = dialog?.type === 'error';
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      transparent
+      visible={Boolean(dialog)}
+    >
+      <View style={styles.dialogOverlay}>
+        <Pressable
+          accessibilityLabel="Закрити діалог"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View accessibilityViewIsModal style={styles.dialogCard}>
+          <View style={[styles.dialogIcon, isError && styles.dialogIconError]}>
+            <MaterialCommunityIcons
+              color={isError ? COLORS.danger : COLORS.primary}
+              name={isError ? 'alert-circle-outline' : 'bell-check-outline'}
+              size={28}
+            />
+          </View>
+          <Text style={styles.dialogTitle}>{dialog?.title}</Text>
+          <Text style={styles.dialogMessage}>{dialog?.message}</Text>
+          <TouchableOpacity
+            accessibilityLabel="Закрити"
+            accessibilityRole="button"
+            activeOpacity={0.75}
+            onPress={onClose}
+            style={styles.dialogButton}
+          >
+            <Text style={styles.dialogButtonText}>Гаразд</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const SectorDetails = ({ guildUsers, node, isNotificationScheduled, isSchedulingNotification, onCancel, onNotify }) => {
   const state = String(node.guildState || '').toLowerCase();
   const isFinished = state === 'finished';
   const isBlockedForbidden = state === 'blocked' && node.isAvoidSelection;
@@ -341,7 +419,7 @@ const SectorDetails = ({ node, isNotificationScheduled, isSchedulingNotification
   const isBlocked = state === 'blocked' && !node.isAvoidSelection;
   const usesActiveLayout = isActive || isBlocked;
   const progress = getSectorProgress(node);
-  const participants = getSectorParticipants(node);
+  const participants = getSectorParticipants(node, guildUsers);
   const status = isFinished
     ? { text: 'Сектор закритий', color: '#35b86b' }
     : isForbidden
@@ -357,18 +435,28 @@ const SectorDetails = ({ node, isNotificationScheduled, isSchedulingNotification
         {isBlocked ? (
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Сповістити про сектор"
+            accessibilityLabel={isNotificationScheduled ? 'Скасувати сповіщення про сектор' : 'Сповістити про сектор'}
             activeOpacity={0.75}
-            disabled={isSchedulingNotification || isNotificationScheduled}
-            onPress={() => onNotify([node.id])}
-            style={[styles.notifyButton, (isSchedulingNotification || isNotificationScheduled) && styles.notifyButtonDisabled]}
+            disabled={isSchedulingNotification}
+            onPress={() => isNotificationScheduled ? onCancel(node.id) : onNotify([node.id])}
+            style={[
+              styles.notifyButton,
+              isNotificationScheduled && styles.cancelNotificationButton,
+              isSchedulingNotification && styles.notifyButtonDisabled,
+            ]}
           >
             {isSchedulingNotification ? (
-              <ActivityIndicator size="small" color={COLORS.primary} />
+              <ActivityIndicator size="small" color={isNotificationScheduled ? COLORS.danger : COLORS.primary} />
             ) : (
-              <MaterialCommunityIcons name={isNotificationScheduled ? 'bell-check-outline' : 'bell-outline'} size={18} color={COLORS.primary} />
+              <MaterialCommunityIcons
+                name={isNotificationScheduled ? 'bell-off-outline' : 'bell-outline'}
+                size={18}
+                color={isNotificationScheduled ? COLORS.danger : COLORS.primary}
+              />
             )}
-            <Text style={styles.notifyButtonText}>{isNotificationScheduled ? 'Заплановано' : 'Сповістити'}</Text>
+            <Text style={[styles.notifyButtonText, isNotificationScheduled && styles.cancelNotificationButtonText]}>
+              {isNotificationScheduled ? 'Скасувати' : 'Сповістити'}
+            </Text>
           </TouchableOpacity>
         ) : (
           <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
@@ -393,6 +481,9 @@ const SectorDetails = ({ node, isNotificationScheduled, isSchedulingNotification
 
 const MultiSectorDetails = ({ isNotificationScheduled, isSchedulingNotification, nodes, onNotify, onRemove }) => {
   const indicatorCount = nodes.filter((node) => node.hasIndicator).length;
+  const selectedCountText = nodes.length === 0
+    ? 'Сектори не обрано'
+    : `${nodes.length} ${nodes.length === 1 ? 'сектор обрано' : 'сектори обрано'}`;
   const typeSummary = nodes.reduce((summary, node) => {
     const type = getSectorType(node);
     const existing = summary.find((item) => item.label === type.label);
@@ -404,10 +495,13 @@ const MultiSectorDetails = ({ isNotificationScheduled, isSchedulingNotification,
   return (
     <View style={styles.multiDetails}>
       <View style={styles.multiHeader}>
-        <Text style={styles.multiCount}>{nodes.length} {nodes.length === 1 ? 'сектор обрано' : 'сектори обрано'}</Text>
+        <Text style={styles.multiCount}>{selectedCountText}</Text>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Сповістити про вибрані сектори"
+          accessibilityLabel={isNotificationScheduled
+            ? 'Сповіщення про вибрані сектори заплановано'
+            : 'Сповістити про вибрані сектори'}
+          accessibilityState={{ disabled: isSchedulingNotification || isNotificationScheduled }}
           activeOpacity={0.75}
           disabled={isSchedulingNotification || isNotificationScheduled}
           onPress={() => onNotify(nodes.map((node) => node.id))}
@@ -479,19 +573,44 @@ const MultiSectorDetails = ({ isNotificationScheduled, isSchedulingNotification,
   );
 };
 
-export default function Quant() {
+export default function Quant({ navigation }) {
   const { guildId } = useContext(GuildContext);
   const { width } = useWindowDimensions();
   const webViewRef = useRef(null);
+  const scrollViewRef = useRef(null);
+  const scheduledReviewActiveRef = useRef(false);
+  const activeGuildIdRef = useRef(String(guildId || ''));
+  const mountedRef = useRef(true);
   const [config, setConfig] = useState(null);
+  const [guildUsers, setGuildUsers] = useState({});
   const [nodes, setNodes] = useState([]);
   const [mapRotation, setMapRotation] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState([]);
   const [scheduledSectorIds, setScheduledSectorIds] = useState([]);
+  const [scheduledEditBaselineIds, setScheduledEditBaselineIds] = useState([]);
+  const [isEditingScheduledSectors, setIsEditingScheduledSectors] = useState(false);
   const [schedulingNotification, setSchedulingNotification] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [dialog, setDialog] = useState(null);
+
+  activeGuildIdRef.current = String(guildId || '');
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const showDialog = useCallback((title, message, type = 'success') => {
+    setDialog({ title, message, type });
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    setDialog(null);
+  }, []);
 
   useEffect(() => {
     if (!guildId) {
@@ -500,6 +619,9 @@ export default function Quant() {
       setMapRotation(null);
       setMultiSelectedNodeIds([]);
       setScheduledSectorIds([]);
+      setScheduledEditBaselineIds([]);
+      setIsEditingScheduledSectors(false);
+      scheduledReviewActiveRef.current = false;
       setLoading(false);
       setError('Не вибрано гільдію.');
       return undefined;
@@ -512,6 +634,9 @@ export default function Quant() {
     setSelectedNodeId(null);
     setMultiSelectedNodeIds([]);
     setScheduledSectorIds([]);
+    setScheduledEditBaselineIds([]);
+    setIsEditingScheduledSectors(false);
+    scheduledReviewActiveRef.current = false;
     const configRef = database().ref(`guilds/${guildId}/quantum`);
     const onConfig = (snapshot) => {
       const nextConfig = snapshot.val() || {};
@@ -524,6 +649,22 @@ export default function Quant() {
     };
     configRef.on('value', onConfig, onError);
     return () => configRef.off('value', onConfig);
+  }, [guildId]);
+
+  useEffect(() => {
+    setGuildUsers({});
+    if (!guildId) return undefined;
+
+    const guildUsersRef = database().ref(`guilds/${guildId}/guildUsers`);
+    const onGuildUsers = (snapshot) => {
+      setGuildUsers(snapshot.val() || {});
+    };
+    const onGuildUsersError = (loadError) => {
+      console.warn('Не вдалося завантажити аватари учасників квантового сектора:', loadError);
+    };
+
+    guildUsersRef.on('value', onGuildUsers, onGuildUsersError);
+    return () => guildUsersRef.off('value', onGuildUsers);
   }, [guildId]);
 
   const mapKey = config?.mapKey;
@@ -649,13 +790,102 @@ export default function Quant() {
     [renderedNodes, geometry, rotation]
   );
   const webViewSource = useMemo(() => ({ html }), [html]);
+  const availableScheduledSectorIds = useMemo(() => {
+    const availableIds = new Set(renderedNodes.map((node) => String(node.id)));
+    return scheduledSectorIds.filter((sectorId) => availableIds.has(String(sectorId)));
+  }, [renderedNodes, scheduledSectorIds]);
+  const syncScheduledSectorsToMap = useCallback(() => {
+    const sectorIds = scheduledSectorIds.map((sectorId) => String(sectorId));
+    webViewRef.current?.injectJavaScript(
+      `window.setQuantumScheduled?.(${JSON.stringify(sectorIds)}); true;`
+    );
+  }, [scheduledSectorIds]);
+  const showScheduledSectorsOnMap = useCallback((selectedSectorIds = multiSelectedNodeIds) => {
+    const availableIds = new Set(renderedNodes.map((node) => String(node.id)));
+    const sectorIds = normalizeQuantumSectorIds(selectedSectorIds)
+      .filter((sectorId) => availableIds.has(sectorId));
+    webViewRef.current?.injectJavaScript(
+      `window.setQuantumScheduled?.(${JSON.stringify(scheduledSectorIds)}); window.showQuantumScheduledSelection?.(${JSON.stringify(sectorIds)}); true;`
+    );
+  }, [multiSelectedNodeIds, renderedNodes, scheduledSectorIds]);
+  const openScheduledSectors = useCallback(() => {
+    if (!scheduledSectorIds.length) return;
+    if (!availableScheduledSectorIds.length) {
+      showDialog(
+        'Заплановані сектори',
+        'Дані запланованих секторів ще не завантажено. Спробуйте ще раз.',
+        'error'
+      );
+      return;
+    }
+
+    scheduledReviewActiveRef.current = true;
+    setIsEditingScheduledSectors(true);
+    setScheduledEditBaselineIds(availableScheduledSectorIds);
+    setSelectedNodeId(availableScheduledSectorIds[0]);
+    setMultiSelectedNodeIds(availableScheduledSectorIds);
+    showScheduledSectorsOnMap(availableScheduledSectorIds);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollViewRef.current?.scrollToEnd({ animated: true }));
+    });
+  }, [availableScheduledSectorIds, scheduledSectorIds.length, showDialog, showScheduledSectorsOnMap]);
+  const handleMapLoadEnd = useCallback(() => {
+    if (scheduledReviewActiveRef.current) {
+      showScheduledSectorsOnMap();
+      return;
+    }
+    syncScheduledSectorsToMap();
+  }, [showScheduledSectorsOnMap, syncScheduledSectorsToMap]);
+
+  useLayoutEffect(() => {
+    const hasScheduledSectors = scheduledSectorIds.length > 0;
+    navigation.setOptions({
+      headerRight: () => hasScheduledSectors ? (
+        <TouchableOpacity
+          accessibilityLabel="Показати заплановані сектори"
+          accessibilityRole="button"
+          activeOpacity={0.7}
+          onPress={openScheduledSectors}
+          style={styles.headerAction}
+        >
+          <MaterialIcons name="volume-up" size={24} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+      ) : (
+        <View
+          accessibilityLabel="Немає запланованих секторів"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: true }}
+          style={[styles.headerAction, styles.headerActionDisabled]}
+        >
+          <MaterialIcons name="volume-off" size={24} color={COLORS.textPrimary} />
+        </View>
+      ),
+    });
+  }, [navigation, openScheduledSectors, scheduledSectorIds.length]);
+
+  useEffect(() => {
+    syncScheduledSectorsToMap();
+  }, [syncScheduledSectorsToMap]);
 
   const onMapMessage = (event) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
       if (message.type === 'nodePress') setSelectedNodeId(message.nodeId);
-      if (message.type === 'clearSelection') setSelectedNodeId(null);
+      if (message.type === 'clearSelection') {
+        scheduledReviewActiveRef.current = false;
+        setIsEditingScheduledSectors(false);
+        setScheduledEditBaselineIds([]);
+        setSelectedNodeId(null);
+      }
       if (message.type === 'multiSelection' && Array.isArray(message.nodeIds)) {
+        scheduledReviewActiveRef.current = false;
+        setIsEditingScheduledSectors(false);
+        setScheduledEditBaselineIds([]);
+        setMultiSelectedNodeIds(message.nodeIds);
+      }
+      if (message.type === 'scheduledSelection' && Array.isArray(message.nodeIds)) {
+        scheduledReviewActiveRef.current = true;
+        setIsEditingScheduledSectors(true);
         setMultiSelectedNodeIds(message.nodeIds);
       }
     } catch (messageError) {
@@ -670,14 +900,17 @@ export default function Quant() {
   };
 
   const scheduleSectorNotifications = async (sectorIds) => {
+    const currentGuildId = String(guildId || '');
     const requestedSectorIds = Array.from(new Set(
       (sectorIds || []).map((sectorId) => String(sectorId || '').trim()).filter(Boolean)
     ));
     const normalizedSectorIds = requestedSectorIds.filter((sectorId) => {
       const node = renderedNodes.find((item) => String(item.id) === sectorId);
-      return node?.guildState === 'blocked' && !node.isAvoidSelection;
+      return node?.guildState === 'blocked' &&
+        !node.isAvoidSelection &&
+        !scheduledSectorIds.includes(sectorId);
     });
-    if (!guildId || !normalizedSectorIds.length || schedulingNotification) return;
+    if (!currentGuildId || !normalizedSectorIds.length || schedulingNotification) return;
 
     setSchedulingNotification(true);
     try {
@@ -686,7 +919,7 @@ export default function Quant() {
 
       const updates = {};
       normalizedSectorIds.forEach((sectorId) => {
-        updates[`guilds/${guildId}/quantumStateNotifications/${sectorId}/${userId}`] = {
+        updates[`guilds/${currentGuildId}/quantumStateNotifications/${sectorId}/${userId}`] = {
           userId,
           sectorId,
           expectedState: 'blocked',
@@ -694,8 +927,9 @@ export default function Quant() {
         };
       });
       await database().ref().update(updates);
+      if (!mountedRef.current || activeGuildIdRef.current !== currentGuildId) return;
       setScheduledSectorIds((current) => Array.from(new Set([...current, ...normalizedSectorIds])));
-      Alert.alert(
+      showDialog(
         'Сповіщення заплановано',
         normalizedSectorIds.length === 1
           ? `Ви отримаєте push, коли сектор ${normalizedSectorIds[0].toUpperCase()} відкриється.`
@@ -703,17 +937,147 @@ export default function Quant() {
       );
     } catch (scheduleError) {
       console.error('Не вдалося запланувати сповіщення квантового сектора:', scheduleError);
-      Alert.alert('Не вдалося запланувати сповіщення', scheduleError?.message || 'Спробуйте ще раз.');
+      if (mountedRef.current && activeGuildIdRef.current === currentGuildId) {
+        showDialog(
+          'Не вдалося запланувати сповіщення',
+          scheduleError?.message || 'Спробуйте ще раз.',
+          'error'
+        );
+      }
     } finally {
-      setSchedulingNotification(false);
+      if (mountedRef.current) setSchedulingNotification(false);
     }
   };
 
-  const isMultiNotificationScheduled = multiSelectedNodes.length > 0 &&
-    multiSelectedNodes.every((node) => scheduledSectorIds.includes(String(node.id)));
+  const saveScheduledSectorNotifications = async (sectorIds) => {
+    const currentGuildId = String(guildId || '');
+    const draftSectorIds = normalizeQuantumSectorIds(sectorIds);
+    if (
+      !currentGuildId ||
+      !isEditingScheduledSectors ||
+      schedulingNotification ||
+      areSameQuantumSectorSelections(draftSectorIds, scheduledEditBaselineIds)
+    ) return;
+
+    const currentScheduledSectorIds = normalizeQuantumSectorIds(scheduledSectorIds);
+    const currentScheduledSet = new Set(currentScheduledSectorIds);
+    const baselineSet = new Set(normalizeQuantumSectorIds(scheduledEditBaselineIds));
+    const renderedNodeIds = new Set(renderedNodes.map((node) => String(node.id)));
+    const preservedHiddenSectorIds = currentScheduledSectorIds.filter((sectorId) =>
+      !renderedNodeIds.has(sectorId) && !baselineSet.has(sectorId)
+    );
+    const nextScheduledSectorIds = normalizeQuantumSectorIds([
+      ...preservedHiddenSectorIds,
+      ...draftSectorIds,
+    ]);
+    const invalidAddedSectorIds = nextScheduledSectorIds.filter((sectorId) => {
+      if (currentScheduledSet.has(sectorId)) return false;
+      const node = renderedNodes.find((item) => String(item.id) === sectorId);
+      return !node ||
+        String(node.guildState || '').toLowerCase() !== 'blocked' ||
+        node.isAvoidSelection ||
+        getNodeGradientType(node) === 'standard';
+    });
+
+    if (invalidAddedSectorIds.length) {
+      showDialog(
+        'Не вдалося оновити сповіщення',
+        `Сектори ${invalidAddedSectorIds.map((sectorId) => sectorId.toUpperCase()).join(', ')} вже недоступні для планування.`,
+        'error'
+      );
+      return;
+    }
+
+    setSchedulingNotification(true);
+    try {
+      const userId = String((await AsyncStorage.getItem('userId')) || '').trim();
+      if (!userId) throw new Error('Не вдалося визначити користувача. Увійдіть у застосунок ще раз.');
+      if (!mountedRef.current || activeGuildIdRef.current !== currentGuildId) return;
+
+      const { updates } = buildQuantumNotificationSelectionUpdates({
+        userId,
+        currentSectorIds: currentScheduledSectorIds,
+        nextSectorIds: nextScheduledSectorIds,
+        createdAt: database.ServerValue.TIMESTAMP,
+      });
+      if (Object.keys(updates).length) {
+        await database()
+          .ref(`guilds/${currentGuildId}/quantumStateNotifications`)
+          .update(updates);
+      }
+      if (!mountedRef.current || activeGuildIdRef.current !== currentGuildId) return;
+
+      setScheduledSectorIds(nextScheduledSectorIds);
+      setMultiSelectedNodeIds(draftSectorIds);
+      setScheduledEditBaselineIds(draftSectorIds);
+      showDialog(
+        'Набір сповіщень оновлено',
+        draftSectorIds.length
+          ? `Збережено секторів для сповіщення: ${draftSectorIds.length}.`
+          : 'Усі заплановані сектори видалено.'
+      );
+    } catch (saveError) {
+      console.error('Не вдалося оновити сповіщення квантових секторів:', saveError);
+      if (mountedRef.current && activeGuildIdRef.current === currentGuildId) {
+        showDialog(
+          'Не вдалося оновити сповіщення',
+          saveError?.message || 'Спробуйте ще раз.',
+          'error'
+        );
+      }
+    } finally {
+      if (mountedRef.current) setSchedulingNotification(false);
+    }
+  };
+
+  const cancelSectorNotification = async (sectorId) => {
+    const normalizedSectorId = String(sectorId || '').trim();
+    const currentGuildId = String(guildId || '');
+    if (
+      !currentGuildId ||
+      !normalizedSectorId ||
+      !scheduledSectorIds.includes(normalizedSectorId) ||
+      schedulingNotification
+    ) return;
+
+    setSchedulingNotification(true);
+    try {
+      const userId = String((await AsyncStorage.getItem('userId')) || '').trim();
+      if (!userId) throw new Error('Не вдалося визначити користувача. Увійдіть у застосунок ще раз.');
+
+      await database()
+        .ref(`guilds/${currentGuildId}/quantumStateNotifications/${normalizedSectorId}/${userId}`)
+        .remove();
+      if (!mountedRef.current || activeGuildIdRef.current !== currentGuildId) return;
+
+      setScheduledSectorIds((current) => current.filter((id) => String(id) !== normalizedSectorId));
+      setMultiSelectedNodeIds((current) => current.filter((id) => String(id) !== normalizedSectorId));
+      showDialog(
+        'Сповіщення скасовано',
+        `Сектор ${normalizedSectorId.toUpperCase()} видалено із запланованих.`
+      );
+    } catch (cancelError) {
+      console.error('Не вдалося скасувати сповіщення квантового сектора:', cancelError);
+      if (mountedRef.current && activeGuildIdRef.current === currentGuildId) {
+        showDialog(
+          'Не вдалося скасувати сповіщення',
+          cancelError?.message || 'Спробуйте ще раз.',
+          'error'
+        );
+      }
+    } finally {
+      if (mountedRef.current) setSchedulingNotification(false);
+    }
+  };
+
+  const isMultiNotificationScheduled = isEditingScheduledSectors
+    ? areSameQuantumSectorSelections(multiSelectedNodeIds, scheduledEditBaselineIds)
+    : multiSelectedNodes.length > 0 &&
+      multiSelectedNodes.every((node) => scheduledSectorIds.includes(String(node.id)));
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <>
+    <ScrollView ref={scrollViewRef} style={styles.screen} contentContainerStyle={styles.content}>
       {loading ? (
         <View style={styles.state}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.stateText}>Завантаження мапи...</Text></View>
       ) : nodes.length ? (
@@ -722,36 +1086,45 @@ export default function Quant() {
             ref={webViewRef}
             key={`${mapKey}-${difficultyLevel}-${rotation}`}
             originWhitelist={['*']} source={webViewSource} style={styles.webView} onMessage={onMapMessage}
+            onLoadEnd={handleMapLoadEnd}
             javaScriptEnabled scrollEnabled={false} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} />
         </View>
       ) : (
         <View style={styles.state}><Text style={styles.errorTitle}>Мапа недоступна</Text><Text style={styles.stateText}>{error}</Text></View>
       )}
       {nodes.length > 0 && <View style={styles.meta}><Text style={styles.metaText}>{config?.raidName || config?.mapKey}</Text><Text style={styles.metaText}>Рівень {config?.difficultyLevel}</Text></View>}
-      {multiSelectedNodes.length > 0 && (
+      {(isEditingScheduledSectors || multiSelectedNodes.length > 0) && (
         <MultiSectorDetails
           isNotificationScheduled={isMultiNotificationScheduled}
           isSchedulingNotification={schedulingNotification}
           nodes={multiSelectedNodes}
-          onNotify={scheduleSectorNotifications}
+          onNotify={isEditingScheduledSectors
+            ? () => saveScheduledSectorNotifications(multiSelectedNodeIds)
+            : scheduleSectorNotifications}
           onRemove={removeMultiSelectedNode}
         />
       )}
-      {selectedNode && !multiSelectedNodes.length && (
+      {selectedNode && !isEditingScheduledSectors && !multiSelectedNodes.length && (
         <SectorDetails
+          guildUsers={guildUsers}
           node={selectedNode}
           isNotificationScheduled={scheduledSectorIds.includes(String(selectedNode.id))}
           isSchedulingNotification={schedulingNotification}
+          onCancel={cancelSectorNotification}
           onNotify={scheduleSectorNotifications}
         />
       )}
     </ScrollView>
+    <QuantumDialog dialog={dialog} onClose={closeDialog} />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.background },
   content: { flexGrow: 1, paddingBottom: 24 },
+  headerAction: { width: 44, height: 44, marginRight: 10, alignItems: 'center', justifyContent: 'center' },
+  headerActionDisabled: { opacity: 0.65 },
   map: {
     width: '96%',
     alignSelf: 'center',
@@ -794,6 +1167,8 @@ const styles = StyleSheet.create({
   statusText: { flexShrink: 1, fontSize: 14, fontWeight: '700', textAlign: 'right' },
   notifyButton: { minHeight: 36, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 8, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: `${COLORS.primary}14` },
   notifyButtonText: { color: COLORS.primary, fontSize: 13, fontWeight: '700' },
+  cancelNotificationButton: { borderColor: COLORS.danger, backgroundColor: `${COLORS.danger}14` },
+  cancelNotificationButtonText: { color: COLORS.danger },
   notifyButtonDisabled: { opacity: 0.65 },
   detailsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: COLORS.separator, marginVertical: 12 },
   sectionHeading: { color: COLORS.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 10 },
@@ -815,10 +1190,18 @@ const styles = StyleSheet.create({
   participantRow: { minHeight: 54, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.surfaceHighlight },
   rank: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: COLORS.separator, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   rankText: { color: COLORS.textPrimary, fontSize: 11, fontWeight: '700' },
-  participantAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 9 },
-  participantAvatarFallback: { width: 30, height: 30, borderRadius: 15, marginRight: 9, backgroundColor: COLORS.surfaceHighlight, alignItems: 'center', justifyContent: 'center' },
+  participantAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 9, borderWidth: 1, borderColor: COLORS.separator, backgroundColor: COLORS.surfaceHighlight },
+  participantAvatarFallback: { width: 30, height: 30, borderRadius: 15, marginRight: 9, borderWidth: 1, borderColor: COLORS.separator, backgroundColor: COLORS.surfaceHighlight, alignItems: 'center', justifyContent: 'center' },
   participantName: { flex: 1, minWidth: 0, color: COLORS.textPrimary, fontSize: 12 },
   participantAmount: { color: COLORS.textPrimary, fontSize: 12, fontWeight: '600', marginLeft: 8 },
   participantPercent: { width: 38, color: '#35b86b', fontSize: 11, textAlign: 'right', marginLeft: 5 },
   emptyParticipants: { padding: 14, color: COLORS.textSecondary, fontSize: 12, textAlign: 'center' },
+  dialogOverlay: { flex: 1, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.72)' },
+  dialogCard: { width: '100%', maxWidth: 360, padding: 20, borderRadius: 18, borderWidth: 1, borderColor: COLORS.separator, backgroundColor: COLORS.surface, alignItems: 'center' },
+  dialogIcon: { width: 52, height: 52, marginBottom: 14, borderRadius: 26, borderWidth: 1, borderColor: `${COLORS.primary}66`, backgroundColor: `${COLORS.primary}14`, alignItems: 'center', justifyContent: 'center' },
+  dialogIconError: { borderColor: `${COLORS.danger}66`, backgroundColor: `${COLORS.danger}14` },
+  dialogTitle: { color: COLORS.textPrimary, fontSize: 19, fontWeight: '700', textAlign: 'center' },
+  dialogMessage: { marginTop: 9, color: COLORS.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  dialogButton: { width: '100%', minHeight: 46, marginTop: 20, borderRadius: 11, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  dialogButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

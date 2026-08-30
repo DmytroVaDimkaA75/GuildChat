@@ -526,9 +526,8 @@ test("loginWithGoogle rejects a disabled linked Firebase Auth user", async () =>
   assert.deepEqual(calls.createCustomToken, []);
 });
 
-test("unlinkGoogleAccount revalidates exact legacy code and unlinks only Google", async () => {
+test("unlinkGoogleAccount uses the authenticated user and unlinks only Google", async () => {
   const { admin, calls } = createAdminMock({
-    values: { "users/user_1/password": "legacy-code" },
     authUsers: {
       user_1: {
         uid: "user_1",
@@ -543,37 +542,59 @@ test("unlinkGoogleAccount revalidates exact legacy code and unlinks only Google"
 
   assert.deepEqual(await handlers.unlinkGoogleAccount({
     auth: { uid: "user_1" },
-    data: { accessCode: "legacy-code" },
+    data: { expectedUserId: "user_1" },
   }), { linked: false });
+  assert.deepEqual(calls.reads, []);
   assert.deepEqual(calls.updateUser, [{
     uid: "user_1",
     update: { providersToUnlink: [GOOGLE_PROVIDER_ID] },
   }]);
 });
 
-test("unlinkGoogleAccount rejects missing auth and wrong code without mutation", async () => {
-  const { admin, calls } = createAdminMock({
-    values: { "users/user_1/password": "legacy-code" },
-  });
+test("unlinkGoogleAccount rejects missing auth without mutation", async () => {
+  const { admin, calls } = createAdminMock();
   const handlers = createHandlers({ admin });
 
   await assert.rejects(
-    handlers.unlinkGoogleAccount({ data: { accessCode: "legacy-code" } }),
-    rejectsWithCode("unauthenticated")
-  );
-  await assert.rejects(
     handlers.unlinkGoogleAccount({
-      auth: { uid: "user_1" },
-      data: { accessCode: "wrong-code" },
+      auth: undefined,
+      data: { expectedUserId: "user_1" },
     }),
     rejectsWithCode("unauthenticated")
   );
+  assert.deepEqual(calls.getUser, []);
+  assert.deepEqual(calls.reads, []);
+  assert.deepEqual(calls.updateUser, []);
+});
+
+test("unlinkGoogleAccount rejects invalid or mismatched expected user IDs before lookup", async () => {
+  const { admin, calls } = createAdminMock();
+  const handlers = createHandlers({ admin });
+
+  for (const expectedUserId of [undefined, "", "bad/user"]) {
+    await assert.rejects(
+      handlers.unlinkGoogleAccount({
+        auth: { uid: "user_1" },
+        data: { expectedUserId },
+      }),
+      rejectsWithCode("invalid-argument")
+    );
+  }
+  await assert.rejects(
+    handlers.unlinkGoogleAccount({
+      auth: { uid: "user_1" },
+      data: { expectedUserId: "user_2" },
+    }),
+    rejectsWithCode("permission-denied")
+  );
+
+  assert.deepEqual(calls.getUser, []);
+  assert.deepEqual(calls.reads, []);
   assert.deepEqual(calls.updateUser, []);
 });
 
 test("unlinkGoogleAccount is idempotent when Google is already unlinked", async () => {
   const { admin, calls } = createAdminMock({
-    values: { "users/user_1/password": "legacy-code" },
     authUsers: {
       user_1: {
         uid: "user_1",
@@ -588,14 +609,14 @@ test("unlinkGoogleAccount is idempotent when Google is already unlinked", async 
 
   assert.deepEqual(await handlers.unlinkGoogleAccount({
     auth: { uid: "user_1" },
-    data: { accessCode: "legacy-code" },
+    data: { expectedUserId: "user_1" },
   }), { linked: false });
+  assert.deepEqual(calls.reads, []);
   assert.deepEqual(calls.updateUser, []);
 });
 
 test("unlinkGoogleAccount rejects a disabled Firebase Auth user without mutation", async () => {
   const { admin, calls } = createAdminMock({
-    values: { "users/user_1/password": "legacy-code" },
     authUsers: {
       user_1: {
         uid: "user_1",
@@ -612,10 +633,11 @@ test("unlinkGoogleAccount rejects a disabled Firebase Auth user without mutation
   await assert.rejects(
     handlers.unlinkGoogleAccount({
       auth: { uid: "user_1" },
-      data: { accessCode: "legacy-code" },
+      data: { expectedUserId: "user_1" },
     }),
     rejectsWithCode("permission-denied")
   );
+  assert.deepEqual(calls.reads, []);
   assert.deepEqual(calls.updateUser, []);
 });
 

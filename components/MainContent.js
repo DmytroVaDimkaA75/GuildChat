@@ -307,15 +307,14 @@ function QuantStack() {
           title: 'Квантові вторгнення',
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
           headerRight: () => (
-            <TouchableOpacity
+            <View
               accessibilityRole="button"
-              accessibilityLabel="Вимкнути звук квантових вторгнень"
-              activeOpacity={0.7}
-              onPress={() => {}}
-              style={{ marginRight: 16, padding: 6 }}
+              accessibilityLabel="Немає запланованих секторів"
+              accessibilityState={{ disabled: true }}
+              style={{ width: 44, height: 44, marginRight: 10, alignItems: 'center', justifyContent: 'center', opacity: 0.65 }}
             >
               <MaterialIcons name="volume-off" size={24} color={COLORS.textPrimary} />
-            </TouchableOpacity>
+            </View>
           ),
         }}
       />

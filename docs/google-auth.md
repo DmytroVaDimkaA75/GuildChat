@@ -51,6 +51,12 @@ the iOS Firebase application and bundle ID, add the plist through
    `loginWithGoogle`, and `unlinkGoogleAccount`.
 3. Ship the native client build.
 
-Existing local sessions continue to open normally. The first link/unlink action
-after upgrading asks for the current access code so the app can establish a
-server-verifiable Firebase session.
+Linking and unlinking in Profile use the existing authenticated Firebase
+session and never request the legacy access code. Linking additionally verifies
+the selected Google account; unlinking requires explicit destructive
+confirmation.
+
+Existing local sessions continue to open normally. A pre-upgrade local session
+without Firebase Authentication cannot modify provider links until the user
+signs in again; the client must never trust an AsyncStorage user ID alone for
+this operation.

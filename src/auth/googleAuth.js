@@ -206,6 +206,12 @@ export const linkGoogleAccount = async () => {
 
   const expectedUid = currentUser.uid;
   const idToken = await getGoogleIdToken();
+  if (String(auth().currentUser?.uid || '') !== expectedUid) {
+    throw createGoogleAuthError(
+      'google/account-mismatch',
+      'Firebase identity changed before Google linking completed.'
+    );
+  }
   const googleCredential = auth.GoogleAuthProvider.credential(idToken);
   const result = await currentUser.linkWithCredential(googleCredential);
 
@@ -227,7 +233,7 @@ export const linkGoogleAccount = async () => {
   };
 };
 
-export const unlinkGoogleAccount = async ({ accessCode }) => {
+export const unlinkGoogleAccount = async ({ expectedUserId } = {}) => {
   const currentUser = auth().currentUser;
   if (!currentUser) {
     throw createGoogleAuthError(
@@ -236,29 +242,32 @@ export const unlinkGoogleAccount = async ({ accessCode }) => {
     );
   }
 
-  const normalizedAccessCode = String(accessCode || '').trim();
-  if (!normalizedAccessCode) {
+  const normalizedExpectedUserId = String(expectedUserId || '').trim();
+  if (
+    !normalizedExpectedUserId ||
+    String(currentUser.uid || '') !== normalizedExpectedUserId
+  ) {
     throw createGoogleAuthError(
-      'google/access-code-required',
-      'An access code is required.'
+      'google/account-mismatch',
+      'Firebase identity does not match the GuildChat account.'
     );
   }
 
   const callable = getCallable('unlinkGoogleAccount');
-  const response = await callable({ accessCode: normalizedAccessCode });
+  const response = await callable({ expectedUserId: normalizedExpectedUserId });
 
   try {
     await auth().currentUser?.reload();
-    await clearNativeGoogleSession();
   } catch (error) {
     console.warn(
-      'Google provider was unlinked, but local Google session cleanup failed:',
+      'Google provider was unlinked, but Firebase user refresh failed:',
       error?.code || 'unknown'
     );
   }
+  await clearNativeGoogleSession();
 
   return {
-    userId: currentUser.uid,
+    userId: normalizedExpectedUserId,
     linked: response?.data?.linked === true,
     email: '',
     displayName: '',

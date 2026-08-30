@@ -9,13 +9,10 @@ import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -23,7 +20,6 @@ import {
 import { getUkrainianRoleLabel } from '../../constants/roles';
 import { DarkThemeColors } from '../../constants/theme';
 import {
-  authenticateLegacyAccount,
   getGoogleLinkStatus,
   isGoogleAuthCancellation,
   linkGoogleAccount,
@@ -48,6 +44,15 @@ const normalizeGoogleStatus = (value, expectedUserId = '') => {
   };
 };
 
+const isGoogleSessionError = error => [
+  'google/session-required',
+  'google/user-missing',
+  'google/user-mismatch',
+  'google/account-mismatch',
+  'functions/unauthenticated',
+  'unauthenticated',
+].includes(String(error?.code || ''));
+
 const ProfileMain = () => {
   const { t } = useTranslation();
   const [userName, setUserName] = useState('');
@@ -55,13 +60,11 @@ const ProfileMain = () => {
   const [guilds, setGuilds] = useState([]);
   const [googleStatus, setGoogleStatus] = useState('loading');
   const [googleAccount, setGoogleAccount] = useState(null);
-  const [verificationAction, setVerificationAction] = useState(null);
-  const [accessCode, setAccessCode] = useState('');
-  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [googleActionBusy, setGoogleActionBusy] = useState(false);
 
   const isMountedRef = useRef(true);
   const googleStatusRequestRef = useRef(0);
-  const statusBeforeVerificationRef = useRef('verification-required');
+  const googleActionBusyRef = useRef(false);
 
   const navigation = useNavigation();
 
@@ -95,10 +98,7 @@ const ProfileMain = () => {
       if (!isMountedRef.current || googleStatusRequestRef.current !== requestId) return;
       setGoogleAccount(null);
       setGoogleStatus(
-        error?.code === 'google/session-required' ||
-        error?.code === 'google/user-mismatch'
-          ? 'verification-required'
-          : 'error'
+        isGoogleSessionError(error) ? 'session-required' : 'error'
       );
     }
   }, [applyGoogleStatus]);
@@ -176,47 +176,21 @@ const ProfileMain = () => {
     };
   }, []);
 
-  const resetVerificationModal = () => {
-    setVerificationAction(null);
-    setAccessCode('');
-  };
+  const performGoogleAction = async action => {
+    if (
+      googleActionBusyRef.current ||
+      !['link', 'unlink'].includes(action)
+    ) return;
 
-  const openVerificationModal = action => {
-    if (verificationBusy || googleStatus === 'loading') return;
-    statusBeforeVerificationRef.current = ['linked', 'unlinked'].includes(googleStatus)
-      ? googleStatus
-      : 'verification-required';
-    setAccessCode('');
-    setVerificationAction(action);
-    setGoogleStatus('verification-required');
-  };
-
-  const closeVerificationModal = () => {
-    if (verificationBusy) return;
-    resetVerificationModal();
-    setGoogleStatus(statusBeforeVerificationRef.current);
-  };
-
-  const handleVerificationSubmit = async () => {
-    if (!verificationAction || verificationBusy) return;
-
-    const normalizedAccessCode = accessCode.trim();
-    if (!normalizedAccessCode) {
-      Alert.alert(
-        t('googleAuth.errorTitle'),
-        t('googleAuth.accessCodeRequired')
-      );
-      return;
-    }
-
-    const action = verificationAction;
-    let stage = 'authentication';
+    const statusBeforeAction = googleStatus;
+    let expectedUserId = '';
     let verifiedStatus = null;
     let committedStatus = null;
-    setVerificationBusy(true);
+    googleActionBusyRef.current = true;
+    setGoogleActionBusy(true);
 
     try {
-      const expectedUserId = String(
+      expectedUserId = String(
         (await AsyncStorage.getItem('userId')) || ''
       ).trim();
       if (!expectedUserId) {
@@ -225,37 +199,23 @@ const ProfileMain = () => {
         throw error;
       }
 
-      const authenticatedAccount = await authenticateLegacyAccount({
-        accessCode: normalizedAccessCode,
-        expectedUserId,
-      });
-      if (String(authenticatedAccount?.userId || '').trim() !== expectedUserId) {
-        const error = new Error('Authenticated account does not match the current user.');
-        error.code = 'google/user-mismatch';
-        throw error;
-      }
-
-      stage = 'status';
       verifiedStatus = normalizeGoogleStatus(
         await getGoogleLinkStatus(),
         expectedUserId
       );
 
       if (action === 'link' && !verifiedStatus.linked) {
-        stage = 'link';
         committedStatus = normalizeGoogleStatus(
           await linkGoogleAccount(),
           expectedUserId
         );
       } else if (action === 'unlink' && verifiedStatus.linked) {
-        stage = 'unlink';
         committedStatus = normalizeGoogleStatus(
-          await unlinkGoogleAccount({ accessCode: normalizedAccessCode }),
+          await unlinkGoogleAccount({ expectedUserId }),
           expectedUserId
         );
       }
 
-      stage = action;
       const finalStatus = normalizeGoogleStatus(
         await getGoogleLinkStatus(),
         expectedUserId
@@ -271,13 +231,11 @@ const ProfileMain = () => {
 
       if (!isMountedRef.current) return;
       applyGoogleStatus(finalStatus, expectedUserId);
-      resetVerificationModal();
     } catch (error) {
       if (!isMountedRef.current) return;
 
       if (committedStatus) {
         applyGoogleStatus(committedStatus, committedStatus.userId);
-        resetVerificationModal();
         Alert.alert(
           t('googleAuth.errorTitle'),
           t('googleAuth.statusRefreshFailed')
@@ -289,27 +247,51 @@ const ProfileMain = () => {
         if (verifiedStatus) {
           applyGoogleStatus(verifiedStatus, verifiedStatus.userId);
         } else {
-          setGoogleStatus(statusBeforeVerificationRef.current);
+          setGoogleStatus(statusBeforeAction);
         }
-        resetVerificationModal();
         return;
       }
 
-      setAccessCode('');
-      setGoogleStatus('verification-required');
-      const errorKey = stage === 'authentication'
-        ? 'googleAuth.authenticationFailed'
-        : action === 'unlink'
-          ? 'googleAuth.unlinkFailed'
-          : 'googleAuth.linkFailed';
+      if (verifiedStatus && !isGoogleSessionError(error)) {
+        try {
+          const recoveredStatus = normalizeGoogleStatus(
+            await getGoogleLinkStatus(),
+            expectedUserId
+          );
+          const actionCompleted = action === 'link'
+            ? recoveredStatus.linked
+            : !recoveredStatus.linked;
+          if (actionCompleted) {
+            applyGoogleStatus(recoveredStatus, expectedUserId);
+            return;
+          }
+          verifiedStatus = recoveredStatus;
+        } catch (_statusError) {
+          // Keep the last confirmed status when recovery is also unavailable.
+        }
+      }
+
+      if (isGoogleSessionError(error)) {
+        setGoogleAccount(null);
+        setGoogleStatus('session-required');
+      } else if (verifiedStatus) {
+        applyGoogleStatus(verifiedStatus, verifiedStatus.userId);
+      } else {
+        setGoogleStatus(statusBeforeAction);
+      }
+
+      const errorKey = action === 'unlink'
+        ? 'googleAuth.unlinkFailed'
+        : 'googleAuth.linkFailed';
       Alert.alert(t('googleAuth.errorTitle'), t(errorKey));
     } finally {
-      if (isMountedRef.current) setVerificationBusy(false);
+      googleActionBusyRef.current = false;
+      if (isMountedRef.current) setGoogleActionBusy(false);
     }
   };
 
   const handleUnlinkPress = () => {
-    if (verificationBusy || googleStatus !== 'linked') return;
+    if (googleActionBusyRef.current || googleStatus !== 'linked') return;
     Alert.alert(
       t('googleAuth.unlinkTitle'),
       t('googleAuth.unlinkMessage'),
@@ -318,14 +300,14 @@ const ProfileMain = () => {
         {
           text: t('googleAuth.unlinkConfirm'),
           style: 'destructive',
-          onPress: () => openVerificationModal('unlink'),
+          onPress: () => performGoogleAction('unlink'),
         },
       ]
     );
   };
 
   const renderGoogleButtonContent = (iconName, labelKey) => (
-    verificationBusy ? (
+    googleActionBusy ? (
       <ActivityIndicator size="small" color="#fff" />
     ) : (
       <>
@@ -401,27 +383,26 @@ const ProfileMain = () => {
             </View>
           )}
 
-          {googleStatus === 'verification-required' && (
+          {googleStatus === 'session-required' && (
             <>
               <View style={styles.googleStatusRow}>
                 <Ionicons name="shield-checkmark-outline" size={19} color={DarkThemeColors.warning} />
                 <Text style={[styles.googleStatusText, styles.googleWarningText]}>
-                  {t('googleAuth.verificationRequired')}
+                  {t('googleAuth.sessionRequired')}
                 </Text>
               </View>
-              {!verificationAction && (
-                <TouchableOpacity
-                  style={styles.googlePrimaryButton}
-                  onPress={() => openVerificationModal('link')}
-                  disabled={verificationBusy}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('googleAuth.link')}
-                  accessibilityState={{ disabled: verificationBusy }}
-                  activeOpacity={0.8}
-                >
-                  {renderGoogleButtonContent('logo-google', 'googleAuth.link')}
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.googleSecondaryButton}
+                onPress={loadGoogleStatus}
+                disabled={googleActionBusy}
+                accessibilityRole="button"
+                accessibilityLabel={t('googleAuth.retry')}
+                accessibilityState={{ disabled: googleActionBusy }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh" size={19} color={DarkThemeColors.primary} />
+                <Text style={styles.googleSecondaryButtonText}>{t('googleAuth.retry')}</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -432,12 +413,15 @@ const ProfileMain = () => {
                 <Text style={styles.googleStatusText}>{t('googleAuth.unlinked')}</Text>
               </View>
               <TouchableOpacity
-                style={styles.googlePrimaryButton}
-                onPress={() => openVerificationModal('link')}
-                disabled={verificationBusy}
+                style={[
+                  styles.googlePrimaryButton,
+                  googleActionBusy && styles.disabledButton,
+                ]}
+                onPress={() => performGoogleAction('link')}
+                disabled={googleActionBusy}
                 accessibilityRole="button"
                 accessibilityLabel={t('googleAuth.link')}
-                accessibilityState={{ disabled: verificationBusy }}
+                accessibilityState={{ disabled: googleActionBusy }}
                 activeOpacity={0.8}
               >
                 {renderGoogleButtonContent('logo-google', 'googleAuth.link')}
@@ -460,16 +444,25 @@ const ProfileMain = () => {
                 {googleAccount?.email || t('googleAuth.emailFallback')}
               </Text>
               <TouchableOpacity
-                style={styles.googleDangerButton}
+                style={[
+                  styles.googleDangerButton,
+                  googleActionBusy && styles.disabledButton,
+                ]}
                 onPress={handleUnlinkPress}
-                disabled={verificationBusy}
+                disabled={googleActionBusy}
                 accessibilityRole="button"
                 accessibilityLabel={t('googleAuth.unlink')}
-                accessibilityState={{ disabled: verificationBusy }}
+                accessibilityState={{ disabled: googleActionBusy }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="unlink-outline" size={19} color={DarkThemeColors.danger} />
-                <Text style={styles.googleDangerButtonText}>{t('googleAuth.unlink')}</Text>
+                {googleActionBusy ? (
+                  <ActivityIndicator size="small" color={DarkThemeColors.danger} />
+                ) : (
+                  <>
+                    <Ionicons name="unlink-outline" size={19} color={DarkThemeColors.danger} />
+                    <Text style={styles.googleDangerButtonText}>{t('googleAuth.unlink')}</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </>
           )}
@@ -483,10 +476,15 @@ const ProfileMain = () => {
                 </Text>
               </View>
               <TouchableOpacity
-                style={styles.googleSecondaryButton}
+                style={[
+                  styles.googleSecondaryButton,
+                  googleActionBusy && styles.disabledButton,
+                ]}
                 onPress={loadGoogleStatus}
+                disabled={googleActionBusy}
                 accessibilityRole="button"
                 accessibilityLabel={t('googleAuth.retry')}
+                accessibilityState={{ disabled: googleActionBusy }}
                 activeOpacity={0.8}
               >
                 <Ionicons name="refresh" size={19} color={DarkThemeColors.primary} />
@@ -513,97 +511,6 @@ const ProfileMain = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      <Modal
-        visible={Platform.OS === 'android' && !!verificationAction}
-        transparent
-        animationType="fade"
-        onRequestClose={closeVerificationModal}
-        statusBarTranslucent
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalCard} accessibilityViewIsModal>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('googleAuth.verificationTitle')}</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={closeVerificationModal}
-                disabled={verificationBusy}
-                accessibilityRole="button"
-                accessibilityLabel={t('googleAuth.cancel')}
-                accessibilityState={{ disabled: verificationBusy }}
-              >
-                <Ionicons name="close" size={24} color={DarkThemeColors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalDescription}>
-              {t(
-                verificationAction === 'unlink'
-                  ? 'googleAuth.verificationDescriptionUnlink'
-                  : 'googleAuth.verificationDescriptionLink'
-              )}
-            </Text>
-            <TextInput
-              style={styles.accessCodeInput}
-              value={accessCode}
-              onChangeText={setAccessCode}
-              placeholder={t('googleAuth.accessCodePlaceholder')}
-              placeholderTextColor={DarkThemeColors.textSecondary}
-              selectionColor={DarkThemeColors.primary}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!verificationBusy}
-              returnKeyType="done"
-              onSubmitEditing={handleVerificationSubmit}
-              accessibilityLabel={t('googleAuth.accessCodePlaceholder')}
-              autoFocus
-            />
-            <View style={styles.modalButtonRow}>
-              <TouchableOpacity
-                style={[
-                  styles.modalSecondaryButton,
-                  verificationBusy && styles.disabledButton,
-                ]}
-                onPress={closeVerificationModal}
-                disabled={verificationBusy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: verificationBusy }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalSecondaryButtonText}>{t('googleAuth.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalPrimaryButton,
-                  verificationAction === 'unlink' && styles.modalDangerButton,
-                  verificationBusy && styles.disabledButton,
-                ]}
-                onPress={handleVerificationSubmit}
-                disabled={verificationBusy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: verificationBusy }}
-                activeOpacity={0.8}
-              >
-                {verificationBusy ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.modalPrimaryButtonText}>
-                    {t(
-                      verificationAction === 'unlink'
-                        ? 'googleAuth.verifyAndUnlink'
-                        : 'googleAuth.verifyAndLink'
-                    )}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </>
   );
 };
@@ -787,96 +694,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.4,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: DarkThemeColors.overlay,
-    paddingHorizontal: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: DarkThemeColors.surface,
-    borderWidth: 1,
-    borderColor: DarkThemeColors.border,
-    borderRadius: 18,
-    padding: 18,
-  },
-  modalHeader: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modalTitle: {
-    flex: 1,
-    color: DarkThemeColors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalCloseButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: -10,
-    marginTop: -8,
-  },
-  modalDescription: {
-    color: DarkThemeColors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 4,
-    marginBottom: 14,
-  },
-  accessCodeInput: {
-    minHeight: 50,
-    color: DarkThemeColors.text,
-    backgroundColor: DarkThemeColors.background,
-    borderWidth: 1,
-    borderColor: DarkThemeColors.border,
-    borderRadius: 11,
-    paddingHorizontal: 14,
-    fontSize: 16,
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    marginTop: 16,
-  },
-  modalSecondaryButton: {
-    flex: 1,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: DarkThemeColors.border,
-    borderRadius: 10,
-    marginRight: 10,
-    paddingHorizontal: 10,
-  },
-  modalSecondaryButtonText: {
-    color: DarkThemeColors.primarySoft,
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  modalPrimaryButton: {
-    flex: 1,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: DarkThemeColors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-  },
-  modalDangerButton: {
-    backgroundColor: DarkThemeColors.danger,
-  },
-  modalPrimaryButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
   },
 });
