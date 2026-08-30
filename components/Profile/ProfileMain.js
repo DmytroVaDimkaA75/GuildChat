@@ -350,8 +350,6 @@ const ProfileMain = () => {
           )}
         </View>
 
-        <View style={styles.divider} />
-
         {/* Про себе */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Про себе</Text>
@@ -359,8 +357,6 @@ const ProfileMain = () => {
             <Text style={styles.mainText}>Я користувач</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.divider} />
 
         {Platform.OS === 'android' && (
           <>
@@ -493,8 +489,6 @@ const ProfileMain = () => {
             </>
           )}
         </View>
-
-        <View style={styles.divider} />
           </>
         )}
 
@@ -527,19 +521,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   userName: { fontSize: 24, color: '#f4f7fb', fontWeight: '700' },
-  divider: {
-    height: 1,
-    backgroundColor: '#152330',
-    marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 1,
-  },
   section: {
     backgroundColor: '#152330',
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',

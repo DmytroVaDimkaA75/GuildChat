@@ -14,6 +14,7 @@ import {
   buildQuantumNotificationSelectionUpdates,
   normalizeQuantumSectorIds,
 } from './quantumNotificationSelection';
+import { resolveQuantumAvatarUrl } from './quantumAvatar';
 
 const COLORS = {
   background: '#0f1115', surface: '#152330', surfaceHighlight: '#1b2b3b',
@@ -278,13 +279,10 @@ const getSectorParticipants = (node, guildUsers = {}) => {
     const matchedProfile = directProfile || guildUsersByName.get(
       String(providedName || '').trim().toLowerCase()
     );
-    const rawImageUrl = firstDefined(
+    const imageUrl = resolveQuantumAvatarUrl(
       data.imageUrl, data.avatarUrl, data.avatar, data.photoURL,
       data.player?.imageUrl, data.player?.avatarUrl, matchedProfile?.imageUrl
     );
-    const imageUrl = typeof rawImageUrl === 'string'
-      ? rawImageUrl
-      : firstDefined(rawImageUrl?.url, rawImageUrl?.src, null);
     const amount = Number(firstDefined(
       data.contribution, data.amount, data.value, data.progress, data.points,
       data.currentProgress, data.contributionAmount, data.contributed, data.total, 0

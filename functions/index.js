@@ -27,10 +27,12 @@ const { fetchLinkPreview } = require("./linkPreview");
 const { fetchYouTubeChannelFeed } = require("./youtubeFeed");
 const { ARC_CONTRIBUTION_BOOSTS } = require("./arcLevels");
 const { PUSH: EXPRESS_PUSH, advanceExpress, uniqueAvailableIds } = require("./expressWorkflow");
+const { ensureVisibleNotificationPayload } = require("./notificationPayload");
 const {
   buildQuantumSectorNotification,
+  collectOpenedQuantumSectorIds,
+  collectQuantumNotificationRecipients,
   collectUserFcmTokens,
-  isQuantumSectorOpening,
 } = require("./quantumNotifications");
 
 admin.initializeApp();
@@ -329,42 +331,58 @@ const addWorldNameToPushBody = (body, context) => {
 const sendMulticastWithoutRecipientLimit = async ({ tokens, ...payload }) => {
   const uniqueTokens = Array.from(new Set((tokens || []).filter(Boolean)));
   if (!uniqueTokens.length) return [];
+  const visiblePayload = ensureVisibleNotificationPayload(payload);
 
   return Promise.all(
     chunkArray(uniqueTokens, 500).map((chunk) =>
-      admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload })
+      admin.messaging().sendEachForMulticast({ tokens: chunk, ...visiblePayload })
     )
   );
 };
 
 exports.notifyQuantumSectorOpen = onValueWritten(
   {
-    ref: "/guilds/{guildId}/quantum/nodes/{sectorId}/state",
+    ref: "/guilds/{guildId}/quantum/nodes",
     region: "europe-west1",
   },
   async (event) => {
-    const beforeState = event.data.before.val();
-    const afterState = event.data.after.val();
-    if (!isQuantumSectorOpening(beforeState, afterState)) return null;
+    const openedSectorIds = collectOpenedQuantumSectorIds(
+      event.data.before.val(),
+      event.data.after.val()
+    );
+    if (!openedSectorIds.length) return null;
 
     const guildId = String(event.params.guildId || "");
-    const sectorId = String(event.params.sectorId || "");
     const db = admin.database();
-    const subscriptionsRef = db.ref(
-      `/guilds/${guildId}/quantumStateNotifications/${sectorId}`
+    const subscriptionsRootRef = db.ref(
+      `/guilds/${guildId}/quantumStateNotifications`
     );
-    const [subscriptionsSnap, guildMembersSnap] = await Promise.all([
-      subscriptionsRef.once("value"),
+    const subscriptionRefs = openedSectorIds.map((sectorId) =>
+      subscriptionsRootRef.child(sectorId)
+    );
+    const [guildMembersSnap, ...subscriptionSnapshots] = await Promise.all([
       db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+      ...subscriptionRefs.map((ref) => ref.once("value")),
     ]);
-    const subscriptions = subscriptionsSnap.val() || {};
     const guildMembers = guildMembersSnap.val() || {};
-    const userIds = Object.keys(subscriptions).filter((userId) =>
-      Object.prototype.hasOwnProperty.call(guildMembers, userId)
+    const subscriptionsBySector = Object.fromEntries(
+      subscriptionSnapshots.map((snapshot, index) => [
+        openedSectorIds[index],
+        snapshot.val() || {},
+      ])
+    );
+    const recipients = collectQuantumNotificationRecipients({
+      openedSectorIds,
+      subscriptionsBySector,
+      guildMembers,
+    });
+    const userIds = recipients.map(({ userId }) => userId);
+    const subscriptionRemovals = Object.fromEntries(
+      openedSectorIds.map((sectorId) => [sectorId, null])
     );
 
     if (!userIds.length) {
-      await subscriptionsRef.remove();
+      await subscriptionsRootRef.update(subscriptionRemovals);
       return null;
     }
 
@@ -375,14 +393,14 @@ exports.notifyQuantumSectorOpen = onValueWritten(
       userSnapshots.map((snapshot, index) => [userIds[index], snapshot.val() || {}])
     );
     const worldContexts = await getPushWorldContext({ db, guildId, userIds });
-    const notification = buildQuantumSectorNotification({
-      guildId,
-      sectorId,
-    });
 
-    const deliveries = userIds.map(async (userId) => {
+    const deliveries = recipients.map(async ({ userId, sectorIds }) => {
       const tokens = collectUserFcmTokens({ [userId]: userRecords[userId] });
       if (!tokens.length) return 0;
+      const notification = buildQuantumSectorNotification({
+        guildId,
+        sectorIds,
+      });
       const body = addWorldNameToPushBody(
         notification.body,
         worldContexts.get(userId)
@@ -421,15 +439,15 @@ exports.notifyQuantumSectorOpen = onValueWritten(
     if (!tokenCount) {
       logger.warn("[QuantumNotifications] No FCM tokens for subscriptions", {
         guildId,
-        sectorId,
+        sectorIds: openedSectorIds,
         userIds,
       });
     }
 
-    await subscriptionsRef.remove();
-    logger.info("[QuantumNotifications] Sector opened", {
+    await subscriptionsRootRef.update(subscriptionRemovals);
+    logger.info("[QuantumNotifications] Sectors opened", {
       guildId,
-      sectorId,
+      sectorIds: openedSectorIds,
       subscriberCount: userIds.length,
       tokenCount,
     });
@@ -1576,7 +1594,7 @@ const sendCulturePushAndMarkSent = async ({ db, userId, guildId, queuePaths, tas
       };
 
   try {
-    await admin.messaging().send(payload);
+    await admin.messaging().send(ensureVisibleNotificationPayload(payload));
 
     await Promise.all(
       safeTasks.map((task) =>
@@ -3116,7 +3134,7 @@ const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
     return;
   }
   const title = "Експрес прокачка";
-  await admin.messaging().send({
+  await admin.messaging().send(ensureVisibleNotificationPayload({
     token,
     data: {
       type: "express_upgrade",
@@ -3133,7 +3151,7 @@ const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
       notification: { title, body: notice.body, channelId: "express_upgrade", sound: "kirpich" },
     },
     apns: { payload: { aps: { alert: { title, body: notice.body }, sound: "kirpich.mp3", "content-available": 1 } } },
-  });
+  }));
   await ledgerRef.update({ status: "sent", completedAt: admin.database.ServerValue.TIMESTAMP });
 };
 
