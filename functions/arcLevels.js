@@ -21,11 +21,20 @@ const ARC_CONTRIBUTION_BOOSTS = Object.freeze([
   99.1, 99.2, 99.3, 99.4, 99.5, 99.6, 99.7, 99.8, 99.9, 100,
 ]);
 
-const findRequiredArcLevel = ({ nominalCost, contribution }) => {
+const findRequiredArcLevel = ({ nominalCost, contribution, multiplier }) => {
   const nominal = Number(nominalCost);
-  const amount = Number(contribution);
+  let amount = Number(contribution);
   if (!Number.isFinite(nominal) || nominal <= 0) return 0;
   if (!Number.isFinite(amount) || amount <= nominal) return 0;
+
+  // placeCost = round(nominalCost * branchMultiplier); the sub-1 FP rounding must
+  // not push the Arc requirement past the branch multiplier's own bracket.
+  const mult = Number(multiplier);
+  if (Number.isFinite(mult) && mult > 0) {
+    const ideal = nominal * mult;
+    if (Math.abs(amount - ideal) <= 0.5) amount = ideal;
+  }
+  if (amount <= nominal) return 0;
 
   const index = ARC_CONTRIBUTION_BOOSTS.findIndex(
     (boost) => nominal * (100 + boost) >= amount * 100

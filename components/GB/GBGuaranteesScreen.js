@@ -50,6 +50,24 @@ const formatForgePoints = (value) => {
   return Number.isFinite(amount) ? amount.toLocaleString('uk') : '0';
 };
 
+// Округлення коефіцієнта для показу (STATUSES.md): до 1,9 включно — 2 знаки вгору,
+// понад 1,9 — 3 знаки вгору.
+const formatCoefficient = (value) => {
+  const coef = Number(value);
+  if (!Number.isFinite(coef)) return null;
+  const factor = coef <= 1.9 ? 100 : 1000;
+  return (Math.ceil(coef * factor) / factor).toLocaleString('uk');
+};
+
+// Рекомендований внесок співгільдійця: для переливу — recommendedDeposit,
+// для empty_guaranteed — повна вартість місця (action.amount).
+const memberDepositAmount = (guarant) => {
+  const recommended = Number(guarant?.recommendedDeposit);
+  if (Number.isFinite(recommended) && recommended > 0) return recommended;
+  const actionAmount = Number(guarant?.action?.amount);
+  return Number.isFinite(actionAmount) ? actionAmount : null;
+};
+
 const getBuildingName = (catalogEntry, language, buildingId) => {
   const names = catalogEntry?.buildingName;
   if (typeof names === 'string' && names.trim()) return names;
@@ -67,24 +85,33 @@ const formatFreshness = (timestamp, t) => {
   return t('gbGuarantees.freshness.days', { count: Math.floor(hours / 24) });
 };
 
-const statusPresentation = (item) => {
-  if (item.guarant.status === 'guild_member_below_place_cost') {
+// Плашки гаранта для екрана «Гаранти». Формулювання — docs/guarant/FIELD_CASES.md
+// (F-002, F-006, F-007) і docs/guarant/STATUSES.md.
+const statusPresentation = (item, t) => {
+  const { guarant } = item;
+  if (guarant.status === 'guild_member_below_place_cost') {
     return {
-      label: `Вартість місця ${item.guarant.placeNumber} складає ${formatForgePoints(item.guarant.placeCost)} СО. Треба докинути ${formatForgePoints(item.guarant.requiredTopUp ?? item.guarant.action?.amount)} СО`,
+      label: t('gbGuarantees.plashka.topUpTarget', {
+        place: guarant.placeNumber,
+        placeCost: formatForgePoints(guarant.placeCost),
+        amount: formatForgePoints(guarant.requiredTopUp ?? guarant.action?.amount),
+      }),
       color: COLORS.red,
       background: COLORS.redSoft,
     };
   }
-  if (item.guarant.status === 'empty_guaranteed') {
+  if (guarant.status === 'empty_guaranteed') {
     return {
-      label: `Гарантовано місце ${item.guarant.placeNumber}`,
+      label: t('gbGuarantees.plashka.guaranteed'),
       color: COLORS.green,
       background: COLORS.greenSoft,
     };
   }
-  if (urgentDepositStatuses.has(item.guarant.status)) {
+  if (urgentDepositStatuses.has(guarant.status)) {
     return {
-      label: `Перелив. На місце ${item.guarant.placeNumber} слід вкласти ${formatForgePoints(item.guarant.totalFp)} СО`,
+      label: t('gbGuarantees.plashka.overflowMember', {
+        amount: formatForgePoints(memberDepositAmount(guarant)),
+      }),
       color: COLORS.red,
       background: COLORS.redSoft,
     };
@@ -105,15 +132,13 @@ const CompactInfoRow = ({ icon, label, value }) => {
 
 const GuaranteeCard = ({ item, onPress, t }) => {
   const { guarant, owner, building, level, updateAt } = item;
-  const status = statusPresentation(item);
+  const status = statusPresentation(item, t);
   const freshness = formatFreshness(updateAt, t);
   const hasLevel = level !== undefined && level !== null && level !== '';
-  const contributionMultiplier = Number.isFinite(Number(guarant.coefficient))
-    ? Number(guarant.coefficient)
-    : null;
+  const contributionMultiplier = formatCoefficient(guarant.coefficient);
   const contributionSize = guarant.status === 'empty_guaranteed'
     ? guarant.action?.amount
-    : guarant.remainingFp;
+    : memberDepositAmount(guarant) ?? guarant.remainingFp;
 
   return (
     <TouchableOpacity
@@ -297,8 +322,9 @@ const GBGuaranteesScreen = ({ isDeveloper = false, navigation }) => {
     };
   }, [guildId, reloadKey]);
 
+  // Ключ ВС «Арка» в даних — X_FutureEra_Landmark1.
   const currentArcLevel = Number(
-    guildUsers?.[currentUserId]?.greatBuild?.['The Arc']?.level
+    guildUsers?.[currentUserId]?.greatBuild?.['X_FutureEra_Landmark1']?.level
   ) || 0;
 
   const records = useMemo(() => {

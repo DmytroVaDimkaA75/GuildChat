@@ -322,83 +322,102 @@ const ExtraContributorsModal = ({ contributors, visible, onClose }) => (
   </Modal>
 );
 
-const getGuaranteeBadge = (building, forgePointsUnit) => {
+// Найвище місце, зайняте чужинцем, яке можна фізично перебити доступним залишком
+// (O + 1 <= remainingFp). У стані no_action_required таке місце завжди економічно
+// недоцільне, тож достатньо перевірити фізичну можливість. Див. docs/guarant/FIELD_CASES.md F-004.
+const getEconomicallyUnbeatableOutsiderPlace = (guarant) => {
+  const places = guarant?.developerDebug?.places;
+  const remainingFp = Number(guarant?.remainingFp);
+  if (!Array.isArray(places) || !Number.isFinite(remainingFp)) return null;
+  let highest = null;
+  places.forEach((place) => {
+    const occupant = place?.occupant;
+    if (occupant?.membership !== 'outsider') return;
+    const forgePoints = Number(occupant.forgePoints);
+    const placeNumber = Number(place.placeNumber);
+    if (!Number.isFinite(forgePoints) || !Number.isInteger(placeNumber)) return;
+    if (forgePoints + 1 <= remainingFp && (highest === null || placeNumber < highest)) {
+      highest = placeNumber;
+    }
+  });
+  return highest;
+};
+
+// Плашки гаранта для екрана «Мої ВС». Формулювання, кольори та цільові місця —
+// див. docs/guarant/FIELD_CASES.md (F-001…F-006) і docs/guarant/STATUSES.md.
+const getGuaranteeBadge = (building, t, language) => {
   if (building.totalLevelCost > 0 && building.totalContribution > building.totalLevelCost) {
     return { label: 'Перелив', type: 'danger' };
   }
   const guarant = building.guarant;
+  const num = (value) => formatNumber(value, language);
+
   if (
     guarant?.status === 'empty_urgent_deposit'
     || guarant?.status === 'empty_urgent_proportional_deposit'
   ) {
-    const placeNumber = Number(guarant.placeNumber);
-    const totalFp = Number(guarant.totalFp);
-    if (
-      Number.isInteger(placeNumber)
-      && placeNumber > 0
-      && Number.isFinite(totalFp)
-      && totalFp >= 0
-    ) {
+    const amount = Number(guarant.recommendedDeposit);
+    if (Number.isFinite(amount) && amount > 0) {
       return {
-        label: `Перелив. На місце ${placeNumber} запропоновано вкласти ${formatNumber(totalFp, 'uk')} СО`,
+        label: t('gbGuarantees.plashka.overflowOwner', { amount: num(amount) }),
         type: 'danger',
       };
     }
   }
+
   if (guarant?.status === 'empty_guaranteed') {
+    return { label: t('gbGuarantees.plashka.guaranteed'), type: 'success' };
+  }
+
+  if (guarant?.status === 'guild_member_can_be_overtaken') {
+    const amount = Number(guarant.ownerGuaranteeFp);
     const placeNumber = Number(guarant.placeNumber);
-    if (Number.isInteger(placeNumber) && placeNumber > 0) {
-      return { label: `Гарантовано місце ${placeNumber}`, type: 'success' };
+    if (Number.isFinite(amount) && amount > 0) {
+      const playerName = guarant.occupant?.playerName;
+      return {
+        label: playerName
+          ? t('gbGuarantees.plashka.coverContributor', { amount: num(amount), playerName })
+          : t('gbGuarantees.plashka.coverContributorNoName', { amount: num(amount), place: placeNumber }),
+        type: 'danger',
+      };
     }
   }
-  if (guarant?.status === 'guild_member_can_be_overtaken') {
+
+  if (guarant?.status === 'empty_requires_owner_guarantee') {
+    const amount = Number(guarant.ownerGuaranteeFp);
     const placeNumber = Number(guarant.placeNumber);
-    const ownerGuaranteeFp = Number(guarant.ownerGuaranteeFp);
-    if (
-      Number.isInteger(placeNumber)
-      && placeNumber > 0
-      && Number.isFinite(ownerGuaranteeFp)
-      && ownerGuaranteeFp > 0
-    ) {
+    if (Number.isFinite(amount) && amount > 0 && Number.isInteger(placeNumber) && placeNumber > 0) {
       return {
-        label: `Для прикриття вкладника на місці ${placeNumber} слід додати ${formatNumber(ownerGuaranteeFp, 'uk')} СО`,
+        label: t('gbGuarantees.plashka.ownerAwaitingGuarantee', { amount: num(amount), place: placeNumber }),
         type: 'warning',
       };
     }
   }
-  if (guarant?.status === 'empty_requires_owner_guarantee') {
-    const ownerGuaranteeFp = Number(guarant.ownerGuaranteeFp);
-    if (Number.isFinite(ownerGuaranteeFp) && ownerGuaranteeFp > 0) {
-      return {
-        label: `Терміново вкласти ${formatNumber(ownerGuaranteeFp, 'uk')} СО`,
-        type: 'danger',
-      };
-    }
-  }
+
   if (guarant?.status === 'guild_member_below_place_cost') {
     const playerName = guarant.occupant?.playerName;
     if (playerName) {
-      return {
-        label: `Очікуємо доплати від ${playerName}`,
-        type: 'warning',
-      };
+      return { label: t('gbGuarantees.plashka.awaitingTopUp', { playerName }), type: 'warning' };
     }
   }
-  if (guarant?.status !== 'ready') return null;
-  const place = guarant.place?.placeNumber;
-  if (guarant.action?.type === 'take_place' && place) {
-    return { label: `Гарантовано місце ${place}`, type: 'success' };
+
+  if (guarant?.status === 'no_action_required') {
+    const skipPlace = getEconomicallyUnbeatableOutsiderPlace(guarant);
+    return {
+      label: skipPlace
+        ? t('gbGuarantees.plashka.readyToCloseWithSkip', { place: skipPlace })
+        : t('gbGuarantees.plashka.readyToClose'),
+      type: 'success',
+    };
   }
-  const amount = Number(guarant.action?.amount);
-  if (place && Number.isFinite(amount) && amount > 0) {
-    return { label: `До гаранту на місце ${place} — ${formatNumber(amount, 'uk')} ${forgePointsUnit}`, type: 'warning' };
-  }
+
   return null;
 };
 
 function BuildingCard({
   building,
   language,
+  t,
   onToggleLock,
   lockUpdating,
   onScheduleExpress,
@@ -406,7 +425,7 @@ function BuildingCard({
 }) {
   const forgePointsUnit = getForgePointsUnit(language);
   const remaining = Math.max(0, building.totalLevelCost - building.totalContribution);
-  const badge = getGuaranteeBadge(building, forgePointsUnit);
+  const badge = getGuaranteeBadge(building, t, language);
   const [expanded, setExpanded] = useState(false);
   const [showExtraContributors, setShowExtraContributors] = useState(false);
   const expansion = useRef(new Animated.Value(0)).current;
@@ -562,7 +581,7 @@ function BuildingCard({
 }
 
 const MyGBCenterScreen = ({ navigation }) => {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [buildings, setBuildings] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [updatingLockId, setUpdatingLockId] = useState(null);
@@ -730,10 +749,10 @@ const MyGBCenterScreen = ({ navigation }) => {
     if (selectedFilter === 'all') return true;
     if (selectedFilter === 'needs_fp') {
       return building.guarant?.status === 'guild_member_can_be_overtaken'
+        || building.guarant?.status === 'empty_requires_owner_guarantee'
         || building.guarant?.action?.type === 'owner_deposit';
     }
-    return building.guarant?.status === 'empty_guaranteed'
-      || building.guarant?.action?.type === 'take_place';
+    return building.guarant?.status === 'empty_guaranteed';
   });
 
   const toggleBuildingLock = async (building) => {
@@ -786,6 +805,7 @@ const MyGBCenterScreen = ({ navigation }) => {
               key={building.id}
               building={building}
               language={i18n.language}
+              t={t}
               lockUpdating={updatingLockId === building.id}
               expressScheduled={activeExpressIds.has(String(building.id))}
               onToggleLock={() => toggleBuildingLock(building)}

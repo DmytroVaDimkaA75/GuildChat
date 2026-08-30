@@ -80,6 +80,25 @@ test("static Arc config maps the exact recommended contribution to the minimum l
   assert.equal(findRequiredArcLevel({ nominalCost: 760, contribution: 760 }), 0);
 });
 
+test("rounding placeCost up by <=0.5 FP does not inflate the Arc level (F-002)", () => {
+  // placeCost = round(405 * 1.9) = round(769.5) = 770; the 0.5 FP round-up must
+  // still map to Arc 80 (+90% boost = the ×1.9 branch), not 82.
+  assert.equal(
+    findRequiredArcLevel({ nominalCost: 405, contribution: 770 }),
+    82,
+    "without the branch multiplier the rounded placeCost inflates the level",
+  );
+  assert.equal(
+    findRequiredArcLevel({ nominalCost: 405, contribution: 770, multiplier: 1.9 }),
+    80,
+  );
+  // A genuinely larger deposit (R-002 overtake) is still evaluated as-is.
+  assert.equal(
+    findRequiredArcLevel({ nominalCost: 405, contribution: 900, multiplier: 1.9 }),
+    null,
+  );
+});
+
 test("missing API ranks still produce five places", () => {
   const validated = validateApiPayload(api([10, 5]), 2);
   assert.equal(validated.places.length, 5);
@@ -370,6 +389,28 @@ test("G-003 skips an outsider that cannot be overtaken and guarantees place two"
     actor: "guild_member",
     amount: 810,
   });
+});
+
+test("F-002 plain ×1.9 place deposit reports branch Arc level, not the rounded one", () => {
+  const result = calculateGuarantee(base({
+    ownerUserId: "owner",
+    buildingId: "gb",
+    building: { level: 1, contributors: { owner: contributor(100, 1, "Owner") } },
+    guildUsers: { owner: {} },
+    branches: {
+      onePointNine: { name: "×1.9", rules: { contributionMultiplier: 1.9 } },
+    },
+    apiPayload: api([405, 200, 70, 20, 5], 1500, 2),
+  }));
+
+  assert.equal(result.status, GUARANTEE_STATUSES.EMPTY_GUARANTEED);
+  assert.equal(result.placeNumber, 1);
+  assert.equal(result.placeCost, 770); // round(405 * 1.9) = round(769.5)
+  assert.equal(result.action.amount, 770);
+  assert.equal(result.requiredArcLevel, 80); // +90% boost = the ×1.9 branch, not 82
+  assert.equal(result.requiredContributionBoost, 90);
+  assert.equal(result.coefficient, 1.9);
+  assert.equal(result.effectiveCoefficient, 1.9);
 });
 
 test("G-004 asks the owner for only 24 FP to protect place four", () => {

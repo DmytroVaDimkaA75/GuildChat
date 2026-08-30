@@ -104,7 +104,7 @@ const GBCenterScreen = ({ navigation }) => {
         handleGreatBuildingsChange = async (snapshot) => {
           const guildUsers = await filterGbgBots(guildId, snapshot.val() || {});
           setMyGBCount(Object.keys(guildUsers[userId]?.greatBuild || {}).length);
-          const arcLevel = Number(guildUsers[userId]?.greatBuild?.['The Arc']?.level) || 0;
+          const arcLevel = Number(guildUsers[userId]?.greatBuild?.['X_FutureEra_Landmark1']?.level) || 0;
           let visibleGuarantees = 0;
           Object.entries(guildUsers).forEach(([ownerUserId, owner]) => {
             // "Гаранти" contains only Great Buildings owned by other members

@@ -503,15 +503,23 @@ const calculateGuarantee = ({
   const distribution = distributeContributors({ candidates, places, remainingFp });
   const result = findFirstActionableResult({ distribution, places, remainingFp });
   const targetPlace = result?.placeNumber <= 5 ? places[result.placeNumber - 1] : null;
+  // A deposit equal to the plain place cost pays the branch multiplier; the ≤0.5 FP
+  // rounding of placeCost must not inflate requiredArcLevel or effectiveCoefficient.
+  const isPlainPlaceDeposit = result?.action?.type === "guild_member_deposit"
+    && targetPlace
+    && result.action.amount === targetPlace.placeCost;
   const calculatedRequiredArcLevel = result?.action?.type === "guild_member_deposit"
     ? findRequiredArcLevel({
       nominalCost: targetPlace?.nominalCost,
       contribution: result.action.amount,
+      multiplier: targetPlace?.coefficient,
     })
     : result?.requiredArcLevel;
   const effectiveCoefficient = result?.action?.type === "guild_member_deposit" &&
     Number(targetPlace?.nominalCost) > 0
-    ? result.action.amount / targetPlace.nominalCost
+    ? (isPlainPlaceDeposit
+      ? targetPlace.coefficient
+      : result.action.amount / targetPlace.nominalCost)
     : null;
   const requiredContributionBoost = calculatedRequiredArcLevel > 0
     ? ARC_CONTRIBUTION_BOOSTS[calculatedRequiredArcLevel - 1]
