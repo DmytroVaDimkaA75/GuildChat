@@ -72,6 +72,7 @@ import ProfileMain from './Profile/ProfileMain';
 import SleepSchedule from './Profile/SleepSchedule';
 import QuantScreen from './Quant';
 import FoeSyncScreen from './FoeSync/FoeSyncScreen';
+import { FoeSyncProvider } from './FoeSync/FoeSyncProvider';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -2171,11 +2172,13 @@ export default function MainContent({ onLogout }) {
 
   return (
     <MenuProvider>
-      <AppNavigator
-        onReady={() => setReadyGuildId(String(guildId || ""))}
-        onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
-        onLogout={onLogout}
-      />
+      <FoeSyncProvider>
+        <AppNavigator
+          onReady={() => setReadyGuildId(String(guildId || ""))}
+          onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
+          onLogout={onLogout}
+        />
+      </FoeSyncProvider>
     </MenuProvider>
   );
 }

@@ -18,11 +18,11 @@ import {
 } from 'react-native';
 // import { database } from '../../firebaseConfig'; // УДАЛЕНО
 import {
-  FOE_CONSENT_KEY,
   FOE_CONSENT_BODY,
   FOE_CONSENT_BULLETS,
   FOE_CONSENT_NOTE,
 } from '../FoeSync/foeConsent';
+import { useFoeSync } from '../FoeSync/FoeSyncProvider';
 import { getUkrainianRoleLabel } from '../../constants/roles';
 import { DarkThemeColors } from '../../constants/theme';
 import {
@@ -66,6 +66,7 @@ const ProfileMain = () => {
   const [guilds, setGuilds] = useState([]);
   const [foeSync, setFoeSync] = useState({ loading: true, syncedAt: null });
   const [foeExpanded, setFoeExpanded] = useState(false);
+  const foe = useFoeSync();
   const [googleStatus, setGoogleStatus] = useState('loading');
   const [googleAccount, setGoogleAccount] = useState(null);
   const [googleActionBusy, setGoogleActionBusy] = useState(false);
@@ -377,24 +378,32 @@ const ProfileMain = () => {
 
         {/* Синхронізація з грою */}
         {(() => {
-          const synced = !foeSync.loading && !!foeSync.syncedAt;
+          const consented = foe?.consent === 'yes';
+          const synced = !!foe?.synced || (!foeSync.loading && !!foeSync.syncedAt);
+          // пасивний, коли вже синхронізовано; активний (розгортний) — коли ні
+          const active = !synced;
           return (
             <View style={styles.section}>
               <TouchableOpacity
                 style={styles.rowBetween}
-                activeOpacity={synced ? 1 : 0.6}
-                disabled={synced}
+                activeOpacity={active ? 0.6 : 1}
+                disabled={!active}
                 onPress={() => setFoeExpanded(v => !v)}
               >
                 <Text style={styles.sectionTitle}>Синхронізація з грою</Text>
-                {foeSync.loading ? (
-                  <ActivityIndicator size="small" color={DarkThemeColors.primary} />
-                ) : synced ? (
+                {synced ? (
                   <View style={styles.rowContent}>
                     <Ionicons name="checkmark-circle" size={18} color={DarkThemeColors.success} />
                     <Text style={styles.foeSyncedText}>
-                      {new Date(foeSync.syncedAt).toLocaleDateString('uk')}
+                      {foeSync.syncedAt
+                        ? new Date(foeSync.syncedAt).toLocaleDateString('uk')
+                        : 'активна'}
                     </Text>
+                  </View>
+                ) : consented ? (
+                  <View style={styles.rowContent}>
+                    <ActivityIndicator size="small" color={DarkThemeColors.primary} />
+                    <Text style={styles.foeSyncedText}>завантаження…</Text>
                   </View>
                 ) : (
                   <Ionicons
@@ -405,7 +414,7 @@ const ProfileMain = () => {
                 )}
               </TouchableOpacity>
 
-              {!synced && foeExpanded && (
+              {active && foeExpanded && !consented && (
                 <View style={styles.foeConsent}>
                   <Text style={styles.foeConsentBody}>{FOE_CONSENT_BODY}</Text>
                   {FOE_CONSENT_BULLETS.map((b, i) => (
@@ -414,17 +423,32 @@ const ProfileMain = () => {
                   <Text style={styles.foeConsentNote}>{FOE_CONSENT_NOTE}</Text>
                   <TouchableOpacity
                     style={styles.foeConsentBtn}
-                    onPress={async () => {
-                      try {
-                        await AsyncStorage.setItem(FOE_CONSENT_KEY, 'yes');
-                      } catch (_e) {
-                        // не критично
-                      }
-                      navigation.navigate('FoeSync', { screen: 'FoeSyncScreen' });
-                    }}
+                    onPress={() => foe?.acceptConsent?.()}
                   >
                     <Text style={styles.foeConsentBtnText}>Погоджуюсь, продовжити</Text>
                   </TouchableOpacity>
+                </View>
+              )}
+
+              {active && consented && (
+                <View style={styles.foeConsent}>
+                  <Text style={styles.foeConsentBody}>
+                    Вікно гри завантажується у фоні. Зачекайте кілька секунд —
+                    блок згорнеться, щойно надійде перший пакет з гри.
+                  </Text>
+                  {foe?.currentUrl ? (
+                    <Text style={styles.foeConsentNote} numberOfLines={1}>
+                      {foe.currentUrl}
+                    </Text>
+                  ) : null}
+                  {foe?.health?.packets === 0 ? (
+                    <TouchableOpacity
+                      style={styles.foeConsentBtn}
+                      onPress={() => foe?.setWebVisible?.(true)}
+                    >
+                      <Text style={styles.foeConsentBtnText}>Показати вікно гри (для входу)</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               )}
             </View>
