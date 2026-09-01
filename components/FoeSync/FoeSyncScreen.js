@@ -410,7 +410,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v21</Text>
+        <Text style={styles.status}>{status}  ·  v22</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -492,21 +492,16 @@ export default function FoeSyncScreen() {
                     не розібрано станів: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
                   </Text>
                 ) : null}
-                {found.prodFinishedDumps ? (
-                  <>
-                    <Text style={styles.subSection}>повний стан готової будівлі:</Text>
-                    <Text style={styles.diag}>
-                      {JSON.stringify(found.prodFinishedDumps, null, 1).slice(0, 3800)}
-                    </Text>
-                  </>
-                ) : null}
-                <Text style={styles.subSection}>по будівлях:</Text>
-                <Text style={styles.diag}>
-                  {col.list
-                    .map((b) => `${b.ready ? '✓' : '⏳'} ${b.id} [${b.st}]: ${b.summary}`)
-                    .join('\n')
-                    .slice(0, 3000)}
-                </Text>
+                {found.prodFullByType
+                  ? Object.entries(found.prodFullByType).map(([uid, st]) => (
+                      <View key={uid}>
+                        <Text style={styles.subSection}>{uid}:</Text>
+                        <Text style={styles.diag}>
+                          {JSON.stringify(st, null, 1).slice(0, 1600)}
+                        </Text>
+                      </View>
+                    ))
+                  : null}
               </>
             );
           })() : null}

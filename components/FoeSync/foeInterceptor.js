@@ -232,19 +232,24 @@ export const FOE_INTERCEPTOR_JS = `
               ready: !!ready,
               readyAt: pst.next_state_transition_at || null
             };
+            var isRandomOnly = false;
             if (po2 && po2.products) {
               var fl = flattenProducts(po2);
               b.det = fl.det;
               if (fl.rnd.length) { b.rnd = fl.rnd; }
               if (fl.other.length) { b.other = fl.other; }
+              isRandomOnly = fl.rnd.length > 0 && Object.keys(fl.det).length === 0;
             } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
               unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
               b.stateKeys = Object.keys(pst);
             }
-            // повні приклади готових будівель — щоб знайти, де конкретний приз
-            if (!found.prodFinishedDumps) { found.prodFinishedDumps = []; }
-            if (found.prodFinishedDumps.length < 3 && /Finished/i.test(pstc)) {
-              found.prodFinishedDumps.push({ id: pe.cityentity_id, type: pt, state: pst });
+            // повний стан ПЕРШОЇ будівлі кожного унікального id (тут і Колодязі)
+            if (!found.prodFullByType) { found.prodFullByType = {}; }
+            var uid = String(pe.cityentity_id || pt);
+            if (!found.prodFullByType[uid] &&
+                Object.keys(found.prodFullByType).length < 14 &&
+                (isRandomOnly || /Finished|Produc/i.test(pstc))) {
+              found.prodFullByType[uid] = pst;
             }
             buildings.push(b);
           }
