@@ -60,25 +60,47 @@ const COMBAT_LABELS = {
   defDefender: 'Захист — оборонна армія',
 };
 
-// Зводить 4 бойові числа з карти сум по типах (режим "all").
-function computeCombat(sumsAll) {
-  const out = {};
+// Бонуси Величних споруд у BoostService.getAllBoosts НЕ входять — гра рахує їх
+// окремо з поля bonus кожної ВС. Значення кожної ВС округлюється ВНИЗ, а тип
+// визначає, у які з 4 чисел воно додається.
+const GB_MILITARY_MAP = {
+  military_boost: ['attAttacker', 'defAttacker'],
+  fierce_resistance: ['attDefender', 'defDefender'],
+  advanced_tactics: ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'],
+};
+
+// Зводить 4 бойові числа: getAllBoosts (по типах, режим "all") + бонуси ВС.
+function computeCombat(sumsAll, cityGBs) {
+  const out = { attAttacker: 0, defAttacker: 0, attDefender: 0, defDefender: 0 };
   const usedTypes = new Set();
   for (const [key, types] of Object.entries(COMBAT_COMPONENTS)) {
-    let total = 0;
     for (const t of types) {
       if (typeof sumsAll[t] === 'number') {
-        total += sumsAll[t];
+        out[key] += sumsAll[t];
         usedTypes.add(t);
       }
     }
-    out[key] = total;
   }
-  // типи, які схожі на бойові, але не потрапили в жодне число — щоб не проґавити
+
+  const gbUnknown = [];
+  let gbTotal = 0;
+  for (const g of cityGBs || []) {
+    const b = g.bonus;
+    if (!b || b.__class__ !== 'GreatBuildingUnitBonus' || typeof b.value !== 'number') continue;
+    const targets = GB_MILITARY_MAP[b.type];
+    if (!targets) {
+      if (/military|att|def|tactic|resist/i.test(String(b.type || ''))) gbUnknown.push(`${g.id}:${b.type}`);
+      continue;
+    }
+    const v = Math.floor(b.value);
+    for (const key of targets) out[key] += v;
+    gbTotal += v;
+  }
+
   const leftover = Object.keys(sumsAll).filter(
     (t) => !usedTypes.has(t) && /(att|def).*(attacker|defender)/i.test(t)
   );
-  return { out, leftover };
+  return { out, leftover, gbUnknown, gbTotal };
 }
 
 // guildId виду "ru11_17480" -> світ "ru11" -> адреса гри
@@ -206,8 +228,11 @@ export default function FoeSyncScreen() {
     () => Object.entries(sumsAll).sort((a, b) => b[1] - a[1]),
     [sumsAll]
   );
-  // 4 бойові числа, зведені як у грі
-  const combat = useMemo(() => computeCombat(sumsAll), [sumsAll]);
+  // 4 бойові числа, зведені як у грі (getAllBoosts + Величні споруди)
+  const combat = useMemo(
+    () => computeCombat(sumsAll, found.cityGBs),
+    [sumsAll, found.cityGBs]
+  );
   const hasSomething =
     sumsAllEntries.length > 0 || (goods && Object.keys(goods).length > 0);
 
@@ -309,7 +334,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v12</Text>
+        <Text style={styles.status}>{status}  ·  v13</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -333,6 +358,10 @@ export default function FoeSyncScreen() {
               не враховано типів: {combat.leftover.join(', ')}
             </Text>
           ) : null}
+          <Text style={styles.kvMuted}>
+            з них Величні споруди: +{combat.gbTotal}
+            {combat.gbUnknown.length ? ` · невідомі ВС: ${combat.gbUnknown.join(', ')}` : ''}
+          </Text>
 
           {sumsAllEntries.length ? (
             <>
