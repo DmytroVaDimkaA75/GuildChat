@@ -181,6 +181,30 @@ export const FOE_INTERCEPTOR_JS = `
           }
           found.cityGBs = gbs;
           found.cityGBsAll = gbs.length;
+
+          // Виробничі будівлі: що готово до збору
+          var prod = [];
+          var now = Math.floor(Date.now() / 1000);
+          for (var pi = 0; pi < list.length; pi++) {
+            var pe = list[pi];
+            if (!pe || typeof pe !== 'object' || !pe.state) { continue; }
+            var st = pe.state;
+            var stc = String(st.__class__ || '');
+            // цікавлять ті, що мають готовий продукт або йде виробництво
+            if (!/Produc|Ready|Idle/i.test(stc) && !st.current_product && !st.next_state_transition_at) { continue; }
+            prod.push({
+              id: pe.cityentity_id,
+              type: pe.type,
+              stateClass: stc,
+              readyAt: st.next_state_transition_at || null,
+              isReady: st.next_state_transition_at ? (st.next_state_transition_at <= now) : (/Ready/i.test(stc)),
+              currentProduct: st.current_product || null,
+              production: st.production || pe.production || null,
+              startedAt: st.state_transitioned_at || null
+            });
+          }
+          found.cityProduction = prod;
+          found.cityEntitiesAll = list.length;
         }
         got = true;
       }

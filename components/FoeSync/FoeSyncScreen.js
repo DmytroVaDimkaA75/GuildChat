@@ -391,7 +391,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v16</Text>
+        <Text style={styles.status}>{status}  ·  v17</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -448,6 +448,17 @@ export default function FoeSyncScreen() {
                   ))}
                 </>
               ) : null}
+            </>
+          ) : null}
+
+          {found.cityProduction ? (
+            <>
+              <Text style={styles.section}>
+                Збір з будівель: {found.cityProduction.length} (усього {found.cityEntitiesAll})
+              </Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.cityProduction.slice(0, 4), null, 1).slice(0, 3500)}
+              </Text>
             </>
           ) : null}
 
