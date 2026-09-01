@@ -276,6 +276,26 @@ export const FOE_INTERCEPTOR_JS = `
 
   setInterval(scanArmyDom, 3000);
 
+  // Поточна адреса сторінки (FoE — SPA, тож стежимо і за hash/history)
+  var lastUrl = '';
+  function reportUrl() {
+    try {
+      var u = String(location.href || '');
+      if (u !== lastUrl) {
+        lastUrl = u;
+        post({ __foeSync: true, kind: 'url', url: u });
+      }
+    } catch (e) {}
+  }
+  reportUrl();
+  setInterval(reportUrl, 1500);
+  try {
+    window.addEventListener('hashchange', reportUrl);
+    window.addEventListener('popstate', reportUrl);
+    var _ps = history.pushState;
+    history.pushState = function () { var r = _ps.apply(this, arguments); reportUrl(); return r; };
+  } catch (e) {}
+
   post({ __foeSync: true, kind: 'ready' });
 })();
 true;

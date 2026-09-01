@@ -159,6 +159,7 @@ export default function FoeSyncScreen() {
   const [webKey, setWebKey] = useState(0);
 
   const [status, setStatus] = useState('Завантаження гри…');
+  const [currentUrl, setCurrentUrl] = useState('');
   const [seen, setSeen] = useState(() => new Set());
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({}); // { boosts, boostsStartup, goods, ... }
@@ -205,6 +206,11 @@ export default function FoeSyncScreen() {
 
     if (msg.kind === 'domBoosts') {
       setFound((prev) => ({ ...prev, domBoosts: msg }));
+      return;
+    }
+
+    if (msg.kind === 'url') {
+      setCurrentUrl(String(msg.url || ''));
       return;
     }
 
@@ -368,11 +374,20 @@ export default function FoeSyncScreen() {
         injectedJavaScriptBeforeContentLoaded={FOE_INTERCEPTOR_JS}
         injectedJavaScript={FOE_INTERCEPTOR_JS}
         onMessage={onMessage}
-        onLoadStart={() => setStatus('Завантаження гри…')}
+        onLoadStart={(e) => {
+          setStatus('Завантаження гри…');
+          if (e?.nativeEvent?.url) setCurrentUrl(e.nativeEvent.url);
+        }}
+        onNavigationStateChange={(s) => {
+          if (s?.url) setCurrentUrl(s.url);
+        }}
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v14</Text>
+        <Text style={styles.status}>{status}  ·  v15</Text>
+        <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
+          {currentUrl || '—'}
+        </Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -618,7 +633,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   panelScroll: { maxHeight: 220 },
-  status: { color: COLORS.primary, fontSize: 13, marginBottom: 8 },
+  status: { color: COLORS.primary, fontSize: 13, marginBottom: 4 },
+  urlBar: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontFamily: 'monospace',
+    marginBottom: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
   section: {
     color: COLORS.textSecondary,
     fontSize: 12,
