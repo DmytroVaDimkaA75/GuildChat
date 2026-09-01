@@ -14,6 +14,10 @@ import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
 
+// Діагностика секторів: показуємо ЛИШЕ сектори, щоб звірити з мапою в грі.
+//   заблоковані — жовті, розблоковані — білі, решту не малюємо.
+const DEBUG_SECTORS = true;
+
 const TYPE_COLOR = {
   street: '#2f3947',
   greatbuilding: '#f0c14b',
@@ -180,9 +184,9 @@ export default function FoeCityMap({ cityMap, defs }) {
                   y={b.y}
                   width={b.width}
                   height={b.length}
-                  fill="#141821"
-                  stroke="#0b0e14"
-                  strokeWidth={0.12}
+                  fill={DEBUG_SECTORS ? '#f5c542' : '#141821'}
+                  stroke={DEBUG_SECTORS ? '#7a5c00' : '#0b0e14'}
+                  strokeWidth={DEBUG_SECTORS ? 0.06 : 0.12}
                 />
               ))}
 
@@ -193,12 +197,13 @@ export default function FoeCityMap({ cityMap, defs }) {
                   y={a.y}
                   width={a.width || 1}
                   height={a.length || 1}
-                  fill="#0c141c"
-                  stroke="#2b3a4d"
-                  strokeWidth={0.1}
+                  fill={DEBUG_SECTORS ? '#ffffff' : '#0c141c'}
+                  stroke={DEBUG_SECTORS ? '#9aa3b2' : '#2b3a4d'}
+                  strokeWidth={DEBUG_SECTORS ? 0.06 : 0.1}
                 />
               ))}
 
+              {DEBUG_SECTORS ? null : (
               <G clipPath="url(#cityClip)">
                 {Array.from({ length: model.gw + 1 }).map((_, i) => (
                   <Line
@@ -242,6 +247,7 @@ export default function FoeCityMap({ cityMap, defs }) {
                   );
                 })}
               </G>
+              )}
             </Svg>
 
             <Pressable style={StyleSheet.absoluteFill} onPress={onTouch} />
@@ -249,16 +255,24 @@ export default function FoeCityMap({ cityMap, defs }) {
         </ScrollView>
       </ScrollView>
 
-      <View style={styles.legend}>
-        {LEGEND.map(([t, label]) => (
-          <View key={t} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
-            <Text style={styles.legendText}>{label}</Text>
-          </View>
-        ))}
-      </View>
+      {DEBUG_SECTORS ? (
+        <Text style={styles.hint}>
+          Діагностика секторів · жовті — заблоковані ({model.blocked.length}), білі — розблоковані (
+          {model.areas.length}) · межі x:{model.minX}…{model.minX + model.gw} y:{model.minY}…
+          {model.minY + model.gh}
+        </Text>
+      ) : (
+        <View style={styles.legend}>
+          {LEGEND.map(([t, label]) => (
+            <View key={t} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
+              <Text style={styles.legendText}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
-      {sel ? (
+      {DEBUG_SECTORS ? null : sel ? (
         <View style={styles.detail}>
           <Text style={styles.detailName}>{sel.d?.name || sel.e.cid}</Text>
           <Text style={styles.detailMeta}>
