@@ -382,27 +382,31 @@ export const FOE_INTERCEPTOR_JS = `
       if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
       var now = Date.now();
 
-      // БЕЗУМОВНА діагностика раз на ~4 тіки
+      // БЕЗУМОВНА діагностика: шукаємо елементи вікна "Выбор мира".
       advTick++;
       if (advTick % 3 === 1) {
-        var docsD = [document];
-        var framesD = document.querySelectorAll('iframe, frame');
-        for (var xi = 0; xi < framesD.length; xi++) {
-          try {
-            var fdd = framesD[xi].contentDocument || (framesD[xi].contentWindow && framesD[xi].contentWindow.document);
-            if (fdd) { docsD.push(fdd); }
-          } catch (e) {}
-        }
-        var repD = ['w=' + JSON.stringify(w) + ' url=' + href + ' docs=' + docsD.length + ' iframes=' + framesD.length];
-        for (var yd = 0; yd < docsD.length; yd++) {
-          try {
-            var bb = docsD[yd].querySelectorAll('a, button');
-            for (var zb = 0; zb < bb.length && repD.length < 40; zb++) {
-              var tb = (bb[zb].textContent || '').trim().slice(0, 20);
-              var hb = (bb[zb].getAttribute('href') || bb[zb].href || bb[zb].getAttribute('onclick') || '').slice(0, 90);
-              if (tb || hb) { repD.push(bb[zb].tagName + ' "' + tb + '" ' + hb); }
-            }
-          } catch (e) {}
+        var repD = ['w=' + JSON.stringify(w) + ' url=' + href];
+        var all = document.querySelectorAll('*');
+        var seenParents = [];
+        for (var ai = 0; ai < all.length && repD.length < 45; ai++) {
+          var node = all[ai];
+          if (node.children && node.children.length) { continue; } // тільки листові
+          var nt = (node.textContent || '').trim();
+          // назви ігрових світів — довжина 4-14, кирилиця, без пробілів
+          if (!/^[А-ЯЁІЇЄA-Z][а-яёіїєa-z]{3,13}$/.test(nt)) { continue; }
+          // піднімаємось до клікабельного предка
+          var p = node;
+          var chain = node.tagName + '"' + nt + '"';
+          for (var pc = 0; pc < 4 && p; pc++) {
+            var oc = p.getAttribute && p.getAttribute('onclick');
+            var hh = p.getAttribute && (p.getAttribute('href') || p.href);
+            var cn = (p.className && typeof p.className === 'string') ? p.className : '';
+            chain += ' <' + p.tagName + (cn ? '.' + cn.split(' ').join('.') : '') +
+                     (oc ? ' onclick=' + oc.slice(0, 60) : '') +
+                     (hh ? ' href=' + String(hh).slice(0, 50) : '') + '>';
+            p = p.parentElement;
+          }
+          repD.push(chain.slice(0, 240));
         }
         post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: repD });
       }
