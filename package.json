@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "dev": "EXPO_TUNNEL_SUBDOMAIN=foechatdev expo start --dev-client --tunnel",
+    "dev": "expo start --dev-client --tunnel",
     "reset-project": "node ./scripts/reset-project.js",
     "generate:widget-maps": "node ./scripts/generate-widget-map-templates.js",
     "android": "expo run:android",
