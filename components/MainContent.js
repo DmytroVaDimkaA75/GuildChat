@@ -71,6 +71,7 @@ import ProfileData from './Profile/ProfileData';
 import ProfileMain from './Profile/ProfileMain';
 import SleepSchedule from './Profile/SleepSchedule';
 import QuantScreen from './Quant';
+import FoeSyncScreen from './FoeSync/FoeSyncScreen';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -316,6 +317,21 @@ function QuantStack() {
               <MaterialIcons name="volume-off" size={24} color={COLORS.textPrimary} />
             </View>
           ),
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function FoeSyncStack() {
+  return (
+    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="FoeSyncScreen"
+        component={FoeSyncScreen}
+        options={{
+          title: 'Синхронізація з грою',
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
         }}
       />
     </Stack.Navigator>
@@ -1257,6 +1273,16 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
           options={{
             drawerLabel: 'Спільнота',
             drawerIconComponent: renderIcon(Community)
+          }}
+        />
+        <Drawer.Screen
+          name="FoeSync"
+          component={FoeSyncStack}
+          options={{
+            drawerLabel: hasTesterAccess ? 'Синхронізація з грою' : null,
+            drawerIconComponent: ({ color }) => (
+              <MaterialIcons name="sync" size={24} color={color} />
+            )
           }}
         />
         <Drawer.Screen

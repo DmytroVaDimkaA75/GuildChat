@@ -4,7 +4,12 @@
       "Bash(python3 -c ' *)",
       "Bash(node city-map/build.js)",
       "Bash(node -e \"const h=require\\('fs'\\).readFileSync\\('city-map/city-map.html','utf8'\\);const m=h.match\\(/var ITEMS = \\(\\\\[.*?\\\\]\\);/s\\);const a=JSON.parse\\(m[1]\\);console.log\\('items:',a.length\\);console.log\\(a.find\\(x=>x.type==='main_building'\\)\\);console.log\\(a.find\\(x=>x.name.includes\\('Арка'\\)\\)\\);const cats={};a.forEach\\(x=>cats[x.catLabel]=\\(cats[x.catLabel]||0\\)+1\\);console.log\\(cats\\);\")",
-      "Bash(node -e \"const h=require\\('fs'\\).readFileSync\\('city-map/city-map.html','utf8'\\); console.log\\('svg rects:', \\(h.match\\(/rect class=\\\\\"b\\\\\"/g\\)||[]\\).length\\); console.log\\('has doctype tags?', /<html|<body|<!DOCTYPE/i.test\\(h\\)\\); console.log\\('size KB:', Math.round\\(h.length/1024\\)\\);\")"
+      "Bash(node -e \"const h=require\\('fs'\\).readFileSync\\('city-map/city-map.html','utf8'\\); console.log\\('svg rects:', \\(h.match\\(/rect class=\\\\\"b\\\\\"/g\\)||[]\\).length\\); console.log\\('has doctype tags?', /<html|<body|<!DOCTYPE/i.test\\(h\\)\\); console.log\\('size KB:', Math.round\\(h.length/1024\\)\\);\")",
+      "Bash(npx eslint *)",
+      "Bash(npx expo *)",
+      "Bash(timeout 120 npx expo-doctor)",
+      "Bash(node -e \"const p=require\\('./package.json'\\),l=require\\('./package-lock.json'\\); console.log\\('pkg dep:', p.dependencies['expo-dev-client']\\); console.log\\('lock root dep:', l.packages['']?.dependencies?.['expo-dev-client']\\); console.log\\('lock has node_modules/expo-dev-client:', !!l.packages['node_modules/expo-dev-client']\\); console.log\\('lockfileVersion:', l.lockfileVersion\\);\")",
+      "Bash(npm ci *)"
     ]
   }
 }

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
+    "dev": "expo start --dev-client --tunnel",
     "reset-project": "node ./scripts/reset-project.js",
     "generate:widget-maps": "node ./scripts/generate-widget-map-templates.js",
     "android": "expo run:android",
@@ -43,6 +44,7 @@
     "expo-av": "~16.0.8",
     "expo-clipboard": "~8.0.7",
     "expo-constants": "~18.0.9",
+    "expo-dev-client": "~6.0.21",
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.9",
     "expo-haptics": "~15.0.7",

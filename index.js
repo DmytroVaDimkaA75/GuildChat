@@ -1,3 +1,6 @@
+// Вмикає підключення до "сервера коду" в збірці для розробки
+// (профіль development в eas.json). У звичайних збірках нічого не робить.
+import "expo-dev-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import messaging from "@react-native-firebase/messaging";
 import notifee, { EventType } from "@notifee/react-native";
