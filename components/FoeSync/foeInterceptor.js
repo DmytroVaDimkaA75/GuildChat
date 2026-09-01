@@ -134,6 +134,12 @@ export const FOE_INTERCEPTOR_JS = `
         got = true;
       }
 
+      // Пакет "Управління армією" — може містити вже готові підсумки бонусів
+      if (/ArmyUnitManagement|ArmyBonus|CombatBoost|MilitaryBoost/i.test(cls) && rd != null) {
+        found.armyInfo = { from: key, data: rd };
+        got = true;
+      }
+
       if (cls === 'StartupService' && mth === 'getData' && rd && typeof rd === 'object') {
         var ud = rd.user_data || rd.userData || {};
         if (ud.user_id || ud.id) {

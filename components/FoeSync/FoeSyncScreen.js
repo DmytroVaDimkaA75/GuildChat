@@ -304,7 +304,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v6</Text>
+        <Text style={styles.status}>{status}  ·  v7</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -370,6 +370,15 @@ export default function FoeSyncScreen() {
               <Text style={styles.subSection}>Величні споруди (з {found.gbHint.from}):</Text>
               <Text style={styles.diag}>
                 {JSON.stringify(found.gbHint.sample, null, 1).slice(0, 2000)}
+              </Text>
+            </>
+          ) : null}
+
+          {found.armyInfo ? (
+            <>
+              <Text style={styles.subSection}>Управління армією ({found.armyInfo.from}):</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.armyInfo.data, null, 1).slice(0, 2500)}
               </Text>
             </>
           ) : null}
