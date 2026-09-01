@@ -162,6 +162,26 @@ export const FOE_INTERCEPTOR_JS = `
           startupKeys.push(sk + ':' + kind);
         }
         found.startupKeys = startupKeys;
+
+        // Величні споруди з міської карти: беремо рівень + бонус кожної
+        var ents = (rd.city_map && (rd.city_map.entities || rd.city_map)) || null;
+        if (ents && typeof ents === 'object') {
+          var list = Array.isArray(ents) ? ents : Object.keys(ents).map(function (k) { return ents[k]; });
+          var gbs = [];
+          for (var e = 0; e < list.length; e++) {
+            var en = list[e];
+            if (!en || typeof en !== 'object') { continue; }
+            if (!/greatbuilding/i.test(String(en.type || en.__class__ || ''))) { continue; }
+            gbs.push({
+              cityentity_id: en.cityentity_id,
+              level: (en.level != null) ? en.level : (en.state && en.state.level),
+              bonus: en.bonus,
+              state: en.state,
+              connected: en.connected
+            });
+          }
+          found.cityGBs = gbs;
+        }
         got = true;
       }
 

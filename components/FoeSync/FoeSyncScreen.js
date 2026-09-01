@@ -304,7 +304,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v7</Text>
+        <Text style={styles.status}>{status}  ·  v8</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -364,6 +364,17 @@ export default function FoeSyncScreen() {
           ) : (
             <Text style={styles.kvMuted}>стартовий пакет ще не спіймано</Text>
           )}
+
+          {found.cityGBs ? (
+            <>
+              <Text style={styles.subSection}>
+                ВС у місті: {found.cityGBs.length}
+              </Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.cityGBs.slice(0, 4), null, 1).slice(0, 3000)}
+              </Text>
+            </>
+          ) : null}
 
           {found.gbHint ? (
             <>
