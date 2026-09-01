@@ -507,7 +507,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v42</Text>
+        <Text style={styles.status}>{status}  ·  v43</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -677,6 +677,20 @@ export default function FoeSyncScreen() {
           <Text style={styles.kvMuted}>
             лист іконок: {iconSheet ? `завантажено, ${Object.keys(iconSheet.frames || {}).length} кадрів` : 'ще ні'}
           </Text>
+
+          {found.cityMap ? (
+            <>
+              <Text style={styles.section}>МАПА МІСТА: {found.cityMap.entities.length} обʼєктів</Text>
+              <Text style={styles.subSection}>city_map ключі:</Text>
+              <Text style={styles.diag}>{(found.cityMap.keys || []).join(', ')}</Text>
+              <Text style={styles.subSection}>поля обʼєкта:</Text>
+              <Text style={styles.diag}>{(found.cityMap.entityKeys || []).join(', ')}</Text>
+              <Text style={styles.subSection}>приклади (сирі):</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.cityMap.samples, null, 1).slice(0, 3000)}
+              </Text>
+            </>
+          ) : null}
 
           {found.assetUrls && found.assetUrls.length ? (
             <>

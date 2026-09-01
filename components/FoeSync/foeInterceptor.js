@@ -267,6 +267,27 @@ export const FOE_INTERCEPTOR_JS = `
           found.prodUnknownStates = unknownStates;
           found.prodBuildings = buildings;
           found.cityEntitiesAll = list.length;
+
+          // --- Мапа міста: позиція+тип кожної будівлі ---
+          var cm = rd.city_map || {};
+          var cityMap = { keys: Object.keys(cm), entityKeys: null, samples: [], entities: [] };
+          for (var mi = 0; mi < list.length; mi++) {
+            var me = list[mi];
+            if (!me || typeof me !== 'object') { continue; }
+            if (cityMap.samples.length < 3) { cityMap.samples.push(me); }
+            if (!cityMap.entityKeys) { cityMap.entityKeys = Object.keys(me); }
+            cityMap.entities.push({
+              id: me.id,
+              cid: me.cityentity_id,
+              x: (me.x != null ? me.x : (me.position && me.position.x)),
+              y: (me.y != null ? me.y : (me.position && me.position.y)),
+              dir: (me.direction != null ? me.direction : me.rotation),
+              lvl: (me.level != null ? me.level : (me.state && me.state.level)),
+              type: me.type,
+              conn: me.connected
+            });
+          }
+          found.cityMap = cityMap;
         }
         got = true;
       }
