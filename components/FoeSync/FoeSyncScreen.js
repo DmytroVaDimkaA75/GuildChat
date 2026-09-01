@@ -44,16 +44,42 @@ const CONSENT_KEY = 'foeSyncConsentV1';
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Військові бонуси: тип у грі -> стабільний ключ + людська назва.
-// Гра віддає кожен внесок окремим рядком, тому значення треба ДОДАВАТИ.
-const BOOST_TYPES = {
-  att_boost_attacker: { label: 'Атака під час нападу' },
-  def_boost_attacker: { label: 'Захист під час нападу' },
-  att_boost_defender: { label: 'Атака під час оборони' },
-  def_boost_defender: { label: 'Захист під час оборони' },
-  att_def_boost_attacker: { label: 'Атака+Захист (напад)' },
-  att_def_boost_defender: { label: 'Атака+Захист (оборона)' },
+// Гра віддає кожен внесок окремим рядком. 4 підсумкові числа з "Управління
+// армією" складаються з кількох типів: є окремі att/def і є СПІЛЬНІ (att_def),
+// що додаються і до атаки, і до захисту. Тут — які типи в яке число входять.
+const COMBAT_COMPONENTS = {
+  attAttacker: ['att_boost_attacker', 'att_def_boost_attacker', 'att_def_boost_attacker_defender'],
+  defAttacker: ['def_boost_attacker', 'att_def_boost_attacker', 'att_def_boost_attacker_defender'],
+  attDefender: ['att_boost_defender', 'att_def_boost_defender', 'att_def_boost_attacker_defender'],
+  defDefender: ['def_boost_defender', 'att_def_boost_defender', 'att_def_boost_attacker_defender'],
 };
+const COMBAT_LABELS = {
+  attAttacker: 'Атака — атакуюча армія',
+  defAttacker: 'Захист — атакуюча армія',
+  attDefender: 'Атака — оборонна армія',
+  defDefender: 'Захист — оборонна армія',
+};
+
+// Зводить 4 бойові числа з карти сум по типах (режим "all").
+function computeCombat(sumsAll) {
+  const out = {};
+  const usedTypes = new Set();
+  for (const [key, types] of Object.entries(COMBAT_COMPONENTS)) {
+    let total = 0;
+    for (const t of types) {
+      if (typeof sumsAll[t] === 'number') {
+        total += sumsAll[t];
+        usedTypes.add(t);
+      }
+    }
+    out[key] = total;
+  }
+  // типи, які схожі на бойові, але не потрапили в жодне число — щоб не проґавити
+  const leftover = Object.keys(sumsAll).filter(
+    (t) => !usedTypes.has(t) && /(att|def).*(attacker|defender)/i.test(t)
+  );
+  return { out, leftover };
+}
 
 // guildId виду "ru11_17480" -> світ "ru11" -> адреса гри
 function worldUrlFromGuildId(guildId) {
@@ -147,12 +173,14 @@ export default function FoeSyncScreen() {
     [goods]
   );
 
-  // Основні бонуси = суми по targetedFeature "all". Показуємо ВСІ типи, а не лише 4 відомі.
+  // Суми по типах (режим "all")
   const sumsAll = useMemo(() => agg?.sumsAll || {}, [agg]);
   const sumsAllEntries = useMemo(
     () => Object.entries(sumsAll).sort((a, b) => b[1] - a[1]),
     [sumsAll]
   );
+  // 4 бойові числа, зведені як у грі
+  const combat = useMemo(() => computeCombat(sumsAll), [sumsAll]);
   const hasSomething =
     sumsAllEntries.length > 0 || (goods && Object.keys(goods).length > 0);
 
@@ -165,7 +193,7 @@ export default function FoeSyncScreen() {
     try {
       await saveFoeStats(guildId, userId, {
         player,
-        boosts: { all: sumsAll, byFeature: agg?.sumsByFeature || {} },
+        boosts: { combat: combat.out, all: sumsAll, byFeature: agg?.sumsByFeature || {} },
         goods,
       });
       if (ToastAndroid?.show) ToastAndroid.show('Збережено у гільдію', ToastAndroid.SHORT);
@@ -175,7 +203,7 @@ export default function FoeSyncScreen() {
     } finally {
       setSaving(false);
     }
-  }, [hasSomething, guildId, userId, player, sumsAll, agg, goods]);
+  }, [hasSomething, guildId, userId, player, sumsAll, combat, agg, goods]);
 
   const onReload = useCallback(() => {
     setStatus('Перезавантаження гри…');
@@ -254,7 +282,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v3</Text>
+        <Text style={styles.status}>{status}  ·  v4</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -263,16 +291,30 @@ export default function FoeSyncScreen() {
             </Text>
           ) : null}
 
-          <Text style={styles.section}>Бонуси (режим all)</Text>
+          <Text style={styles.section}>Бонуси (як у грі)</Text>
           {sumsAllEntries.length ? (
-            sumsAllEntries.map(([type, val]) => (
-              <Text key={type} style={styles.kv}>
-                {BOOST_TYPES[type]?.label || type}: <Text style={styles.kvVal}>{val}%</Text>
+            Object.keys(COMBAT_COMPONENTS).map((k) => (
+              <Text key={k} style={styles.kv}>
+                {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.out[k]}%</Text>
               </Text>
             ))
           ) : (
             <Text style={styles.kvMuted}>ще не знайдено</Text>
           )}
+          {combat.leftover.length ? (
+            <Text style={styles.kvMuted}>
+              не враховано типів: {combat.leftover.join(', ')}
+            </Text>
+          ) : null}
+
+          {sumsAllEntries.length ? (
+            <>
+              <Text style={styles.subSection}>складові (сума по типах, режим all):</Text>
+              <Text style={styles.diag}>
+                {sumsAllEntries.map(([t, v]) => `${t}: ${v}`).join('\n')}
+              </Text>
+            </>
+          ) : null}
 
           {agg ? (
             <>
