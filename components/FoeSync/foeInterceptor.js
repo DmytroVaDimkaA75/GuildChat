@@ -241,6 +241,44 @@ export const FOE_INTERCEPTOR_JS = `
     }
   } catch (e) {}
 
+  // --- Читання чисел прямо з екрана гри (вікно "Управління армією") ---
+  // FoE малює діалоги звичайним HTML, тож можна прочитати відображені відсотки.
+  function scanArmyDom() {
+    try {
+      var dlg = document.querySelector(
+        '#unit-management, .unit-management, [class*="army-management"], [class*="unitManagement"], #army_buildings, .army-management-window'
+      );
+      var root = dlg || document.body;
+      if (!root) { return; }
+      // збираємо всі елементи з текстом "NNNN%"
+      var hits = [];
+      var nodes = root.querySelectorAll('*');
+      for (var i = 0; i < nodes.length && hits.length < 60; i++) {
+        var n = nodes[i];
+        if (n.children && n.children.length) { continue; } // тільки листові вузли
+        var tx = (n.textContent || '').trim();
+        var m = tx.match(/^\\+?\\s*([\\d.,]+)\\s*%$/);
+        if (!m) { continue; }
+        var label = '';
+        var p = n.parentElement;
+        for (var d = 0; d < 4 && p; d++) {
+          if (p.className && typeof p.className === 'string') { label += ' ' + p.className; }
+          if (p.getAttribute) {
+            var tt = p.getAttribute('title') || p.getAttribute('aria-label');
+            if (tt) { label += ' [' + tt + ']'; }
+          }
+          p = p.parentElement;
+        }
+        hits.push({ value: tx, ctx: label.trim().slice(0, 120) });
+      }
+      if (hits.length) {
+        post({ __foeSync: true, kind: 'domBoosts', inDialog: !!dlg, hits: hits });
+      }
+    } catch (e) {}
+  }
+
+  setInterval(scanArmyDom, 4000);
+
   post({ __foeSync: true, kind: 'ready' });
 })();
 true;

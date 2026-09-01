@@ -148,6 +148,11 @@ export default function FoeSyncScreen() {
       return;
     }
 
+    if (msg.kind === 'domBoosts') {
+      setFound((prev) => ({ ...prev, domBoosts: msg }));
+      return;
+    }
+
     if (Array.isArray(msg.seen) && msg.seen.length) {
       setSeen((prev) => {
         const next = new Set(prev);
@@ -304,7 +309,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v10</Text>
+        <Text style={styles.status}>{status}  ·  v11</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -364,6 +369,20 @@ export default function FoeSyncScreen() {
           ) : (
             <Text style={styles.kvMuted}>стартовий пакет ще не спіймано</Text>
           )}
+
+          {found.domBoosts ? (
+            <>
+              <Text style={styles.subSection}>
+                з екрана гри (у діалозі: {found.domBoosts.inDialog ? 'так' : 'ні'}):
+              </Text>
+              <Text style={styles.diag}>
+                {found.domBoosts.hits
+                  .map((h) => `${h.value}  ← ${h.ctx}`)
+                  .join('\n')
+                  .slice(0, 2500)}
+              </Text>
+            </>
+          ) : null}
 
           {found.cityGBs ? (
             <>
