@@ -402,13 +402,15 @@ export const FOE_INTERCEPTOR_JS = `
       var report = ['w=' + JSON.stringify(w) + ' url=' + href];
       for (var i = 0; i < all.length; i++) {
         var el = all[i];
-        if (el.children && el.children.length > 1) { continue; }
+        if (el.children && el.children.length > 2) { continue; }
         var t = (el.textContent || el.value || '').trim();
-        if (!t || t.length > 24) { continue; }
-        if (/^(грати|играть|play|spielen|jouer|играй)$/i.test(t)) {
+        var hrefA = (el.tagName === 'A' && (el.getAttribute('href') || '')) || '';
+        if ((t && t.length <= 24 && /играть|грати|играй|^play$|spielen|jouer|jugar|gioca/i.test(t)) ||
+            /\\/game\\/index|play-now|launch/i.test(hrefA)) {
+          var pa = clickableAncestor(el);
           playBtns.push(el);
-          if (report.length < 40) { report.push('PLAY: ' + outer(clickableAncestor(el))); }
-        } else if (/^[А-ЯЁІЇЄ][а-яёіїє]{3,13}$/.test(t)) {
+          if (report.length < 40) { report.push('PLAY "' + t + '": ' + outer(pa)); }
+        } else if (t && /^[А-ЯЁІЇЄ][а-яёіїє]{3,13}$/.test(t)) {
           var anc = clickableAncestor(el);
           worlds.push({ name: t, el: el, anc: anc });
           if (report.length < 40) {
