@@ -65,6 +65,35 @@ export const FOE_INTERCEPTOR_JS = `
     return agg;
   }
 
+  // Рекурсивно шукає об'єкти, схожі на Величну споруду (type === "greatbuilding"
+  // або є поле bonus). Повертає до 3 прикладів (обрізаних), або null.
+  function scanForGB(node, depth) {
+    if (!node || typeof node !== 'object' || depth > 8) { return null; }
+    var out = [];
+    function walk(n, d) {
+      if (!n || typeof n !== 'object' || d > 8 || out.length >= 3) { return; }
+      if (Array.isArray(n)) {
+        for (var i = 0; i < n.length && out.length < 3; i++) { walk(n[i], d + 1); }
+        return;
+      }
+      var t = String(n.type || n.__class__ || '');
+      var isGB = /greatbuilding/i.test(t) || (n.bonus && (typeof n.bonus === 'object'));
+      if (isGB && (n.cityentity_id || n.entity_id || n.id || n.bonus || n.level != null)) {
+        out.push({
+          type: n.type,
+          cityentity_id: n.cityentity_id || n.entity_id,
+          level: n.level != null ? n.level : (n.state && n.state.level),
+          bonus: n.bonus
+        });
+      }
+      for (var k in n) {
+        if (Object.prototype.hasOwnProperty.call(n, k) && out.length < 3) { walk(n[k], d + 1); }
+      }
+    }
+    walk(node, depth);
+    return out.length ? out : null;
+  }
+
   function handleBody(body) {
     var data;
     try { data = JSON.parse(body); } catch (e) { return; }
@@ -118,6 +147,22 @@ export const FOE_INTERCEPTOR_JS = `
           found.boostStartupAgg = aggregateBoosts(rd.boosts);
           got = true;
         }
+        // Огляд стартового пакета: назви ключів верхнього рівня + усе, де є "boost"
+        var startupKeys = [];
+        for (var sk in rd) {
+          if (!Object.prototype.hasOwnProperty.call(rd, sk)) { continue; }
+          var sv = rd[sk];
+          var kind = Array.isArray(sv) ? ('array[' + sv.length + ']') : (sv && typeof sv === 'object' ? 'object' : typeof sv);
+          startupKeys.push(sk + ':' + kind);
+        }
+        found.startupKeys = startupKeys;
+        got = true;
+      }
+
+      // Будь-який пакет: шукаємо згадки Величних споруд і полів бонусів
+      if (rd && typeof rd === 'object' && !found.gbHint) {
+        var hint = scanForGB(rd, 0);
+        if (hint) { found.gbHint = { from: key, sample: hint }; got = true; }
       }
     }
 

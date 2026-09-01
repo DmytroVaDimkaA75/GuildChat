@@ -304,7 +304,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v5</Text>
+        <Text style={styles.status}>{status}  ·  v6</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -355,6 +355,24 @@ export default function FoeSyncScreen() {
           <Text style={styles.subSection}>
             тимч.: {found.boostLimitedAgg?.count ?? 0} · таймер: {found.boostTimerAgg?.count ?? 0}
           </Text>
+
+          {found.startupKeys ? (
+            <>
+              <Text style={styles.subSection}>StartupService.getData — ключі:</Text>
+              <Text style={styles.diag}>{found.startupKeys.join('\n')}</Text>
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>стартовий пакет ще не спіймано</Text>
+          )}
+
+          {found.gbHint ? (
+            <>
+              <Text style={styles.subSection}>Величні споруди (з {found.gbHint.from}):</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.gbHint.sample, null, 1).slice(0, 2000)}
+              </Text>
+            </>
+          ) : null}
 
           {agg ? (
             <>
