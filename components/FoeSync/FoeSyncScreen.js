@@ -259,10 +259,8 @@ export default function FoeSyncScreen() {
   }, []);
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
-  const injectedJs = useMemo(
-    () => `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n${FOE_INTERCEPTOR_JS}`,
-    [guildId]
-  );
+  const injectedJs =
+    `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n${FOE_INTERCEPTOR_JS}`;
 
   const acceptConsent = useCallback(async () => {
     await AsyncStorage.setItem(CONSENT_KEY, 'yes');
@@ -470,7 +468,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v37</Text>
+        <Text style={styles.status}>{status}  ·  v38</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
