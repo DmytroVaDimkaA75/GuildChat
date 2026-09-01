@@ -318,6 +318,16 @@ export default function FoeSyncScreen() {
       return;
     }
 
+    if (msg.kind === 'buildingLookup' && msg.url) {
+      setFound((prev) => ({ ...prev, buildingLookupUrl: msg.url, metaExample: msg.metaExample }));
+      return;
+    }
+
+    if (msg.kind === 'goodsSheet' && msg.png && msg.json) {
+      setFound((prev) => ({ ...prev, goodsSheet: { png: msg.png, json: msg.json } }));
+      return;
+    }
+
     if (msg.kind === 'iconSheet' && msg.png && msg.json) {
       const key = msg.png + '|' + msg.json;
       if (iconSheetUrlsRef.current !== key) {
@@ -435,7 +445,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v46',
+      v: 'v47',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -532,7 +542,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v46</Text>
+        <Text style={styles.status}>{status}  ·  v47</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -702,6 +712,15 @@ export default function FoeSyncScreen() {
           <Text style={styles.kvMuted}>
             лист іконок: {iconSheet ? `завантажено, ${Object.keys(iconSheet.frames || {}).length} кадрів` : 'ще ні'}
           </Text>
+          {found.buildingLookupUrl ? (
+            <>
+              <Text style={styles.subSection}>building_entity_lookup:</Text>
+              <Text style={styles.diag}>{found.buildingLookupUrl}</Text>
+              {found.metaExample ? <Text style={styles.diag}>{found.metaExample}</Text> : null}
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>lookup будівель ще не знайдено</Text>
+          )}
 
           {found.cityMap ? (
             <>

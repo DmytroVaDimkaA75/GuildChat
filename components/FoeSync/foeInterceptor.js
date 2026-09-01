@@ -559,31 +559,44 @@ export const FOE_INTERCEPTOR_JS = `
     history.pushState = function () { var r = _ps.apply(this, arguments); reportUrl(); return r; };
   } catch (e) {}
 
-  // --- Пошук спрайт-листа "shared/icons" — там іконки money/supplies/medals/premium/... ---
+  // --- Пошук статичних ресурсів гри серед завантажених файлів ---
   var iconSheetSent = false;
+  var goodsSheetSent = false;
+  var lookupSent = false;
   var seenAssets = {};
   function scanAssets() {
     try {
       var entries = performance.getEntriesByType('resource');
       var hits = [];
-      var png = null;
-      var json = null;
+      var iconPng = null, iconJson = null;
+      var goodsPng = null, goodsJson = null;
+      var lookupUrl = null, metaBase = null;
       for (var i = 0; i < entries.length; i++) {
         var u = entries[i].name || '';
+        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.png/i.test(u)) { iconPng = u; }
+        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.json/i.test(u)) { iconJson = u; }
+        if (/goods_large\\/[a-z_]*goods_large_0-[a-f0-9]+\\.png/i.test(u)) { goodsPng = u; }
+        if (/goods_large\\/[a-z_]*goods_large_0-[a-f0-9]+\\.json/i.test(u)) { goodsJson = u; }
+        if (/building_entity_lookup-/i.test(u)) { lookupUrl = u; }
+        if (/start\\/metadata\\?id=building_entity_/i.test(u) && !metaBase) { metaBase = u; }
         if (seenAssets[u]) { continue; }
         if (/\\.(png|json)(\\?|$)/i.test(u) && /(good|resource|icon|sprite|atlas)/i.test(u)) {
           seenAssets[u] = true;
           hits.push(u);
         }
-        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.png/i.test(u)) { png = u; }
-        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.json/i.test(u)) { json = u; }
       }
-      if (hits.length) {
-        post({ __foeSync: true, kind: 'assets', urls: hits });
-      }
-      if (!iconSheetSent && png && json) {
+      if (hits.length) { post({ __foeSync: true, kind: 'assets', urls: hits }); }
+      if (!iconSheetSent && iconPng && iconJson) {
         iconSheetSent = true;
-        post({ __foeSync: true, kind: 'iconSheet', png: png, json: json });
+        post({ __foeSync: true, kind: 'iconSheet', png: iconPng, json: iconJson });
+      }
+      if (!goodsSheetSent && goodsPng && goodsJson) {
+        goodsSheetSent = true;
+        post({ __foeSync: true, kind: 'goodsSheet', png: goodsPng, json: goodsJson });
+      }
+      if (!lookupSent && lookupUrl) {
+        lookupSent = true;
+        post({ __foeSync: true, kind: 'buildingLookup', url: lookupUrl, metaExample: metaBase });
       }
     } catch (e) {}
   }
