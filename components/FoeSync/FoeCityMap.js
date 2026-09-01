@@ -4,8 +4,12 @@
 // (components/Culture/ObstaclesMap.js): один <Svg viewBox>, обрізка по
 // розблокованих ділянках через <ClipPath>, сітка <Line>, будівлі <Rect>.
 //
-// У видиме вікно вміщується 24×20 клітинок; решту міста видно прокруткою
-// (пальцем у будь-який бік).
+// Сектори (по 4×4 клітинки):
+//   • білі  — розблоковані (твоє місто);
+//   • жовті — можна купити за ресурси / відкрити технологією;
+//   • рамка blocked (недоступний край мапи) — НЕ малюється взагалі.
+//
+// У видиме вікно вміщується 24×20 клітинок; решту видно прокруткою.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -13,10 +17,7 @@ import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
-
-// Діагностика секторів: показуємо ЛИШЕ сектори, щоб звірити з мапою в грі.
-//   заблоковані — жовті, розблоковані — білі, решту не малюємо.
-const DEBUG_SECTORS = true;
+const SECTOR = 4; // сторона сектора у клітинках
 
 const TYPE_COLOR = {
   street: '#2f3947',
@@ -58,15 +59,48 @@ export default function FoeCityMap({ cityMap, defs }) {
     const allEnts = (cityMap?.entities || []).filter((e) => e.x != null && e.y != null);
     if (!areas.length) return null;
 
-    // Заблоковані сектори — 4×4 клітинки, координата може бути відсутня (=0).
-    const blocked = blockedRaw.map((b) => ({
-      x: b.x || 0,
-      y: b.y || 0,
-      width: b.width || 4,
-      length: b.length || 4,
-    }));
+    // --- сектори у сітці секторів (ділимо клітинки на 4) ---
+    const key = (sc, sr) => `${sc},${sr}`;
+    const unlockedSet = new Set();
+    for (const a of areas) {
+      const w = a.width || SECTOR;
+      const l = a.length || SECTOR;
+      for (let x = a.x; x < a.x + w; x += SECTOR) {
+        for (let y = a.y; y < a.y + l; y += SECTOR) {
+          unlockedSet.add(key(x / SECTOR, y / SECTOR));
+        }
+      }
+    }
+    const blockedSet = new Set();
+    for (const b of blockedRaw) {
+      blockedSet.add(key((b.x || 0) / SECTOR, (b.y || 0) / SECTOR));
+    }
 
-    // Межі мапи = розблоковані + заблоковані сектори. off_grid не враховуємо.
+    // межі всієї мапи (розблоковані + заблокована рамка) у секторах
+    let scMin = Infinity;
+    let scMax = -Infinity;
+    let srMin = Infinity;
+    let srMax = -Infinity;
+    for (const s of [...unlockedSet, ...blockedSet]) {
+      const [sc, sr] = s.split(',').map(Number);
+      scMin = Math.min(scMin, sc);
+      scMax = Math.max(scMax, sc);
+      srMin = Math.min(srMin, sr);
+      srMax = Math.max(srMax, sr);
+    }
+
+    // "можна купити" = все всередині рамки, що ще не відкрите і не рамка
+    const buyable = [];
+    for (let sc = scMin; sc <= scMax; sc += 1) {
+      for (let sr = srMin; sr <= srMax; sr += 1) {
+        const k = key(sc, sr);
+        if (!unlockedSet.has(k) && !blockedSet.has(k)) {
+          buyable.push({ x: sc * SECTOR, y: sr * SECTOR });
+        }
+      }
+    }
+
+    // область малювання = розблоковані + "можна купити" (рамку не малюємо)
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -77,10 +111,10 @@ export default function FoeCityMap({ cityMap, defs }) {
       maxX = Math.max(maxX, x + w);
       maxY = Math.max(maxY, y + h);
     };
-    for (const a of areas) bump(a.x, a.y, a.width || 1, a.length || 1);
-    for (const b of blocked) bump(b.x, b.y, b.width, b.length);
+    for (const a of areas) bump(a.x, a.y, a.width || SECTOR, a.length || SECTOR);
+    for (const b of buyable) bump(b.x, b.y, SECTOR, SECTOR);
 
-    // Кут розблокованої зони — щоб одразу прокрутити вікно на місто.
+    // кут розблокованої зони — щоб одразу прокрутити вікно на місто
     let cityX = Infinity;
     let cityY = Infinity;
     for (const a of areas) {
@@ -88,13 +122,14 @@ export default function FoeCityMap({ cityMap, defs }) {
       cityY = Math.min(cityY, a.y);
     }
 
-    // Обʼєкти лише в межах міста (off_grid / поселення відкидаємо).
+    // обʼєкти лише в межах міста (off_grid / поселення відкидаємо)
     const ents = allEnts.filter(
       (e) => e.x >= minX && e.x < maxX && e.y >= minY && e.y < maxY
     );
+
     return {
       areas,
-      blocked,
+      buyable,
       ents,
       minX,
       minY,
@@ -102,6 +137,7 @@ export default function FoeCityMap({ cityMap, defs }) {
       gh: maxY - minY,
       cityX,
       cityY,
+      counts: { unlocked: unlockedSet.size, buyable: buyable.length, blocked: blockedSet.size },
     };
   }, [cityMap]);
 
@@ -134,7 +170,7 @@ export default function FoeCityMap({ cityMap, defs }) {
     setSel(findAt(tx, ty));
   };
 
-  // Одразу прокрутити вікно на розблоковане місто (а не на кут із локнутими секторами).
+  // одразу прокрутити вікно на розблоковане місто
   const cityOffX = Math.max(0, (model.cityX - model.minX - 1) * tile);
   const cityOffY = Math.max(0, (model.cityY - model.minY - 1) * tile);
   useEffect(() => {
@@ -172,38 +208,48 @@ export default function FoeCityMap({ cityMap, defs }) {
               <Defs>
                 <ClipPath id="cityClip">
                   {model.areas.map((a, i) => (
-                    <Rect key={i} x={a.x} y={a.y} width={a.width || 1} height={a.length || 1} />
+                    <Rect
+                      key={i}
+                      x={a.x}
+                      y={a.y}
+                      width={a.width || SECTOR}
+                      height={a.length || SECTOR}
+                    />
                   ))}
                 </ClipPath>
               </Defs>
 
-              {model.blocked.map((b, i) => (
+              {/* сектори, які можна купити — жовті */}
+              {model.buyable.map((b, i) => (
                 <Rect
-                  key={`b${i}`}
+                  key={`buy${i}`}
                   x={b.x}
                   y={b.y}
-                  width={b.width}
-                  height={b.length}
-                  fill={DEBUG_SECTORS ? '#f5c542' : '#141821'}
-                  stroke={DEBUG_SECTORS ? '#7a5c00' : '#0b0e14'}
-                  strokeWidth={DEBUG_SECTORS ? 0.06 : 0.12}
+                  width={SECTOR}
+                  height={SECTOR}
+                  fill="#f5c542"
+                  fillOpacity={0.18}
+                  stroke="#f5c542"
+                  strokeWidth={0.05}
+                  strokeOpacity={0.5}
                 />
               ))}
 
+              {/* розблоковані сектори — білі */}
               {model.areas.map((a, i) => (
                 <Rect
                   key={`a${i}`}
                   x={a.x}
                   y={a.y}
-                  width={a.width || 1}
-                  height={a.length || 1}
-                  fill={DEBUG_SECTORS ? '#ffffff' : '#0c141c'}
-                  stroke={DEBUG_SECTORS ? '#9aa3b2' : '#2b3a4d'}
-                  strokeWidth={DEBUG_SECTORS ? 0.06 : 0.1}
+                  width={a.width || SECTOR}
+                  height={a.length || SECTOR}
+                  fill="#ffffff"
+                  fillOpacity={0.06}
+                  stroke="#9aa3b2"
+                  strokeWidth={0.06}
                 />
               ))}
 
-              {DEBUG_SECTORS ? null : (
               <G clipPath="url(#cityClip)">
                 {Array.from({ length: model.gw + 1 }).map((_, i) => (
                   <Line
@@ -247,7 +293,6 @@ export default function FoeCityMap({ cityMap, defs }) {
                   );
                 })}
               </G>
-              )}
             </Svg>
 
             <Pressable style={StyleSheet.absoluteFill} onPress={onTouch} />
@@ -255,24 +300,24 @@ export default function FoeCityMap({ cityMap, defs }) {
         </ScrollView>
       </ScrollView>
 
-      {DEBUG_SECTORS ? (
-        <Text style={styles.hint}>
-          Діагностика секторів · жовті — заблоковані ({model.blocked.length}), білі — розблоковані (
-          {model.areas.length}) · межі x:{model.minX}…{model.minX + model.gw} y:{model.minY}…
-          {model.minY + model.gh}
-        </Text>
-      ) : (
-        <View style={styles.legend}>
-          {LEGEND.map(([t, label]) => (
-            <View key={t} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
-              <Text style={styles.legendText}>{label}</Text>
-            </View>
-          ))}
+      <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#ffffff' }]} />
+          <Text style={styles.legendText}>розблоковано ({model.counts.unlocked})</Text>
         </View>
-      )}
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#f5c542' }]} />
+          <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
+        </View>
+        {LEGEND.map(([t, label]) => (
+          <View key={t} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
+            <Text style={styles.legendText}>{label}</Text>
+          </View>
+        ))}
+      </View>
 
-      {DEBUG_SECTORS ? null : sel ? (
+      {sel ? (
         <View style={styles.detail}>
           <Text style={styles.detailName}>{sel.d?.name || sel.e.cid}</Text>
           <Text style={styles.detailMeta}>
