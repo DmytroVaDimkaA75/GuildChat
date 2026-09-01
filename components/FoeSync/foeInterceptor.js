@@ -440,6 +440,16 @@ export const FOE_INTERCEPTOR_JS = `
         lastAdvance = Date.now();
         return;
       }
+
+      // 3) запасний варіант: на сторінці порталу без кнопки — прямий перехід у гру
+      if (w && (/\\/page/.test(href) || /master-page-login/.test(href))) {
+        window.__foeStuck = (window.__foeStuck || 0) + 1;
+        if (window.__foeStuck >= 4) {
+          window.__foeStuck = 0;
+          lastAdvance = Date.now();
+          location.href = 'https://' + w + '.forgeofempires.com/game/index';
+        }
+      }
     } catch (e) {}
   }
   setInterval(autoAdvance, 1500);

@@ -470,7 +470,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v34</Text>
+        <Text style={styles.status}>{status}  ·  v35</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
