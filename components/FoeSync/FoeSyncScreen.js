@@ -293,6 +293,11 @@ export default function FoeSyncScreen() {
       return;
     }
 
+    if (msg.kind === 'worldSelectDump') {
+      setFound((prev) => ({ ...prev, worldSelectDump: msg }));
+      return;
+    }
+
     if (Array.isArray(msg.seen) && msg.seen.length) {
       setSeen((prev) => {
         const next = new Set(prev);
@@ -465,7 +470,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v28</Text>
+        <Text style={styles.status}>{status}  ·  v29</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -599,6 +604,17 @@ export default function FoeSyncScreen() {
           ) : (
             <Text style={styles.kvMuted}>стартовий пакет ще не спіймано</Text>
           )}
+
+          {found.worldSelectDump ? (
+            <>
+              <Text style={styles.subSection}>
+                вибір світу ({found.worldSelectDump.title}):
+              </Text>
+              <Text style={styles.diag}>
+                {(found.worldSelectDump.els || []).join('\n').slice(0, 3500)}
+              </Text>
+            </>
+          ) : null}
 
           {found.domBoosts ? (
             <>

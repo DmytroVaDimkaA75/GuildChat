@@ -391,22 +391,34 @@ export const FOE_INTERCEPTOR_JS = `
 
       // Вибір світу: клікаємо елемент, що веде на потрібний worldId
       if (w) {
-        var cand = document.querySelectorAll('a, button, [onclick], [data-world], .world-select-button');
+        var cand = document.querySelectorAll('a, button, [onclick], [data-world], [class*="world"], [class*="server"], li, div[role="button"]');
+        var report = [];
         for (var j = 0; j < cand.length; j++) {
           var el = cand[j];
           var blob = (el.getAttribute('href') || '') + ' ' +
                      (el.getAttribute('onclick') || '') + ' ' +
                      (el.getAttribute('data-world') || '') + ' ' +
+                     (el.getAttribute('data-id') || '') + ' ' +
+                     (el.id || '') + ' ' +
                      (el.className || '');
+          var txt = (el.textContent || '').trim().slice(0, 24);
+          if (report.length < 25 && (txt || blob.trim())) {
+            report.push(el.tagName + ' "' + txt + '" | ' + blob.trim().slice(0, 120));
+          }
           if (blob.indexOf(w + '.') !== -1 ||
               blob.indexOf('"' + w + '"') !== -1 ||
               blob.indexOf("'" + w + "'") !== -1 ||
               blob.indexOf('world=' + w) !== -1 ||
-              blob.indexOf('/' + w + '/') !== -1) {
+              blob.indexOf('/' + w + '/') !== -1 ||
+              blob.indexOf('_' + w) !== -1 ||
+              blob.indexOf(w + '_') !== -1) {
             el.click();
             lastAdvance = now;
             return;
           }
+        }
+        if (/select|world|welt|monde|mir|мир/i.test(href) || document.title) {
+          post({ __foeSync: true, kind: 'worldSelectDump', url: href, title: document.title, els: report });
         }
       }
     } catch (e) {}
