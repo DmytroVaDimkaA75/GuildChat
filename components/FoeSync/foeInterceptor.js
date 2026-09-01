@@ -363,116 +363,86 @@ export const FOE_INTERCEPTOR_JS = `
   setInterval(scanArmyDom, 3000);
 
   // --- Автоперехід через сторінку входу і вибір світу ---
-  // Портал памʼятає користувача, тож просто тиснемо "Грати" і потрібний світ.
-  function clickByText(re) {
-    var els = document.querySelectorAll('a, button, input[type="button"], input[type="submit"]');
-    for (var i = 0; i < els.length; i++) {
-      var t = (els[i].textContent || els[i].value || '').trim();
-      if (t && re.test(t)) { els[i].click(); return true; }
-    }
-    return false;
+  function realClick(el) {
+    if (!el) { return; }
+    try { el.click(); } catch (e) {}
+    try {
+      ['mousedown', 'mouseup', 'click'].forEach(function (t) {
+        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+      });
+    } catch (e) {}
   }
+  function clickableAncestor(el) {
+    var p = el;
+    for (var i = 0; i < 5 && p; i++) {
+      if (p.tagName === 'A' || p.tagName === 'BUTTON' || p.onclick ||
+          (p.getAttribute && p.getAttribute('onclick')) ||
+          (p.getAttribute && /button|btn|clickable/i.test(p.className || ''))) {
+        return p;
+      }
+      p = p.parentElement;
+    }
+    return el;
+  }
+  function outer(el) {
+    try { return (el.outerHTML || '').replace(/\\s+/g, ' ').slice(0, 200); } catch (e) { return ''; }
+  }
+
   var lastAdvance = 0;
-  var advTick = 0;
   function autoAdvance() {
     try {
       var w = window.__FOE_WORLD || '';
       var href = String(location.href || '');
-      // всередині гри вже — нічого не робимо
       if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
-      var now = Date.now();
 
-      // БЕЗУМОВНА діагностика: шукаємо елементи вікна "Выбор мира".
-      advTick++;
-      if (advTick % 3 === 1) {
-        var repD = ['w=' + JSON.stringify(w) + ' url=' + href];
-        var all = document.querySelectorAll('*');
-        var seenParents = [];
-        for (var ai = 0; ai < all.length && repD.length < 45; ai++) {
-          var node = all[ai];
-          if (node.children && node.children.length) { continue; } // тільки листові
-          var nt = (node.textContent || '').trim();
-          // назви ігрових світів — довжина 4-14, кирилиця, без пробілів
-          if (!/^[А-ЯЁІЇЄA-Z][а-яёіїєa-z]{3,13}$/.test(nt)) { continue; }
-          // піднімаємось до клікабельного предка
-          var p = node;
-          var chain = node.tagName + '"' + nt + '"';
-          for (var pc = 0; pc < 4 && p; pc++) {
-            var oc = p.getAttribute && p.getAttribute('onclick');
-            var hh = p.getAttribute && (p.getAttribute('href') || p.href);
-            var cn = (p.className && typeof p.className === 'string') ? p.className : '';
-            chain += ' <' + p.tagName + (cn ? '.' + cn.split(' ').join('.') : '') +
-                     (oc ? ' onclick=' + oc.slice(0, 60) : '') +
-                     (hh ? ' href=' + String(hh).slice(0, 50) : '') + '>';
-            p = p.parentElement;
+      // Знаходимо всі елементи з текстом = назва світу або "Грати"
+      var all = document.querySelectorAll('a, button, span, div, li, td, p, h1, h2, h3');
+      var worlds = [];
+      var playBtns = [];
+      var report = ['w=' + JSON.stringify(w) + ' url=' + href];
+      for (var i = 0; i < all.length; i++) {
+        var el = all[i];
+        if (el.children && el.children.length > 1) { continue; }
+        var t = (el.textContent || el.value || '').trim();
+        if (!t || t.length > 24) { continue; }
+        if (/^(грати|играть|play|spielen|jouer|играй)$/i.test(t)) {
+          playBtns.push(el);
+          if (report.length < 40) { report.push('PLAY: ' + outer(clickableAncestor(el))); }
+        } else if (/^[А-ЯЁІЇЄ][а-яёіїє]{3,13}$/.test(t)) {
+          var anc = clickableAncestor(el);
+          worlds.push({ name: t, el: el, anc: anc });
+          if (report.length < 40) {
+            report.push('WORLD "' + t + '": ' + outer(anc));
           }
-          repD.push(chain.slice(0, 240));
         }
-        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: repD });
       }
+      post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
 
-      if (now - lastAdvance < 2500) { return; }
+      if (Date.now() - lastAdvance < 2500) { return; }
 
-      // Спершу — вибір світу (діалог "Выбор мира" може бути поверх сторінки порталу).
-      var worldClicked = false;
-      if (w) {
-        var docs = [document];
-        var frames = document.querySelectorAll('iframe, frame');
-        for (var fi = 0; fi < frames.length; fi++) {
-          try {
-            var fd = frames[fi].contentDocument || (frames[fi].contentWindow && frames[fi].contentWindow.document);
-            if (fd) { docs.push(fd); }
-          } catch (e) {}
+      // 1) якщо є кнопки світів — клікаємо ту, чий предок веде на наш worldId
+      for (var k = 0; k < worlds.length; k++) {
+        var wb = worlds[k];
+        var blob = outer(wb.anc) + ' ' + (wb.anc.href || '') + ' ' + (wb.anc.getAttribute && wb.anc.getAttribute('onclick') || '');
+        if (blob.indexOf('//' + w + '.') !== -1 || blob.indexOf('/' + w + '/') !== -1 ||
+            blob.indexOf('"' + w + '"') !== -1 || blob.indexOf("'" + w + "'") !== -1 ||
+            blob.indexOf('world=' + w) !== -1 || blob.indexOf('=' + w) !== -1) {
+          realClick(wb.el);
+          realClick(wb.anc);
+          lastAdvance = Date.now();
+          return;
         }
-        var cand = [];
-        for (var di = 0; di < docs.length; di++) {
-          try {
-            var got = docs[di].querySelectorAll('a, button, [onclick], [data-world], [class*="world"], [class*="server"], li, div[role="button"], span');
-            for (var gi = 0; gi < got.length; gi++) { cand.push(got[gi]); }
-          } catch (e) {}
-        }
-        var report = ['docs:' + docs.length + ' iframes:' + frames.length];
-        for (var j = 0; j < cand.length; j++) {
-          var el = cand[j];
-          var blob = (el.getAttribute('href') || '') + ' ' +
-                     (el.href || '') + ' ' +
-                     (el.getAttribute('onclick') || '') + ' ' +
-                     (el.getAttribute('data-world') || '') + ' ' +
-                     (el.getAttribute('data-id') || '') + ' ' +
-                     (el.getAttribute('data-server') || '') + ' ' +
-                     (el.id || '') + ' ' +
-                     (typeof el.className === 'string' ? el.className : '');
-          var txt = (el.textContent || '').trim().slice(0, 24);
-          if (report.length < 25 && (txt || blob.trim())) {
-            report.push(el.tagName + ' "' + txt + '" | ' + blob.trim().slice(0, 120));
-          }
-          if (blob.indexOf('//' + w + '.') !== -1 ||
-              blob.indexOf('"' + w + '"') !== -1 ||
-              blob.indexOf("'" + w + "'") !== -1 ||
-              blob.indexOf('world=' + w) !== -1 ||
-              blob.indexOf('/' + w + '/') !== -1 ||
-              blob.indexOf('=' + w + '&') !== -1 ||
-              blob.indexOf('=' + w + '"') !== -1) {
-            try { el.click(); } catch (e) {}
-            worldClicked = true;
-            lastAdvance = now;
-            return;
-          }
-        }
-        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
       }
-
-      if (worldClicked) { return; }
-
-      // Кнопка "Грати" / "Играть" / "Play" на сторінці порталу
-      if (/\\/page/.test(href) || /master-page-login/.test(href)) {
-        var play = document.querySelector('a.launcher-play, a.play-now, a[href*="/game/index"]');
-        if (play) { play.click(); lastAdvance = now; return; }
-        if (clickByText(/^(грати|играть|play)$/i)) { lastAdvance = now; return; }
+      // 2) інакше — тиснемо "Грати" (відкриває діалог вибору світу)
+      if (playBtns.length) {
+        realClick(playBtns[0]);
+        realClick(clickableAncestor(playBtns[0]));
+        lastAdvance = Date.now();
+        return;
       }
     } catch (e) {}
   }
-  setInterval(autoAdvance, 1200);
+  setInterval(autoAdvance, 1500);
 
   // Поточна адреса сторінки (FoE — SPA, тож стежимо і за hash/history)
   var lastUrl = '';
