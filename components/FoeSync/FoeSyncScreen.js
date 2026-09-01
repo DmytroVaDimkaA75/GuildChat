@@ -150,6 +150,25 @@ function gameUrlFromGuildId(guildId) {
   return world ? `https://${world}.forgeofempires.com/game/index?` : null;
 }
 
+// Зводить продукцію будівель у підсумок. buildings: [{id,type,st,ready,det,rnd}]
+function computeCollection(buildings) {
+  const ready = {};
+  const pending = {};
+  let randomCount = 0;
+  const list = [];
+  for (const b of buildings || []) {
+    const det = b.det || {};
+    const target = b.ready ? ready : pending;
+    for (const [k, v] of Object.entries(det)) target[k] = (target[k] || 0) + v;
+    if (b.rnd) randomCount += 1;
+    const summary =
+      Object.entries(det).map(([k, v]) => `${k} ${v}`).join(', ') +
+      (b.rnd ? (Object.keys(det).length ? ' + випадк.' : 'випадкове') : '');
+    if (summary) list.push({ id: b.id, ready: b.ready, st: b.st, summary });
+  }
+  return { ready, pending, randomCount, list };
+}
+
 // Товари гравця: { назва: кількість }
 function parseGoods(raw) {
   const map = raw?.resources?.resources || raw?.resources || null;
@@ -391,7 +410,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v19</Text>
+        <Text style={styles.status}>{status}  ·  v20</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -451,23 +470,38 @@ export default function FoeSyncScreen() {
             </>
           ) : null}
 
-          {found.prodStateCounts ? (
-            <>
-              <Text style={styles.section}>
-                Продукція: {found.prodWithProductsCount} будівель з продуктами
-              </Text>
-              <Text style={styles.subSection}>стани будівель:</Text>
-              <Text style={styles.diag}>
-                {Object.entries(found.prodStateCounts)
-                  .map(([s, c]) => `${s}: ${c}`)
-                  .join('\n')}
-              </Text>
-              <Text style={styles.subSection}>повний стан (2 приклади):</Text>
-              <Text style={styles.diag}>
-                {JSON.stringify(found.prodFullExamples, null, 1).slice(0, 3800)}
-              </Text>
-            </>
-          ) : null}
+          {found.prodBuildings ? (() => {
+            const col = computeCollection(found.prodBuildings);
+            const fmt = (m) =>
+              Object.entries(m)
+                .sort((a, b) => b[1] - a[1])
+                .map(([k, v]) => `${k}: ${v}`)
+                .join('\n') || '—';
+            return (
+              <>
+                <Text style={styles.section}>Збір з міста — ГОТОВО зараз</Text>
+                <Text style={styles.diag}>{fmt(col.ready)}</Text>
+                <Text style={styles.subSection}>ще виробляється (буде пізніше):</Text>
+                <Text style={styles.diag}>{fmt(col.pending)}</Text>
+                <Text style={styles.subSection}>
+                  випадкових продукцій: {col.randomCount} · стани:{' '}
+                  {Object.entries(found.prodStateCounts).map(([s, c]) => `${s}:${c}`).join(' ')}
+                </Text>
+                {Object.keys(found.prodUnknownStates || {}).length ? (
+                  <Text style={styles.kvMuted}>
+                    не розібрано станів: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
+                  </Text>
+                ) : null}
+                <Text style={styles.subSection}>по будівлях:</Text>
+                <Text style={styles.diag}>
+                  {col.list
+                    .map((b) => `${b.ready ? '✓' : '⏳'} ${b.id} [${b.st}]: ${b.summary}`)
+                    .join('\n')
+                    .slice(0, 4000)}
+                </Text>
+              </>
+            );
+          })() : null}
 
           {sumsAllEntries.length ? (
             <>

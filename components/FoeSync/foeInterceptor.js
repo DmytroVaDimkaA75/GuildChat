@@ -182,10 +182,35 @@ export const FOE_INTERCEPTOR_JS = `
           found.cityGBs = gbs;
           found.cityGBsAll = gbs.length;
 
-          // Виробничі будівлі: сирий стан. Відкидаємо дороги/декор/порожні місця.
+          // Виробничі будівлі: розбираємо продукцію кожної.
+          var nowP = Math.floor(Date.now() / 1000);
           var stateCounts = {};
-          var withProducts = [];
-          var fullExamples = [];
+          var buildings = [];        // по одній на будівлю
+          var unknownStates = {};    // стани, з яких не змогли витягти продукт
+
+          function flattenProducts(po) {
+            // повертає { deterministic: {res:amt}, random: [опис], other: [опис] }
+            var out = { det: {}, rnd: [], other: [] };
+            var arr = (po && po.products) || [];
+            for (var q = 0; q < arr.length; q++) {
+              var pr = arr[q];
+              if (!pr) { continue; }
+              var res = pr.playerResources && pr.playerResources.resources;
+              if (pr.isRandom || pr.type === 'random' || pr.type === 'genericReward') {
+                out.rnd.push({ type: pr.type, resources: res || null, clazz: pr.__class__ });
+              } else if (res && typeof res === 'object') {
+                for (var rk in res) {
+                  if (Object.prototype.hasOwnProperty.call(res, rk)) {
+                    out.det[rk] = (out.det[rk] || 0) + (Number(res[rk]) || 0);
+                  }
+                }
+              } else {
+                out.other.push({ type: pr.type, clazz: pr.__class__, keys: Object.keys(pr) });
+              }
+            }
+            return out;
+          }
+
           for (var pi = 0; pi < list.length; pi++) {
             var pe = list[pi];
             if (!pe || typeof pe !== 'object') { continue; }
@@ -195,27 +220,31 @@ export const FOE_INTERCEPTOR_JS = `
             var pstc = String(pst.__class__ || 'none');
             stateCounts[pstc] = (stateCounts[pstc] || 0) + 1;
 
-            var po = pst.productionOption || pst.current_product || null;
-            var products = po && po.products ? po.products : null;
-            if (products) {
-              withProducts.push({
-                id: pe.cityentity_id,
-                type: pt,
-                stateClass: pstc,
-                readyAt: pst.next_state_transition_at || null,
-                time: po.time || null,
-                products: products
-              });
+            var po2 = pst.productionOption || pst.current_product || null;
+            var ready = pst.next_state_transition_at ? (pst.next_state_transition_at <= nowP)
+              : /Produced|Ready/i.test(pstc);
+            var b = {
+              id: pe.cityentity_id,
+              type: pt,
+              st: pstc,
+              ready: !!ready,
+              readyAt: pst.next_state_transition_at || null
+            };
+            if (po2) {
+              var fl = flattenProducts(po2);
+              b.det = fl.det;
+              if (fl.rnd.length) { b.rnd = fl.rnd; }
+              if (fl.other.length) { b.other = fl.other; }
+            } else if (!/Idle|Construction|None|none/i.test(pstc)) {
+              unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
+              b.stateKeys = Object.keys(pst);
             }
-            // 2 повні приклади стану цілком
-            if (fullExamples.length < 2 && pst.__class__) {
-              fullExamples.push({ id: pe.cityentity_id, type: pt, state: pst });
-            }
+            buildings.push(b);
           }
+
           found.prodStateCounts = stateCounts;
-          found.prodWithProducts = withProducts.slice(0, 12);
-          found.prodWithProductsCount = withProducts.length;
-          found.prodFullExamples = fullExamples;
+          found.prodUnknownStates = unknownStates;
+          found.prodBuildings = buildings;
           found.cityEntitiesAll = list.length;
         }
         got = true;
