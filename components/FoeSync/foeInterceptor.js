@@ -405,6 +405,21 @@ export const FOE_INTERCEPTOR_JS = `
       );
       if (pb) { playBtns.push(pb); report.push('PLAY#: ' + outer(pb)); }
 
+      // Кнопки вибору світу: <a class="world_select_button" value="ru3">Сигард</a>
+      var wsb = document.querySelectorAll('a.world_select_button, .world_select_button, [class*="world_select"]');
+      for (var wi = 0; wi < wsb.length; wi++) {
+        var wv = wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '';
+        report.push('WSB value="' + wv + '" "' + (wsb[wi].textContent || '').trim() + '"');
+        if (wv && wv === w) {
+          if (Date.now() - lastAdvance >= 2000) {
+            realClick(wsb[wi]);
+            lastAdvance = Date.now();
+          }
+          post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
+          return;
+        }
+      }
+
       // Знаходимо всі елементи з текстом = назва світу або "Грати"
       var all = document.querySelectorAll('a, button, input, span, div, li, td, p, h1, h2, h3');
       for (var i = 0; i < all.length; i++) {
