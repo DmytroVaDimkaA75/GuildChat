@@ -47,44 +47,19 @@ const DESKTOP_UA =
 // Військові бонуси: тип у грі -> стабільний ключ + людська назва.
 // Гра віддає кожен внесок окремим рядком, тому значення треба ДОДАВАТИ.
 const BOOST_TYPES = {
-  att_boost_attacker: { key: 'attAttacker', label: 'Атака під час нападу' },
-  def_boost_attacker: { key: 'defAttacker', label: 'Захист під час нападу' },
-  att_boost_defender: { key: 'attDefender', label: 'Атака під час оборони' },
-  def_boost_defender: { key: 'defDefender', label: 'Захист під час оборони' },
+  att_boost_attacker: { label: 'Атака під час нападу' },
+  def_boost_attacker: { label: 'Захист під час нападу' },
+  att_boost_defender: { label: 'Атака під час оборони' },
+  def_boost_defender: { label: 'Захист під час оборони' },
+  att_def_boost_attacker: { label: 'Атака+Захист (напад)' },
+  att_def_boost_defender: { label: 'Атака+Захист (оборона)' },
 };
-const BOOST_ORDER = ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'];
-const BOOST_LABEL_BY_KEY = Object.fromEntries(
-  Object.values(BOOST_TYPES).map((d) => [d.key, d.label])
-);
 
 // guildId виду "ru11_17480" -> світ "ru11" -> адреса гри
 function worldUrlFromGuildId(guildId) {
   const world = String(guildId || '').split('_')[0].trim();
   if (!world) return null;
   return `https://${world}.forgeofempires.com/`;
-}
-
-// Сумуємо військові бонуси з сирих даних BoostService.getAllBoosts.
-// Повертає:
-//   base    — { attAttacker, defAttacker, ... } сума внесків із targetedFeature = "all"
-//   targeted — { "<key> · <feature>": сума } внески, прицільні на окремі режими (GBG, ГЕ тощо)
-function parseMilitaryBoosts(raw) {
-  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.boosts) ? raw.boosts : [];
-  const base = {};
-  const targeted = {};
-  for (const it of list) {
-    if (!it || typeof it.value !== 'number') continue;
-    const def = BOOST_TYPES[String(it.type || '')];
-    if (!def) continue;
-    const feat = it.targetedFeature || 'all';
-    if (feat === 'all') {
-      base[def.key] = (base[def.key] || 0) + it.value;
-    } else {
-      const k = `${def.key} · ${feat}`;
-      targeted[k] = (targeted[k] || 0) + it.value;
-    }
-  }
-  return { base, targeted };
 }
 
 // Товари гравця: { назва: кількість }
@@ -164,16 +139,22 @@ export default function FoeSyncScreen() {
     }
   }, []);
 
-  const boostsRaw = found.boosts || found.boostsStartup || null;
   const goodsRaw = found.goods || null;
-  const boosts = useMemo(() => parseMilitaryBoosts(boostsRaw), [boostsRaw]);
+  const agg = found.boostAgg || found.boostStartupAgg || null;
   const goods = useMemo(() => parseGoods(goodsRaw), [goodsRaw]);
   const goodsEntries = useMemo(
     () => (goods ? Object.entries(goods).sort((a, b) => a[0].localeCompare(b[0])) : []),
     [goods]
   );
+
+  // Основні бонуси = суми по targetedFeature "all". Показуємо ВСІ типи, а не лише 4 відомі.
+  const sumsAll = useMemo(() => agg?.sumsAll || {}, [agg]);
+  const sumsAllEntries = useMemo(
+    () => Object.entries(sumsAll).sort((a, b) => b[1] - a[1]),
+    [sumsAll]
+  );
   const hasSomething =
-    Object.keys(boosts.base).length > 0 || (goods && Object.keys(goods).length > 0);
+    sumsAllEntries.length > 0 || (goods && Object.keys(goods).length > 0);
 
   const onSave = useCallback(async () => {
     if (!hasSomething) {
@@ -184,7 +165,7 @@ export default function FoeSyncScreen() {
     try {
       await saveFoeStats(guildId, userId, {
         player,
-        boosts: { ...boosts.base, targeted: boosts.targeted },
+        boosts: { all: sumsAll, byFeature: agg?.sumsByFeature || {} },
         goods,
       });
       if (ToastAndroid?.show) ToastAndroid.show('Збережено у гільдію', ToastAndroid.SHORT);
@@ -194,7 +175,7 @@ export default function FoeSyncScreen() {
     } finally {
       setSaving(false);
     }
-  }, [hasSomething, guildId, userId, player, boosts, goods]);
+  }, [hasSomething, guildId, userId, player, sumsAll, agg, goods]);
 
   const onReload = useCallback(() => {
     setStatus('Перезавантаження гри…');
@@ -282,24 +263,49 @@ export default function FoeSyncScreen() {
             </Text>
           ) : null}
 
-          <Text style={styles.section}>Бонуси</Text>
-          {Object.keys(boosts.base).length ? (
-            BOOST_ORDER.filter((k) => boosts.base[k] != null).map((k) => (
-              <Text key={k} style={styles.kv}>
-                {BOOST_LABEL_BY_KEY[k]}: <Text style={styles.kvVal}>{boosts.base[k]}%</Text>
+          <Text style={styles.section}>Бонуси (режим all)</Text>
+          {sumsAllEntries.length ? (
+            sumsAllEntries.map(([type, val]) => (
+              <Text key={type} style={styles.kv}>
+                {BOOST_TYPES[type]?.label || type}: <Text style={styles.kvVal}>{val}%</Text>
               </Text>
             ))
           ) : (
-            <Text style={styles.kvMuted}>військові бонуси не розпізнано</Text>
+            <Text style={styles.kvMuted}>ще не знайдено</Text>
           )}
-          {Object.keys(boosts.targeted).length ? (
+
+          {agg ? (
             <>
-              <Text style={styles.subSection}>прицільні (окремі режими)</Text>
-              {Object.entries(boosts.targeted).map(([k, v]) => (
-                <Text key={k} style={styles.diag}>
-                  {k}: {v}%
-                </Text>
-              ))}
+              <Text style={styles.subSection}>
+                всього рядків бонусів: {agg.count}
+                {found.boostRawLength != null ? ` (у пакеті ${found.boostRawLength})` : ''}
+              </Text>
+              <Text style={styles.subSection}>джерела:</Text>
+              <Text style={styles.diag}>
+                {Object.entries(agg.originCounts || {})
+                  .map(([o, c]) => `${o}: ${c}`)
+                  .join('\n')}
+              </Text>
+              <Text style={styles.subSection}>типи (кількість рядків):</Text>
+              <Text style={styles.diag}>
+                {Object.entries(agg.typeCounts || {})
+                  .map(([t, c]) => `${t}: ${c}`)
+                  .join('\n')}
+              </Text>
+              {Object.keys(agg.sumsByFeature || {}).length ? (
+                <>
+                  <Text style={styles.subSection}>прицільні режими:</Text>
+                  <Text style={styles.diag}>
+                    {Object.entries(agg.sumsByFeature)
+                      .map(([k, v]) => `${k}: ${v}%`)
+                      .join('\n')}
+                  </Text>
+                </>
+              ) : null}
+              <Text style={styles.subSection}>приклади рядків:</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(agg.sample || [], null, 1).slice(0, 2500)}
+              </Text>
             </>
           ) : null}
 

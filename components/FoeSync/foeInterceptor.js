@@ -15,9 +15,6 @@ export const FOE_INTERCEPTOR_JS = `
 
   // requestClass.requestMethod -> під якою назвою покласти сирі дані
   var WANTED = {
-    'BoostService.getAllBoosts': 'boosts',
-    'BoostService.getLimitedBonuses': 'boostsLimited',
-    'BoostService.getTimerBoosts': 'boostsTimer',
     'ResourceService.getPlayerResourceBag': 'goods',
     'ResourceService.getResourceBag': 'goods',
     'ResourceService.getResourceDefinitions': 'resourceDefs'
@@ -29,6 +26,43 @@ export const FOE_INTERCEPTOR_JS = `
         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
       }
     } catch (e) {}
+  }
+
+  // Підсумовує масив бонусів від гри.
+  // Кожен елемент: { type, value, origin, targetedFeature, entityId, ... }
+  function aggregateBoosts(list) {
+    var agg = {
+      count: 0,
+      sumsAll: {},        // { type: сума }  де targetedFeature = "all" / відсутній
+      sumsByFeature: {},   // { "type | feature": сума }  для інших режимів
+      typeCounts: {},      // { type: скільки рядків }
+      originCounts: {},     // { origin: скільки рядків }
+      sample: []           // перші кілька рядків "як є" для перевірки
+    };
+    if (!Array.isArray(list)) { return agg; }
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      if (!b || typeof b !== 'object') { continue; }
+      agg.count++;
+      var type = String(b.type || b.boostType || '?');
+      var val = b.value;
+      if (typeof val !== 'number') { val = Number(val) || 0; }
+      var feat = b.targetedFeature || b.feature || 'all';
+      var origin = String(b.origin || b.originType || '?');
+
+      agg.typeCounts[type] = (agg.typeCounts[type] || 0) + 1;
+      agg.originCounts[origin] = (agg.originCounts[origin] || 0) + 1;
+
+      if (feat === 'all') {
+        agg.sumsAll[type] = (agg.sumsAll[type] || 0) + val;
+      } else {
+        var k = type + ' | ' + feat;
+        agg.sumsByFeature[k] = (agg.sumsByFeature[k] || 0) + val;
+      }
+
+      if (agg.sample.length < 15) { agg.sample.push(b); }
+    }
+    return agg;
   }
 
   function handleBody(body) {
@@ -56,6 +90,21 @@ export const FOE_INTERCEPTOR_JS = `
         got = true;
       }
 
+      // Бонуси — підсумовуємо прямо тут, щоб великий масив не губився при передачі
+      if (cls === 'BoostService' && mth === 'getAllBoosts' && Array.isArray(rd)) {
+        found.boostAgg = aggregateBoosts(rd);
+        found.boostRawLength = rd.length;
+        got = true;
+      }
+      if (cls === 'BoostService' && mth === 'getLimitedBonuses' && Array.isArray(rd)) {
+        found.boostLimitedAgg = aggregateBoosts(rd);
+        got = true;
+      }
+      if (cls === 'BoostService' && mth === 'getTimerBoosts' && Array.isArray(rd)) {
+        found.boostTimerAgg = aggregateBoosts(rd);
+        got = true;
+      }
+
       if (cls === 'StartupService' && mth === 'getData' && rd && typeof rd === 'object') {
         var ud = rd.user_data || rd.userData || {};
         if (ud.user_id || ud.id) {
@@ -65,8 +114,10 @@ export const FOE_INTERCEPTOR_JS = `
           };
           got = true;
         }
-        // у стартовому пакеті теж інколи є зведення бонусів
-        if (rd.boosts && !found.boosts) { found.boostsStartup = rd.boosts; got = true; }
+        if (Array.isArray(rd.boosts)) {
+          found.boostStartupAgg = aggregateBoosts(rd.boosts);
+          got = true;
+        }
       }
     }
 
