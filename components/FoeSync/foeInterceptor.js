@@ -498,6 +498,27 @@ export const FOE_INTERCEPTOR_JS = `
     history.pushState = function () { var r = _ps.apply(this, arguments); reportUrl(); return r; };
   } catch (e) {}
 
+  // --- Пошук спрайт-листів з іконками товарів (картинка + json-карта координат) ---
+  var seenAssets = {};
+  function scanAssets() {
+    try {
+      var entries = performance.getEntriesByType('resource');
+      var hits = [];
+      for (var i = 0; i < entries.length; i++) {
+        var u = entries[i].name || '';
+        if (seenAssets[u]) { continue; }
+        if (/\\.(png|json)(\\?|$)/i.test(u) && /(good|resource|icon|sprite|atlas)/i.test(u)) {
+          seenAssets[u] = true;
+          hits.push(u);
+        }
+      }
+      if (hits.length) {
+        post({ __foeSync: true, kind: 'assets', urls: hits });
+      }
+    } catch (e) {}
+  }
+  setInterval(scanAssets, 4000);
+
   post({ __foeSync: true, kind: 'ready' });
 })();
 true;

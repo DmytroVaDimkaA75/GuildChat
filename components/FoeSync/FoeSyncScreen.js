@@ -296,6 +296,14 @@ export default function FoeSyncScreen() {
       return;
     }
 
+    if (msg.kind === 'assets' && Array.isArray(msg.urls)) {
+      setFound((prev) => ({
+        ...prev,
+        assetUrls: Array.from(new Set([...(prev.assetUrls || []), ...msg.urls])),
+      }));
+      return;
+    }
+
     if (Array.isArray(msg.seen) && msg.seen.length) {
       setSeen((prev) => {
         const next = new Set(prev);
@@ -468,7 +476,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v40</Text>
+        <Text style={styles.status}>{status}  ·  v41</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -624,6 +632,15 @@ export default function FoeSyncScreen() {
               </Text>
             </>
           ) : null}
+
+          {found.assetUrls && found.assetUrls.length ? (
+            <>
+              <Text style={styles.section}>Знайдені файли іконок/спрайтів:</Text>
+              <Text style={styles.diag}>{found.assetUrls.join('\n')}</Text>
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>файлів іконок ще не знайдено</Text>
+          )}
 
           {found.resourceDefs ? (
             <>
