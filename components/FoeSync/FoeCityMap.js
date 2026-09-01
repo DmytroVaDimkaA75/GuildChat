@@ -1,13 +1,16 @@
 // components/FoeSync/FoeCityMap.js
 //
 // Мапа міста (city_map). Принцип — як у мапі культурних поселень
-// (components/Culture/ObstaclesMap.js): один <Svg viewBox>, обрізка по
-// розблокованих ділянках через <ClipPath>, сітка <Line>, будівлі <Rect>.
+// (components/Culture/ObstaclesMap.js): один <Svg viewBox>, сектори по 4×4
+// клітинки, сітка <Line>, будівлі <Rect>.
 //
-// Сектори (по 4×4 клітинки):
+// Сектори:
 //   • білі  — розблоковані (твоє місто);
 //   • жовті — можна купити за ресурси / відкрити технологією;
-//   • рамка blocked (недоступний край мапи) — НЕ малюється взагалі.
+//   • темні — рамка недоступного краю мапи (просто тло).
+//
+// Уся мапа повернута на 90° за годинниковою — щоб орієнтація збігалася з
+// містом у грі. Будівлі повертаються разом із нею.
 //
 // У видиме вікно вміщується 24×20 клітинок; решту видно прокруткою.
 
@@ -18,24 +21,25 @@ import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
 const SECTOR = 4; // сторона сектора у клітинках
+const FRAME_FILL = '#131722';
 
 const TYPE_COLOR = {
-  street: '#2f3947',
-  greatbuilding: '#f0c14b',
-  military: '#ef5350',
-  main_building: '#66bb6a',
-  residential: '#42a5f5',
-  production: '#26a69a',
-  goods: '#26a69a',
-  culture: '#ab47bc',
+  street: '#3a4656',
+  greatbuilding: '#ff6f00', // помаранчевий — не плутати з жовтими секторами
+  military: '#e53935',
+  main_building: '#43a047',
+  residential: '#1e88e5',
+  production: '#00897b',
+  goods: '#00897b',
+  culture: '#8e24aa',
   decoration: '#8d6e63',
-  tower: '#ec407a',
-  outpost_ship: '#78909c',
-  friends_tavern: '#ab47bc',
-  generic_building: '#5c6bc0',
-  bonus_building: '#ffa726',
+  tower: '#d81b60',
+  outpost_ship: '#607d8b',
+  friends_tavern: '#8e24aa',
+  generic_building: '#3949ab',
+  bonus_building: '#fb8c00',
 };
-const colorFor = (t) => TYPE_COLOR[t] || '#90a4ae';
+const colorFor = (t) => TYPE_COLOR[t] || '#78909c';
 
 const LEGEND = [
   ['residential', 'житлові'],
@@ -59,24 +63,18 @@ export default function FoeCityMap({ cityMap, defs }) {
     const allEnts = (cityMap?.entities || []).filter((e) => e.x != null && e.y != null);
     if (!areas.length) return null;
 
-    // --- сектори у сітці секторів (ділимо клітинки на 4) ---
+    // --- сектори у сітці секторів ---
     const key = (sc, sr) => `${sc},${sr}`;
     const unlockedSet = new Set();
     for (const a of areas) {
       const w = a.width || SECTOR;
       const l = a.length || SECTOR;
-      for (let x = a.x; x < a.x + w; x += SECTOR) {
-        for (let y = a.y; y < a.y + l; y += SECTOR) {
-          unlockedSet.add(key(x / SECTOR, y / SECTOR));
-        }
-      }
+      for (let x = a.x; x < a.x + w; x += SECTOR)
+        for (let y = a.y; y < a.y + l; y += SECTOR) unlockedSet.add(key(x / SECTOR, y / SECTOR));
     }
     const blockedSet = new Set();
-    for (const b of blockedRaw) {
-      blockedSet.add(key((b.x || 0) / SECTOR, (b.y || 0) / SECTOR));
-    }
+    for (const b of blockedRaw) blockedSet.add(key((b.x || 0) / SECTOR, (b.y || 0) / SECTOR));
 
-    // межі всієї мапи (розблоковані + заблокована рамка) у секторах
     let scMin = Infinity;
     let scMax = -Infinity;
     let srMin = Infinity;
@@ -89,18 +87,35 @@ export default function FoeCityMap({ cityMap, defs }) {
       srMax = Math.max(srMax, sr);
     }
 
-    // "можна купити" = все всередині рамки, що ще не відкрите і не рамка
     const buyable = [];
+    const frame = [];
     for (let sc = scMin; sc <= scMax; sc += 1) {
       for (let sr = srMin; sr <= srMax; sr += 1) {
         const k = key(sc, sr);
-        if (!unlockedSet.has(k) && !blockedSet.has(k)) {
-          buyable.push({ x: sc * SECTOR, y: sr * SECTOR });
-        }
+        if (unlockedSet.has(k)) continue;
+        if (blockedSet.has(k)) frame.push({ x: sc * SECTOR, y: sr * SECTOR });
+        else buyable.push({ x: sc * SECTOR, y: sr * SECTOR });
       }
     }
 
-    // область малювання = розблоковані + "можна купити" (рамку не малюємо)
+    // --- поворот на 90° за годинниковою: (x,y,w,l) -> (H - y - l, x, l, w) ---
+    const H = (srMax + 1) * SECTOR;
+    const rc = (x, y, w, l) => ({ x: H - y - l, y: x, width: l, length: w });
+    const rArea = (a) => rc(a.x, a.y, a.width || SECTOR, a.length || SECTOR);
+    const rCell = (c) => rc(c.x, c.y, SECTOR, SECTOR);
+
+    const rAreas = areas.map(rArea);
+    const rBuyable = buyable.map(rCell);
+    const rFrame = frame.map(rCell);
+    const rEnts = allEnts.map((e) => {
+      const d = defs && defs[e.cid];
+      const w = d?.width || 1;
+      const l = d?.length || 1;
+      const r = rc(e.x, e.y, w, l);
+      return { ...e, rx: r.x, ry: r.y, rw: r.width, rl: r.length };
+    });
+
+    // межі малювання = розблоковані + "можна купити"
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -111,25 +126,22 @@ export default function FoeCityMap({ cityMap, defs }) {
       maxX = Math.max(maxX, x + w);
       maxY = Math.max(maxY, y + h);
     };
-    for (const a of areas) bump(a.x, a.y, a.width || SECTOR, a.length || SECTOR);
-    for (const b of buyable) bump(b.x, b.y, SECTOR, SECTOR);
+    for (const a of rAreas) bump(a.x, a.y, a.width, a.length);
+    for (const b of rBuyable) bump(b.x, b.y, b.width, b.length);
 
-    // кут розблокованої зони — щоб одразу прокрутити вікно на місто
+    const ents = rEnts.filter((e) => e.rx >= minX && e.rx < maxX && e.ry >= minY && e.ry < maxY);
+
     let cityX = Infinity;
     let cityY = Infinity;
-    for (const a of areas) {
+    for (const a of rAreas) {
       cityX = Math.min(cityX, a.x);
       cityY = Math.min(cityY, a.y);
     }
 
-    // обʼєкти лише в межах міста (off_grid / поселення відкидаємо)
-    const ents = allEnts.filter(
-      (e) => e.x >= minX && e.x < maxX && e.y >= minY && e.y < maxY
-    );
-
     return {
-      areas,
-      buyable,
+      areas: rAreas,
+      buyable: rBuyable,
+      frame: rFrame,
       ents,
       minX,
       minY,
@@ -137,13 +149,12 @@ export default function FoeCityMap({ cityMap, defs }) {
       gh: maxY - minY,
       cityX,
       cityY,
-      counts: { unlocked: unlockedSet.size, buyable: buyable.length, blocked: blockedSet.size },
+      counts: { unlocked: unlockedSet.size, buyable: buyable.length },
     };
-  }, [cityMap]);
+  }, [cityMap, defs]);
 
   if (!model) return null;
 
-  // px на клітинку — щоб рівно 24 клітинки влізло по ширині
   const tile = Math.floor((screenW - 20) / VIEW_COLS);
   const viewW = tile * VIEW_COLS;
   const viewH = tile * VIEW_ROWS;
@@ -153,11 +164,8 @@ export default function FoeCityMap({ cityMap, defs }) {
   const findAt = (tx, ty) => {
     let best = null;
     for (const e of model.ents) {
-      const d = defs && defs[e.cid];
-      const w = d?.width || 1;
-      const l = d?.length || 1;
-      if (tx >= e.x && tx < e.x + w && ty >= e.y && ty < e.y + l) {
-        if (!best || (e.type !== 'street' && best.e.type === 'street')) best = { e, d };
+      if (tx >= e.rx && tx < e.rx + e.rw && ty >= e.ry && ty < e.ry + e.rl) {
+        if (!best || (e.type !== 'street' && best.type === 'street')) best = e;
       }
     }
     return best;
@@ -167,10 +175,10 @@ export default function FoeCityMap({ cityMap, defs }) {
     const { locationX, locationY } = ev.nativeEvent;
     const tx = model.minX + Math.floor(locationX / tile);
     const ty = model.minY + Math.floor(locationY / tile);
-    setSel(findAt(tx, ty));
+    const e = findAt(tx, ty);
+    setSel(e ? { e, d: defs && defs[e.cid] } : null);
   };
 
-  // одразу прокрутити вікно на розблоковане місто
   const cityOffX = Math.max(0, (model.cityX - model.minX - 1) * tile);
   const cityOffY = Math.max(0, (model.cityY - model.minY - 1) * tile);
   useEffect(() => {
@@ -208,39 +216,28 @@ export default function FoeCityMap({ cityMap, defs }) {
               <Defs>
                 <ClipPath id="cityClip">
                   {model.areas.map((a, i) => (
-                    <Rect
-                      key={i}
-                      x={a.x}
-                      y={a.y}
-                      width={a.width || SECTOR}
-                      height={a.length || SECTOR}
-                    />
-                  ))}
-                </ClipPath>
-                <ClipPath id="mapClip">
-                  {model.areas.map((a, i) => (
-                    <Rect
-                      key={`m${i}`}
-                      x={a.x}
-                      y={a.y}
-                      width={a.width || SECTOR}
-                      height={a.length || SECTOR}
-                    />
-                  ))}
-                  {model.buyable.map((b, i) => (
-                    <Rect key={`mb${i}`} x={b.x} y={b.y} width={SECTOR} height={SECTOR} />
+                    <Rect key={i} x={a.x} y={a.y} width={a.width} height={a.length} />
                   ))}
                 </ClipPath>
               </Defs>
 
-              {/* сектори, які можна купити — суцільний жовтий */}
+              {/* тло рамки */}
+              <Rect
+                x={model.minX}
+                y={model.minY}
+                width={model.gw}
+                height={model.gh}
+                fill={FRAME_FILL}
+              />
+
+              {/* сектори "можна купити" — суцільний жовтий */}
               {model.buyable.map((b, i) => (
                 <Rect
                   key={`buy${i}`}
                   x={b.x}
                   y={b.y}
-                  width={SECTOR}
-                  height={SECTOR}
+                  width={b.width}
+                  height={b.length}
                   fill="#ffe100"
                 />
               ))}
@@ -251,37 +248,47 @@ export default function FoeCityMap({ cityMap, defs }) {
                   key={`a${i}`}
                   x={a.x}
                   y={a.y}
-                  width={a.width || SECTOR}
-                  height={a.length || SECTOR}
+                  width={a.width}
+                  height={a.length}
                   fill="#ffffff"
                 />
               ))}
 
-              {/* сітка клітинок (лише в межах мапи) */}
-              <G clipPath="url(#mapClip)">
-                {Array.from({ length: model.gw + 1 }).map((_, i) => (
-                  <Line
-                    key={`v${i}`}
-                    x1={model.minX + i}
-                    y1={model.minY}
-                    x2={model.minX + i}
-                    y2={model.minY + model.gh}
-                    stroke="#7a7a7a"
-                    strokeWidth={0.05}
-                  />
-                ))}
-                {Array.from({ length: model.gh + 1 }).map((_, i) => (
-                  <Line
-                    key={`h${i}`}
-                    x1={model.minX}
-                    y1={model.minY + i}
-                    x2={model.minX + model.gw}
-                    y2={model.minY + i}
-                    stroke="#7a7a7a"
-                    strokeWidth={0.05}
-                  />
-                ))}
-              </G>
+              {/* сітка клітинок — по всій мапі */}
+              {Array.from({ length: model.gw + 1 }).map((_, i) => (
+                <Line
+                  key={`v${i}`}
+                  x1={model.minX + i}
+                  y1={model.minY}
+                  x2={model.minX + i}
+                  y2={model.minY + model.gh}
+                  stroke="#7a7a7a"
+                  strokeWidth={0.05}
+                />
+              ))}
+              {Array.from({ length: model.gh + 1 }).map((_, i) => (
+                <Line
+                  key={`h${i}`}
+                  x1={model.minX}
+                  y1={model.minY + i}
+                  x2={model.minX + model.gw}
+                  y2={model.minY + i}
+                  stroke="#7a7a7a"
+                  strokeWidth={0.05}
+                />
+              ))}
+
+              {/* рамка поверх сітки — ховає сітку поза мапою */}
+              {model.frame.map((f, i) => (
+                <Rect
+                  key={`f${i}`}
+                  x={f.x}
+                  y={f.y}
+                  width={f.width}
+                  height={f.length}
+                  fill={FRAME_FILL}
+                />
+              ))}
 
               {/* жирна межа розблокованого міста */}
               {model.areas.map((a, i) => (
@@ -289,8 +296,8 @@ export default function FoeCityMap({ cityMap, defs }) {
                   key={`ab${i}`}
                   x={a.x}
                   y={a.y}
-                  width={a.width || SECTOR}
-                  height={a.length || SECTOR}
+                  width={a.width}
+                  height={a.length}
                   fill="none"
                   stroke="#111111"
                   strokeWidth={0.16}
@@ -305,10 +312,10 @@ export default function FoeCityMap({ cityMap, defs }) {
                   return (
                     <Rect
                       key={i}
-                      x={e.x + 0.04}
-                      y={e.y + 0.04}
-                      width={Math.max((d?.width || 1) - 0.08, 0.1)}
-                      height={Math.max((d?.length || 1) - 0.08, 0.1)}
+                      x={e.rx + 0.04}
+                      y={e.ry + 0.04}
+                      width={Math.max(e.rw - 0.08, 0.1)}
+                      height={Math.max(e.rl - 0.08, 0.1)}
                       fill={colorFor(d?.type || e.type)}
                       opacity={e.conn === 0 ? 0.4 : 1}
                       stroke={isSel ? '#ff1744' : 'rgba(0,0,0,0.35)'}
@@ -326,11 +333,11 @@ export default function FoeCityMap({ cityMap, defs }) {
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#ffffff' }]} />
+          <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffffff' }]} />
           <Text style={styles.legendText}>розблоковано ({model.counts.unlocked})</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#f5c542' }]} />
+          <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffe100' }]} />
           <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
         </View>
         {LEGEND.map(([t, label]) => (
@@ -363,6 +370,7 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 },
   legendDot: { width: 9, height: 9, borderRadius: 2, marginRight: 3 },
+  legendBox: { borderWidth: 1, borderColor: '#555' },
   legendText: { color: '#9aa3b2', fontSize: 10 },
   hint: { color: '#9aa3b2', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
   detail: { marginTop: 6, padding: 8, backgroundColor: '#0c141c', borderRadius: 6 },
