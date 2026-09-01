@@ -150,6 +150,36 @@ function gameUrlFromGuildId(guildId) {
   return world ? `https://${world}.forgeofempires.com/game/index?` : null;
 }
 
+// Людські назви основних ресурсів. Усе інше вважаємо товаром.
+const RES_LABELS = {
+  money: 'Монети',
+  supplies: 'Припаси',
+  medals: 'Медалі',
+  premium: 'Діаманти',
+  strategy_points: 'Очки Форджа (ВП)',
+  total_battlepoints: 'Бойові бали',
+  clan_power: 'Сила гільдії',
+  icarus_feathers: 'Пір’я Ікара',
+  rogue: 'Розбійники',
+};
+
+// Форматує карту {ресурс: кількість} у рядки: спершу валюти, потім товари.
+function formatResources(map) {
+  const entries = Object.entries(map || {}).filter(([, v]) => v);
+  if (!entries.length) return '—';
+  const known = entries
+    .filter(([k]) => RES_LABELS[k])
+    .sort((a, b) => Object.keys(RES_LABELS).indexOf(a[0]) - Object.keys(RES_LABELS).indexOf(b[0]));
+  const goods = entries.filter(([k]) => !RES_LABELS[k]).sort((a, b) => b[1] - a[1]);
+  const line = ([k, v]) => `${RES_LABELS[k] || k}: ${Number(v).toLocaleString('uk')}`;
+  const out = known.map(line);
+  if (goods.length) {
+    out.push('— Товари —');
+    out.push(...goods.map(line));
+  }
+  return out.join('\n');
+}
+
 // Зводить продукцію будівель у підсумок. buildings: [{id,type,st,ready,det,rnd}]
 function computeCollection(buildings) {
   const ready = {};
@@ -412,7 +442,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v23</Text>
+        <Text style={styles.status}>{status}  ·  v24</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -474,33 +504,30 @@ export default function FoeSyncScreen() {
 
           {found.prodBuildings ? (() => {
             const col = computeCollection(found.prodBuildings);
-            const fmt = (m) =>
-              Object.entries(m)
-                .sort((a, b) => b[1] - a[1])
-                .map(([k, v]) => `${k}: ${v.toLocaleString('uk')}`)
-                .join('\n') || '—';
+            const readyLines = formatResources(col.ready);
+            const pendingLines = formatResources(col.pending);
             return (
               <>
-                <Text style={styles.section}>Збір з міста — ГОТОВО зараз</Text>
-                <Text style={styles.diag}>{fmt(col.ready)}</Text>
-                <Text style={styles.subSection}>ще виробляється (буде пізніше):</Text>
-                <Text style={styles.diag}>{fmt(col.pending)}</Text>
-                <Text style={styles.subSection}>
-                  будівель з випадковим призом: {col.randomCount} · стани:{' '}
-                  {Object.entries(found.prodStateCounts).map(([s, c]) => `${s}:${c}`).join(' ')}
-                </Text>
+                <Text style={styles.section}>ЗБІР З МІСТА</Text>
+                {readyLines.split('\n').map((ln, i) => (
+                  <Text key={i} style={ln.startsWith('—') ? styles.subSection : styles.kv}>
+                    {ln.startsWith('—') ? ln : (() => {
+                      const [name, val] = ln.split(': ');
+                      return <>{name}: <Text style={styles.kvVal}>{val}</Text></>;
+                    })()}
+                  </Text>
+                ))}
+                {pendingLines !== '—' ? (
+                  <>
+                    <Text style={styles.subSection}>ще виробляється (буде пізніше):</Text>
+                    <Text style={styles.diag}>{pendingLines}</Text>
+                  </>
+                ) : null}
                 {Object.keys(found.prodUnknownStates || {}).length ? (
                   <Text style={styles.kvMuted}>
                     не розібрано: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
                   </Text>
                 ) : null}
-                <Text style={styles.subSection}>по будівлях:</Text>
-                <Text style={styles.diag}>
-                  {col.list
-                    .map((b) => `${b.ready ? '✓' : '⏳'} ${b.id}: ${b.summary}`)
-                    .join('\n')
-                    .slice(0, 3500)}
-                </Text>
               </>
             );
           })() : null}
