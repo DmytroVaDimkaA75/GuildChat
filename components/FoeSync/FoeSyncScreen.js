@@ -254,7 +254,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}</Text>
+        <Text style={styles.status}>{status}  ·  v3</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
