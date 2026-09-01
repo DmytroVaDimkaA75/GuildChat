@@ -391,7 +391,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v18</Text>
+        <Text style={styles.status}>{status}  ·  v19</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -451,20 +451,20 @@ export default function FoeSyncScreen() {
             </>
           ) : null}
 
-          {found.cityProdRaw ? (
+          {found.prodStateCounts ? (
             <>
               <Text style={styles.section}>
-                Виробничі будівлі: {found.cityProdCount} (усього {found.cityEntitiesAll})
+                Продукція: {found.prodWithProductsCount} будівель з продуктами
               </Text>
-              <Text style={styles.subSection}>типи будівель:</Text>
+              <Text style={styles.subSection}>стани будівель:</Text>
               <Text style={styles.diag}>
-                {Object.entries(found.cityTypeCounts || {})
-                  .map(([t, c]) => `${t}: ${c}`)
+                {Object.entries(found.prodStateCounts)
+                  .map(([s, c]) => `${s}: ${c}`)
                   .join('\n')}
               </Text>
-              <Text style={styles.subSection}>сирий стан (перші будівлі):</Text>
+              <Text style={styles.subSection}>повний стан (2 приклади):</Text>
               <Text style={styles.diag}>
-                {JSON.stringify(found.cityProdRaw, null, 1).slice(0, 3800)}
+                {JSON.stringify(found.prodFullExamples, null, 1).slice(0, 3800)}
               </Text>
             </>
           ) : null}

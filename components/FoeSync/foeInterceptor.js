@@ -183,29 +183,39 @@ export const FOE_INTERCEPTOR_JS = `
           found.cityGBsAll = gbs.length;
 
           // Виробничі будівлі: сирий стан. Відкидаємо дороги/декор/порожні місця.
-          var prodRaw = [];
-          var typeCounts = {};
+          var stateCounts = {};
+          var withProducts = [];
+          var fullExamples = [];
           for (var pi = 0; pi < list.length; pi++) {
             var pe = list[pi];
             if (!pe || typeof pe !== 'object') { continue; }
             var pt = String(pe.type || '');
-            typeCounts[pt] = (typeCounts[pt] || 0) + 1;
-            if (/street|decoration|bonus_area|main_building|token|off_grid/i.test(pt)) { continue; }
-            if (!pe.state) { continue; }
-            var hasProd =
-              pe.state.current_product ||
-              pe.state.next_state_transition_at ||
-              /Produc|Ready|Collect|Polish|Motiv/i.test(String(pe.state.__class__ || ''));
-            if (!hasProd && prodRaw.length >= 6) { continue; }
-            prodRaw.push({
-              id: pe.cityentity_id,
-              type: pt,
-              state: pe.state
-            });
+            if (/street|decoration|main_building|off_grid/i.test(pt)) { continue; }
+            var pst = pe.state || {};
+            var pstc = String(pst.__class__ || 'none');
+            stateCounts[pstc] = (stateCounts[pstc] || 0) + 1;
+
+            var po = pst.productionOption || pst.current_product || null;
+            var products = po && po.products ? po.products : null;
+            if (products) {
+              withProducts.push({
+                id: pe.cityentity_id,
+                type: pt,
+                stateClass: pstc,
+                readyAt: pst.next_state_transition_at || null,
+                time: po.time || null,
+                products: products
+              });
+            }
+            // 2 повні приклади стану цілком
+            if (fullExamples.length < 2 && pst.__class__) {
+              fullExamples.push({ id: pe.cityentity_id, type: pt, state: pst });
+            }
           }
-          found.cityProdRaw = prodRaw.slice(0, 8);
-          found.cityProdCount = prodRaw.length;
-          found.cityTypeCounts = typeCounts;
+          found.prodStateCounts = stateCounts;
+          found.prodWithProducts = withProducts.slice(0, 12);
+          found.prodWithProductsCount = withProducts.length;
+          found.prodFullExamples = fullExamples;
           found.cityEntitiesAll = list.length;
         }
         got = true;
