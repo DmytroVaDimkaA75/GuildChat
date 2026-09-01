@@ -217,9 +217,23 @@ export default function FoeCityMap({ cityMap, defs }) {
                     />
                   ))}
                 </ClipPath>
+                <ClipPath id="mapClip">
+                  {model.areas.map((a, i) => (
+                    <Rect
+                      key={`m${i}`}
+                      x={a.x}
+                      y={a.y}
+                      width={a.width || SECTOR}
+                      height={a.length || SECTOR}
+                    />
+                  ))}
+                  {model.buyable.map((b, i) => (
+                    <Rect key={`mb${i}`} x={b.x} y={b.y} width={SECTOR} height={SECTOR} />
+                  ))}
+                </ClipPath>
               </Defs>
 
-              {/* сектори, які можна купити — жовті */}
+              {/* сектори, які можна купити — суцільний жовтий */}
               {model.buyable.map((b, i) => (
                 <Rect
                   key={`buy${i}`}
@@ -227,15 +241,11 @@ export default function FoeCityMap({ cityMap, defs }) {
                   y={b.y}
                   width={SECTOR}
                   height={SECTOR}
-                  fill="#f5c542"
-                  fillOpacity={0.18}
-                  stroke="#f5c542"
-                  strokeWidth={0.05}
-                  strokeOpacity={0.5}
+                  fill="#ffe100"
                 />
               ))}
 
-              {/* розблоковані сектори — білі */}
+              {/* розблоковані сектори — суцільний білий */}
               {model.areas.map((a, i) => (
                 <Rect
                   key={`a${i}`}
@@ -244,13 +254,11 @@ export default function FoeCityMap({ cityMap, defs }) {
                   width={a.width || SECTOR}
                   height={a.length || SECTOR}
                   fill="#ffffff"
-                  fillOpacity={0.06}
-                  stroke="#9aa3b2"
-                  strokeWidth={0.06}
                 />
               ))}
 
-              <G clipPath="url(#cityClip)">
+              {/* сітка клітинок (лише в межах мапи) */}
+              <G clipPath="url(#mapClip)">
                 {Array.from({ length: model.gw + 1 }).map((_, i) => (
                   <Line
                     key={`v${i}`}
@@ -258,8 +266,8 @@ export default function FoeCityMap({ cityMap, defs }) {
                     y1={model.minY}
                     x2={model.minX + i}
                     y2={model.minY + model.gh}
-                    stroke="#1a2430"
-                    strokeWidth={0.04}
+                    stroke="#7a7a7a"
+                    strokeWidth={0.05}
                   />
                 ))}
                 {Array.from({ length: model.gh + 1 }).map((_, i) => (
@@ -269,26 +277,42 @@ export default function FoeCityMap({ cityMap, defs }) {
                     y1={model.minY + i}
                     x2={model.minX + model.gw}
                     y2={model.minY + i}
-                    stroke="#1a2430"
-                    strokeWidth={0.04}
+                    stroke="#7a7a7a"
+                    strokeWidth={0.05}
                   />
                 ))}
+              </G>
 
+              {/* жирна межа розблокованого міста */}
+              {model.areas.map((a, i) => (
+                <Rect
+                  key={`ab${i}`}
+                  x={a.x}
+                  y={a.y}
+                  width={a.width || SECTOR}
+                  height={a.length || SECTOR}
+                  fill="none"
+                  stroke="#111111"
+                  strokeWidth={0.16}
+                />
+              ))}
+
+              {/* будівлі — суцільні кольорові прямокутники поверх білого */}
+              <G clipPath="url(#cityClip)">
                 {model.ents.map((e, i) => {
                   const d = defs && defs[e.cid];
                   const isSel = sel && sel.e === e;
                   return (
                     <Rect
                       key={i}
-                      x={e.x + 0.06}
-                      y={e.y + 0.06}
-                      width={Math.max((d?.width || 1) - 0.12, 0.1)}
-                      height={Math.max((d?.length || 1) - 0.12, 0.1)}
-                      rx={0.15}
+                      x={e.x + 0.04}
+                      y={e.y + 0.04}
+                      width={Math.max((d?.width || 1) - 0.08, 0.1)}
+                      height={Math.max((d?.length || 1) - 0.08, 0.1)}
                       fill={colorFor(d?.type || e.type)}
-                      opacity={e.conn === 0 ? 0.35 : 1}
-                      stroke={isSel ? '#ffffff' : 'none'}
-                      strokeWidth={isSel ? 0.18 : 0}
+                      opacity={e.conn === 0 ? 0.4 : 1}
+                      stroke={isSel ? '#ff1744' : 'rgba(0,0,0,0.35)'}
+                      strokeWidth={isSel ? 0.2 : 0.03}
                     />
                   );
                 })}
