@@ -382,15 +382,9 @@ export const FOE_INTERCEPTOR_JS = `
       var now = Date.now();
       if (now - lastAdvance < 2500) { return; }
 
-      // Сторінка входу порталу: кнопка "Грати" / "Играть" / "Play"
-      if (/\\/page/.test(href) || /master-page-login/.test(href)) {
-        var play = document.querySelector('a.launcher-play, a.play-now, a[href*="/game/index"], .browser-warning ~ * a[href*="game"]');
-        if (play) { play.click(); lastAdvance = now; return; }
-        if (clickByText(/^(грати|играть|play)$/i)) { lastAdvance = now; return; }
-      }
-
-      // Вибір світу: клікаємо елемент, що веде на потрібний worldId.
+      // Спершу — вибір світу (діалог "Выбор мира" може бути поверх сторінки порталу).
       // Дивимось і в головному документі, і всередині всіх iframe того ж домену.
+      var worldClicked = false;
       if (w) {
         var docs = [document];
         var frames = document.querySelectorAll('iframe, frame');
@@ -422,21 +416,29 @@ export const FOE_INTERCEPTOR_JS = `
           if (report.length < 25 && (txt || blob.trim())) {
             report.push(el.tagName + ' "' + txt + '" | ' + blob.trim().slice(0, 120));
           }
-          if (blob.indexOf(w + '.') !== -1 ||
+          if (blob.indexOf('//' + w + '.') !== -1 ||
               blob.indexOf('"' + w + '"') !== -1 ||
               blob.indexOf("'" + w + "'") !== -1 ||
               blob.indexOf('world=' + w) !== -1 ||
               blob.indexOf('/' + w + '/') !== -1 ||
-              blob.indexOf('_' + w) !== -1 ||
-              blob.indexOf(w + '_') !== -1) {
-            el.click();
+              blob.indexOf('=' + w + '&') !== -1 ||
+              blob.indexOf('=' + w + '"') !== -1) {
+            try { el.click(); } catch (e) {}
+            worldClicked = true;
             lastAdvance = now;
             return;
           }
         }
-        if (/select|world|welt|monde|mir|мир/i.test(href) || document.title) {
-          post({ __foeSync: true, kind: 'worldSelectDump', url: href, title: document.title, els: report });
-        }
+        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
+      }
+
+      if (worldClicked) { return; }
+
+      // Кнопка "Грати" / "Играть" / "Play" на сторінці порталу
+      if (/\\/page/.test(href) || /master-page-login/.test(href)) {
+        var play = document.querySelector('a.launcher-play, a.play-now, a[href*="/game/index"]');
+        if (play) { play.click(); lastAdvance = now; return; }
+        if (clickByText(/^(грати|играть|play)$/i)) { lastAdvance = now; return; }
       }
     } catch (e) {}
   }

@@ -470,7 +470,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v30</Text>
+        <Text style={styles.status}>{status}  ·  v31</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -608,7 +608,7 @@ export default function FoeSyncScreen() {
           {found.worldSelectDump ? (
             <>
               <Text style={styles.subSection}>
-                вибір світу ({found.worldSelectDump.title}):
+                вибір світу [шукаю: {found.worldSelectDump.world}] ({found.worldSelectDump.title}):
               </Text>
               <Text style={styles.diag}>
                 {(found.worldSelectDump.els || []).join('\n').slice(0, 3500)}
