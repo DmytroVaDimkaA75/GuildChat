@@ -7,7 +7,7 @@
 // У видиме вікно вміщується 24×20 клітинок; решту міста видно прокруткою
 // (пальцем у будь-який бік).
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
@@ -44,11 +44,25 @@ const LEGEND = [
 export default function FoeCityMap({ cityMap, defs }) {
   const { width: screenW } = useWindowDimensions();
   const [sel, setSel] = useState(null);
+  const hScrollRef = useRef(null);
+  const vScrollRef = useRef(null);
+  const didInitScroll = useRef(false);
 
   const model = useMemo(() => {
     const areas = cityMap?.unlocked_areas || [];
-    const ents = (cityMap?.entities || []).filter((e) => e.x != null && e.y != null);
-    if (!ents.length) return null;
+    const blockedRaw = cityMap?.blocked_areas || [];
+    const allEnts = (cityMap?.entities || []).filter((e) => e.x != null && e.y != null);
+    if (!areas.length) return null;
+
+    // Заблоковані сектори — 4×4 клітинки, координата може бути відсутня (=0).
+    const blocked = blockedRaw.map((b) => ({
+      x: b.x || 0,
+      y: b.y || 0,
+      width: b.width || 4,
+      length: b.length || 4,
+    }));
+
+    // Межі мапи = розблоковані + заблоковані сектори. off_grid не враховуємо.
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -60,12 +74,32 @@ export default function FoeCityMap({ cityMap, defs }) {
       maxY = Math.max(maxY, y + h);
     };
     for (const a of areas) bump(a.x, a.y, a.width || 1, a.length || 1);
-    for (const e of ents) {
-      const d = defs && defs[e.cid];
-      bump(e.x, e.y, d?.width || 1, d?.length || 1);
+    for (const b of blocked) bump(b.x, b.y, b.width, b.length);
+
+    // Кут розблокованої зони — щоб одразу прокрутити вікно на місто.
+    let cityX = Infinity;
+    let cityY = Infinity;
+    for (const a of areas) {
+      cityX = Math.min(cityX, a.x);
+      cityY = Math.min(cityY, a.y);
     }
-    return { areas, ents, minX, minY, gw: maxX - minX, gh: maxY - minY };
-  }, [cityMap, defs]);
+
+    // Обʼєкти лише в межах міста (off_grid / поселення відкидаємо).
+    const ents = allEnts.filter(
+      (e) => e.x >= minX && e.x < maxX && e.y >= minY && e.y < maxY
+    );
+    return {
+      areas,
+      blocked,
+      ents,
+      minX,
+      minY,
+      gw: maxX - minX,
+      gh: maxY - minY,
+      cityX,
+      cityY,
+    };
+  }, [cityMap]);
 
   if (!model) return null;
 
@@ -96,17 +130,34 @@ export default function FoeCityMap({ cityMap, defs }) {
     setSel(findAt(tx, ty));
   };
 
+  // Одразу прокрутити вікно на розблоковане місто (а не на кут із локнутими секторами).
+  const cityOffX = Math.max(0, (model.cityX - model.minX - 1) * tile);
+  const cityOffY = Math.max(0, (model.cityY - model.minY - 1) * tile);
+  useEffect(() => {
+    if (didInitScroll.current) return;
+    const t = setTimeout(() => {
+      hScrollRef.current?.scrollTo?.({ x: cityOffX, animated: false });
+      vScrollRef.current?.scrollTo?.({ y: cityOffY, animated: false });
+      didInitScroll.current = true;
+    }, 60);
+    return () => clearTimeout(t);
+  }, [cityOffX, cityOffY]);
+
   return (
     <View>
       <ScrollView
+        ref={hScrollRef}
         horizontal
         style={{ width: viewW, height: viewH, alignSelf: 'center' }}
         showsHorizontalScrollIndicator
+        contentOffset={{ x: cityOffX, y: 0 }}
       >
         <ScrollView
+          ref={vScrollRef}
           style={{ height: viewH }}
           nestedScrollEnabled
           showsVerticalScrollIndicator
+          contentOffset={{ x: 0, y: cityOffY }}
         >
           <View style={{ width: contentW, height: contentH }}>
             <Svg
@@ -122,6 +173,19 @@ export default function FoeCityMap({ cityMap, defs }) {
                 </ClipPath>
               </Defs>
 
+              {model.blocked.map((b, i) => (
+                <Rect
+                  key={`b${i}`}
+                  x={b.x}
+                  y={b.y}
+                  width={b.width}
+                  height={b.length}
+                  fill="#141821"
+                  stroke="#0b0e14"
+                  strokeWidth={0.12}
+                />
+              ))}
+
               {model.areas.map((a, i) => (
                 <Rect
                   key={`a${i}`}
@@ -130,8 +194,8 @@ export default function FoeCityMap({ cityMap, defs }) {
                   width={a.width || 1}
                   height={a.length || 1}
                   fill="#0c141c"
-                  stroke="#243140"
-                  strokeWidth={0.08}
+                  stroke="#2b3a4d"
+                  strokeWidth={0.1}
                 />
               ))}
 
