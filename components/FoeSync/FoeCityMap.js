@@ -290,6 +290,30 @@ export default function FoeCityMap({ cityMap, defs }) {
                 />
               ))}
 
+              {/* жирна сітка СЕКТОРІВ (кожні 4 клітинки) */}
+              {Array.from({ length: Math.round(model.gw / SECTOR) + 1 }).map((_, i) => (
+                <Line
+                  key={`sv${i}`}
+                  x1={model.minX + i * SECTOR}
+                  y1={model.minY}
+                  x2={model.minX + i * SECTOR}
+                  y2={model.minY + model.gh}
+                  stroke="#1b1b1b"
+                  strokeWidth={0.14}
+                />
+              ))}
+              {Array.from({ length: Math.round(model.gh / SECTOR) + 1 }).map((_, i) => (
+                <Line
+                  key={`sh${i}`}
+                  x1={model.minX}
+                  y1={model.minY + i * SECTOR}
+                  x2={model.minX + model.gw}
+                  y2={model.minY + i * SECTOR}
+                  stroke="#1b1b1b"
+                  strokeWidth={0.14}
+                />
+              ))}
+
               {/* жирна межа розблокованого міста */}
               {model.areas.map((a, i) => (
                 <Rect

@@ -270,7 +270,7 @@ export default function FoeSyncScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v63` : '⏳ синхронізація ще триває… · v63'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v64` : '⏳ синхронізація ще триває… · v64'}
       </Text>
       {player ? (
         <Text style={styles.muted}>
