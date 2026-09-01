@@ -257,9 +257,20 @@ export default function FoeSyncScreen() {
   const readyRows = collection ? resourceRows(collection.ready, resDefs) : [];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 14 }}>
+    <View style={styles.container}>
+      {/* Мапа — зверху, фіксована, з прокруткою пальцем */}
+      {found.cityMap ? (
+        <View style={styles.mapTop}>
+          <Text style={styles.mapTitle}>
+            Мапа міста{defsProgress ? ` · будівлі ${defsProgress}` : ''}
+          </Text>
+          <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} />
+        </View>
+      ) : null}
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v57` : '⏳ синхронізація ще триває… · v57'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v58` : '⏳ синхронізація ще триває… · v58'}
       </Text>
       {player ? (
         <Text style={styles.muted}>
@@ -317,16 +328,6 @@ export default function FoeSyncScreen() {
         </>
       ) : null}
 
-      {found.cityMap ? (
-        <>
-          <Text style={styles.section}>
-            Мапа міста
-            {defsProgress ? ` · будівлі ${defsProgress}` : ''}
-          </Text>
-          <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} />
-        </>
-      ) : null}
-
       <View style={styles.btnRow}>
         <TouchableOpacity style={styles.secondaryBtn} onPress={onCopy}>
           <Text style={styles.secondaryBtnText}>Копіювати</Text>
@@ -345,12 +346,28 @@ export default function FoeSyncScreen() {
           Синхронізацію ще не увімкнено. Відкрийте профіль → «Синхронізація з грою».
         </Text>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  mapTop: {
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.separator,
+    backgroundColor: COLORS.surface,
+  },
+  mapTitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
   status: { color: COLORS.primary, fontSize: 14, marginBottom: 4 },
   muted: { color: COLORS.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 4 },
   hintBox: {

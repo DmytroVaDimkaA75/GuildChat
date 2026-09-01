@@ -1,13 +1,18 @@
 // components/FoeSync/FoeCityMap.js
 //
-// Мапа міста (city_map) за принципом мапи культурних поселень
+// Мапа міста (city_map). Принцип — як у мапі культурних поселень
 // (components/Culture/ObstaclesMap.js): один <Svg viewBox>, обрізка по
-// розблокованих ділянках через <ClipPath>, сітка <Line>, будівлі <Rect>,
-// а дотик — через прозорий <View> поверх, з перерахунком координат.
+// розблокованих ділянках через <ClipPath>, сітка <Line>, будівлі <Rect>.
+//
+// У видиме вікно вміщується 24×20 клітинок; решту міста видно прокруткою
+// (пальцем у будь-який бік).
 
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
+
+const VIEW_COLS = 24;
+const VIEW_ROWS = 20;
 
 const TYPE_COLOR = {
   street: '#2f3947',
@@ -30,7 +35,6 @@ const colorFor = (t) => TYPE_COLOR[t] || '#90a4ae';
 const LEGEND = [
   ['residential', 'житлові'],
   ['production', 'виробничі'],
-  ['goods', 'товари'],
   ['culture', 'культура'],
   ['military', 'військові'],
   ['greatbuilding', 'ВС'],
@@ -65,10 +69,12 @@ export default function FoeCityMap({ cityMap, defs }) {
 
   if (!model) return null;
 
-  // Малюємо у координатах тайлів; viewBox масштабує під екран.
-  const availW = Math.max(screenW - 28, 200);
-  const dispW = Math.min(availW, model.gw * 14);
-  const dispH = (dispW * model.gh) / model.gw;
+  // px на клітинку — щоб рівно 24 клітинки влізло по ширині
+  const tile = Math.floor((screenW - 20) / VIEW_COLS);
+  const viewW = tile * VIEW_COLS;
+  const viewH = tile * VIEW_ROWS;
+  const contentW = model.gw * tile;
+  const contentH = model.gh * tile;
 
   const findAt = (tx, ty) => {
     let best = null;
@@ -77,7 +83,6 @@ export default function FoeCityMap({ cityMap, defs }) {
       const w = d?.width || 1;
       const l = d?.length || 1;
       if (tx >= e.x && tx < e.x + w && ty >= e.y && ty < e.y + l) {
-        // будівля перекриває дорогу — показуємо будівлю
         if (!best || (e.type !== 'street' && best.e.type === 'street')) best = { e, d };
       }
     }
@@ -86,36 +91,37 @@ export default function FoeCityMap({ cityMap, defs }) {
 
   const onTouch = (ev) => {
     const { locationX, locationY } = ev.nativeEvent;
-    const tx = model.minX + Math.floor((locationX / dispW) * model.gw);
-    const ty = model.minY + Math.floor((locationY / dispH) * model.gh);
+    const tx = model.minX + Math.floor(locationX / tile);
+    const ty = model.minY + Math.floor(locationY / tile);
     setSel(findAt(tx, ty));
   };
 
   return (
     <View>
-      <ScrollView horizontal contentContainerStyle={{ paddingRight: 4 }}>
-        <ScrollView style={{ maxHeight: 460 }} nestedScrollEnabled>
-          <View style={{ width: dispW, height: dispH }}>
+      <ScrollView
+        horizontal
+        style={{ width: viewW, height: viewH, alignSelf: 'center' }}
+        showsHorizontalScrollIndicator
+      >
+        <ScrollView
+          style={{ height: viewH }}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          <View style={{ width: contentW, height: contentH }}>
             <Svg
-              width={dispW}
-              height={dispH}
+              width={contentW}
+              height={contentH}
               viewBox={`${model.minX} ${model.minY} ${model.gw} ${model.gh}`}
             >
               <Defs>
                 <ClipPath id="cityClip">
                   {model.areas.map((a, i) => (
-                    <Rect
-                      key={i}
-                      x={a.x}
-                      y={a.y}
-                      width={a.width || 1}
-                      height={a.length || 1}
-                    />
+                    <Rect key={i} x={a.x} y={a.y} width={a.width || 1} height={a.length || 1} />
                   ))}
                 </ClipPath>
               </Defs>
 
-              {/* тло розблокованих ділянок */}
               {model.areas.map((a, i) => (
                 <Rect
                   key={`a${i}`}
@@ -129,9 +135,7 @@ export default function FoeCityMap({ cityMap, defs }) {
                 />
               ))}
 
-              {/* будівлі — обрізані по дозволеній зоні */}
               <G clipPath="url(#cityClip)">
-                {/* сітка */}
                 {Array.from({ length: model.gw + 1 }).map((_, i) => (
                   <Line
                     key={`v${i}`}
@@ -176,7 +180,6 @@ export default function FoeCityMap({ cityMap, defs }) {
               </G>
             </Svg>
 
-            {/* прозорий шар для дотику (Pressable відрізняє тап від прокрутки) */}
             <Pressable style={StyleSheet.absoluteFill} onPress={onTouch} />
           </View>
         </ScrollView>
@@ -200,12 +203,10 @@ export default function FoeCityMap({ cityMap, defs }) {
             {sel.e.lvl != null ? ` · рів. ${sel.e.lvl}` : ''}
             {sel.e.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
           </Text>
-          {sel.d?.description ? (
-            <Text style={styles.detailDesc}>{sel.d.description}</Text>
-          ) : null}
+          {sel.d?.description ? <Text style={styles.detailDesc}>{sel.d.description}</Text> : null}
         </View>
       ) : (
-        <Text style={styles.hint}>Торкніться будівлі, щоб побачити деталі</Text>
+        <Text style={styles.hint}>Мапу можна рухати пальцем. Торкніться будівлі — деталі.</Text>
       )}
     </View>
   );
