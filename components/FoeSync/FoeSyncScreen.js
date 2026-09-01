@@ -44,15 +44,10 @@ const CONSENT_KEY = 'foeSyncConsentV1';
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Гра віддає кожен внесок окремим рядком. 4 підсумкові числа з "Управління
-// армією" складаються з кількох типів: є окремі att/def і є СПІЛЬНІ (att_def),
-// що додаються і до атаки, і до захисту. Тут — які типи в яке число входять.
-const COMBAT_COMPONENTS = {
-  attAttacker: ['att_boost_attacker', 'att_def_boost_attacker', 'att_def_boost_attacker_defender'],
-  defAttacker: ['def_boost_attacker', 'att_def_boost_attacker', 'att_def_boost_attacker_defender'],
-  attDefender: ['att_boost_defender', 'att_def_boost_defender', 'att_def_boost_attacker_defender'],
-  defDefender: ['def_boost_defender', 'att_def_boost_defender', 'att_def_boost_attacker_defender'],
-};
+// 4 бойові показники. Ключ бонуса -> у які з них він додається.
+// Розбираємо назву типу за складниками (att / def / attacker / defender),
+// тому працює для будь-якого набору, а не лише відомих рядків.
+const STATS = ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'];
 const COMBAT_LABELS = {
   attAttacker: 'Атака — атакуюча армія',
   defAttacker: 'Захист — атакуюча армія',
@@ -60,47 +55,85 @@ const COMBAT_LABELS = {
   defDefender: 'Захист — оборонна армія',
 };
 
-// Бонуси Величних споруд у BoostService.getAllBoosts НЕ входять — гра рахує їх
-// окремо з поля bonus кожної ВС. Значення кожної ВС округлюється ВНИЗ, а тип
-// визначає, у які з 4 чисел воно додається.
-const GB_MILITARY_MAP = {
-  military_boost: ['attAttacker', 'defAttacker'],
-  fierce_resistance: ['attDefender', 'defDefender'],
-  advanced_tactics: ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'],
+// Явна таблиця для типів з getAllBoosts (att/def + спільні att_def).
+const GETALL_MAP = {
+  att_boost_attacker: ['attAttacker'],
+  def_boost_attacker: ['defAttacker'],
+  att_boost_defender: ['attDefender'],
+  def_boost_defender: ['defDefender'],
+  att_def_boost_attacker: ['attAttacker', 'defAttacker'],
+  att_def_boost_defender: ['attDefender', 'defDefender'],
+  att_def_boost_attacker_defender: STATS,
 };
 
-// Зводить 4 бойові числа: getAllBoosts (по типах, режим "all") + бонуси ВС.
-function computeCombat(sumsAll, cityGBs) {
-  const out = { attAttacker: 0, defAttacker: 0, attDefender: 0, defDefender: 0 };
-  const usedTypes = new Set();
-  for (const [key, types] of Object.entries(COMBAT_COMPONENTS)) {
-    for (const t of types) {
-      if (typeof sumsAll[t] === 'number') {
-        out[key] += sumsAll[t];
-        usedTypes.add(t);
-      }
-    }
+// Бонуси Величних споруд (поле bonus кожної ВС) — за ТИПОМ бонуса, не за назвою
+// споруди. Значення округлюється вниз. У getAllBoosts цих бонусів немає.
+const GB_MAP = {
+  military_boost: ['attAttacker', 'defAttacker'],
+  fierce_resistance: ['attDefender', 'defDefender'],
+  advanced_tactics: STATS,
+};
+// типи ВС, що НЕ входять у 4 показники (окрема статистика)
+const GB_IGNORE = /crit|first_strike|contribution|double_collection|spoils|diplomat|algorithm|missile|tactics_?boost$/i;
+
+const empty = () => ({ attAttacker: 0, defAttacker: 0, attDefender: 0, defDefender: 0 });
+const addInto = (dst, keys, v) => keys.forEach((k) => { dst[k] += v; });
+
+// sumsAll: { type: сума } (targetedFeature "all")
+// sumsByFeature: { "type | feature": сума }
+// cityGBs: [{ id, bonus:{type,value,targetedFeature} }]
+function computeCombat(sumsAll, sumsByFeature, cityGBs) {
+  const base = empty();
+  const feat = {}; // feature -> stats (додатки понад базу)
+  const getFeat = (f) => (feat[f] || (feat[f] = empty()));
+  const unknown = [];
+
+  // getAllBoosts, режим "all"
+  for (const [type, sum] of Object.entries(sumsAll || {})) {
+    const keys = GETALL_MAP[type];
+    if (keys) addInto(base, keys, sum);
+    else if (/(att|def).*(attacker|defender)/i.test(type)) unknown.push(`all:${type}`);
+  }
+  // getAllBoosts, прицільні режими
+  for (const [k, sum] of Object.entries(sumsByFeature || {})) {
+    const [type, f] = k.split(' | ');
+    const keys = GETALL_MAP[type];
+    if (keys) addInto(getFeat(f), keys, sum);
+    else if (/(att|def).*(attacker|defender)/i.test(type)) unknown.push(`${f}:${type}`);
   }
 
-  const gbUnknown = [];
+  // Величні споруди
   let gbTotal = 0;
   for (const g of cityGBs || []) {
     const b = g.bonus;
     if (!b || b.__class__ !== 'GreatBuildingUnitBonus' || typeof b.value !== 'number') continue;
-    const targets = GB_MILITARY_MAP[b.type];
-    if (!targets) {
-      if (/military|att|def|tactic|resist/i.test(String(b.type || ''))) gbUnknown.push(`${g.id}:${b.type}`);
+    const keys = GB_MAP[b.type];
+    if (!keys) {
+      if (!GB_IGNORE.test(String(b.type || ''))) unknown.push(`ВС ${g.id}:${b.type}`);
       continue;
     }
     const v = Math.floor(b.value);
-    for (const key of targets) out[key] += v;
-    gbTotal += v;
+    const target = b.targetedFeature && b.targetedFeature !== 'all' ? getFeat(b.targetedFeature) : base;
+    addInto(target, keys, v);
+    if (target === base) gbTotal += v;
   }
 
-  const leftover = Object.keys(sumsAll).filter(
-    (t) => !usedTypes.has(t) && /(att|def).*(attacker|defender)/i.test(t)
-  );
-  return { out, leftover, gbUnknown, gbTotal };
+  // контекстні підсумки: база + відповідний прицільний набір
+  const withFeat = (f) => {
+    const o = { ...base };
+    const d = feat[f];
+    if (d) STATS.forEach((k) => { o[k] += d[k]; });
+    return o;
+  };
+  const contexts = {
+    general: base,
+    battleground: withFeat('battleground'),
+    guild_expedition: withFeat('guild_expedition'),
+  };
+  // Кванти/рейди — незалежний набір (базу НЕ додаємо)
+  const quantum = feat['quantum_incursions'] || feat['guild_raids'] || null;
+
+  return { base, contexts, quantum, feat, unknown, gbTotal };
 }
 
 // guildId виду "ru11_17480" -> світ "ru11" -> адреса гри
@@ -228,10 +261,10 @@ export default function FoeSyncScreen() {
     () => Object.entries(sumsAll).sort((a, b) => b[1] - a[1]),
     [sumsAll]
   );
-  // 4 бойові числа, зведені як у грі (getAllBoosts + Величні споруди)
+  // Бойові показники: база + контексти (ПБГ, Виправа) + кванти (окремо)
   const combat = useMemo(
-    () => computeCombat(sumsAll, found.cityGBs),
-    [sumsAll, found.cityGBs]
+    () => computeCombat(sumsAll, sumsByFeature, found.cityGBs),
+    [sumsAll, sumsByFeature, found.cityGBs]
   );
   const hasSomething =
     sumsAllEntries.length > 0 || (goods && Object.keys(goods).length > 0);
@@ -245,7 +278,12 @@ export default function FoeSyncScreen() {
     try {
       await saveFoeStats(guildId, userId, {
         player,
-        boosts: { combat: combat.out, all: sumsAll, byFeature: agg?.sumsByFeature || {} },
+        boosts: {
+          general: combat.base,
+          contexts: combat.contexts,
+          quantum: combat.quantum,
+          featureDeltas: combat.feat,
+        },
         goods,
       });
       if (ToastAndroid?.show) ToastAndroid.show('Збережено у гільдію', ToastAndroid.SHORT);
@@ -255,7 +293,7 @@ export default function FoeSyncScreen() {
     } finally {
       setSaving(false);
     }
-  }, [hasSomething, guildId, userId, player, sumsAll, combat, agg, goods]);
+  }, [hasSomething, guildId, userId, player, combat, goods]);
 
   const onReload = useCallback(() => {
     setStatus('Перезавантаження гри…');
@@ -334,7 +372,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v13</Text>
+        <Text style={styles.status}>{status}  ·  v14</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -343,25 +381,53 @@ export default function FoeSyncScreen() {
             </Text>
           ) : null}
 
-          <Text style={styles.section}>Бонуси (як у грі)</Text>
+          <Text style={styles.section}>Бонуси — загальні (як у грі)</Text>
           {sumsAllEntries.length ? (
-            Object.keys(COMBAT_COMPONENTS).map((k) => (
+            STATS.map((k) => (
               <Text key={k} style={styles.kv}>
-                {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.out[k]}%</Text>
+                {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.base[k]}%</Text>
               </Text>
             ))
           ) : (
             <Text style={styles.kvMuted}>ще не знайдено</Text>
           )}
-          {combat.leftover.length ? (
-            <Text style={styles.kvMuted}>
-              не враховано типів: {combat.leftover.join(', ')}
-            </Text>
+          <Text style={styles.kvMuted}>з них Величні споруди: +{combat.gbTotal}</Text>
+          {combat.unknown.length ? (
+            <Text style={styles.kvMuted}>не враховано: {combat.unknown.join(', ')}</Text>
           ) : null}
-          <Text style={styles.kvMuted}>
-            з них Величні споруди: +{combat.gbTotal}
-            {combat.gbUnknown.length ? ` · невідомі ВС: ${combat.gbUnknown.join(', ')}` : ''}
-          </Text>
+
+          {Object.keys(combat.feat).length ? (
+            <>
+              <Text style={styles.section}>Прицільні режими (додаток до загальних)</Text>
+              {Object.entries(combat.feat).map(([f, d]) => (
+                <Text key={f} style={styles.diag}>
+                  {f}: {STATS.map((k) => `${k}+${d[k]}`).join('  ')}
+                </Text>
+              ))}
+              <Text style={styles.subSection}>ПБГ (battleground):</Text>
+              {STATS.map((k) => (
+                <Text key={k} style={styles.kv}>
+                  {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.contexts.battleground[k]}%</Text>
+                </Text>
+              ))}
+              <Text style={styles.subSection}>Виправа (guild_expedition):</Text>
+              {STATS.map((k) => (
+                <Text key={k} style={styles.kv}>
+                  {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.contexts.guild_expedition[k]}%</Text>
+                </Text>
+              ))}
+              {combat.quantum ? (
+                <>
+                  <Text style={styles.subSection}>Кванти/рейди (окремо, без бази):</Text>
+                  {STATS.map((k) => (
+                    <Text key={k} style={styles.kv}>
+                      {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.quantum[k]}%</Text>
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+            </>
+          ) : null}
 
           {sumsAllEntries.length ? (
             <>
