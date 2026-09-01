@@ -29,6 +29,7 @@ import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { saveFoeStats } from '../../src/services/foeStats';
 import FoeIcon, { loadCachedIconSheet, fetchIconSheet } from './FoeIcon';
 import FoeCityMap from './FoeCityMap';
+import { getBuildingDefs } from '../../src/services/foeBuildings';
 
 const COLORS = {
   background: '#0f1115',
@@ -259,6 +260,9 @@ export default function FoeSyncScreen() {
   const [saving, setSaving] = useState(false);
   const [iconSheet, setIconSheet] = useState(null); // { pngUrl, frames, sheetW, sheetH }
   const iconSheetUrlsRef = useRef(null); // остання пара {png,json}, щоб не тягнути json повторно
+  const [buildingDefs, setBuildingDefs] = useState(null);
+  const [defsProgress, setDefsProgress] = useState(null); // "N / M"
+  const defsLoadingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,6 +283,24 @@ export default function FoeSyncScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Довантажуємо визначення будівель (назви/розміри), коли є мапа
+  useEffect(() => {
+    const cids = found.cityMap?.entities?.map((e) => e.cid).filter(Boolean);
+    if (!cids || !cids.length || defsLoadingRef.current) return;
+    defsLoadingRef.current = true;
+    getBuildingDefs(cids, found.buildingLookupUrl, (done, total) =>
+      setDefsProgress(`${done} / ${total}`)
+    )
+      .then((d) => {
+        setBuildingDefs(d);
+        setDefsProgress(null);
+      })
+      .catch(() => setDefsProgress('помилка'))
+      .finally(() => {
+        defsLoadingRef.current = false;
+      });
+  }, [found.cityMap, found.buildingLookupUrl]);
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
   const injectedJs =
@@ -445,7 +467,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v47',
+      v: 'v48',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -542,7 +564,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v47</Text>
+        <Text style={styles.status}>{status}  ·  v48</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -724,8 +746,12 @@ export default function FoeSyncScreen() {
 
           {found.cityMap ? (
             <>
-              <Text style={styles.section}>МАПА МІСТА: {found.cityMap.entities.length} обʼєктів</Text>
-              <FoeCityMap cityMap={found.cityMap} />
+              <Text style={styles.section}>
+                МАПА МІСТА: {found.cityMap.entities.length} обʼєктів
+                {defsProgress ? `  ·  завантаження будівель ${defsProgress}` : ''}
+                {buildingDefs ? `  ·  ${Object.keys(buildingDefs).length} типів` : ''}
+              </Text>
+              <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} />
               <Text style={styles.subSection}>unlocked_areas:</Text>
               <Text style={styles.diag}>
                 {JSON.stringify(found.cityMap.unlocked_areas, null, 0).slice(0, 1500)}
