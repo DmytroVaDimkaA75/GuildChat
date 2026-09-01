@@ -220,9 +220,11 @@ export const FOE_INTERCEPTOR_JS = `
             var pstc = String(pst.__class__ || 'none');
             stateCounts[pstc] = (stateCounts[pstc] || 0) + 1;
 
-            var po2 = pst.productionOption || pst.current_product || null;
-            var ready = pst.next_state_transition_at ? (pst.next_state_transition_at <= nowP)
-              : /Produced|Ready/i.test(pstc);
+            // конкретний готовий приз — шукаємо в кількох можливих полях
+            var concrete = pst.current_product || pst.produced_product || pst.reward || null;
+            var po2 = concrete || pst.productionOption || null;
+            var ready = /Finished|Produced|Ready|Collect/i.test(pstc)
+              || (pst.next_state_transition_at ? (pst.next_state_transition_at <= nowP) : false);
             var b = {
               id: pe.cityentity_id,
               type: pt,
@@ -230,14 +232,19 @@ export const FOE_INTERCEPTOR_JS = `
               ready: !!ready,
               readyAt: pst.next_state_transition_at || null
             };
-            if (po2) {
+            if (po2 && po2.products) {
               var fl = flattenProducts(po2);
               b.det = fl.det;
               if (fl.rnd.length) { b.rnd = fl.rnd; }
               if (fl.other.length) { b.other = fl.other; }
-            } else if (!/Idle|Construction|None|none/i.test(pstc)) {
+            } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
               unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
               b.stateKeys = Object.keys(pst);
+            }
+            // повні приклади готових будівель — щоб знайти, де конкретний приз
+            if (!found.prodFinishedDumps) { found.prodFinishedDumps = []; }
+            if (found.prodFinishedDumps.length < 3 && /Finished/i.test(pstc)) {
+              found.prodFinishedDumps.push({ id: pe.cityentity_id, type: pt, state: pst });
             }
             buildings.push(b);
           }
