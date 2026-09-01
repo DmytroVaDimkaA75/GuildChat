@@ -362,6 +362,57 @@ export const FOE_INTERCEPTOR_JS = `
 
   setInterval(scanArmyDom, 3000);
 
+  // --- Автоперехід через сторінку входу і вибір світу ---
+  // Портал памʼятає користувача, тож просто тиснемо "Грати" і потрібний світ.
+  function clickByText(re) {
+    var els = document.querySelectorAll('a, button, input[type="button"], input[type="submit"]');
+    for (var i = 0; i < els.length; i++) {
+      var t = (els[i].textContent || els[i].value || '').trim();
+      if (t && re.test(t)) { els[i].click(); return true; }
+    }
+    return false;
+  }
+  var lastAdvance = 0;
+  function autoAdvance() {
+    try {
+      var w = window.__FOE_WORLD;
+      var href = String(location.href || '');
+      // всередині гри вже — нічого не робимо
+      if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
+      var now = Date.now();
+      if (now - lastAdvance < 2500) { return; }
+
+      // Сторінка входу порталу: кнопка "Грати" / "Играть" / "Play"
+      if (/\\/page/.test(href) || /master-page-login/.test(href)) {
+        var play = document.querySelector('a.launcher-play, a.play-now, a[href*="/game/index"], .browser-warning ~ * a[href*="game"]');
+        if (play) { play.click(); lastAdvance = now; return; }
+        if (clickByText(/^(грати|играть|play)$/i)) { lastAdvance = now; return; }
+      }
+
+      // Вибір світу: клікаємо елемент, що веде на потрібний worldId
+      if (w) {
+        var cand = document.querySelectorAll('a, button, [onclick], [data-world], .world-select-button');
+        for (var j = 0; j < cand.length; j++) {
+          var el = cand[j];
+          var blob = (el.getAttribute('href') || '') + ' ' +
+                     (el.getAttribute('onclick') || '') + ' ' +
+                     (el.getAttribute('data-world') || '') + ' ' +
+                     (el.className || '');
+          if (blob.indexOf(w + '.') !== -1 ||
+              blob.indexOf('"' + w + '"') !== -1 ||
+              blob.indexOf("'" + w + "'") !== -1 ||
+              blob.indexOf('world=' + w) !== -1 ||
+              blob.indexOf('/' + w + '/') !== -1) {
+            el.click();
+            lastAdvance = now;
+            return;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  setInterval(autoAdvance, 1200);
+
   // Поточна адреса сторінки (FoE — SPA, тож стежимо і за hash/history)
   var lastUrl = '';
   function reportUrl() {

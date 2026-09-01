@@ -259,6 +259,10 @@ export default function FoeSyncScreen() {
   }, []);
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
+  const injectedJs = useMemo(
+    () => `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n${FOE_INTERCEPTOR_JS}`,
+    [guildId]
+  );
 
   const acceptConsent = useCallback(async () => {
     await AsyncStorage.setItem(CONSENT_KEY, 'yes');
@@ -448,8 +452,8 @@ export default function FoeSyncScreen() {
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
         mixedContentMode="always"
-        injectedJavaScriptBeforeContentLoaded={FOE_INTERCEPTOR_JS}
-        injectedJavaScript={FOE_INTERCEPTOR_JS}
+        injectedJavaScriptBeforeContentLoaded={injectedJs}
+        injectedJavaScript={injectedJs}
         onMessage={onMessage}
         onLoadStart={(e) => {
           setStatus('Завантаження гри…');
@@ -461,7 +465,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v27</Text>
+        <Text style={styles.status}>{status}  ·  v28</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
