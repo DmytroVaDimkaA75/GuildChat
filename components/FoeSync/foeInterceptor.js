@@ -395,11 +395,18 @@ export const FOE_INTERCEPTOR_JS = `
       var href = String(location.href || '');
       if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
 
-      // Знаходимо всі елементи з текстом = назва світу або "Грати"
-      var all = document.querySelectorAll('a, button, span, div, li, td, p, h1, h2, h3');
       var worlds = [];
       var playBtns = [];
       var report = ['w=' + JSON.stringify(w) + ' url=' + href];
+
+      // Кнопка "Грати" на порталі — стабільні id/class, не залежать від мови
+      var pb = document.querySelector(
+        '#play_now_button, input.play_button, .play_button, input[name="play"], a.launcher-play, a.play-now'
+      );
+      if (pb) { playBtns.push(pb); report.push('PLAY#: ' + outer(pb)); }
+
+      // Знаходимо всі елементи з текстом = назва світу або "Грати"
+      var all = document.querySelectorAll('a, button, input, span, div, li, td, p, h1, h2, h3');
       for (var i = 0; i < all.length; i++) {
         var el = all[i];
         if (el.children && el.children.length > 2) { continue; }
