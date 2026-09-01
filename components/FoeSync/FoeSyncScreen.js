@@ -467,7 +467,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v49',
+      v: 'v50',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -564,7 +564,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v49</Text>
+        <Text style={styles.status}>{status}  ·  v50</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
