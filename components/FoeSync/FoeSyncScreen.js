@@ -240,8 +240,33 @@ export default function FoeSyncScreen() {
   }, [hasData, saveToGuild, player, combat, goods, collection]);
 
   const onCopy = useCallback(async () => {
+    // не тягнемо в дамп величезні мапи URL — лише зведення
+    const { buildingUrls, ...foundSlim } = found;
+    const buildingUrlsSummary = buildingUrls
+      ? { count: Object.keys(buildingUrls).length, sample: Object.entries(buildingUrls).slice(0, 3) }
+      : null;
+    const defsSummary = buildingDefs
+      ? {
+          count: Object.keys(buildingDefs).length,
+          items: Object.values(buildingDefs).map((d) => ({
+            id: d?.id,
+            name: d?.name,
+            type: d?.type,
+            wl: `${d?.width}×${d?.length}`,
+            era: d?.era,
+          })),
+        }
+      : null;
     const text = JSON.stringify(
-      { url: currentUrl, player, seen: seen ? Array.from(seen).sort() : [], found },
+      {
+        url: currentUrl,
+        player,
+        seen: seen ? Array.from(seen).sort() : [],
+        found: foundSlim,
+        buildingUrlsSummary,
+        buildingDefs: defsSummary,
+        defsProgress,
+      },
       null,
       1
     );
@@ -251,7 +276,7 @@ export default function FoeSyncScreen() {
     } catch (e) {
       Alert.alert('Помилка', String(e?.message || e));
     }
-  }, [currentUrl, player, seen, found]);
+  }, [currentUrl, player, seen, found, buildingDefs, defsProgress]);
 
   const packets = health.packets || 0;
   const readyRows = collection ? resourceRows(collection.ready, resDefs) : [];
@@ -270,7 +295,7 @@ export default function FoeSyncScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v64` : '⏳ синхронізація ще триває… · v64'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v65` : '⏳ синхронізація ще триває… · v65'}
       </Text>
       {player ? (
         <Text style={styles.muted}>

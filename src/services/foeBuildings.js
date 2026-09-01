@@ -98,7 +98,7 @@ function slimDef(d) {
 
 // Головна функція: повертає { id: slimDef } для переданих cityentity_id.
 // Тягне лише відсутні, кешує результат. onProgress(done, total) — не обовʼязково.
-export async function getBuildingDefs(cityentityIds, lookupUrl, onProgress) {
+export async function getBuildingDefs(cityentityIds, lookupUrl, onProgress, directUrlMap) {
   const defs = await readDefs();
   const want = Array.from(new Set(cityentityIds.filter(Boolean)));
   const missing = want.filter((id) => !defs[id]);
@@ -106,11 +106,27 @@ export async function getBuildingDefs(cityentityIds, lookupUrl, onProgress) {
     return Object.fromEntries(want.map((id) => [id, defs[id]]));
   }
 
-  const map = await resolveUrls(missing, lookupUrl);
-  if (!map) {
-    return Object.fromEntries(want.filter((id) => defs[id]).map((id) => [id, defs[id]]));
+  // URL-и, зловлені напряму з ресурсів гри (найнадійніше — не треба lookup)
+  let map = {};
+  if (directUrlMap && typeof directUrlMap === 'object') {
+    const cache = await loadLookupCache();
+    for (const id of missing) {
+      if (directUrlMap[id]) {
+        map[id] = directUrlMap[id];
+        cache.map[id] = directUrlMap[id];
+      }
+    }
+    try {
+      await AsyncStorage.setItem(LOOKUP_KEY, JSON.stringify(cache));
+    } catch (_e) {
+      /* ignore */
+    }
   }
-
+  const stillMissing = missing.filter((id) => !map[id]);
+  if (stillMissing.length) {
+    const resolved = await resolveUrls(stillMissing, lookupUrl);
+    map = { ...map, ...(resolved || {}) };
+  }
   let done = 0;
   const CHUNK = 12;
   for (let i = 0; i < missing.length; i += CHUNK) {

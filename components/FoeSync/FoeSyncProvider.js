@@ -145,6 +145,10 @@ export function FoeSyncProvider({ children }) {
       setFound((p) => ({ ...p, buildingLookupUrl: msg.url, metaExample: msg.metaExample }));
       return;
     }
+    if (msg.kind === 'buildingUrls' && msg.map && typeof msg.map === 'object') {
+      setFound((p) => ({ ...p, buildingUrls: { ...(p.buildingUrls || {}), ...msg.map } }));
+      return;
+    }
     if (msg.kind === 'goodsSheet' && msg.png && msg.json) {
       setFound((p) => ({ ...p, goodsSheet: { png: msg.png, json: msg.json } }));
       return;
@@ -183,8 +187,15 @@ export function FoeSyncProvider({ children }) {
   useEffect(() => {
     const cids = found.cityMap?.entities?.map((e) => e.cid).filter(Boolean);
     if (!cids || !cids.length || defsLoadingRef.current) return;
+    const haveUrls = found.buildingUrls && Object.keys(found.buildingUrls).length;
+    if (!haveUrls && !found.buildingLookupUrl) return; // ще нема звідки тягнути
     defsLoadingRef.current = true;
-    getBuildingDefs(cids, found.buildingLookupUrl, (d, t) => setDefsProgress(`${d} / ${t}`))
+    getBuildingDefs(
+      cids,
+      found.buildingLookupUrl,
+      (d, t) => setDefsProgress(`${d} / ${t}`),
+      found.buildingUrls
+    )
       .then((d) => {
         setBuildingDefs(d);
         setDefsProgress(null);
@@ -193,7 +204,7 @@ export function FoeSyncProvider({ children }) {
       .finally(() => {
         defsLoadingRef.current = false;
       });
-  }, [found.cityMap, found.buildingLookupUrl]);
+  }, [found.cityMap, found.buildingLookupUrl, found.buildingUrls]);
 
   // Якщо застрягли на сторінці входу порталу — показати вікно для ручного входу
   useEffect(() => {

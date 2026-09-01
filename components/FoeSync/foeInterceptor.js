@@ -13,6 +13,20 @@ export const FOE_INTERCEPTOR_JS = `
   if (window.__foeSyncHook) { return; }
   window.__foeSyncHook = true;
 
+  // Буфер ресурсних таймінгів переповнюється (у грі > 2800 файлів будівель),
+  // тож ловимо URL-и і напряму через PerformanceObserver, і збільшуємо буфер.
+  var _perfUrls = [];
+  try { performance.setResourceTimingBufferSize(200000); } catch (e) {}
+  try {
+    var _po = new PerformanceObserver(function (list) {
+      var es = list.getEntries();
+      for (var i = 0; i < es.length; i++) {
+        if (es[i] && es[i].name) { _perfUrls.push(es[i].name); }
+      }
+    });
+    _po.observe({ type: 'resource', buffered: true });
+  } catch (e) {}
+
   // requestClass.requestMethod -> під якою назвою покласти сирі дані
   var WANTED = {
     'ResourceService.getPlayerResourceBag': 'goods',
@@ -569,21 +583,30 @@ export const FOE_INTERCEPTOR_JS = `
   var goodsSheetSent = false;
   var lookupSent = false;
   var seenAssets = {};
+  var buildingUrls = {};      // { cityentity_id: metadataUrl } — напряму з ресурсів гри
+  var buildingUrlsSentCount = 0;
   function scanAssets() {
     try {
-      var entries = performance.getEntriesByType('resource');
+      var live = performance.getEntriesByType('resource');
+      var all = _perfUrls.slice();
+      for (var k = 0; k < live.length; k++) { all.push(live[k].name || ''); }
+
       var hits = [];
       var iconPng = null, iconJson = null;
       var goodsPng = null, goodsJson = null;
       var lookupUrl = null, metaBase = null;
-      for (var i = 0; i < entries.length; i++) {
-        var u = entries[i].name || '';
+      for (var i = 0; i < all.length; i++) {
+        var u = all[i] || '';
         if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.png/i.test(u)) { iconPng = u; }
         if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.json/i.test(u)) { iconJson = u; }
         if (/goods_large\\/[a-z_]*goods_large_0-[a-f0-9]+\\.png/i.test(u)) { goodsPng = u; }
         if (/goods_large\\/[a-z_]*goods_large_0-[a-f0-9]+\\.json/i.test(u)) { goodsJson = u; }
         if (/building_entity_lookup-/i.test(u)) { lookupUrl = u; }
-        if (/start\\/metadata\\?id=building_entity_/i.test(u) && !metaBase) { metaBase = u; }
+        var m = u.match(/[?&]id=building_entity_(.+?)-[a-f0-9]{6,}(?:[&#]|$)/i);
+        if (m && m[1] && m[1] !== 'lookup') {
+          buildingUrls[m[1]] = u;
+          if (!metaBase) { metaBase = u; }
+        }
         if (seenAssets[u]) { continue; }
         if (/\\.(png|json)(\\?|$)/i.test(u) && /(good|resource|icon|sprite|atlas)/i.test(u)) {
           seenAssets[u] = true;
@@ -603,9 +626,15 @@ export const FOE_INTERCEPTOR_JS = `
         lookupSent = true;
         post({ __foeSync: true, kind: 'buildingLookup', url: lookupUrl, metaExample: metaBase });
       }
+      var n = Object.keys(buildingUrls).length;
+      if (n > buildingUrlsSentCount) {
+        buildingUrlsSentCount = n;
+        post({ __foeSync: true, kind: 'buildingUrls', map: buildingUrls });
+      }
     } catch (e) {}
   }
   setInterval(scanAssets, 4000);
+  scanAssets();
 
   post({ __foeSync: true, kind: 'ready' });
 })();
