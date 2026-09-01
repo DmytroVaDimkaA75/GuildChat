@@ -110,8 +110,8 @@ export default function FoeCityMap({ cityMap, defs, tile = 7 }) {
             {sel.d?.name || sel.e.cid}
           </Text>
           <Text style={{ color: '#9aa3b2', fontSize: 12 }}>
-            {(sel.d?.type || sel.e.type)} · {(sel.d?.width || '?')}×{(sel.d?.length || '?')} ·
-            позиція {sel.e.x},{sel.e.y}
+            {(sel.d?.type || sel.e.type)} · {(sel.d?.width || '?')}×{(sel.d?.length || '?')}
+            {sel.d?.era ? ` · ${sel.d.era}` : ''} · поз. {sel.e.x},{sel.e.y}
             {sel.e.lvl != null ? ` · рів. ${sel.e.lvl}` : ''}
           </Text>
           {sel.d?.description ? (

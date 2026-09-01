@@ -11,8 +11,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LOOKUP_KEY = 'foeBuildingLookupV1'; // { url, map: {id: perBuildingUrl} }
-const DEFS_KEY = 'foeBuildingDefsV1'; //   { id: {name,width,length,type,description} }
+const LOOKUP_KEY = 'foeBuildingLookupV2'; // { url, map: {id: perBuildingUrl} } — лише потрібні id
+const DEFS_KEY = 'foeBuildingDefsV2'; //   { id: {name,width,length,type,era,description,...} }
 
 let lookupMem = null;
 let defsMem = null;
@@ -36,49 +36,63 @@ async function writeDefs() {
   }
 }
 
-// Отримати карту id -> perBuildingUrl. lookupUrl — свіжий URL із гри (може бути null).
-async function getLookupMap(lookupUrl) {
-  if (lookupMem && (!lookupUrl || lookupMem.url === lookupUrl)) return lookupMem.map;
-  if (!lookupMem) {
+async function loadLookupCache() {
+  if (lookupMem) return lookupMem;
+  try {
+    const raw = await AsyncStorage.getItem(LOOKUP_KEY);
+    lookupMem = raw ? JSON.parse(raw) : { url: null, map: {} };
+  } catch (_e) {
+    lookupMem = { url: null, map: {} };
+  }
+  return lookupMem;
+}
+
+// Повертає perBuildingUrl для потрібних id. Якщо чогось бракує і lookupUrl
+// свіжий — тягне повний lookup, але зберігає в кеш лише потрібні записи.
+async function resolveUrls(neededIds, lookupUrl) {
+  const cache = await loadLookupCache();
+  const missing = neededIds.filter((id) => !cache.map[id]);
+  const sameVersion = lookupUrl && cache.url === lookupUrl;
+
+  if (missing.length && lookupUrl && !sameVersion) {
+    // нова версія гри — старі URL могли протухнути, чистимо
+    cache.map = {};
+  }
+  const stillMissing = neededIds.filter((id) => !cache.map[id]);
+
+  if (stillMissing.length && lookupUrl) {
+    const res = await fetch(lookupUrl);
+    const arr = await res.json();
+    const want = new Set(stillMissing);
+    for (const e of arr || []) {
+      const id = String(e.identifier || '').replace(/^building_entity_/, '');
+      if (want.has(id) && e.url) cache.map[id] = e.url;
+    }
+    cache.url = lookupUrl;
     try {
-      const raw = await AsyncStorage.getItem(LOOKUP_KEY);
-      if (raw) lookupMem = JSON.parse(raw);
+      await AsyncStorage.setItem(LOOKUP_KEY, JSON.stringify(cache));
     } catch (_e) {
       /* ignore */
     }
   }
-  if (lookupMem && (!lookupUrl || lookupMem.url === lookupUrl)) return lookupMem.map;
-  if (!lookupUrl) return lookupMem ? lookupMem.map : null;
-
-  const res = await fetch(lookupUrl);
-  const arr = await res.json();
-  const map = {};
-  for (const e of arr || []) {
-    const ident = String(e.identifier || '');
-    const id = ident.replace(/^building_entity_/, '');
-    if (id && e.url) map[id] = e.url;
-  }
-  lookupMem = { url: lookupUrl, map };
-  try {
-    await AsyncStorage.setItem(LOOKUP_KEY, JSON.stringify(lookupMem));
-  } catch (_e) {
-    /* ignore */
-  }
-  return map;
+  return cache.map;
 }
 
 function slimDef(d) {
   if (!d) return null;
+  const req = d.requirements || {};
   return {
     id: d.id,
     name: d.name || d.id,
     type: d.type,
     width: d.width || 1,
     length: d.length || 1,
+    era: req.min_era || d.era || null,
+    techId: req.tech_id || null,
     description: d.description || null,
     happiness: d.provided_happiness || 0,
     points: d.points || null,
-    cost: d.requirements && d.requirements.cost && d.requirements.cost.resources,
+    cost: req.cost && req.cost.resources,
   };
 }
 
@@ -92,7 +106,7 @@ export async function getBuildingDefs(cityentityIds, lookupUrl, onProgress) {
     return Object.fromEntries(want.map((id) => [id, defs[id]]));
   }
 
-  const map = await getLookupMap(lookupUrl);
+  const map = await resolveUrls(missing, lookupUrl);
   if (!map) {
     return Object.fromEntries(want.filter((id) => defs[id]).map((id) => [id, defs[id]]));
   }
