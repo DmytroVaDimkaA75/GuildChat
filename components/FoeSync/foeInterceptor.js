@@ -172,15 +172,27 @@ export const FOE_INTERCEPTOR_JS = `
             var en = list[e];
             if (!en || typeof en !== 'object') { continue; }
             if (!/greatbuilding/i.test(String(en.type || en.__class__ || ''))) { continue; }
+            var bs = Array.isArray(en.bonus) ? en.bonus : (en.bonus ? [en.bonus] : []);
+            var bonuses = [];
+            for (var bi = 0; bi < bs.length; bi++) {
+              if (!bs[bi]) { continue; }
+              bonuses.push({
+                value: bs[bi].value,
+                type: bs[bi].type,
+                targetedFeature: bs[bi].targetedFeature
+              });
+            }
             gbs.push({
-              cityentity_id: en.cityentity_id,
+              id: en.cityentity_id,
               level: (en.level != null) ? en.level : (en.state && en.state.level),
-              bonus: en.bonus,
-              state: en.state,
-              connected: en.connected
+              bonuses: bonuses
             });
           }
-          found.cityGBs = gbs;
+          // залишаємо лише ті, що мають військовий бонус
+          found.cityGBs = gbs.filter(function (g) {
+            return g.bonuses.some(function (b) { return /military|att|def/i.test(String(b.type || '')); });
+          });
+          found.cityGBsAll = gbs.length;
         }
         got = true;
       }

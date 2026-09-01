@@ -304,7 +304,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v8</Text>
+        <Text style={styles.status}>{status}  ·  v9</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -368,10 +368,17 @@ export default function FoeSyncScreen() {
           {found.cityGBs ? (
             <>
               <Text style={styles.subSection}>
-                ВС у місті: {found.cityGBs.length}
+                Бойові ВС: {found.cityGBs.length} (усього ВС {found.cityGBsAll})
               </Text>
               <Text style={styles.diag}>
-                {JSON.stringify(found.cityGBs.slice(0, 4), null, 1).slice(0, 3000)}
+                {found.cityGBs
+                  .map((g) => {
+                    const b = g.bonuses
+                      .map((x) => `${x.type}=${x.value}${x.targetedFeature && x.targetedFeature !== 'all' ? '/' + x.targetedFeature : ''}`)
+                      .join(', ');
+                    return `${g.id} L${g.level}: ${b}`;
+                  })
+                  .join('\n')}
               </Text>
             </>
           ) : null}
