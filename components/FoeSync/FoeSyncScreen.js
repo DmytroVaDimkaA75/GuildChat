@@ -180,23 +180,42 @@ function formatResources(map) {
   return out.join('\n');
 }
 
+// Виробничі бонуси з getAllBoosts множать базову продукцію певних ресурсів.
+// final = floor(base * (1 + boost%/100)). Медалі/діаманти/ВП — без множника.
+const PROD_MULT_BY_RES = {
+  money: 'coin_production',
+  supplies: 'supply_production',
+};
+const GOODS_BOOST_KEY = 'goods_production';
+
+function applyMultiplier(map, sumsAll) {
+  const out = {};
+  for (const [res, amt] of Object.entries(map)) {
+    let pct = 0;
+    if (PROD_MULT_BY_RES[res]) pct = Number(sumsAll[PROD_MULT_BY_RES[res]]) || 0;
+    else if (!RES_LABELS[res]) pct = Number(sumsAll[GOODS_BOOST_KEY]) || 0; // товари
+    out[res] = pct ? Math.floor(amt * (1 + pct / 100)) : amt;
+  }
+  return out;
+}
+
 // Зводить продукцію будівель у підсумок. buildings: [{id,type,st,ready,det,rnd}]
-function computeCollection(buildings) {
-  const ready = {};
-  const pending = {};
+function computeCollection(buildings, sumsAll) {
+  const readyBase = {};
+  const pendingBase = {};
   let randomCount = 0;
-  const list = [];
   for (const b of buildings || []) {
     const det = b.det || {};
-    const target = b.ready ? ready : pending;
+    const target = b.ready ? readyBase : pendingBase;
     for (const [k, v] of Object.entries(det)) target[k] = (target[k] || 0) + v;
     if (b.rnd) randomCount += 1;
-    const summary =
-      Object.entries(det).map(([k, v]) => `${k} ${v}`).join(', ') +
-      (b.rnd ? (Object.keys(det).length ? ' + випадк.' : 'випадкове') : '');
-    if (summary) list.push({ id: b.id, ready: b.ready, st: b.st, summary });
   }
-  return { ready, pending, randomCount, list };
+  return {
+    ready: applyMultiplier(readyBase, sumsAll || {}),
+    pending: applyMultiplier(pendingBase, sumsAll || {}),
+    readyBase,
+    randomCount,
+  };
 }
 
 // Товари гравця: { назва: кількість }
@@ -338,7 +357,7 @@ export default function FoeSyncScreen() {
     }
     setSaving(true);
     try {
-      const col = found.prodBuildings ? computeCollection(found.prodBuildings) : null;
+      const col = found.prodBuildings ? computeCollection(found.prodBuildings, sumsAll) : null;
       await saveFoeStats(guildId, userId, {
         player,
         boosts: {
@@ -442,7 +461,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v25</Text>
+        <Text style={styles.status}>{status}  ·  v26</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -503,7 +522,7 @@ export default function FoeSyncScreen() {
           ) : null}
 
           {found.prodBuildings ? (() => {
-            const col = computeCollection(found.prodBuildings);
+            const col = computeCollection(found.prodBuildings, sumsAll);
             const readyLines = formatResources(col.ready);
             const pendingLines = formatResources(col.pending);
             return (
