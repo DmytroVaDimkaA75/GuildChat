@@ -308,6 +308,7 @@ export default function FoeSyncScreen() {
     }
     setSaving(true);
     try {
+      const col = found.prodBuildings ? computeCollection(found.prodBuildings) : null;
       await saveFoeStats(guildId, userId, {
         player,
         boosts: {
@@ -317,6 +318,7 @@ export default function FoeSyncScreen() {
           featureDeltas: combat.feat,
         },
         goods,
+        collection: col ? { ready: col.ready, pending: col.pending } : null,
       });
       if (ToastAndroid?.show) ToastAndroid.show('Збережено у гільдію', ToastAndroid.SHORT);
       else Alert.alert('Готово', 'Дані збережено у гільдію.');
@@ -325,7 +327,7 @@ export default function FoeSyncScreen() {
     } finally {
       setSaving(false);
     }
-  }, [hasSomething, guildId, userId, player, combat, goods]);
+  }, [hasSomething, guildId, userId, player, combat, goods, found.prodBuildings]);
 
   const onReload = useCallback(() => {
     setStatus('Перезавантаження гри…');
@@ -410,7 +412,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v22</Text>
+        <Text style={styles.status}>{status}  ·  v23</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -475,7 +477,7 @@ export default function FoeSyncScreen() {
             const fmt = (m) =>
               Object.entries(m)
                 .sort((a, b) => b[1] - a[1])
-                .map(([k, v]) => `${k}: ${v}`)
+                .map(([k, v]) => `${k}: ${v.toLocaleString('uk')}`)
                 .join('\n') || '—';
             return (
               <>
@@ -484,24 +486,21 @@ export default function FoeSyncScreen() {
                 <Text style={styles.subSection}>ще виробляється (буде пізніше):</Text>
                 <Text style={styles.diag}>{fmt(col.pending)}</Text>
                 <Text style={styles.subSection}>
-                  випадкових продукцій: {col.randomCount} · стани:{' '}
+                  будівель з випадковим призом: {col.randomCount} · стани:{' '}
                   {Object.entries(found.prodStateCounts).map(([s, c]) => `${s}:${c}`).join(' ')}
                 </Text>
                 {Object.keys(found.prodUnknownStates || {}).length ? (
                   <Text style={styles.kvMuted}>
-                    не розібрано станів: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
+                    не розібрано: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
                   </Text>
                 ) : null}
-                {found.prodFullByType
-                  ? Object.entries(found.prodFullByType).map(([uid, st]) => (
-                      <View key={uid}>
-                        <Text style={styles.subSection}>{uid}:</Text>
-                        <Text style={styles.diag}>
-                          {JSON.stringify(st, null, 1).slice(0, 1600)}
-                        </Text>
-                      </View>
-                    ))
-                  : null}
+                <Text style={styles.subSection}>по будівлях:</Text>
+                <Text style={styles.diag}>
+                  {col.list
+                    .map((b) => `${b.ready ? '✓' : '⏳'} ${b.id}: ${b.summary}`)
+                    .join('\n')
+                    .slice(0, 3500)}
+                </Text>
               </>
             );
           })() : null}

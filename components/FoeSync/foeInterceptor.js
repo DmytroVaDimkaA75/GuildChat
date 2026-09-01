@@ -189,23 +189,23 @@ export const FOE_INTERCEPTOR_JS = `
           var unknownStates = {};    // стани, з яких не змогли витягти продукт
 
           function flattenProducts(po) {
-            // повертає { deterministic: {res:amt}, random: [опис], other: [опис] }
-            var out = { det: {}, rnd: [], other: [] };
+            // playerResources.resources — це вже конкретний готовий приз,
+            // навіть коли isRandom:true (просто щоразу випадає різне).
+            var out = { det: {}, rnd: false, other: [] };
             var arr = (po && po.products) || [];
             for (var q = 0; q < arr.length; q++) {
               var pr = arr[q];
               if (!pr) { continue; }
+              if (pr.isRandom || pr.type === 'random') { out.rnd = true; }
               var res = pr.playerResources && pr.playerResources.resources;
-              if (pr.isRandom || pr.type === 'random' || pr.type === 'genericReward') {
-                out.rnd.push({ type: pr.type, resources: res || null, clazz: pr.__class__ });
-              } else if (res && typeof res === 'object') {
+              if (res && typeof res === 'object') {
                 for (var rk in res) {
                   if (Object.prototype.hasOwnProperty.call(res, rk)) {
                     out.det[rk] = (out.det[rk] || 0) + (Number(res[rk]) || 0);
                   }
                 }
-              } else {
-                out.other.push({ type: pr.type, clazz: pr.__class__, keys: Object.keys(pr) });
+              } else if (pr.type && pr.type !== 'resources') {
+                out.other.push({ type: pr.type, clazz: pr.__class__ });
               }
             }
             return out;
@@ -232,24 +232,14 @@ export const FOE_INTERCEPTOR_JS = `
               ready: !!ready,
               readyAt: pst.next_state_transition_at || null
             };
-            var isRandomOnly = false;
             if (po2 && po2.products) {
               var fl = flattenProducts(po2);
               b.det = fl.det;
-              if (fl.rnd.length) { b.rnd = fl.rnd; }
+              if (fl.rnd) { b.rnd = true; }
               if (fl.other.length) { b.other = fl.other; }
-              isRandomOnly = fl.rnd.length > 0 && Object.keys(fl.det).length === 0;
             } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
               unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
               b.stateKeys = Object.keys(pst);
-            }
-            // повний стан ПЕРШОЇ будівлі кожного унікального id (тут і Колодязі)
-            if (!found.prodFullByType) { found.prodFullByType = {}; }
-            var uid = String(pe.cityentity_id || pt);
-            if (!found.prodFullByType[uid] &&
-                Object.keys(found.prodFullByType).length < 14 &&
-                (isRandomOnly || /Finished|Produc/i.test(pstc))) {
-              found.prodFullByType[uid] = pst;
             }
             buildings.push(b);
           }
