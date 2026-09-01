@@ -153,6 +153,19 @@ export const FOE_INTERCEPTOR_JS = `
           found.boostStartupAgg = aggregateBoosts(rd.boosts);
           got = true;
         }
+        // Настрій міста + усе, де у ключі є "happ"/"enthus"
+        var happ = {};
+        var rres = (rd.resources && rd.resources.resources) || rd.resources || {};
+        for (var hk in rres) {
+          if (Object.prototype.hasOwnProperty.call(rres, hk) && /happ|enthus|mood/i.test(hk)) {
+            happ[hk] = rres[hk];
+          }
+        }
+        if (ud.is_enthusiastic != null) { happ.is_enthusiastic = ud.is_enthusiastic; }
+        if (ud.happiness != null) { happ.ud_happiness = ud.happiness; }
+        if (rd.happiness != null) { happ.rd_happiness = rd.happiness; }
+        found.happiness = happ;
+        found.startupResourceKeys = Object.keys(rres);
         // Огляд стартового пакета: назви ключів верхнього рівня + усе, де є "boost"
         var startupKeys = [];
         for (var sk in rd) {

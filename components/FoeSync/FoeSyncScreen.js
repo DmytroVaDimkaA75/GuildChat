@@ -442,7 +442,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v24</Text>
+        <Text style={styles.status}>{status}  ·  v25</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -523,6 +523,13 @@ export default function FoeSyncScreen() {
                     <Text style={styles.diag}>{pendingLines}</Text>
                   </>
                 ) : null}
+                <Text style={styles.subSection}>виробничі бонуси (для множника):</Text>
+                <Text style={styles.diag}>
+                  {['coin_production', 'supply_production', 'goods_production', 'special_goods_production', 'forge_points_production', 'medal_production']
+                    .map((t) => `${t}: ${sumsAll[t] ?? '—'}`)
+                    .join('\n')}
+                  {'\n'}настрій: {JSON.stringify(found.happiness || {})}
+                </Text>
                 {Object.keys(found.prodUnknownStates || {}).length ? (
                   <Text style={styles.kvMuted}>
                     не розібрано: {Object.entries(found.prodUnknownStates).map(([s, c]) => `${s}:${c}`).join(' ')}
