@@ -470,12 +470,23 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v31</Text>
+        <Text style={styles.status}>{status}  ·  v32</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
+          {found.worldSelectDump ? (
+            <>
+              <Text style={styles.subSection}>
+                АВТОВХІД [шукаю: {found.worldSelectDump.world || '—'}]
+              </Text>
+              <Text style={styles.diag}>
+                {(found.worldSelectDump.els || []).join('\n').slice(0, 3500)}
+              </Text>
+            </>
+          ) : null}
+
           {player ? (
             <Text style={styles.kv}>
               Гравець: <Text style={styles.kvVal}>{player.name || '—'} (id {player.id})</Text>

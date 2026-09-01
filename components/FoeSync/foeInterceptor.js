@@ -373,17 +373,43 @@ export const FOE_INTERCEPTOR_JS = `
     return false;
   }
   var lastAdvance = 0;
+  var advTick = 0;
   function autoAdvance() {
     try {
-      var w = window.__FOE_WORLD;
+      var w = window.__FOE_WORLD || '';
       var href = String(location.href || '');
       // всередині гри вже — нічого не робимо
       if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
       var now = Date.now();
+
+      // БЕЗУМОВНА діагностика раз на ~4 тіки
+      advTick++;
+      if (advTick % 3 === 1) {
+        var docsD = [document];
+        var framesD = document.querySelectorAll('iframe, frame');
+        for (var xi = 0; xi < framesD.length; xi++) {
+          try {
+            var fdd = framesD[xi].contentDocument || (framesD[xi].contentWindow && framesD[xi].contentWindow.document);
+            if (fdd) { docsD.push(fdd); }
+          } catch (e) {}
+        }
+        var repD = ['w=' + JSON.stringify(w) + ' url=' + href + ' docs=' + docsD.length + ' iframes=' + framesD.length];
+        for (var yd = 0; yd < docsD.length; yd++) {
+          try {
+            var bb = docsD[yd].querySelectorAll('a, button');
+            for (var zb = 0; zb < bb.length && repD.length < 40; zb++) {
+              var tb = (bb[zb].textContent || '').trim().slice(0, 20);
+              var hb = (bb[zb].getAttribute('href') || bb[zb].href || bb[zb].getAttribute('onclick') || '').slice(0, 90);
+              if (tb || hb) { repD.push(bb[zb].tagName + ' "' + tb + '" ' + hb); }
+            }
+          } catch (e) {}
+        }
+        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: repD });
+      }
+
       if (now - lastAdvance < 2500) { return; }
 
       // Спершу — вибір світу (діалог "Выбор мира" може бути поверх сторінки порталу).
-      // Дивимось і в головному документі, і всередині всіх iframe того ж домену.
       var worldClicked = false;
       if (w) {
         var docs = [document];
