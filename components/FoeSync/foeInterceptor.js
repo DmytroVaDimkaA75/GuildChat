@@ -140,12 +140,33 @@ export const FOE_INTERCEPTOR_JS = `
         got = true;
       }
 
+      // Метадані гри — там визначення будівель з розмірами
+      if (cls === 'StaticDataService' && mth === 'getMetadata' && rd && typeof rd === 'object') {
+        var meta = { keys: Object.keys(rd), cityEntitySample: null, sizeFieldHint: null };
+        for (var mk in rd) {
+          if (!Object.prototype.hasOwnProperty.call(rd, mk)) { continue; }
+          var mv = rd[mk];
+          if (/city.?entit|building/i.test(mk) && mv) {
+            var arr = Array.isArray(mv) ? mv : Object.keys(mv).map(function (kk) { return mv[kk]; });
+            meta.cityEntityKey = mk;
+            meta.cityEntityCount = arr.length;
+            meta.cityEntitySample = arr.slice(0, 3);
+          }
+        }
+        found.metaInfo = meta;
+        got = true;
+      }
+
       if (cls === 'StartupService' && mth === 'getData' && rd && typeof rd === 'object') {
         var ud = rd.user_data || rd.userData || {};
-        if (ud.user_id || ud.id) {
+        if (ud.player_id || ud.user_id || ud.id) {
           player = {
-            id: String(ud.user_id || ud.id),
-            name: String(ud.user_name || ud.name || '')
+            id: String(ud.player_id || ud.user_id || ud.id),
+            name: String(ud.user_name || ud.name || ''),
+            city: ud.city_name || null,
+            era: ud.era || null,
+            clanId: ud.clan_id || null,
+            clanName: ud.clan_name || null
           };
           got = true;
         }
@@ -270,7 +291,15 @@ export const FOE_INTERCEPTOR_JS = `
 
           // --- Мапа міста: позиція+тип кожної будівлі ---
           var cm = rd.city_map || {};
-          var cityMap = { keys: Object.keys(cm), entityKeys: null, samples: [], entities: [] };
+          var cityMap = {
+            keys: Object.keys(cm),
+            gridId: cm.gridId,
+            unlocked_areas: cm.unlocked_areas || null,
+            blocked_areas: cm.blocked_areas || null,
+            entityKeys: null,
+            samples: [],
+            entities: []
+          };
           for (var mi = 0; mi < list.length; mi++) {
             var me = list[mi];
             if (!me || typeof me !== 'object') { continue; }

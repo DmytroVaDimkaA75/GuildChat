@@ -434,7 +434,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v44',
+      v: 'v45',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -531,7 +531,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v44</Text>
+        <Text style={styles.status}>{status}  ·  v45</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -705,16 +705,38 @@ export default function FoeSyncScreen() {
           {found.cityMap ? (
             <>
               <Text style={styles.section}>МАПА МІСТА: {found.cityMap.entities.length} обʼєктів</Text>
-              <Text style={styles.subSection}>city_map ключі:</Text>
-              <Text style={styles.diag}>{(found.cityMap.keys || []).join(', ')}</Text>
-              <Text style={styles.subSection}>поля обʼєкта:</Text>
-              <Text style={styles.diag}>{(found.cityMap.entityKeys || []).join(', ')}</Text>
+              <Text style={styles.subSection}>unlocked_areas:</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.cityMap.unlocked_areas, null, 0).slice(0, 1500)}
+              </Text>
+              <Text style={styles.subSection}>поля обʼєкта: {(found.cityMap.entityKeys || []).join(', ')}</Text>
               <Text style={styles.subSection}>приклади (сирі):</Text>
               <Text style={styles.diag}>
-                {JSON.stringify(found.cityMap.samples, null, 1).slice(0, 3000)}
+                {JSON.stringify(found.cityMap.samples, null, 1).slice(0, 2000)}
               </Text>
             </>
           ) : null}
+
+          {found.metaInfo ? (
+            <>
+              <Text style={styles.section}>МЕТАДАНІ (StaticDataService):</Text>
+              <Text style={styles.subSection}>ключі: {(found.metaInfo.keys || []).join(', ')}</Text>
+              {found.metaInfo.cityEntityKey ? (
+                <>
+                  <Text style={styles.subSection}>
+                    {found.metaInfo.cityEntityKey}: {found.metaInfo.cityEntityCount} шт
+                  </Text>
+                  <Text style={styles.diag}>
+                    {JSON.stringify(found.metaInfo.cityEntitySample, null, 1).slice(0, 2500)}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.kvMuted}>ключа з будівлями не знайдено</Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>метадані ще не спіймано</Text>
+          )}
 
           {found.assetUrls && found.assetUrls.length ? (
             <>
