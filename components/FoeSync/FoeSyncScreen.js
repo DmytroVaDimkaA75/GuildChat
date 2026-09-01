@@ -173,8 +173,30 @@ export default function FoeSyncScreen() {
     [goods]
   );
 
-  // Суми по типах (режим "all")
-  const sumsAll = useMemo(() => agg?.sumsAll || {}, [agg]);
+  // Об'єднуємо суми з усіх джерел бонусів: постійні + тимчасові + активні розхідники.
+  const sumsAll = useMemo(() => {
+    const merged = {};
+    const add = (m) => {
+      if (!m) return;
+      for (const [k, v] of Object.entries(m)) merged[k] = (merged[k] || 0) + v;
+    };
+    add(found.boostAgg?.sumsAll);
+    add(found.boostLimitedAgg?.sumsAll);
+    add(found.boostTimerAgg?.sumsAll);
+    if (!found.boostAgg) add(found.boostStartupAgg?.sumsAll);
+    return merged;
+  }, [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg, found.boostStartupAgg]);
+
+  // Прицільні бонуси (targetedFeature ≠ all) — окремо, для звірки
+  const sumsByFeature = useMemo(() => {
+    const merged = {};
+    for (const src of [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg]) {
+      if (!src?.sumsByFeature) continue;
+      for (const [k, v] of Object.entries(src.sumsByFeature)) merged[k] = (merged[k] || 0) + v;
+    }
+    return merged;
+  }, [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg]);
+
   const sumsAllEntries = useMemo(
     () => Object.entries(sumsAll).sort((a, b) => b[1] - a[1]),
     [sumsAll]
@@ -282,7 +304,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v4</Text>
+        <Text style={styles.status}>{status}  ·  v5</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -315,6 +337,24 @@ export default function FoeSyncScreen() {
               </Text>
             </>
           ) : null}
+
+          {Object.keys(sumsByFeature).length ? (
+            <>
+              <Text style={styles.subSection}>ПРИЦІЛЬНІ (targetedFeature ≠ all):</Text>
+              <Text style={styles.diag}>
+                {Object.entries(sumsByFeature)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join('\n')}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>прицільних бонусів немає</Text>
+          )}
+
+          <Text style={styles.subSection}>
+            тимч.: {found.boostLimitedAgg?.count ?? 0} · таймер: {found.boostTimerAgg?.count ?? 0}
+          </Text>
 
           {agg ? (
             <>
