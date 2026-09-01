@@ -17,6 +17,12 @@ import {
   View,
 } from 'react-native';
 // import { database } from '../../firebaseConfig'; // УДАЛЕНО
+import {
+  FOE_CONSENT_KEY,
+  FOE_CONSENT_BODY,
+  FOE_CONSENT_BULLETS,
+  FOE_CONSENT_NOTE,
+} from '../FoeSync/foeConsent';
 import { getUkrainianRoleLabel } from '../../constants/roles';
 import { DarkThemeColors } from '../../constants/theme';
 import {
@@ -59,6 +65,7 @@ const ProfileMain = () => {
   const [activeWorld, setActiveWorld] = useState('');
   const [guilds, setGuilds] = useState([]);
   const [foeSync, setFoeSync] = useState({ loading: true, syncedAt: null });
+  const [foeExpanded, setFoeExpanded] = useState(false);
   const [googleStatus, setGoogleStatus] = useState('loading');
   const [googleAccount, setGoogleAccount] = useState(null);
   const [googleActionBusy, setGoogleActionBusy] = useState(false);
@@ -369,47 +376,60 @@ const ProfileMain = () => {
         </View>
 
         {/* Синхронізація з грою */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Синхронізація з грою</Text>
-          {foeSync.loading ? (
-            <View style={styles.itemRowNoBorder}>
-              <ActivityIndicator size="small" color={DarkThemeColors.primary} />
+        {(() => {
+          const synced = !foeSync.loading && !!foeSync.syncedAt;
+          return (
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={styles.rowBetween}
+                activeOpacity={synced ? 1 : 0.6}
+                disabled={synced}
+                onPress={() => setFoeExpanded(v => !v)}
+              >
+                <Text style={styles.sectionTitle}>Синхронізація з грою</Text>
+                {foeSync.loading ? (
+                  <ActivityIndicator size="small" color={DarkThemeColors.primary} />
+                ) : synced ? (
+                  <View style={styles.rowContent}>
+                    <Ionicons name="checkmark-circle" size={18} color={DarkThemeColors.success} />
+                    <Text style={styles.foeSyncedText}>
+                      {new Date(foeSync.syncedAt).toLocaleDateString('uk')}
+                    </Text>
+                  </View>
+                ) : (
+                  <Ionicons
+                    name={foeExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    color={DarkThemeColors.primary}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {!synced && foeExpanded && (
+                <View style={styles.foeConsent}>
+                  <Text style={styles.foeConsentBody}>{FOE_CONSENT_BODY}</Text>
+                  {FOE_CONSENT_BULLETS.map((b, i) => (
+                    <Text key={i} style={styles.foeConsentBullet}>{'• '}{b}</Text>
+                  ))}
+                  <Text style={styles.foeConsentNote}>{FOE_CONSENT_NOTE}</Text>
+                  <TouchableOpacity
+                    style={styles.foeConsentBtn}
+                    onPress={async () => {
+                      try {
+                        await AsyncStorage.setItem(FOE_CONSENT_KEY, 'yes');
+                      } catch (_e) {
+                        // не критично
+                      }
+                      navigation.navigate('FoeSync', { screen: 'FoeSyncScreen' });
+                    }}
+                  >
+                    <Text style={styles.foeConsentBtnText}>Погоджуюсь, продовжити</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-          ) : foeSync.syncedAt ? (
-            <View style={styles.itemRowNoBorder}>
-              <View style={styles.rowContent}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={20}
-                  color={DarkThemeColors.primary}
-                  style={styles.iconSpacing}
-                />
-                <Text style={styles.mainText}>
-                  Синхронізовано{'  '}
-                  {new Date(foeSync.syncedAt).toLocaleDateString('uk')}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.itemRow}
-              onPress={() =>
-                navigation.navigate('FoeSync', { screen: 'FoeSyncScreen' })
-              }
-            >
-              <View style={styles.rowContent}>
-                <Ionicons
-                  name="sync"
-                  size={20}
-                  color={DarkThemeColors.warning}
-                  style={styles.iconSpacing}
-                />
-                <Text style={styles.mainText}>Синхронізувати дані з гри</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={DarkThemeColors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
+          );
+        })()}
 
         {Platform.OS === 'android' && (
           <>
@@ -609,6 +629,34 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowContent: { flexDirection: 'row', alignItems: 'center' },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  foeSyncedText: { color: DarkThemeColors.textSecondary, fontSize: 13, marginLeft: 6 },
+  foeConsent: { marginTop: 10 },
+  foeConsentBody: { color: DarkThemeColors.text, fontSize: 14, lineHeight: 21, marginBottom: 10 },
+  foeConsentBullet: {
+    color: DarkThemeColors.text,
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  foeConsentNote: {
+    color: DarkThemeColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  foeConsentBtn: {
+    backgroundColor: DarkThemeColors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  foeConsentBtnText: { color: '#00121f', fontSize: 15, fontWeight: '700' },
   mainText: { fontSize: 14, marginLeft: 8, color: '#f4f7fb' },
   iconSpacing: { marginRight: 10 },
   googleHeader: {
