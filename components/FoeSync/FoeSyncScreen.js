@@ -376,7 +376,7 @@ export default function FoeSyncScreen() {
     } finally {
       setSaving(false);
     }
-  }, [hasSomething, guildId, userId, player, combat, goods, found.prodBuildings]);
+  }, [hasSomething, guildId, userId, player, combat, goods, found.prodBuildings, sumsAll]);
 
   const onReload = useCallback(() => {
     setStatus('Перезавантаження гри…');
