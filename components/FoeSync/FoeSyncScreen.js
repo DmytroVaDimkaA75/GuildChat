@@ -468,7 +468,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v39</Text>
+        <Text style={styles.status}>{status}  ·  v40</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -624,6 +624,19 @@ export default function FoeSyncScreen() {
               </Text>
             </>
           ) : null}
+
+          {found.resourceDefs ? (
+            <>
+              <Text style={styles.section}>ResourceService.getResourceDefinitions:</Text>
+              <Text style={styles.diag}>
+                {JSON.stringify(found.resourceDefs, null, 1).slice(0, 3500)}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.kvMuted}>
+              визначення ресурсів ще не спіймано — відкрийте у грі вікно товарів/скарбниці
+            </Text>
+          )}
 
           {found.domBoosts ? (
             <>
