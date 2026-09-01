@@ -309,7 +309,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v11</Text>
+        <Text style={styles.status}>{status}  ·  v12</Text>
 
         <ScrollView style={styles.panelScroll} contentContainerStyle={{ paddingBottom: 8 }}>
           {player ? (
@@ -373,14 +373,20 @@ export default function FoeSyncScreen() {
           {found.domBoosts ? (
             <>
               <Text style={styles.subSection}>
-                з екрана гри (у діалозі: {found.domBoosts.inDialog ? 'так' : 'ні'}):
+                з екрана гри (вікно: {found.domBoosts.hasWindow ? 'так' : 'ні'}):
               </Text>
               <Text style={styles.diag}>
-                {found.domBoosts.hits
-                  .map((h) => `${h.value}  ← ${h.ctx}`)
+                {(found.domBoosts.pct || [])
+                  .map((h) => `${h.v}  ← ${h.ctx}`)
                   .join('\n')
-                  .slice(0, 2500)}
+                  .slice(0, 1800)}
               </Text>
+              {found.domBoosts.winText ? (
+                <>
+                  <Text style={styles.subSection}>текст вікна:</Text>
+                  <Text style={styles.diag}>{found.domBoosts.winText}</Text>
+                </>
+              ) : null}
             </>
           ) : null}
 

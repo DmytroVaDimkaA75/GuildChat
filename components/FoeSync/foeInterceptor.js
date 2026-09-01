@@ -242,42 +242,39 @@ export const FOE_INTERCEPTOR_JS = `
   } catch (e) {}
 
   // --- Читання чисел прямо з екрана гри (вікно "Управління армією") ---
-  // FoE малює діалоги звичайним HTML, тож можна прочитати відображені відсотки.
   function scanArmyDom() {
     try {
-      var dlg = document.querySelector(
-        '#unit-management, .unit-management, [class*="army-management"], [class*="unitManagement"], #army_buildings, .army-management-window'
+      // будь-яке відкрите вікно гри
+      var win = document.querySelector(
+        '.window-frame, .game-window, [class*="window"], .dialog, [role="dialog"]'
       );
-      var root = dlg || document.body;
-      if (!root) { return; }
-      // збираємо всі елементи з текстом "NNNN%"
-      var hits = [];
-      var nodes = root.querySelectorAll('*');
-      for (var i = 0; i < nodes.length && hits.length < 60; i++) {
+      var pct = [];
+      var scope = win || document.body;
+      var nodes = scope.querySelectorAll('*');
+      for (var i = 0; i < nodes.length && pct.length < 80; i++) {
         var n = nodes[i];
-        if (n.children && n.children.length) { continue; } // тільки листові вузли
-        var tx = (n.textContent || '').trim();
-        var m = tx.match(/^\\+?\\s*([\\d.,]+)\\s*%$/);
-        if (!m) { continue; }
-        var label = '';
+        if (n.children && n.children.length) { continue; }
+        var tx = (n.textContent || '').replace(/\\u00a0/g, ' ').trim();
+        if (!/%/.test(tx) || tx.length > 20) { continue; }
+        if (!/[0-9]/.test(tx)) { continue; }
+        var ctx = '';
         var p = n.parentElement;
-        for (var d = 0; d < 4 && p; d++) {
-          if (p.className && typeof p.className === 'string') { label += ' ' + p.className; }
-          if (p.getAttribute) {
-            var tt = p.getAttribute('title') || p.getAttribute('aria-label');
-            if (tt) { label += ' [' + tt + ']'; }
-          }
+        for (var d = 0; d < 5 && p; d++) {
+          if (typeof p.className === 'string' && p.className) { ctx += ' .' + p.className.split(' ').join('.'); }
+          var tt = p.getAttribute && (p.getAttribute('title') || p.getAttribute('class'));
           p = p.parentElement;
         }
-        hits.push({ value: tx, ctx: label.trim().slice(0, 120) });
+        pct.push({ v: tx, ctx: ctx.trim().slice(0, 140) });
       }
-      if (hits.length) {
-        post({ __foeSync: true, kind: 'domBoosts', inDialog: !!dlg, hits: hits });
+      // текст усього вікна (щоб побачити структуру)
+      var winText = win ? (win.innerText || win.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 1200) : '';
+      if (pct.length || winText) {
+        post({ __foeSync: true, kind: 'domBoosts', hasWindow: !!win, pct: pct, winText: winText });
       }
     } catch (e) {}
   }
 
-  setInterval(scanArmyDom, 4000);
+  setInterval(scanArmyDom, 3000);
 
   post({ __foeSync: true, kind: 'ready' });
 })();
