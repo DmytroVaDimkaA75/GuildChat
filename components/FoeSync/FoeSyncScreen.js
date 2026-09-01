@@ -28,6 +28,7 @@ import { GuildContext } from '../../GuildContext';
 import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { saveFoeStats } from '../../src/services/foeStats';
 import FoeIcon, { loadCachedIconSheet, fetchIconSheet } from './FoeIcon';
+import FoeCityMap from './FoeCityMap';
 
 const COLORS = {
   background: '#0f1115',
@@ -434,7 +435,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v45',
+      v: 'v46',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -531,7 +532,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v45</Text>
+        <Text style={styles.status}>{status}  ·  v46</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -705,6 +706,7 @@ export default function FoeSyncScreen() {
           {found.cityMap ? (
             <>
               <Text style={styles.section}>МАПА МІСТА: {found.cityMap.entities.length} обʼєктів</Text>
+              <FoeCityMap cityMap={found.cityMap} />
               <Text style={styles.subSection}>unlocked_areas:</Text>
               <Text style={styles.diag}>
                 {JSON.stringify(found.cityMap.unlocked_areas, null, 0).slice(0, 1500)}
@@ -719,19 +721,19 @@ export default function FoeSyncScreen() {
 
           {found.metaInfo ? (
             <>
-              <Text style={styles.section}>МЕТАДАНІ (StaticDataService):</Text>
-              <Text style={styles.subSection}>ключі: {(found.metaInfo.keys || []).join(', ')}</Text>
-              {found.metaInfo.cityEntityKey ? (
+              <Text style={styles.section}>МЕТАДАНІ: {found.metaInfo.blockCount} блоків</Text>
+              <Text style={styles.diag}>{(found.metaInfo.blocks || []).join('\n')}</Text>
+              {found.metaInfo.cityEntities ? (
                 <>
                   <Text style={styles.subSection}>
-                    {found.metaInfo.cityEntityKey}: {found.metaInfo.cityEntityCount} шт
+                    будівлі: {found.metaInfo.cityEntities.count} (з {found.metaInfo.cityEntities.from})
                   </Text>
                   <Text style={styles.diag}>
-                    {JSON.stringify(found.metaInfo.cityEntitySample, null, 1).slice(0, 2500)}
+                    {JSON.stringify(found.metaInfo.cityEntities.sample, null, 1).slice(0, 2500)}
                   </Text>
                 </>
               ) : (
-                <Text style={styles.kvMuted}>ключа з будівлями не знайдено</Text>
+                <Text style={styles.kvMuted}>блока з розмірами будівель не знайдено в цьому пакеті</Text>
               )}
             </>
           ) : (

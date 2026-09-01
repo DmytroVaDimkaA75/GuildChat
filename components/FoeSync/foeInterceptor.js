@@ -140,17 +140,28 @@ export const FOE_INTERCEPTOR_JS = `
         got = true;
       }
 
-      // Метадані гри — там визначення будівель з розмірами
-      if (cls === 'StaticDataService' && mth === 'getMetadata' && rd && typeof rd === 'object') {
-        var meta = { keys: Object.keys(rd), cityEntitySample: null, sizeFieldHint: null };
-        for (var mk in rd) {
-          if (!Object.prototype.hasOwnProperty.call(rd, mk)) { continue; }
-          var mv = rd[mk];
-          if (/city.?entit|building/i.test(mk) && mv) {
-            var arr = Array.isArray(mv) ? mv : Object.keys(mv).map(function (kk) { return mv[kk]; });
-            meta.cityEntityKey = mk;
-            meta.cityEntityCount = arr.length;
-            meta.cityEntitySample = arr.slice(0, 3);
+      // Метадані гри — там визначення будівель з розмірами.
+      // Відповідь — масив блоків метаданих різних типів.
+      if (cls === 'StaticDataService' && mth === 'getMetadata' && rd) {
+        var blocks = Array.isArray(rd) ? rd : Object.keys(rd).map(function (kk) { return rd[kk]; });
+        var meta = { blockCount: blocks.length, blocks: [], cityEntities: null };
+        for (var bi = 0; bi < blocks.length; bi++) {
+          var blk = blocks[bi];
+          if (!blk || typeof blk !== 'object') { continue; }
+          var cn = String(blk.__class__ || blk.class || blk.type || '?');
+          var bkeys = Object.keys(blk);
+          meta.blocks.push(cn + ' {' + bkeys.slice(0, 8).join(',') + '}');
+          // шукаємо блок з визначеннями будівель
+          var payload = blk.metadata || blk.data || blk.entities || blk;
+          var parr = Array.isArray(payload) ? payload : (payload && typeof payload === 'object'
+            ? Object.keys(payload).map(function (kk) { return payload[kk]; }) : null);
+          if (parr && parr.length && parr[0] && (parr[0].cityentity_id || parr[0].id) &&
+              (parr[0].width != null || parr[0].length != null || parr[0].requirements != null)) {
+            meta.cityEntities = {
+              from: cn,
+              count: parr.length,
+              sample: parr.slice(0, 4)
+            };
           }
         }
         found.metaInfo = meta;
