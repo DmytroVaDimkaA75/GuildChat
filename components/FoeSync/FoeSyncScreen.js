@@ -480,24 +480,37 @@ export default function FoeSyncScreen() {
     return () => clearInterval(t);
   }, []);
 
-  // Одноразова перевірка синхронізації через ~12с після (пере)завантаження гри
-  const syncCheckedRef = useRef(false);
+  // Перевірка синхронізації. health тримаємо в ref, щоб таймер бачив свіже.
+  const healthRef = useRef(health);
+  healthRef.current = health;
+  const syncNotifiedRef = useRef(false);
   useEffect(() => {
-    syncCheckedRef.current = false;
-    const t = setTimeout(() => {
-      if (syncCheckedRef.current) return;
-      syncCheckedRef.current = true;
-      if (health.packets > 0) {
+    if (phase !== 'game') return;
+    syncNotifiedRef.current = false;
+    // одразу як прийшов перший пакет — тост
+    const poll = setInterval(() => {
+      if (!syncNotifiedRef.current && healthRef.current.packets > 0) {
+        syncNotifiedRef.current = true;
         if (ToastAndroid?.show) ToastAndroid.show('Синхронізовано з грою ✓', ToastAndroid.SHORT);
-      } else {
+        clearInterval(poll);
+      }
+    }, 500);
+    // якщо за 8с нічого — алерт
+    const timeout = setTimeout(() => {
+      clearInterval(poll);
+      if (!syncNotifiedRef.current && healthRef.current.packets === 0) {
+        syncNotifiedRef.current = true;
         Alert.alert(
-          'Немає даних з гри',
-          'Застосунок не отримує пакети від Forge of Empires. Переконайтесь, що ви увійшли в гру у вікні вище, і натисніть «Оновити».'
+          'Немає звʼязку з грою',
+          'Застосунок не отримує дані від Forge of Empires.\n\nПеревірте, що ви увійшли в гру у вікні вище, і натисніть «Оновити».'
         );
       }
-    }, 12000);
-    return () => clearTimeout(t);
-  }, [webKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, 8000);
+    return () => {
+      clearInterval(poll);
+      clearTimeout(timeout);
+    };
+  }, [phase, webKey]);
 
   const healthText = (() => {
     if (!health.ready) return '⏳ слухач ще не запустився';
@@ -509,7 +522,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v52',
+      v: 'v53',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -606,7 +619,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v52</Text>
+        <Text style={styles.status}>{status}  ·  v53</Text>
         <Text
           style={[
             styles.status,
