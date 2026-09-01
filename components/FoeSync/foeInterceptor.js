@@ -182,28 +182,30 @@ export const FOE_INTERCEPTOR_JS = `
           found.cityGBs = gbs;
           found.cityGBsAll = gbs.length;
 
-          // Виробничі будівлі: що готово до збору
-          var prod = [];
-          var now = Math.floor(Date.now() / 1000);
+          // Виробничі будівлі: сирий стан. Відкидаємо дороги/декор/порожні місця.
+          var prodRaw = [];
+          var typeCounts = {};
           for (var pi = 0; pi < list.length; pi++) {
             var pe = list[pi];
-            if (!pe || typeof pe !== 'object' || !pe.state) { continue; }
-            var st = pe.state;
-            var stc = String(st.__class__ || '');
-            // цікавлять ті, що мають готовий продукт або йде виробництво
-            if (!/Produc|Ready|Idle/i.test(stc) && !st.current_product && !st.next_state_transition_at) { continue; }
-            prod.push({
+            if (!pe || typeof pe !== 'object') { continue; }
+            var pt = String(pe.type || '');
+            typeCounts[pt] = (typeCounts[pt] || 0) + 1;
+            if (/street|decoration|bonus_area|main_building|token|off_grid/i.test(pt)) { continue; }
+            if (!pe.state) { continue; }
+            var hasProd =
+              pe.state.current_product ||
+              pe.state.next_state_transition_at ||
+              /Produc|Ready|Collect|Polish|Motiv/i.test(String(pe.state.__class__ || ''));
+            if (!hasProd && prodRaw.length >= 6) { continue; }
+            prodRaw.push({
               id: pe.cityentity_id,
-              type: pe.type,
-              stateClass: stc,
-              readyAt: st.next_state_transition_at || null,
-              isReady: st.next_state_transition_at ? (st.next_state_transition_at <= now) : (/Ready/i.test(stc)),
-              currentProduct: st.current_product || null,
-              production: st.production || pe.production || null,
-              startedAt: st.state_transitioned_at || null
+              type: pt,
+              state: pe.state
             });
           }
-          found.cityProduction = prod;
+          found.cityProdRaw = prodRaw.slice(0, 8);
+          found.cityProdCount = prodRaw.length;
+          found.cityTypeCounts = typeCounts;
           found.cityEntitiesAll = list.length;
         }
         got = true;
