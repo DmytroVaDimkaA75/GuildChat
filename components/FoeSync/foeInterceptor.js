@@ -153,19 +153,25 @@ export const FOE_INTERCEPTOR_JS = `
           found.boostStartupAgg = aggregateBoosts(rd.boosts);
           got = true;
         }
-        // Настрій міста + усе, де у ключі є "happ"/"enthus"
+        // Настрій міста: шукаємо в rd, user_data, resources усе про happiness/enthus/mood
         var happ = {};
-        var rres = (rd.resources && rd.resources.resources) || rd.resources || {};
-        for (var hk in rres) {
-          if (Object.prototype.hasOwnProperty.call(rres, hk) && /happ|enthus|mood/i.test(hk)) {
-            happ[hk] = rres[hk];
+        function grabHapp(obj, prefix) {
+          if (!obj || typeof obj !== 'object') { return; }
+          for (var hk in obj) {
+            if (!Object.prototype.hasOwnProperty.call(obj, hk)) { continue; }
+            if (/happ|enthus|mood|content/i.test(hk) && typeof obj[hk] !== 'object') {
+              happ[prefix + hk] = obj[hk];
+            }
           }
         }
-        if (ud.is_enthusiastic != null) { happ.is_enthusiastic = ud.is_enthusiastic; }
-        if (ud.happiness != null) { happ.ud_happiness = ud.happiness; }
-        if (rd.happiness != null) { happ.rd_happiness = rd.happiness; }
+        var rres = (rd.resources && rd.resources.resources) || rd.resources || {};
+        grabHapp(rd, 'rd.');
+        grabHapp(ud, 'ud.');
+        grabHapp(rres, 'res.');
+        grabHapp(rd.city_map, 'map.');
         found.happiness = happ;
         found.startupResourceKeys = Object.keys(rres);
+        found.userDataKeys = Object.keys(ud);
         // Огляд стартового пакета: назви ключів верхнього рівня + усе, де є "boost"
         var startupKeys = [];
         for (var sk in rd) {

@@ -461,7 +461,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v26</Text>
+        <Text style={styles.status}>{status}  ·  v27</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -548,6 +548,8 @@ export default function FoeSyncScreen() {
                     .map((t) => `${t}: ${sumsAll[t] ?? '—'}`)
                     .join('\n')}
                   {'\n'}настрій: {JSON.stringify(found.happiness || {})}
+                  {'\n'}ud keys: {JSON.stringify(found.userDataKeys || [])}
+                  {'\n'}res keys: {JSON.stringify(found.startupResourceKeys || [])}
                 </Text>
                 {Object.keys(found.prodUnknownStates || {}).length ? (
                   <Text style={styles.kvMuted}>
