@@ -136,11 +136,18 @@ function computeCombat(sumsAll, sumsByFeature, cityGBs) {
   return { base, contexts, quantum, feat, unknown, gbTotal };
 }
 
-// guildId виду "ru11_17480" -> світ "ru11" -> адреса гри
-function worldUrlFromGuildId(guildId) {
+// guildId виду "ru11_17480" -> світ "ru11".
+function worldIdFromGuildId(guildId) {
   const world = String(guildId || '').split('_')[0].trim();
-  if (!world) return null;
-  return `https://${world}.forgeofempires.com/`;
+  return world || null;
+}
+
+// Пряме відкриття гри потрібного світу. За наявності збереженої сесії гра
+// відкриється одразу (минаючи вхід і вибір світу). Без сесії гра сама
+// перекине на сторінку входу.
+function gameUrlFromGuildId(guildId) {
+  const world = worldIdFromGuildId(guildId);
+  return world ? `https://${world}.forgeofempires.com/game/index?` : null;
 }
 
 // Товари гравця: { назва: кількість }
@@ -183,7 +190,7 @@ export default function FoeSyncScreen() {
     };
   }, []);
 
-  const gameUrl = useMemo(() => worldUrlFromGuildId(guildId), [guildId]);
+  const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
 
   const acceptConsent = useCallback(async () => {
     await AsyncStorage.setItem(CONSENT_KEY, 'yes');
@@ -384,7 +391,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v15</Text>
+        <Text style={styles.status}>{status}  ·  v16</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
