@@ -1279,6 +1279,9 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
           name="FoeSync"
           component={FoeSyncStack}
           options={{
+            // lazy:false — екран монтується одразу з меню, тож вікно гри
+            // починає завантажуватись у фоні ще до відкриття пункту.
+            lazy: false,
             drawerLabel: hasTesterAccess ? 'Синхронізація з грою' : null,
             drawerIconComponent: ({ color }) => (
               <MaterialIcons name="sync" size={24} color={color} />

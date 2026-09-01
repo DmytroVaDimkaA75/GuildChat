@@ -24,6 +24,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { WebView } from 'react-native-webview';
 
+import { useIsFocused } from '@react-navigation/native';
+
 import { GuildContext } from '../../GuildContext';
 import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { saveFoeStats } from '../../src/services/foeStats';
@@ -480,12 +482,14 @@ export default function FoeSyncScreen() {
     return () => clearInterval(t);
   }, []);
 
-  // Перевірка синхронізації. health тримаємо в ref, щоб таймер бачив свіже.
+  // Перевірка синхронізації — лише коли екран відкритий (гра може вантажитись
+  // у фоні, і алерт на іншому екрані був би недоречним).
+  const isFocused = useIsFocused();
   const healthRef = useRef(health);
   healthRef.current = health;
   const syncNotifiedRef = useRef(false);
   useEffect(() => {
-    if (phase !== 'game') return;
+    if (phase !== 'game' || !isFocused) return;
     syncNotifiedRef.current = false;
     // одразу як прийшов перший пакет — тост
     const poll = setInterval(() => {
@@ -510,7 +514,7 @@ export default function FoeSyncScreen() {
       clearInterval(poll);
       clearTimeout(timeout);
     };
-  }, [phase, webKey]);
+  }, [phase, webKey, isFocused]);
 
   const healthText = (() => {
     if (!health.ready) return '⏳ слухач ще не запустився';
@@ -522,7 +526,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v53',
+      v: 'v54',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -619,7 +623,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v53</Text>
+        <Text style={styles.status}>{status}  ·  v54</Text>
         <Text
           style={[
             styles.status,
