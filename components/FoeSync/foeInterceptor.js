@@ -389,18 +389,35 @@ export const FOE_INTERCEPTOR_JS = `
         if (clickByText(/^(грати|играть|play)$/i)) { lastAdvance = now; return; }
       }
 
-      // Вибір світу: клікаємо елемент, що веде на потрібний worldId
+      // Вибір світу: клікаємо елемент, що веде на потрібний worldId.
+      // Дивимось і в головному документі, і всередині всіх iframe того ж домену.
       if (w) {
-        var cand = document.querySelectorAll('a, button, [onclick], [data-world], [class*="world"], [class*="server"], li, div[role="button"]');
-        var report = [];
+        var docs = [document];
+        var frames = document.querySelectorAll('iframe, frame');
+        for (var fi = 0; fi < frames.length; fi++) {
+          try {
+            var fd = frames[fi].contentDocument || (frames[fi].contentWindow && frames[fi].contentWindow.document);
+            if (fd) { docs.push(fd); }
+          } catch (e) {}
+        }
+        var cand = [];
+        for (var di = 0; di < docs.length; di++) {
+          try {
+            var got = docs[di].querySelectorAll('a, button, [onclick], [data-world], [class*="world"], [class*="server"], li, div[role="button"], span');
+            for (var gi = 0; gi < got.length; gi++) { cand.push(got[gi]); }
+          } catch (e) {}
+        }
+        var report = ['docs:' + docs.length + ' iframes:' + frames.length];
         for (var j = 0; j < cand.length; j++) {
           var el = cand[j];
           var blob = (el.getAttribute('href') || '') + ' ' +
+                     (el.href || '') + ' ' +
                      (el.getAttribute('onclick') || '') + ' ' +
                      (el.getAttribute('data-world') || '') + ' ' +
                      (el.getAttribute('data-id') || '') + ' ' +
+                     (el.getAttribute('data-server') || '') + ' ' +
                      (el.id || '') + ' ' +
-                     (el.className || '');
+                     (typeof el.className === 'string' ? el.className : '');
           var txt = (el.textContent || '').trim().slice(0, 24);
           if (report.length < 25 && (txt || blob.trim())) {
             report.push(el.tagName + ' "' + txt + '" | ' + blob.trim().slice(0, 120));
