@@ -526,7 +526,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v54',
+      v: 'v55',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -581,8 +581,8 @@ export default function FoeSyncScreen() {
           й так завантажує.{'\n'}
           • Пароль від гри не зберігається.{'\n'}
           • Дані бачить тільки ваша гільдія.{'\n'}
-          • Оновлення відбувається лише коли ви самі відкриваєте цей екран або тиснете
-          «Оновити».
+          • Вікно гри тримається завантаженим у фоні, поки застосунок відкритий, — щоб
+          дані були готові одразу. Це один звичайний запуск гри, а не постійне опитування.
         </Text>
         <Text style={styles.bodyMuted}>
           Зверніть увагу: використання сторонніх інструментів формально суперечить
@@ -623,7 +623,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v54</Text>
+        <Text style={styles.status}>{status}  ·  v55</Text>
         <Text
           style={[
             styles.status,
