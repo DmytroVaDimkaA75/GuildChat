@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import { WebView } from 'react-native-webview';
 
 import { GuildContext } from '../../GuildContext';
@@ -431,6 +432,29 @@ export default function FoeSyncScreen() {
     setWebKey((k) => k + 1);
   }, []);
 
+  const onCopyDiag = useCallback(async () => {
+    const dump = {
+      v: 'v44',
+      url: currentUrl,
+      player,
+      seen: Array.from(seen).sort(),
+      found,
+    };
+    let text;
+    try {
+      text = JSON.stringify(dump, null, 1);
+    } catch (_e) {
+      text = String(dump);
+    }
+    try {
+      await Clipboard.setStringAsync(text);
+      if (ToastAndroid?.show) ToastAndroid.show(`Скопійовано (${text.length} симв.)`, ToastAndroid.SHORT);
+      else Alert.alert('Скопійовано', `${text.length} символів у буфері`);
+    } catch (e) {
+      Alert.alert('Не вдалося скопіювати', String(e?.message || e));
+    }
+  }, [currentUrl, player, seen, found]);
+
   // --- Рендер ---
 
   if (phase === 'checking') {
@@ -507,7 +531,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v43</Text>
+        <Text style={styles.status}>{status}  ·  v44</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -828,13 +852,16 @@ export default function FoeSyncScreen() {
           <TouchableOpacity style={styles.secondaryBtn} onPress={onReload}>
             <Text style={styles.secondaryBtnText}>Оновити</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={onCopyDiag}>
+            <Text style={styles.secondaryBtnText}>Копіювати</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.primaryBtn, (!hasSomething || saving) && styles.btnDisabled]}
             onPress={onSave}
             disabled={!hasSomething || saving}
           >
             <Text style={styles.primaryBtnText}>
-              {saving ? 'Збереження…' : 'Зберегти у гільдію'}
+              {saving ? '…' : 'Зберегти'}
             </Text>
           </TouchableOpacity>
         </View>
