@@ -94,10 +94,15 @@ export const FOE_INTERCEPTOR_JS = `
     return out.length ? out : null;
   }
 
+  var packetNo = 0;
+
   function handleBody(body) {
     var data;
     try { data = JSON.parse(body); } catch (e) { return; }
     if (!Array.isArray(data)) { return; }
+
+    packetNo++;
+    post({ __foeSync: true, kind: 'packet', n: packetNo, size: body.length });
 
     var seen = [];
     var found = {};

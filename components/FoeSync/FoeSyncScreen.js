@@ -254,6 +254,7 @@ export default function FoeSyncScreen() {
 
   const [status, setStatus] = useState('Завантаження гри…');
   const [currentUrl, setCurrentUrl] = useState('');
+  const [health, setHealth] = useState({ ready: false, packets: 0, lastAt: 0 });
   const [seen, setSeen] = useState(() => new Set());
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({}); // { boosts, boostsStartup, goods, ... }
@@ -322,6 +323,12 @@ export default function FoeSyncScreen() {
 
     if (msg.kind === 'ready') {
       setStatus('Слухач працює. Увійдіть у гру, якщо потрібно…');
+      setHealth((h) => ({ ...h, ready: true }));
+      return;
+    }
+
+    if (msg.kind === 'packet') {
+      setHealth((h) => ({ ...h, ready: true, packets: msg.n, lastAt: Date.now() }));
       return;
     }
 
@@ -462,12 +469,28 @@ export default function FoeSyncScreen() {
     setStatus('Перезавантаження гри…');
     setFound({});
     setPlayer(null);
+    setHealth({ ready: false, packets: 0, lastAt: 0 });
     setWebKey((k) => k + 1);
   }, []);
 
+  // "тик" раз на секунду, щоб оновлювати "Xс тому"
+  const [, force] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const healthText = (() => {
+    if (!health.ready) return '⏳ слухач ще не запустився';
+    if (!health.packets) return '⚠️ слухач працює, але пакетів з гри ще НЕ отримано';
+    const ago = Math.round((Date.now() - health.lastAt) / 1000);
+    const flowing = ago < 20;
+    return `${flowing ? '✅' : '🟡'} пакетів: ${health.packets} · останній ${ago}с тому`;
+  })();
+
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v50',
+      v: 'v51',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -564,7 +587,22 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v50</Text>
+        <Text style={styles.status}>{status}  ·  v51</Text>
+        <Text
+          style={[
+            styles.status,
+            {
+              color: !health.ready
+                ? COLORS.textSecondary
+                : !health.packets
+                ? COLORS.danger
+                : COLORS.success,
+              marginBottom: 4,
+            },
+          ]}
+        >
+          {healthText}
+        </Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
