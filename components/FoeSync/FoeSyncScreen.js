@@ -26,6 +26,7 @@ import { WebView } from 'react-native-webview';
 import { GuildContext } from '../../GuildContext';
 import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { saveFoeStats } from '../../src/services/foeStats';
+import FoeIcon, { loadCachedIconSheet, fetchIconSheet } from './FoeIcon';
 
 const COLORS = {
   background: '#0f1115',
@@ -180,6 +181,21 @@ function formatResources(map) {
   return out.join('\n');
 }
 
+// Те саме, але як список рядків {key,label,value,isGoodsHeader} — для рендеру з іконками.
+function resourceRows(map) {
+  const entries = Object.entries(map || {}).filter(([, v]) => v);
+  const known = entries
+    .filter(([k]) => RES_LABELS[k])
+    .sort((a, b) => Object.keys(RES_LABELS).indexOf(a[0]) - Object.keys(RES_LABELS).indexOf(b[0]));
+  const goods = entries.filter(([k]) => !RES_LABELS[k]).sort((a, b) => b[1] - a[1]);
+  const rows = known.map(([k, v]) => ({ key: k, label: RES_LABELS[k], value: v }));
+  if (goods.length) {
+    rows.push({ header: 'Товари' });
+    goods.forEach(([k, v]) => rows.push({ key: k, label: k, value: v }));
+  }
+  return rows;
+}
+
 // Виробничі бонуси з getAllBoosts множать базову продукцію певних ресурсів.
 // final = floor(base * (1 + boost%/100)). Медалі/діаманти/ВП — без множника.
 const PROD_MULT_BY_RES = {
@@ -239,19 +255,23 @@ export default function FoeSyncScreen() {
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({}); // { boosts, boostsStartup, goods, ... }
   const [saving, setSaving] = useState(false);
+  const [iconSheet, setIconSheet] = useState(null); // { pngUrl, frames, sheetW, sheetH }
+  const iconSheetUrlsRef = useRef(null); // остання пара {png,json}, щоб не тягнути json повторно
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [consent, storedUser, storedGuild] = await Promise.all([
+      const [consent, storedUser, storedGuild, cachedSheet] = await Promise.all([
         AsyncStorage.getItem(CONSENT_KEY),
         AsyncStorage.getItem('userId'),
         AsyncStorage.getItem('guildId'),
+        loadCachedIconSheet(),
       ]);
       if (cancelled) return;
       setUserId(String(storedUser || '').trim() || null);
       setGuildId((prev) => prev || String(storedGuild || '').trim() || null);
       setPhase(consent === 'yes' ? 'game' : 'consent');
+      if (cachedSheet) setIconSheet(cachedSheet);
     })();
     return () => {
       cancelled = true;
@@ -293,6 +313,17 @@ export default function FoeSyncScreen() {
 
     if (msg.kind === 'worldSelectDump') {
       setFound((prev) => ({ ...prev, worldSelectDump: msg }));
+      return;
+    }
+
+    if (msg.kind === 'iconSheet' && msg.png && msg.json) {
+      const key = msg.png + '|' + msg.json;
+      if (iconSheetUrlsRef.current !== key) {
+        iconSheetUrlsRef.current = key;
+        fetchIconSheet(msg.png, msg.json)
+          .then((data) => setIconSheet(data))
+          .catch(() => {});
+      }
       return;
     }
 
@@ -476,7 +507,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v41</Text>
+        <Text style={styles.status}>{status}  ·  v42</Text>
         <Text style={styles.urlBar} numberOfLines={1} ellipsizeMode="middle">
           {currentUrl || '—'}
         </Text>
@@ -549,19 +580,29 @@ export default function FoeSyncScreen() {
 
           {found.prodBuildings ? (() => {
             const col = computeCollection(found.prodBuildings, sumsAll);
-            const readyLines = formatResources(col.ready);
+            const readyRows = resourceRows(col.ready);
             const pendingLines = formatResources(col.pending);
             return (
               <>
                 <Text style={styles.section}>ЗБІР З МІСТА</Text>
-                {readyLines.split('\n').map((ln, i) => (
-                  <Text key={i} style={ln.startsWith('—') ? styles.subSection : styles.kv}>
-                    {ln.startsWith('—') ? ln : (() => {
-                      const [name, val] = ln.split(': ');
-                      return <>{name}: <Text style={styles.kvVal}>{val}</Text></>;
-                    })()}
-                  </Text>
-                ))}
+                {readyRows.length ? (
+                  readyRows.map((r, i) =>
+                    r.header ? (
+                      <Text key={i} style={styles.subSection}>
+                        — {r.header} —
+                      </Text>
+                    ) : (
+                      <View key={i} style={styles.resRow}>
+                        <FoeIcon sheet={iconSheet} name={r.key} size={18} style={styles.resIcon} />
+                        <Text style={styles.kv}>
+                          {r.label}: <Text style={styles.kvVal}>{Number(r.value).toLocaleString('uk')}</Text>
+                        </Text>
+                      </View>
+                    )
+                  )
+                ) : (
+                  <Text style={styles.kvMuted}>—</Text>
+                )}
                 {pendingLines !== '—' ? (
                   <>
                     <Text style={styles.subSection}>ще виробляється (буде пізніше):</Text>
@@ -632,6 +673,10 @@ export default function FoeSyncScreen() {
               </Text>
             </>
           ) : null}
+
+          <Text style={styles.kvMuted}>
+            лист іконок: {iconSheet ? `завантажено, ${Object.keys(iconSheet.frames || {}).length} кадрів` : 'ще ні'}
+          </Text>
 
           {found.assetUrls && found.assetUrls.length ? (
             <>
@@ -829,6 +874,8 @@ const styles = StyleSheet.create({
   },
   subSection: { color: COLORS.textSecondary, fontSize: 11, marginTop: 8, marginBottom: 2 },
   kv: { color: COLORS.textPrimary, fontSize: 14, lineHeight: 20 },
+  resRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  resIcon: { marginRight: 6 },
   kvVal: { color: COLORS.success, fontWeight: '700' },
   kvMuted: { color: COLORS.textSecondary, fontSize: 13, fontStyle: 'italic' },
   diag: { color: COLORS.textSecondary, fontSize: 11, fontFamily: 'monospace', lineHeight: 15 },

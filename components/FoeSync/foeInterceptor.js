@@ -498,12 +498,15 @@ export const FOE_INTERCEPTOR_JS = `
     history.pushState = function () { var r = _ps.apply(this, arguments); reportUrl(); return r; };
   } catch (e) {}
 
-  // --- Пошук спрайт-листів з іконками товарів (картинка + json-карта координат) ---
+  // --- Пошук спрайт-листа "shared/icons" — там іконки money/supplies/medals/premium/... ---
+  var iconSheetSent = false;
   var seenAssets = {};
   function scanAssets() {
     try {
       var entries = performance.getEntriesByType('resource');
       var hits = [];
+      var png = null;
+      var json = null;
       for (var i = 0; i < entries.length; i++) {
         var u = entries[i].name || '';
         if (seenAssets[u]) { continue; }
@@ -511,9 +514,15 @@ export const FOE_INTERCEPTOR_JS = `
           seenAssets[u] = true;
           hits.push(u);
         }
+        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.png/i.test(u)) { png = u; }
+        if (/shared\\/icons\\/icons_0-[a-f0-9]+\\.json/i.test(u)) { json = u; }
       }
       if (hits.length) {
         post({ __foeSync: true, kind: 'assets', urls: hits });
+      }
+      if (!iconSheetSent && png && json) {
+        iconSheetSent = true;
+        post({ __foeSync: true, kind: 'iconSheet', png: png, json: json });
       }
     } catch (e) {}
   }
