@@ -1,14 +1,14 @@
 // components/FoeSync/FoeCityMap.js
 //
-// Мапа міста з city_map: сітка розблокованих ділянок + будівлі.
-// Якщо передано `defs` — малюємо справжні прямокутники width×length,
-// інакше кожна будівля 1×1. Тап по будівлі -> деталі знизу.
+// Мапа міста (city_map) за принципом мапи культурних поселень
+// (components/Culture/ObstaclesMap.js): один <Svg viewBox>, обрізка по
+// розблокованих ділянках через <ClipPath>, сітка <Line>, будівлі <Rect>,
+// а дотик — через прозорий <View> поверх, з перерахунком координат.
 
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
-// колір за типом (з визначення) або за grubою категорією з city_map
 const TYPE_COLOR = {
   street: '#2f3947',
   greatbuilding: '#f0c14b',
@@ -34,11 +34,11 @@ const LEGEND = [
   ['culture', 'культура'],
   ['military', 'військові'],
   ['greatbuilding', 'ВС'],
-  ['decoration', 'декор'],
   ['street', 'дороги'],
 ];
 
 export default function FoeCityMap({ cityMap, defs }) {
+  const { width: screenW } = useWindowDimensions();
   const [sel, setSel] = useState(null);
 
   const model = useMemo(() => {
@@ -60,78 +60,165 @@ export default function FoeCityMap({ cityMap, defs }) {
       const d = defs && defs[e.cid];
       bump(e.x, e.y, d?.width || 1, d?.length || 1);
     }
-    return { areas, ents, minX, minY, w: maxX - minX, h: maxY - minY };
+    return { areas, ents, minX, minY, gw: maxX - minX, gh: maxY - minY };
   }, [cityMap, defs]);
 
   if (!model) return null;
 
-  // масштаб під розумний розмір: не менше 8 px/клітинку, вписати ширину ~340
-  const tile = Math.max(6, Math.min(16, Math.floor(340 / Math.max(model.w, 1))));
-  const W = model.w * tile;
-  const H = model.h * tile;
+  // Малюємо у координатах тайлів; viewBox масштабує під екран.
+  const availW = Math.max(screenW - 28, 200);
+  const dispW = Math.min(availW, model.gw * 14);
+  const dispH = (dispW * model.gh) / model.gw;
+
+  const findAt = (tx, ty) => {
+    let best = null;
+    for (const e of model.ents) {
+      const d = defs && defs[e.cid];
+      const w = d?.width || 1;
+      const l = d?.length || 1;
+      if (tx >= e.x && tx < e.x + w && ty >= e.y && ty < e.y + l) {
+        // будівля перекриває дорогу — показуємо будівлю
+        if (!best || (e.type !== 'street' && best.e.type === 'street')) best = { e, d };
+      }
+    }
+    return best;
+  };
+
+  const onTouch = (ev) => {
+    const { locationX, locationY } = ev.nativeEvent;
+    const tx = model.minX + Math.floor((locationX / dispW) * model.gw);
+    const ty = model.minY + Math.floor((locationY / dispH) * model.gh);
+    setSel(findAt(tx, ty));
+  };
 
   return (
     <View>
-      <ScrollView horizontal>
-        <ScrollView style={{ maxHeight: 420 }}>
-          <Svg width={W} height={H}>
-            {model.areas.map((a, i) => (
-              <Rect
-                key={`a${i}`}
-                x={(a.x - model.minX) * tile}
-                y={(a.y - model.minY) * tile}
-                width={(a.width || 1) * tile}
-                height={(a.length || 1) * tile}
-                fill="#0c141c"
-                stroke="#243140"
-                strokeWidth={0.5}
-              />
-            ))}
-            {model.ents.map((e, i) => {
-              const d = defs && defs[e.cid];
-              const w = (d?.width || 1) * tile;
-              const h = (d?.length || 1) * tile;
-              return (
+      <ScrollView horizontal contentContainerStyle={{ paddingRight: 4 }}>
+        <ScrollView style={{ maxHeight: 460 }} nestedScrollEnabled>
+          <View style={{ width: dispW, height: dispH }}>
+            <Svg
+              width={dispW}
+              height={dispH}
+              viewBox={`${model.minX} ${model.minY} ${model.gw} ${model.gh}`}
+            >
+              <Defs>
+                <ClipPath id="cityClip">
+                  {model.areas.map((a, i) => (
+                    <Rect
+                      key={i}
+                      x={a.x}
+                      y={a.y}
+                      width={a.width || 1}
+                      height={a.length || 1}
+                    />
+                  ))}
+                </ClipPath>
+              </Defs>
+
+              {/* тло розблокованих ділянок */}
+              {model.areas.map((a, i) => (
                 <Rect
-                  key={i}
-                  x={(e.x - model.minX) * tile + 0.5}
-                  y={(e.y - model.minY) * tile + 0.5}
-                  width={Math.max(w - 1, 1)}
-                  height={Math.max(h - 1, 1)}
-                  rx={1.5}
-                  fill={colorFor(d?.type || e.type)}
-                  opacity={e.conn === 0 ? 0.35 : 1}
-                  onPress={() => setSel({ e, d })}
+                  key={`a${i}`}
+                  x={a.x}
+                  y={a.y}
+                  width={a.width || 1}
+                  height={a.length || 1}
+                  fill="#0c141c"
+                  stroke="#243140"
+                  strokeWidth={0.08}
                 />
-              );
-            })}
-          </Svg>
+              ))}
+
+              {/* будівлі — обрізані по дозволеній зоні */}
+              <G clipPath="url(#cityClip)">
+                {/* сітка */}
+                {Array.from({ length: model.gw + 1 }).map((_, i) => (
+                  <Line
+                    key={`v${i}`}
+                    x1={model.minX + i}
+                    y1={model.minY}
+                    x2={model.minX + i}
+                    y2={model.minY + model.gh}
+                    stroke="#1a2430"
+                    strokeWidth={0.04}
+                  />
+                ))}
+                {Array.from({ length: model.gh + 1 }).map((_, i) => (
+                  <Line
+                    key={`h${i}`}
+                    x1={model.minX}
+                    y1={model.minY + i}
+                    x2={model.minX + model.gw}
+                    y2={model.minY + i}
+                    stroke="#1a2430"
+                    strokeWidth={0.04}
+                  />
+                ))}
+
+                {model.ents.map((e, i) => {
+                  const d = defs && defs[e.cid];
+                  const isSel = sel && sel.e === e;
+                  return (
+                    <Rect
+                      key={i}
+                      x={e.x + 0.06}
+                      y={e.y + 0.06}
+                      width={Math.max((d?.width || 1) - 0.12, 0.1)}
+                      height={Math.max((d?.length || 1) - 0.12, 0.1)}
+                      rx={0.15}
+                      fill={colorFor(d?.type || e.type)}
+                      opacity={e.conn === 0 ? 0.35 : 1}
+                      stroke={isSel ? '#ffffff' : 'none'}
+                      strokeWidth={isSel ? 0.18 : 0}
+                    />
+                  );
+                })}
+              </G>
+            </Svg>
+
+            {/* прозорий шар для дотику (Pressable відрізняє тап від прокрутки) */}
+            <Pressable style={StyleSheet.absoluteFill} onPress={onTouch} />
+          </View>
         </ScrollView>
       </ScrollView>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 }}>
+      <View style={styles.legend}>
         {LEGEND.map(([t, label]) => (
-          <View key={t} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 }}>
-            <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: colorFor(t), marginRight: 3 }} />
-            <Text style={{ color: '#9aa3b2', fontSize: 10 }}>{label}</Text>
+          <View key={t} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
+            <Text style={styles.legendText}>{label}</Text>
           </View>
         ))}
       </View>
 
       {sel ? (
-        <View style={{ marginTop: 6, padding: 8, backgroundColor: '#0c141c', borderRadius: 6 }}>
-          <Text style={{ color: '#f4f7fb', fontWeight: '700' }}>{sel.d?.name || sel.e.cid}</Text>
-          <Text style={{ color: '#9aa3b2', fontSize: 12 }}>
+        <View style={styles.detail}>
+          <Text style={styles.detailName}>{sel.d?.name || sel.e.cid}</Text>
+          <Text style={styles.detailMeta}>
             {(sel.d?.type || sel.e.type)} · {(sel.d?.width || '?')}×{(sel.d?.length || '?')}
             {sel.d?.era ? ` · ${sel.d.era}` : ''} · поз. {sel.e.x},{sel.e.y}
             {sel.e.lvl != null ? ` · рів. ${sel.e.lvl}` : ''}
             {sel.e.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
           </Text>
           {sel.d?.description ? (
-            <Text style={{ color: '#c8d0dc', fontSize: 12, marginTop: 4 }}>{sel.d.description}</Text>
+            <Text style={styles.detailDesc}>{sel.d.description}</Text>
           ) : null}
         </View>
-      ) : null}
+      ) : (
+        <Text style={styles.hint}>Торкніться будівлі, щоб побачити деталі</Text>
+      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  legend: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 },
+  legendDot: { width: 9, height: 9, borderRadius: 2, marginRight: 3 },
+  legendText: { color: '#9aa3b2', fontSize: 10 },
+  hint: { color: '#9aa3b2', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
+  detail: { marginTop: 6, padding: 8, backgroundColor: '#0c141c', borderRadius: 6 },
+  detailName: { color: '#f4f7fb', fontWeight: '700' },
+  detailMeta: { color: '#9aa3b2', fontSize: 12, marginTop: 2 },
+  detailDesc: { color: '#c8d0dc', fontSize: 12, marginTop: 4 },
+});
