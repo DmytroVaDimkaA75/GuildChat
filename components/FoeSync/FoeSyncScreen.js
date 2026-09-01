@@ -480,6 +480,25 @@ export default function FoeSyncScreen() {
     return () => clearInterval(t);
   }, []);
 
+  // Одноразова перевірка синхронізації через ~12с після (пере)завантаження гри
+  const syncCheckedRef = useRef(false);
+  useEffect(() => {
+    syncCheckedRef.current = false;
+    const t = setTimeout(() => {
+      if (syncCheckedRef.current) return;
+      syncCheckedRef.current = true;
+      if (health.packets > 0) {
+        if (ToastAndroid?.show) ToastAndroid.show('Синхронізовано з грою ✓', ToastAndroid.SHORT);
+      } else {
+        Alert.alert(
+          'Немає даних з гри',
+          'Застосунок не отримує пакети від Forge of Empires. Переконайтесь, що ви увійшли в гру у вікні вище, і натисніть «Оновити».'
+        );
+      }
+    }, 12000);
+    return () => clearTimeout(t);
+  }, [webKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const healthText = (() => {
     if (!health.ready) return '⏳ слухач ще не запустився';
     if (!health.packets) return '⚠️ слухач працює, але пакетів з гри ще НЕ отримано';
@@ -490,7 +509,7 @@ export default function FoeSyncScreen() {
 
   const onCopyDiag = useCallback(async () => {
     const dump = {
-      v: 'v51',
+      v: 'v52',
       url: currentUrl,
       player,
       seen: Array.from(seen).sort(),
@@ -587,7 +606,7 @@ export default function FoeSyncScreen() {
       />
 
       <View style={styles.panel}>
-        <Text style={styles.status}>{status}  ·  v51</Text>
+        <Text style={styles.status}>{status}  ·  v52</Text>
         <Text
           style={[
             styles.status,
