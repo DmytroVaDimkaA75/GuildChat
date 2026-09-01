@@ -58,6 +58,7 @@ const ProfileMain = () => {
   const [userName, setUserName] = useState('');
   const [activeWorld, setActiveWorld] = useState('');
   const [guilds, setGuilds] = useState([]);
+  const [foeSync, setFoeSync] = useState({ loading: true, syncedAt: null });
   const [googleStatus, setGoogleStatus] = useState('loading');
   const [googleAccount, setGoogleAccount] = useState(null);
   const [googleActionBusy, setGoogleActionBusy] = useState(false);
@@ -135,6 +136,15 @@ const ProfileMain = () => {
           const onWorldNameUpdate = snap => snap.exists() && setActiveWorld(snap.val());
           worldNameRef.on('value', onWorldNameUpdate);
           listeners.push({ ref: worldNameRef, callback: onWorldNameUpdate });
+        }
+
+        if (guildId && userId) {
+          const foeRef = database().ref(`/guilds/${guildId}/foeStats/${userId}/updatedAt`);
+          const onFoe = snap => setFoeSync({ loading: false, syncedAt: snap.val() || null });
+          foeRef.on('value', onFoe);
+          listeners.push({ ref: foeRef, callback: onFoe });
+        } else {
+          setFoeSync({ loading: false, syncedAt: null });
         }
         
       } catch (e) {
@@ -356,6 +366,49 @@ const ProfileMain = () => {
           <TouchableOpacity style={styles.itemRow} onPress={() => navigation.navigate('ProfileData')}>
             <Text style={styles.mainText}>Я користувач</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Синхронізація з грою */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Синхронізація з грою</Text>
+          {foeSync.loading ? (
+            <View style={styles.itemRowNoBorder}>
+              <ActivityIndicator size="small" color={DarkThemeColors.primary} />
+            </View>
+          ) : foeSync.syncedAt ? (
+            <View style={styles.itemRowNoBorder}>
+              <View style={styles.rowContent}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={DarkThemeColors.primary}
+                  style={styles.iconSpacing}
+                />
+                <Text style={styles.mainText}>
+                  Синхронізовано{'  '}
+                  {new Date(foeSync.syncedAt).toLocaleDateString('uk')}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() =>
+                navigation.navigate('FoeSync', { screen: 'FoeSyncScreen' })
+              }
+            >
+              <View style={styles.rowContent}>
+                <Ionicons
+                  name="sync"
+                  size={20}
+                  color={DarkThemeColors.warning}
+                  style={styles.iconSpacing}
+                />
+                <Text style={styles.mainText}>Синхронізувати дані з гри</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={DarkThemeColors.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {Platform.OS === 'android' && (
