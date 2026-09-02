@@ -32,11 +32,12 @@ const FILTERS = [
   { id: 'premium', label: 'Діаманти', icon: 'premium', boost: null },
   { id: 'medals', label: 'Медалі', icon: 'medals', boost: null },
   {
-    id: 'blueprints',
-    label: 'Креслення',
-    icon: 'blueprint',
+    id: 'fragments',
+    label: 'Фрагменти',
+    icon: 'icon_fragment',
+    mat: 'extension',
     boost: null,
-    keys: ['blueprints', 'blueprint'],
+    keys: ['fragments', 'fragment'],
   },
   {
     id: 'goods',

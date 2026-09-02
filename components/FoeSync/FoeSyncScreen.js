@@ -232,7 +232,7 @@ export default function FoeSyncScreen() {
       : null;
 
     const dump = {
-      v: 'v77',
+      v: 'v87',
       url: currentUrl,
       player,
       defsProgress: defsProgress || null,
@@ -244,6 +244,15 @@ export default function FoeSyncScreen() {
       },
       boosts: found.boostAgg?.sumsAll || found.boostStartupAgg?.sumsAll || null,
       collectKeys: Array.from(collectKeys),
+      prodStateCounts: found.prodStateCounts || null,
+      prodProductClasses: found.prodProductClasses || null,
+      prodProductSamples: found.prodProductSamples || null,
+      resourceDefsWithFragment: Array.isArray(found.resourceDefs)
+        ? found.resourceDefs
+            .filter((r) => /frag/i.test(String(r?.id || '')) || /фрагмент/i.test(String(r?.name || '')))
+            .map((r) => ({ id: r.id, name: r.name }))
+            .slice(0, 40)
+        : null,
       goodDefs,
       iconSheet: iconSheet
         ? { pngUrl: iconSheet.pngUrl, frames: Object.keys(iconSheet.frames || {}) }

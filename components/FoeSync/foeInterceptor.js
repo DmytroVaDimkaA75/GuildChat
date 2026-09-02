@@ -288,6 +288,8 @@ export const FOE_INTERCEPTOR_JS = `
           var stateCounts = {};
           var buildings = [];        // по одній на будівлю
           var unknownStates = {};    // стани, з яких не змогли витягти продукт
+          var productClassCounts = {}; // {__class__: скільки продуктів}
+          var productSamples = [];   // сирий JSON перших виробництв з не-ресурсним продуктом
 
           function flattenProducts(po) {
             // playerResources.resources — це вже конкретний готовий приз,
@@ -316,7 +318,16 @@ export const FOE_INTERCEPTOR_JS = `
                   }
                 }
               } else if (pr.type && pr.type !== 'resources') {
-                out.other.push({ type: pr.type, clazz: pr.__class__ });
+                // не-ресурсний продукт (фрагменти, набори, юніти, ОФ-пакети…)
+                var entry = { type: pr.type, clazz: pr.__class__ };
+                var rw = pr.reward || pr.genericReward || null;
+                if (rw && typeof rw === 'object') {
+                  entry.rewardId = rw.id || rw.subType || null;
+                  entry.rewardType = rw.type || rw.__class__ || null;
+                  if (rw.amount != null) { entry.amount = rw.amount; }
+                  if (rw.name) { entry.name = rw.name; }
+                }
+                out.other.push(entry);
               }
             }
             return out;
@@ -345,11 +356,25 @@ export const FOE_INTERCEPTOR_JS = `
               readyAt: pst.next_state_transition_at || null
             };
             if (po2 && po2.products) {
+              for (var qc = 0; qc < po2.products.length; qc++) {
+                var pcc = po2.products[qc] && po2.products[qc].__class__;
+                if (pcc) { productClassCounts[pcc] = (productClassCounts[pcc] || 0) + 1; }
+              }
               var fl = flattenProducts(po2);
               b.det = fl.det;
               if (Object.keys(fl.guildDet).length) { b.guildDet = fl.guildDet; }
               if (fl.rnd) { b.rnd = true; }
-              if (fl.other.length) { b.other = fl.other; }
+              if (fl.other.length) {
+                b.other = fl.other;
+                if (productSamples.length < 8) {
+                  try {
+                    productSamples.push({
+                      cid: pe.cityentity_id,
+                      raw: JSON.stringify(po2).slice(0, 1500)
+                    });
+                  } catch (e) {}
+                }
+              }
             } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
               unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
               b.stateKeys = Object.keys(pst);
@@ -360,6 +385,8 @@ export const FOE_INTERCEPTOR_JS = `
           found.prodStateCounts = stateCounts;
           found.prodUnknownStates = unknownStates;
           found.prodBuildings = buildings;
+          found.prodProductClasses = productClassCounts;
+          found.prodProductSamples = productSamples;
           found.cityEntitiesAll = list.length;
 
           // --- Мапа міста: позиція+тип кожної будівлі ---
