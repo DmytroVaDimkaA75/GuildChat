@@ -17,6 +17,7 @@ import {
 
 import { useFoeSync } from './FoeSyncProvider';
 import { STATS, computeCombat, otherBonusRows } from './foeBonuses';
+import FoeIcon from './FoeIcon';
 
 const COLORS = {
   background: '#0f1115',
@@ -35,18 +36,28 @@ const SHORT = {
   defDefender: 'Захист (оборона)',
 };
 
+const STAT_ICON = {
+  attAttacker: 'att_boost_attacker',
+  defAttacker: 'def_boost_attacker',
+  attDefender: 'att_boost_defender',
+  defDefender: 'def_boost_defender',
+};
+
 const CONTEXTS = [
   ['battleground', 'Поля Гільдій'],
   ['guild_expedition', 'Виправа'],
 ];
 
-function CombatGrid({ values }) {
+function CombatGrid({ values, sheets }) {
   return (
     <View style={styles.combatRow}>
       {STATS.map((k) => (
         <View key={k} style={styles.combatCell}>
+          <View style={styles.combatCapRow}>
+            <FoeIcon sheet={sheets} name={STAT_ICON[k]} size={16} style={{ marginRight: 5 }} />
+            <Text style={styles.combatCap}>{SHORT[k]}</Text>
+          </View>
           <Text style={styles.combatNum}>{values[k]}%</Text>
-          <Text style={styles.combatCap}>{SHORT[k]}</Text>
         </View>
       ))}
     </View>
@@ -55,7 +66,8 @@ function CombatGrid({ values }) {
 
 export default function BonusesModal({ visible, onClose }) {
   const foe = useFoeSync();
-  const { found = {}, player, health = { packets: 0 } } = foe || {};
+  const { found = {}, player, health = { packets: 0 }, iconSheet, goodsSheet } = foe || {};
+  const sheets = [iconSheet, goodsSheet].filter(Boolean);
 
   const sumsAll = useMemo(() => {
     const merged = {};
@@ -108,20 +120,20 @@ export default function BonusesModal({ visible, onClose }) {
           ) : (
             <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ paddingBottom: 6 }}>
               <Text style={styles.section}>Бойові бонуси</Text>
-              <CombatGrid values={combat.base} />
+              <CombatGrid values={combat.base} sheets={sheets} />
 
               {CONTEXTS.map(([key, label]) =>
                 combat.feat[key] ? (
                   <View key={key} style={styles.ctxBlock}>
                     <Text style={styles.ctxLabel}>{label} (разом із загальними)</Text>
-                    <CombatGrid values={combat.contexts[key]} />
+                    <CombatGrid values={combat.contexts[key]} sheets={sheets} />
                   </View>
                 ) : null
               )}
               {combat.quantum ? (
                 <View style={styles.ctxBlock}>
                   <Text style={styles.ctxLabel}>Квантові вторгнення (окремі)</Text>
-                  <CombatGrid values={combat.quantum} />
+                  <CombatGrid values={combat.quantum} sheets={sheets} />
                 </View>
               ) : null}
 
@@ -130,6 +142,12 @@ export default function BonusesModal({ visible, onClose }) {
                   <Text style={styles.section}>Інші бонуси</Text>
                   {others.map((row) => (
                     <View key={row.type} style={styles.otherRow}>
+                      <FoeIcon
+                        sheet={sheets}
+                        name={row.type}
+                        size={18}
+                        style={{ marginRight: 8 }}
+                      />
                       <Text style={styles.otherLabel}>{row.label}</Text>
                       <Text style={styles.otherVal}>
                         {row.value > 0 ? '+' : ''}
@@ -182,8 +200,9 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   combatCell: { width: '50%', paddingVertical: 7, paddingHorizontal: 6 },
-  combatNum: { color: COLORS.success, fontSize: 18, fontWeight: '800' },
-  combatCap: { color: COLORS.textSecondary, fontSize: 10, marginTop: 2 },
+  combatCapRow: { flexDirection: 'row', alignItems: 'center' },
+  combatNum: { color: COLORS.success, fontSize: 18, fontWeight: '800', marginTop: 3 },
+  combatCap: { color: COLORS.textSecondary, fontSize: 10, flex: 1 },
   ctxBlock: { marginTop: 10 },
   ctxLabel: { color: COLORS.textSecondary, fontSize: 11, marginBottom: 4 },
   otherRow: {
