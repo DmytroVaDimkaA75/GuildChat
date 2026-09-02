@@ -3,7 +3,17 @@
 // building_entity. Уся мапа повернута на 90° за годинниковою, як у грі.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import { DarkThemeColors } from '../../constants/theme';
@@ -12,6 +22,8 @@ const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
 const SECTOR = 4;
 const FRAME_FILL = '#131722';
+const RULER_W = 26; // ширина лівої координатної лінійки
+const RULER_H = 16; // висота верхньої координатної лінійки
 
 const TYPE_COLOR = {
   street: '#3a4656',
@@ -136,8 +148,11 @@ function formatBonus(bonus) {
 export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
   const { width: screenWidth } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const horizontalScrollRef = useRef(null);
   const verticalScrollRef = useRef(null);
+  const topRulerRef = useRef(null);
+  const leftRulerRef = useRef(null);
 
   const model = useMemo(() => {
     const areas = Array.isArray(cityMap?.unlocked_areas)
@@ -315,6 +330,8 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
     const timer = setTimeout(() => {
       horizontalScrollRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
       verticalScrollRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
+      topRulerRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
+      leftRulerRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
     }, 60);
     return () => clearTimeout(timer);
   }, [canScroll, cityMap, cityOffsetX, cityOffsetY]);
@@ -370,22 +387,72 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
     : null;
   const collectRows = (selectedCollect?.rows || []).filter((row) => !row.header && row.value);
 
+  const sectorsX = Math.ceil(model.width / SECTOR);
+  const sectorsY = Math.ceil(model.height / SECTOR);
+  const isGB = /greatbuilding/i.test(selectedType);
+
+  const syncTopRuler = (e) =>
+    topRulerRef.current?.scrollTo?.({ x: e.nativeEvent.contentOffset.x, animated: false });
+  const syncLeftRuler = (e) =>
+    leftRulerRef.current?.scrollTo?.({ y: e.nativeEvent.contentOffset.y, animated: false });
+
   return (
     <View>
-      <ScrollView
-        ref={horizontalScrollRef}
-        horizontal
-        style={{ width: viewportWidth, height: viewportHeight, alignSelf: 'center' }}
-        showsHorizontalScrollIndicator
-        contentOffset={{ x: cityOffsetX, y: 0 }}
-      >
+      {/* верхня координатна лінійка */}
+      <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
+        <View style={{ width: RULER_W, height: RULER_H }} />
         <ScrollView
-          ref={verticalScrollRef}
-          style={{ height: viewportHeight }}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          contentOffset={{ x: 0, y: cityOffsetY }}
+          ref={topRulerRef}
+          horizontal
+          scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          style={{ width: viewportWidth, height: RULER_H }}
         >
+          <View style={{ flexDirection: 'row', width: contentWidth }}>
+            {Array.from({ length: sectorsX }).map((_, s) => (
+              <View key={`rx-${s}`} style={{ width: SECTOR * tile }}>
+                <Text style={styles.rulerText}>{model.minX + s * SECTOR}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
+        {/* ліва координатна лінійка */}
+        <ScrollView
+          ref={leftRulerRef}
+          scrollEnabled={false}
+          showsVerticalScrollIndicator={false}
+          style={{ width: RULER_W, height: viewportHeight }}
+        >
+          <View style={{ height: contentHeight }}>
+            {Array.from({ length: sectorsY }).map((_, s) => (
+              <View key={`ry-${s}`} style={{ height: SECTOR * tile }}>
+                <Text style={styles.rulerText}>{model.minY + s * SECTOR}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+
+        <ScrollView
+          ref={horizontalScrollRef}
+          horizontal
+          style={{ width: viewportWidth, height: viewportHeight }}
+          showsHorizontalScrollIndicator
+          contentOffset={{ x: cityOffsetX, y: 0 }}
+          onScroll={syncTopRuler}
+          scrollEventThrottle={16}
+        >
+          <ScrollView
+            ref={verticalScrollRef}
+            style={{ height: viewportHeight }}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            contentOffset={{ x: 0, y: cityOffsetY }}
+            onScroll={syncLeftRuler}
+            scrollEventThrottle={16}
+          >
           <View style={{ width: contentWidth, height: contentHeight }}>
             <Svg
               width={contentWidth}
@@ -534,95 +601,179 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
               onPress={onTouch}
             />
           </View>
+          </ScrollView>
         </ScrollView>
-      </ScrollView>
-
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffffff' }]} />
-          <Text style={styles.legendText}>розблоковано ({model.counts.unlocked})</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffe100' }]} />
-          <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
-        </View>
-        {LEGEND.map(([type, label]) => (
-          <View key={type} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colorFor(type) }]} />
-            <Text style={styles.legendText}>{label}</Text>
-          </View>
-        ))}
       </View>
 
-      <Text style={styles.catalogStatus}>
-        Будівель: {model.counts.buildings} · точні розміри: {model.counts.resolvedSizes}/
-        {model.counts.buildings}
-      </Text>
+      <Text style={styles.hint}>Мапу можна рухати пальцем. Торкніться будівлі — деталі.</Text>
 
-      {selectedEntity ? (
-        <View style={styles.detail}>
-          <Text style={styles.detailName}>
-            {selectedEntity.name || selectedDefinition?.name || selectedEntity.cid}
-          </Text>
-          <Text style={styles.detailMeta}>
-            {TYPE_LABELS[selectedType] || selectedType} ·{' '}
-            {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
-            {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
-            {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''} · поз. {selectedEntity.x},
-            {selectedEntity.y}
-            {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
-            {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
-          </Text>
-          {shownBonuses.length ? (
-            <View style={styles.bonusList}>
-              <Text style={styles.bonusTitle}>
-                Бонуси{selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
-              </Text>
-              {shownBonuses.map((bonus, index) => (
-                <Text key={`${bonus}-${index}`} style={styles.bonusText}>• {bonus}</Text>
-              ))}
-              {selectedBonuses.length > shownBonuses.length ? (
-                <Text style={styles.moreBonuses}>
-                  Ще бонусів: {selectedBonuses.length - shownBonuses.length}
-                </Text>
-              ) : null}
+      {/* згортаний блок легенди */}
+      <TouchableOpacity
+        style={styles.legendHeader}
+        onPress={() => setLegendOpen((open) => !open)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.legendHeaderText}>Легенда</Text>
+        <MaterialIcons
+          name={legendOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+          size={22}
+          color={DarkThemeColors.textSecondary}
+        />
+      </TouchableOpacity>
+      {legendOpen ? (
+        <View style={styles.legendBody}>
+          <View style={styles.legend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffffff' }]} />
+              <Text style={styles.legendText}>розблоковано ({model.counts.unlocked})</Text>
             </View>
-          ) : null}
-          {selectedDefinition?.description ? (
-            <Text style={styles.detailDescription}>{selectedDefinition.description}</Text>
-          ) : null}
-          {selectedCollect ? (
-            <View style={styles.collectBox}>
-              <Text style={styles.collectStatus}>
-                Стан: {selectedCollect.status}
-                {selectedCollect.whenText ? ` · завершення ${selectedCollect.whenText}` : ''}
-              </Text>
-              {collectRows.length ? (
-                <>
-                  <Text style={styles.collectTitle}>
-                    Збір{selectedCollect.rnd ? ' (випадковий)' : ''}
-                  </Text>
-                  {collectRows.map((row) => (
-                    <Text key={row.key} style={styles.collectRow}>
-                      • {row.label}: {Number(row.value).toLocaleString('uk')}
-                    </Text>
-                  ))}
-                </>
-              ) : null}
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffe100' }]} />
+              <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
             </View>
-          ) : null}
-          {!selectedDefinition?.resolved ? (
-            <Text style={styles.pendingText}>Метадані цієї будівлі ще завантажуються.</Text>
-          ) : null}
+            {LEGEND.map(([type, label]) => (
+              <View key={type} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: colorFor(type) }]} />
+                <Text style={styles.legendText}>{label}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.catalogStatus}>
+            Будівель: {model.counts.buildings} · точні розміри: {model.counts.resolvedSizes}/
+            {model.counts.buildings}
+          </Text>
         </View>
-      ) : (
-        <Text style={styles.hint}>Мапу можна рухати пальцем. Торкніться будівлі — деталі.</Text>
-      )}
+      ) : null}
+
+      {/* попап деталей будівлі */}
+      <Modal
+        visible={!!selectedEntity}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedId(null)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setSelectedId(null)}>
+          <Pressable style={styles.popup} onPress={() => {}}>
+            {selectedEntity ? (
+              <>
+                <View style={styles.popupHeader}>
+                  <Text style={styles.detailName}>
+                    {selectedEntity.name || selectedDefinition?.name || selectedEntity.cid}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setSelectedId(null)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.close}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {isGB ? (
+                  <Text style={styles.detailMeta}>
+                    Велична споруда
+                    {selectedEntity.lvl != null ? ` · рівень ${selectedEntity.lvl}` : ''}
+                  </Text>
+                ) : (
+                  <Text style={styles.detailMeta}>
+                    {TYPE_LABELS[selectedType] || selectedType} ·{' '}
+                    {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
+                    {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
+                    {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
+                    {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
+                    {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
+                  </Text>
+                )}
+
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {shownBonuses.length ? (
+                    <View style={styles.bonusList}>
+                      <Text style={styles.bonusTitle}>Бонуси</Text>
+                      {shownBonuses.map((bonus, index) => (
+                        <Text key={`${bonus}-${index}`} style={styles.bonusText}>• {bonus}</Text>
+                      ))}
+                      {selectedBonuses.length > shownBonuses.length ? (
+                        <Text style={styles.moreBonuses}>
+                          Ще бонусів: {selectedBonuses.length - shownBonuses.length}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {!isGB && selectedDefinition?.description ? (
+                    <Text style={styles.detailDescription}>{selectedDefinition.description}</Text>
+                  ) : null}
+
+                  {!isGB && selectedCollect ? (
+                    <View style={styles.collectBox}>
+                      <Text style={styles.collectStatus}>
+                        Стан: {selectedCollect.status}
+                        {selectedCollect.whenText ? ` · завершення ${selectedCollect.whenText}` : ''}
+                      </Text>
+                      {collectRows.length ? (
+                        <>
+                          <Text style={styles.collectTitle}>
+                            Збір{selectedCollect.rnd ? ' (випадковий)' : ''}
+                          </Text>
+                          {collectRows.map((row) => (
+                            <Text key={row.key} style={styles.collectRow}>
+                              • {row.label}: {Number(row.value).toLocaleString('uk')}
+                            </Text>
+                          ))}
+                        </>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {!isGB && !selectedDefinition?.resolved ? (
+                    <Text style={styles.pendingText}>Метадані цієї будівлі ще завантажуються.</Text>
+                  ) : null}
+                </ScrollView>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rulerText: { color: DarkThemeColors.textSecondary, fontSize: 9, paddingLeft: 1 },
+  legendHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: DarkThemeColors.surfaceElevated,
+  },
+  legendHeaderText: {
+    color: DarkThemeColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  legendBody: { marginBottom: 4 },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  popup: {
+    backgroundColor: DarkThemeColors.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: DarkThemeColors.border,
+    padding: 14,
+  },
+  popupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  close: { color: DarkThemeColors.textSecondary, fontSize: 17, fontWeight: '700', paddingLeft: 12 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 },
   legendDot: { width: 9, height: 9, borderRadius: 2, marginRight: 3 },
