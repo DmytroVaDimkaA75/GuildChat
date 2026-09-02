@@ -232,7 +232,7 @@ export default function FoeSyncScreen() {
       : null;
 
     const dump = {
-      v: 'v88',
+      v: 'v89',
       url: currentUrl,
       player,
       defsProgress: defsProgress || null,
@@ -244,6 +244,15 @@ export default function FoeSyncScreen() {
       },
       boosts: found.boostAgg?.sumsAll || found.boostStartupAgg?.sumsAll || null,
       collectKeys: Array.from(collectKeys),
+      collectGoodEras: (() => {
+        const arr = found.resourceDefs;
+        const m = {};
+        if (Array.isArray(arr)) for (const r of arr) if (r?.id) m[r.id] = r;
+        return Array.from(collectKeys)
+          .map((k) => k.replace(/^guild:/, ''))
+          .filter((k, i, a) => a.indexOf(k) === i)
+          .map((k) => ({ key: k, name: m[k]?.name || null, era: m[k]?.era || null }));
+      })(),
       prodStateCounts: found.prodStateCounts || null,
       prodProductClasses: found.prodProductClasses || null,
       prodProductSamples: found.prodProductSamples || null,

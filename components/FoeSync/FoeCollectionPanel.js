@@ -12,6 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import FoeIcon from './FoeIcon';
+import { goodEra, eraIndex } from './foeGoods';
 
 const CORE_KEYS = new Set([
   'money',
@@ -155,11 +156,15 @@ export default function FoeCollectionPanel({
       const set = new Set();
       for (const b of ready) {
         const det = b[selFilter.group] || {};
-        if (!Object.keys(det).some(isGoodKey)) continue;
-        const e = bInfo(b).era;
-        if (e) set.add(e);
+        for (const k of Object.keys(det)) {
+          if (!isGoodKey(k) || !det[k]) continue;
+          const e = goodEra(k, resDefs);
+          if (e) set.add(e);
+        }
       }
-      return Array.from(set).sort().map((e) => ({ key: e, label: eraLabel(e) }));
+      return Array.from(set)
+        .sort((a, z) => eraIndex(a) - eraIndex(z))
+        .map((e) => ({ key: e, label: eraLabel(e) }));
     }
     if (isFrags) {
       const map = new Map();
@@ -171,7 +176,7 @@ export default function FoeCollectionPanel({
       return Array.from(map.keys()).sort().map((n) => ({ key: n, label: n }));
     }
     return [];
-  }, [isGroup, isFrags, selFilter, ready, isGoodKey, bInfo]);
+  }, [isGroup, isFrags, selFilter, ready, isGoodKey, resDefs]);
 
   // Рядки таблиці для вибраного фільтра
   const rows = useMemo(() => {
@@ -197,15 +202,16 @@ export default function FoeCollectionPanel({
           });
         }
       } else if (isGroup) {
-        if (era && info.era !== era) continue;
         const det = b[selFilter.group] || {};
         for (const [k, v] of Object.entries(det)) {
           if (!isGoodKey(k) || !v) continue;
+          const gEra = goodEra(k, resDefs);
+          if (era && gEra !== era) continue;
           list.push({
             key: `${b.iid || b.id}:${k}`,
             resKey: k,
             name: info.name,
-            sub: goodName(k) + (info.era ? ` · ${eraLabel(info.era)}` : ''),
+            sub: goodName(k) + (gEra ? ` · ${eraLabel(gEra)}` : ''),
             base: Number(v),
             boosted: withBonus(Number(v), pct),
           });
@@ -232,7 +238,7 @@ export default function FoeCollectionPanel({
       }
     }
     return list.sort((a, b) => b.base - a.base);
-  }, [selFilter, isGroup, isFrags, era, ready, sumsAll, bInfo, goodName, isGoodKey]);
+  }, [selFilter, isGroup, isFrags, era, ready, sumsAll, bInfo, goodName, isGoodKey, resDefs]);
 
   const pick = (id) => {
     setSelected((cur) => (cur === id ? null : id));
