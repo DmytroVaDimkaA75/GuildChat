@@ -231,8 +231,24 @@ export default function FoeSyncScreen() {
           .slice(0, 160)
       : null;
 
+    // повні визначення товарів, зібраних у місті (abilities — лише ключі)
+    const rawGoodDefs = (() => {
+      const arr = found.resourceDefs;
+      if (!Array.isArray(arr)) return null;
+      const want = new Set(Array.from(collectKeys).map((k) => k.replace(/^guild:/, '')));
+      return arr
+        .filter((r) => r && want.has(r.id))
+        .map((r) => {
+          const o = {};
+          for (const [k, v] of Object.entries(r)) {
+            o[k] = v && typeof v === 'object' ? Object.keys(v) : v;
+          }
+          return o;
+        });
+    })();
+
     const dump = {
-      v: 'v89',
+      v: 'v90',
       url: currentUrl,
       player,
       defsProgress: defsProgress || null,
@@ -253,6 +269,7 @@ export default function FoeSyncScreen() {
           .filter((k, i, a) => a.indexOf(k) === i)
           .map((k) => ({ key: k, name: m[k]?.name || null, era: m[k]?.era || null }));
       })(),
+      rawGoodDefs,
       prodStateCounts: found.prodStateCounts || null,
       prodProductClasses: found.prodProductClasses || null,
       prodProductSamples: found.prodProductSamples || null,
