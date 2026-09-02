@@ -10,16 +10,18 @@ import React from 'react';
 import { Image, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const ICON_CACHE_KEY = 'foeIconSheetV1';
-const GOODS_CACHE_KEY = 'foeGoodsSheetV1';
+const ICON_CACHE_KEY = 'foeIconSheetV2'; // v2 — кадри тепер зберігають прапорець rotated
+const GOODS_CACHE_KEY = 'foeGoodsSheetV2';
 
 // Компактний формат кадрів: [name, x, y, w, h, offX?, offY?, origW?, origH?, rotated?]
+// rotated=true — кадр упакований у лист повернутим на 90° (за годинниковою),
+// тож для показу його треба повернути назад (проти годинникової).
 export function parseAtlas(json) {
   const frames = {};
   for (const f of json?.frames || []) {
     const [name, x, y, w, h] = f;
     if (typeof name === 'string' && typeof x === 'number') {
-      frames[name] = { x, y, w, h };
+      frames[name] = { x, y, w, h, rotated: !!f[9] };
     }
   }
   return { frames, sheetW: json?.size?.w || 0, sheetH: json?.size?.h || 0 };
@@ -83,9 +85,20 @@ export default function FoeIcon({ sheet, name, size = 20, style }) {
   }
   if (!picked || !frame) return null;
 
-  const scale = size / Math.max(frame.w, frame.h);
-  return (
-    <View style={[{ width: frame.w * scale, height: frame.h * scale, overflow: 'hidden' }, style]}>
+  // frame.w × frame.h — розмір ділянки в листі. Якщо кадр повернутий, реальні
+  // (показувані) сторони міняються місцями.
+  const dispW = frame.rotated ? frame.h : frame.w;
+  const dispH = frame.rotated ? frame.w : frame.h;
+  const scale = size / Math.max(dispW, dispH);
+
+  const crop = (
+    <View
+      style={{
+        width: frame.w * scale,
+        height: frame.h * scale,
+        overflow: 'hidden',
+      }}
+    >
       <Image
         source={{ uri: picked.pngUrl }}
         style={{
@@ -96,6 +109,21 @@ export default function FoeIcon({ sheet, name, size = 20, style }) {
         }}
         resizeMode="stretch"
       />
+    </View>
+  );
+
+  if (!frame.rotated) {
+    return <View style={style}>{crop}</View>;
+  }
+
+  return (
+    <View
+      style={[
+        { width: dispW * scale, height: dispH * scale, alignItems: 'center', justifyContent: 'center' },
+        style,
+      ]}
+    >
+      <View style={{ transform: [{ rotate: '-90deg' }] }}>{crop}</View>
     </View>
   );
 }

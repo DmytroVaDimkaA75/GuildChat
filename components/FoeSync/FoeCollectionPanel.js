@@ -26,7 +26,7 @@ const CORE_KEYS = new Set([
 ]);
 
 const FILTERS = [
-  { id: 'strategy_points', label: 'ВП', icon: 'strategy_points', boost: null },
+  { id: 'strategy_points', label: 'СО', icon: 'strategy_points', boost: null },
   { id: 'money', label: 'Монети', icon: 'money', boost: 'coin_production' },
   { id: 'supplies', label: 'Ресурси', icon: 'supplies', boost: 'supply_production' },
   { id: 'premium', label: 'Діаманти', icon: 'premium', boost: null },
