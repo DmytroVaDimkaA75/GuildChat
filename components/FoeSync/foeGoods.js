@@ -41,16 +41,15 @@ export const GOOD_ERA = {
   mars_ore: 'SpaceAgeMars', superalloys: 'SpaceAgeMars', biotech_crops: 'SpaceAgeMars', lubricants: 'SpaceAgeMars', mars_microbes: 'SpaceAgeMars', fusion_reactors: 'SpaceAgeMars',
   // SpaceAgeAsteroidBelt
   asteroid_ice: 'SpaceAgeAsteroidBelt', bromine: 'SpaceAgeAsteroidBelt', compound_fluid: 'SpaceAgeAsteroidBelt', nickel: 'SpaceAgeAsteroidBelt', platinum_crystals: 'SpaceAgeAsteroidBelt', processed_material: 'SpaceAgeAsteroidBelt',
-  // SpaceAgeVenus
-  venus_carbon: 'SpaceAgeVenus', bio_creatures: 'SpaceAgeVenus', enhanced_porifera: 'SpaceAgeVenus', red_algae: 'SpaceAgeVenus', glowing_seaweed: 'SpaceAgeVenus', plankton_solution: 'SpaceAgeVenus',
-  // SpaceAgeJupiterMoon
-  unknown_dna: 'SpaceAgeJupiterMoon', dna_data_jupiter: 'SpaceAgeJupiterMoon', advanced_dna_data: 'SpaceAgeJupiterMoon', bio_data: 'SpaceAgeJupiterMoon', dark_matter: 'SpaceAgeJupiterMoon', topological_records: 'SpaceAgeJupiterMoon',
-  // SpaceAgeTitan
-  crystallized_hydrocarbons: 'SpaceAgeTitan', herbal_snack: 'SpaceAgeTitan', microgreen_supplement: 'SpaceAgeTitan', soy_proteins: 'SpaceAgeTitan', sugar_crystals: 'SpaceAgeTitan',
-  // SpaceAgeSpaceHub
-  upcycled_hydrocarbons: 'SpaceAgeSpaceHub', biogeochemical_data_hub: 'SpaceAgeSpaceHub', experimental_data: 'SpaceAgeSpaceHub', isolated_molecules: 'SpaceAgeSpaceHub', liquid_binder: 'SpaceAgeSpaceHub', compressed_matter_capsule: 'SpaceAgeSpaceHub',
-  // StellarAgeDiscovery
-  silver_crystals: 'StellarAgeDiscovery', dark_energy_battery: 'StellarAgeDiscovery', oxygen_pills: 'StellarAgeDiscovery', deep_space_data: 'StellarAgeDiscovery', hypersleep_modules: 'StellarAgeDiscovery',
+  // SpaceAgeVenus (звірено з resourceDefs)
+  soy_proteins: 'SpaceAgeVenus', venus_carbon: 'SpaceAgeVenus', microgreen_supplement: 'SpaceAgeVenus', herbal_snack: 'SpaceAgeVenus', sugar_crystals: 'SpaceAgeVenus', glowing_seaweed: 'SpaceAgeVenus',
+  // SpaceAgeJupiterMoon (звірено)
+  enhanced_porifera: 'SpaceAgeJupiterMoon', red_algae: 'SpaceAgeJupiterMoon', bio_creatures: 'SpaceAgeJupiterMoon', topological_records: 'SpaceAgeJupiterMoon', advanced_dna_data: 'SpaceAgeJupiterMoon', unknown_dna: 'SpaceAgeJupiterMoon',
+  // SpaceAgeTitan (звірено)
+  liquid_binder: 'SpaceAgeTitan', upcycled_hydrocarbons: 'SpaceAgeTitan', compressed_matter_capsule: 'SpaceAgeTitan', isolated_molecules: 'SpaceAgeTitan', experimental_data: 'SpaceAgeTitan', crystallized_hydrocarbons: 'SpaceAgeTitan',
+  // SpaceAgeSpaceHub (звірено)
+  silver_crystals: 'SpaceAgeSpaceHub', dark_energy_battery: 'SpaceAgeSpaceHub', oxygen_pills: 'SpaceAgeSpaceHub', deep_space_data: 'SpaceAgeSpaceHub', hypersleep_modules: 'SpaceAgeSpaceHub', dark_matter: 'SpaceAgeSpaceHub',
+  // StellarAgeDiscovery (звірено)
   stel_psionic_conduits: 'StellarAgeDiscovery', stel_glyph_circuits: 'StellarAgeDiscovery', stel_xenocrystals: 'StellarAgeDiscovery', stel_metamorphic_alloys: 'StellarAgeDiscovery', stel_resonance_cores: 'StellarAgeDiscovery', stel_void_shard: 'StellarAgeDiscovery',
 };
 

@@ -74,6 +74,8 @@ const ERA_LABELS = {
   SpaceAgeJupiterMoon: 'Космос: Супутник Юпітера',
   SpaceAgeTitan: 'Космос: Титан',
   SpaceAgeSpaceHub: 'Космос: Космічний вузол',
+  StellarAgeDiscovery: 'Зоряна ера: Відкриття',
+  StellarAgeColonization: 'Зоряна ера: Колонізація',
 };
 const eraLabel = (e) => ERA_LABELS[e] || e;
 const withBonus = (base, pct) => (pct ? Math.floor(base * (1 + pct / 100)) : base);
