@@ -287,7 +287,6 @@ export default function FoeSyncScreen() {
   const mapPct = dpTotal ? (dpDone / dpTotal) * 100 : 0;
   const synced = packets > 0;
   const syncEnabled = consent === 'yes';
-  const syncColor = synced ? C.success : syncEnabled ? C.primary : C.warning;
   const stackActions = screenWidth < 360 || fontScale > 1.2;
 
   return (
@@ -319,39 +318,6 @@ export default function FoeSyncScreen() {
       ) : null}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.statusCard}>
-          <View
-            style={[
-              styles.statusIcon,
-              { backgroundColor: `${syncColor}18` },
-            ]}
-          >
-            {synced ? (
-              <MaterialIcons name="cloud-done" size={23} color={C.success} />
-            ) : syncEnabled ? (
-              <ActivityIndicator size="small" color={C.primary} />
-            ) : (
-              <MaterialIcons name="sync-disabled" size={23} color={C.warning} />
-            )}
-          </View>
-          <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle}>
-              {synced
-                ? 'Синхронізовано з грою'
-                : syncEnabled
-                  ? 'Синхронізація триває'
-                  : 'Синхронізацію не ввімкнено'}
-            </Text>
-            <Text style={styles.statusMeta}>
-              {synced
-                ? `Отримано пакетів: ${packets}`
-                : syncEnabled
-                  ? 'Очікуємо перші дані з міста.'
-                  : 'Надайте згоду в профілі, щоб почати.'}
-            </Text>
-          </View>
-        </View>
-
         {!syncEnabled ? (
           <View style={styles.consentCard}>
             <Text style={styles.consentBody}>{FOE_CONSENT_BODY}</Text>
@@ -538,17 +504,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   disabledBtn: { opacity: 0.4 },
-  warningCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 12,
-    marginTop: 12,
-    backgroundColor: `${C.warning}12`,
-    borderWidth: 1,
-    borderColor: `${C.warning}70`,
-    borderRadius: 12,
-  },
-  warningText: { flex: 1, color: C.textSecondary, fontSize: 12, lineHeight: 18, marginLeft: 9 },
   consentCard: {
     padding: 14,
     marginTop: 12,
@@ -557,15 +512,23 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     borderRadius: 14,
   },
-  consentBody: { color: C.text, fontSize: 13, lineHeight: 19 },
-  consentBullet: { color: C.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 5 },
-  consentNote: { color: C.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 10, fontStyle: 'italic' },
-  consentBtn: {
-    marginTop: 14,
-    backgroundColor: C.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
+  consentBody: { color: C.text, fontSize: 14, lineHeight: 21, marginBottom: 10 },
+  consentBullet: { color: C.text, fontSize: 13, lineHeight: 20, marginBottom: 4 },
+  consentNote: {
+    color: C.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    marginTop: 8,
   },
-  consentBtnText: { color: '#00121f', fontSize: 15, fontWeight: '800' },
+  consentBtn: {
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingHorizontal: 14,
+    backgroundColor: C.primary,
+    borderRadius: 10,
+  },
+  consentBtnText: { color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center' },
 });
