@@ -69,7 +69,15 @@ const eraLabel = (e) => ERA_LABELS[e] || e;
 const withBonus = (base, pct) => (pct ? Math.floor(base * (1 + pct / 100)) : base);
 const fmt = (n) => Number(n || 0).toLocaleString('uk');
 
-export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsAll, resDefs, iconSheet }) {
+export default function FoeCollectionPanel({
+  prodBuildings,
+  cityBuildings,
+  sumsAll,
+  resDefs,
+  iconSheet,
+  goodsSheet,
+}) {
+  const sheets = [iconSheet, goodsSheet].filter(Boolean);
   const [selected, setSelected] = useState(null);
   const [era, setEra] = useState(null);
 
@@ -156,6 +164,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
           if (!isGoodKey(k) || !v) continue;
           list.push({
             key: `${b.iid || b.id}:${k}`,
+            resKey: k,
             name: info.name,
             sub: goodName(k) + (info.era ? ` · ${eraLabel(info.era)}` : ''),
             base: Number(v),
@@ -167,6 +176,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
         if (!v) continue;
         list.push({
           key: String(b.iid || b.id) + ':' + selFilter.id,
+          resKey: selFilter.id,
           name: info.name,
           sub: null,
           base: v,
@@ -270,6 +280,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
             </View>
             {rows.map((r, index) => (
               <View key={r.key} style={[styles.tr, index === rows.length - 1 && styles.trLast]}>
+                <FoeIcon sheet={sheets} name={r.resKey} size={20} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tdName}>{r.name}</Text>
                   {r.sub ? <Text style={styles.tdSub}>{r.sub}</Text> : null}

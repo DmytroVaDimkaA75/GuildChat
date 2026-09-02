@@ -118,6 +118,7 @@ export default function FoeSyncScreen() {
     seen,
     consent,
     iconSheet,
+    goodsSheet,
     buildingDefs,
     cityBuildings,
     defsProgress,
@@ -260,6 +261,10 @@ export default function FoeSyncScreen() {
         buildingDefs: defsSummary,
         cityBuildings: cityBuildingsSummary,
         defsProgress,
+        iconSheetFrames: iconSheet ? Object.keys(iconSheet.frames || {}).slice(0, 80) : null,
+        goodsSheet: goodsSheet
+          ? { pngUrl: goodsSheet.pngUrl, frames: Object.keys(goodsSheet.frames || {}) }
+          : null,
       },
       null,
       1
@@ -270,7 +275,7 @@ export default function FoeSyncScreen() {
     } catch (e) {
       Alert.alert('Помилка', String(e?.message || e));
     }
-  }, [currentUrl, player, seen, found, buildingDefs, cityBuildings, defsProgress]);
+  }, [currentUrl, player, seen, found, buildingDefs, cityBuildings, defsProgress, iconSheet, goodsSheet]);
 
   const packets = health.packets || 0;
 
@@ -363,6 +368,7 @@ export default function FoeSyncScreen() {
             sumsAll={sumsAll}
             resDefs={resDefs}
             iconSheet={iconSheet}
+            goodsSheet={goodsSheet}
           />
         ) : null}
 

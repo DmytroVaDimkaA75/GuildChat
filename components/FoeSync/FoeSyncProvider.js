@@ -26,7 +26,12 @@ import { GuildContext } from '../../GuildContext';
 import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { FOE_CONSENT_KEY } from './foeConsent';
 import { saveFoeStats } from '../../src/services/foeStats';
-import { loadCachedIconSheet, fetchIconSheet } from './FoeIcon';
+import {
+  loadCachedIconSheet,
+  fetchIconSheet,
+  loadCachedGoodsSheet,
+  fetchGoodsSheet,
+} from './FoeIcon';
 import { getBuildingDefs } from '../../src/services/foeBuildings';
 
 const {
@@ -64,10 +69,12 @@ export function FoeSyncProvider({ children }) {
   const [seen, setSeen] = useState(() => new Set());
   const [saving, setSaving] = useState(false);
   const [iconSheet, setIconSheet] = useState(null);
+  const [goodsSheet, setGoodsSheet] = useState(null);
   const [buildingDefs, setBuildingDefs] = useState(null);
   const [defsProgress, setDefsProgress] = useState(null);
 
   const iconSheetUrlsRef = useRef(null);
+  const goodsSheetUrlsRef = useRef(null);
   const guildIdRef = useRef(guildContext?.guildId || null);
   const defsRequestRef = useRef(0);
   const defsScopeRef = useRef(null);
@@ -93,11 +100,12 @@ export function FoeSyncProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, u, g, sheet] = await Promise.all([
+      const [c, u, g, sheet, gSheet] = await Promise.all([
         AsyncStorage.getItem(FOE_CONSENT_KEY),
         AsyncStorage.getItem('userId'),
         AsyncStorage.getItem('guildId'),
         loadCachedIconSheet(),
+        loadCachedGoodsSheet(),
       ]);
       if (cancelled) return;
       setConsent(c === 'yes' ? 'yes' : 'no');
@@ -108,6 +116,7 @@ export function FoeSyncProvider({ children }) {
         setGuildId(storedGuildId);
       }
       if (sheet) setIconSheet(sheet);
+      if (gSheet) setGoodsSheet(gSheet);
     })();
     return () => {
       cancelled = true;
@@ -183,7 +192,11 @@ export function FoeSyncProvider({ children }) {
       return;
     }
     if (msg.kind === 'goodsSheet' && msg.png && msg.json) {
-      setFound((p) => ({ ...p, goodsSheet: { png: msg.png, json: msg.json } }));
+      const key = msg.png + '|' + msg.json;
+      if (goodsSheetUrlsRef.current !== key) {
+        goodsSheetUrlsRef.current = key;
+        fetchGoodsSheet(msg.png, msg.json).then(setGoodsSheet).catch(() => {});
+      }
       return;
     }
     if (msg.kind === 'iconSheet' && msg.png && msg.json) {
@@ -433,6 +446,7 @@ export function FoeSyncProvider({ children }) {
     found,
     seen,
     iconSheet,
+    goodsSheet,
     buildingDefs,
     cityBuildings,
     defsProgress,

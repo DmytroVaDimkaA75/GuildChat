@@ -1,18 +1,19 @@
 // components/FoeSync/FoeIcon.js
 //
-// Показує справжню іконку ресурсу з ігрового спрайт-листа
-// (https://foeru.innogamescdn.com/assets/shared/icons/icons_0-*.png).
-// Адресу картинки й json-карту координат застосунок дізнається сам
-// із вікна гри (foeInterceptor.js, kind: "iconSheet") і кешує локально,
-// щоб не чекати на це щоразу.
+// Показує справжню іконку ресурсу з ігрового спрайт-листа.
+//   • icons_0-*  — валюти/нагороди (money, supplies, medals, premium, ВП…)
+//   • *goods_large_0-*  — товари по епохах (мармур, тканина…)
+// Адреси картинок і json-карти координат застосунок дізнається сам із вікна
+// гри (foeInterceptor.js, kind "iconSheet" / "goodsSheet") і кешує локально.
 
 import React from 'react';
 import { Image, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CACHE_KEY = 'foeIconSheetV1';
+const ICON_CACHE_KEY = 'foeIconSheetV1';
+const GOODS_CACHE_KEY = 'foeGoodsSheetV1';
 
-// Розбирає компактний формат кадрів: [name, x, y, w, h, offX?, offY?, origW?, origH?, rotated?]
+// Компактний формат кадрів: [name, x, y, w, h, offX?, offY?, origW?, origH?, rotated?]
 export function parseAtlas(json) {
   const frames = {};
   for (const f of json?.frames || []) {
@@ -24,50 +25,72 @@ export function parseAtlas(json) {
   return { frames, sheetW: json?.size?.w || 0, sheetH: json?.size?.h || 0 };
 }
 
-export async function loadCachedIconSheet() {
+async function loadCached(key) {
   try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    const raw = await AsyncStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch (_e) {
     return null;
   }
 }
 
-// Завантажує json-карту й повертає { pngUrl, frames, sheetW, sheetH } — і кешує результат.
-export async function fetchIconSheet(pngUrl, jsonUrl) {
+async function fetchSheet(pngUrl, jsonUrl, key) {
   const res = await fetch(jsonUrl);
   const json = await res.json();
   const { frames, sheetW, sheetH } = parseAtlas(json);
   const data = { pngUrl, frames, sheetW, sheetH, savedAt: Date.now() };
   try {
-    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    await AsyncStorage.setItem(key, JSON.stringify(data));
   } catch (_e) {
-    // не критично, просто не закешується
+    /* не критично */
   }
   return data;
 }
 
+export const loadCachedIconSheet = () => loadCached(ICON_CACHE_KEY);
+export const fetchIconSheet = (png, json) => fetchSheet(png, json, ICON_CACHE_KEY);
+export const loadCachedGoodsSheet = () => loadCached(GOODS_CACHE_KEY);
+export const fetchGoodsSheet = (png, json) => fetchSheet(png, json, GOODS_CACHE_KEY);
+
+// Кілька варіантів імені кадру (у різних листах трохи різні назви)
+function frameFor(sheet, name) {
+  const f = sheet?.frames;
+  if (!f || !name) return null;
+  const variants = [
+    name,
+    `good_${name}`,
+    `goods_${name}`,
+    name.replace(/^good_/, ''),
+    name.charAt(0).toUpperCase() + name.slice(1),
+  ];
+  for (const v of variants) if (f[v]) return f[v];
+  return null;
+}
+
 // <FoeIcon sheet={iconSheet} name="medals" size={20} />
+// sheet може бути одним листом або масивом (пробуються по черзі).
 export default function FoeIcon({ sheet, name, size = 20, style }) {
-  const frame = sheet?.frames?.[name];
-  if (!sheet?.pngUrl || !frame || !sheet.sheetW || !sheet.sheetH) return null;
+  const sheets = (Array.isArray(sheet) ? sheet : [sheet]).filter(Boolean);
+  let picked = null;
+  let frame = null;
+  for (const s of sheets) {
+    const fr = frameFor(s, name);
+    if (fr && s.pngUrl && s.sheetW && s.sheetH) {
+      picked = s;
+      frame = fr;
+      break;
+    }
+  }
+  if (!picked || !frame) return null;
 
   const scale = size / Math.max(frame.w, frame.h);
-  const dispSheetW = sheet.sheetW * scale;
-  const dispSheetH = sheet.sheetH * scale;
-
   return (
-    <View
-      style={[
-        { width: frame.w * scale, height: frame.h * scale, overflow: 'hidden' },
-        style,
-      ]}
-    >
+    <View style={[{ width: frame.w * scale, height: frame.h * scale, overflow: 'hidden' }, style]}>
       <Image
-        source={{ uri: sheet.pngUrl }}
+        source={{ uri: picked.pngUrl }}
         style={{
-          width: dispSheetW,
-          height: dispSheetH,
+          width: picked.sheetW * scale,
+          height: picked.sheetH * scale,
           marginLeft: -frame.x * scale,
           marginTop: -frame.y * scale,
         }}
