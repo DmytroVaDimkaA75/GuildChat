@@ -110,9 +110,9 @@ const BONUS_LABELS = {
 
 const FEATURE_LABELS = {
   all: null,
-  battleground: 'ПБГ',
-  guild_battleground: 'ПБГ',
-  guild_expedition: 'Експедиція',
+  battleground: 'Поле битви гільдій',
+  guild_battleground: 'Поле битви гільдій',
+  guild_expedition: 'Експедиція гільдії',
   quantum_incursions: 'Квантові вторгнення',
   guild_raids: 'Квантові вторгнення',
 };

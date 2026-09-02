@@ -1,7 +1,7 @@
 // components/FoeSync/foeBonuses.js
 //
 // Спільна математика бонусів FoE: 4 бойові числа (як в «Управлінні армією»),
-// контексти (ПБГ / Виправа / Кванти) та повний перелік решти бонусів.
+// контексти (Поле битви гільдій / Експедиція / Кванти) та решта бонусів.
 
 export const STATS = ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'];
 
@@ -28,34 +28,61 @@ export const GB_MAP = {
   advanced_tactics: STATS,
 };
 
+// Типи бонусів, які не показуємо взагалі.
+export const HIDDEN_BONUS_TYPES = new Set([
+  'antiques_dealer_slot',
+  'army_scout_time',
+  'cop_playthrough_reward',
+]);
+
 // Людські назви для решти типів бонусів (не бойових 4-х).
 export const BONUS_LABELS = {
+  // Виробництво / збір у місті
   coin_production: 'Виробництво монет',
   supply_production: 'Виробництво припасів',
   goods_production: 'Виробництво товарів',
-  forge_points_production: 'Виробництво Очок Форджа',
+  special_goods_production: 'Виробництво особливих товарів',
+  forge_points_production: 'Виробництво ОФ',
   medal_production: 'Виробництво медалей',
-  strategy_points_production: 'Виробництво ВП',
   guild_goods_production: 'Виробництво товарів гільдії',
+  diamond_production: 'Виробництво діамантів',
   happiness: 'Задоволеність',
   population: 'Населення',
-  finish_special_productions: 'Миттєве завершення виробництв',
-  attrition_reduction: 'Зниження виснаження',
   double_collection: 'Подвійний збір',
-  critical_hit: 'Критичний удар',
-  first_strike: 'Перший удар',
-  extra_turn: 'Додатковий хід',
-  guild_expedition_attempts: 'Спроби у Виправі',
-  diamond_production: 'Виробництво діамантів',
+
+  // Квантові вторгнення
+  guild_raids_coins_production: 'Монети: виробництво (Кванти)',
+  guild_raids_supplies_production: 'Припаси: виробництво (Кванти)',
+  guild_raids_coins_start: 'Монети на старті (Кванти)',
+  guild_raids_supplies_start: 'Припаси на старті (Кванти)',
+  guild_raids_goods_start: 'Товари на старті (Кванти)',
+  guild_raids_units_start: 'Юніти на старті (Кванти)',
+  guild_raids_action_points_capacity: 'Ліміт очок дій (Кванти)',
+  guild_raids_action_points_collection: 'Збір очок дій (Кванти)',
+
+  // Таверна
+  tavern_shop_price: 'Ціни в таверні (знижка)',
+  tavern_silver_collect_bonus: 'Збір срібла таверни',
+  tavern_visit_silver_drop: 'Срібло за візит',
+  tavern_visit_fp_drop: 'ОФ за візит',
+
+  // Інші механіки
+  outpost_cooldown_time: 'Відкат форпосту',
+  pvp_arena_attempt_refill_interval: 'Відновлення спроб Арени',
+  item_exchange_tradecoin_value: 'Курс торгових монет',
+  item_exchange_gemstone_value: 'Курс самоцвітів',
+  attrition_reduction: 'Зниження виснаження',
+  finish_special_productions: 'Миттєве завершення виробництв',
+  guild_expedition_attempts: 'Спроби в експедиції гільдії',
   unit_slot: 'Слоти юнітів',
   plunder_repel: 'Захист від пограбування',
 };
 
 export const FEATURE_LABELS = {
   all: 'загальні',
-  battleground: 'Поля Гільдій',
-  guild_battleground: 'Поля Гільдій',
-  guild_expedition: 'Виправа',
+  battleground: 'Поле битви гільдій',
+  guild_battleground: 'Поле битви гільдій',
+  guild_expedition: 'Експедиція гільдії',
   guild_raids: 'Квантові вторгнення',
   quantum_incursions: 'Квантові вторгнення',
 };
@@ -125,11 +152,14 @@ export function computeCombat(sumsAll, sumsByFeature, cityGBs) {
   };
 }
 
-// Решта бонусів (усе з sumsAll, що не входить у 4 бойові числа й не GB-тип).
+// Решта бонусів (усе з sumsAll, що не входить у 4 бойові числа й не GB-тип
+// і не в списку прихованих).
 export function otherBonusRows(sumsAll) {
   const skip = new Set([...Object.keys(GETALL_MAP), ...Object.keys(GB_MAP)]);
   return Object.entries(sumsAll || {})
-    .filter(([type, value]) => !skip.has(type) && Number(value))
+    .filter(
+      ([type, value]) => !skip.has(type) && !HIDDEN_BONUS_TYPES.has(type) && Number(value)
+    )
     .map(([type, value]) => ({ type, label: humanizeBonusType(type), value: Number(value) }))
     .sort((a, b) => a.label.localeCompare(b.label, 'uk'));
 }

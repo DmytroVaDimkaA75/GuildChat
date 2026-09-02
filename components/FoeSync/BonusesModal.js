@@ -44,8 +44,8 @@ const STAT_ICON = {
 };
 
 const CONTEXTS = [
-  ['battleground', 'Поля Гільдій'],
-  ['guild_expedition', 'Виправа'],
+  ['battleground', 'Поле битви гільдій'],
+  ['guild_expedition', 'Експедиція гільдії'],
 ];
 
 // суфікс іконки бойового бонуса за контекстом
