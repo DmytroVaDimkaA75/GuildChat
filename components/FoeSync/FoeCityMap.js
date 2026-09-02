@@ -408,12 +408,18 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
           showsHorizontalScrollIndicator={false}
           style={{ width: viewportWidth, height: RULER_H }}
         >
-          <View style={{ flexDirection: 'row', width: contentWidth }}>
-            {Array.from({ length: sectorsX }).map((_, s) => (
-              <View key={`rx-${s}`} style={{ width: SECTOR * tile }}>
-                <Text style={styles.rulerText}>{model.minX + s * SECTOR}</Text>
-              </View>
-            ))}
+          <View style={{ width: contentWidth, height: RULER_H }}>
+            {Array.from({ length: sectorsX }).map((_, s) =>
+              s === 0 ? null : (
+                <Text
+                  key={`rx-${s}`}
+                  numberOfLines={1}
+                  style={[styles.rulerText, styles.rulerTop, { width: s * SECTOR * tile }]}
+                >
+                  {model.minX + s * SECTOR}
+                </Text>
+              )
+            )}
           </View>
         </ScrollView>
       </View>
@@ -426,12 +432,16 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
           showsVerticalScrollIndicator={false}
           style={{ width: RULER_W, height: viewportHeight }}
         >
-          <View style={{ height: contentHeight }}>
-            {Array.from({ length: sectorsY }).map((_, s) => (
-              <View key={`ry-${s}`} style={{ height: SECTOR * tile }}>
-                <Text style={styles.rulerText}>{model.minY + s * SECTOR}</Text>
-              </View>
-            ))}
+          <View style={{ width: RULER_W, height: contentHeight }}>
+            {Array.from({ length: sectorsY }).map((_, s) =>
+              s === 0 ? null : (
+                <View key={`ry-${s}`} style={[styles.rulerLeft, { height: s * SECTOR * tile }]}>
+                  <Text style={styles.rulerText} numberOfLines={1}>
+                    {model.minY + s * SECTOR}
+                  </Text>
+                </View>
+              )
+            )}
           </View>
         </ScrollView>
 
@@ -738,7 +748,17 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
 }
 
 const styles = StyleSheet.create({
-  rulerText: { color: DarkThemeColors.textSecondary, fontSize: 9, paddingLeft: 1 },
+  rulerText: { color: DarkThemeColors.textSecondary, fontSize: 9 },
+  rulerTop: { position: 'absolute', left: 0, top: 3, textAlign: 'right', paddingRight: 2 },
+  rulerLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    paddingRight: 3,
+    paddingBottom: 1,
+  },
   legendHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
