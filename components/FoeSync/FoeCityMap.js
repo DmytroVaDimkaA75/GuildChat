@@ -1,31 +1,21 @@
-// components/FoeSync/FoeCityMap.js
-//
-// Мапа міста (city_map). Принцип — як у мапі культурних поселень
-// (components/Culture/ObstaclesMap.js): один <Svg viewBox>, сектори по 4×4
-// клітинки, сітка <Line>, будівлі <Rect>.
-//
-// Сектори:
-//   • білі  — розблоковані (твоє місто);
-//   • жовті — можна купити за ресурси / відкрити технологією;
-//   • темні — рамка недоступного краю мапи (просто тло).
-//
-// Уся мапа повернута на 90° за годинниковою — щоб орієнтація збігалася з
-// містом у грі. Будівлі повертаються разом із нею.
-//
-// У видиме вікно вміщується 24×20 клітинок; решту видно прокруткою.
+// Мапа міста з city_map. Список інстансів приходить із StartupService,
+// а локалізовані назви, footprint і бонуси потрібної епохи — з каталогу
+// building_entity. Уся мапа повернута на 90° за годинниковою, як у грі.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
+import { DarkThemeColors } from '../../constants/theme';
+
 const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
-const SECTOR = 4; // сторона сектора у клітинках
+const SECTOR = 4;
 const FRAME_FILL = '#131722';
 
 const TYPE_COLOR = {
   street: '#3a4656',
-  greatbuilding: '#ff6f00', // помаранчевий — не плутати з жовтими секторами
+  greatbuilding: '#ff6f00',
   military: '#e53935',
   main_building: '#43a047',
   residential: '#1e88e5',
@@ -39,7 +29,77 @@ const TYPE_COLOR = {
   generic_building: '#3949ab',
   bonus_building: '#fb8c00',
 };
-const colorFor = (t) => TYPE_COLOR[t] || '#78909c';
+
+const TYPE_LABELS = {
+  street: 'дорога',
+  greatbuilding: 'Велична споруда',
+  military: 'військова',
+  main_building: 'ратуша',
+  residential: 'житлова',
+  production: 'виробнича',
+  goods: 'товарна',
+  culture: 'культурна',
+  decoration: 'декорація',
+  tower: 'вежа',
+  generic_building: 'будівля',
+  bonus_building: 'бонусна',
+  unknown: 'тип уточнюється',
+};
+
+const ERA_LABELS = {
+  NoAge: 'поза епохою',
+  StoneAge: 'Кам’яна доба',
+  BronzeAge: 'Бронзова доба',
+  IronAge: 'Залізна доба',
+  EarlyMiddleAge: 'Раннє Середньовіччя',
+  HighMiddleAge: 'Високе Середньовіччя',
+  LateMiddleAge: 'Пізнє Середньовіччя',
+  ColonialAge: 'Колоніальна доба',
+  IndustrialAge: 'Індустріальна доба',
+  ProgressiveEra: 'Епоха прогресу',
+  ModernEra: 'Епоха модерну',
+  PostModernEra: 'Постмодерн',
+  ContemporaryEra: 'Новітня епоха',
+  TomorrowEra: 'Епоха майбутнього',
+  FutureEra: 'Майбутнє',
+  ArcticFuture: 'Арктичне майбутнє',
+  OceanicFuture: 'Океанічне майбутнє',
+  VirtualFuture: 'Віртуальне майбутнє',
+  SpaceAgeMars: 'Космічна ера: Марс',
+  SpaceAgeAsteroidBelt: 'Космічна ера: Пояс астероїдів',
+  SpaceAgeVenus: 'Космічна ера: Венера',
+  SpaceAgeJupiterMoon: 'Космічна ера: Супутник Юпітера',
+  SpaceAgeTitan: 'Космічна ера: Титан',
+  SpaceAgeSpaceHub: 'Космічна ера: Космічний вузол',
+  StellarAgeDiscovery: 'Зоряна ера: Відкриття',
+  AllAge: 'усі епохи',
+};
+
+const BONUS_LABELS = {
+  att_boost_attacker: 'атака атакуючої армії',
+  def_boost_attacker: 'захист атакуючої армії',
+  att_boost_defender: 'атака оборонної армії',
+  def_boost_defender: 'захист оборонної армії',
+  att_def_boost_attacker: 'атака й захист атакуючої армії',
+  att_def_boost_defender: 'атака й захист оборонної армії',
+  att_def_boost_attacker_defender: 'атака й захист усіх армій',
+  coin_production: 'виробництво монет',
+  supply_production: 'виробництво припасів',
+  goods_production: 'виробництво товарів',
+  forge_points_production: 'виробництво очок Форджа',
+  military_boost: 'атака й захист атакуючої армії',
+  fierce_resistance: 'атака й захист оборонної армії',
+  advanced_tactics: 'атака й захист усіх армій',
+};
+
+const FEATURE_LABELS = {
+  all: null,
+  battleground: 'ПБГ',
+  guild_battleground: 'ПБГ',
+  guild_expedition: 'Експедиція',
+  quantum_incursions: 'Квантові вторгнення',
+  guild_raids: 'Квантові вторгнення',
+};
 
 const LEGEND = [
   ['residential', 'житлові'],
@@ -50,307 +110,421 @@ const LEGEND = [
   ['street', 'дороги'],
 ];
 
-export default function FoeCityMap({ cityMap, defs }) {
-  const { width: screenW } = useWindowDimensions();
-  const [sel, setSel] = useState(null);
-  const hScrollRef = useRef(null);
-  const vScrollRef = useRef(null);
-  const didInitScroll = useRef(false);
+const colorFor = (type) => TYPE_COLOR[type] || '#78909c';
+const positive = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+};
+const eraLabel = (era) => ERA_LABELS[era] || era;
+const bonusLabel = (type) => BONUS_LABELS[type] || String(type || '').replace(/_/g, ' ');
+
+function formatBonus(bonus) {
+  const value = Number(bonus?.value);
+  if (!Number.isFinite(value)) return null;
+  const type = String(bonus?.type || '');
+  const unit = /(^att_|^def_|_boost|_production$)/.test(type) ? '%' : '';
+  const featureKey = String(bonus?.targetedFeature || 'all');
+  const feature = featureKey === 'all'
+    ? null
+    : FEATURE_LABELS[featureKey] || featureKey.replace(/_/g, ' ');
+  const motivated = bonus?.onlyWhenMotivated ? ' · за мотивації' : '';
+  return `${value > 0 ? '+' : ''}${value}${unit} ${bonusLabel(type)}${
+    feature ? ` · ${feature}` : ''
+  }${motivated}`;
+}
+
+export default function FoeCityMap({ cityMap, defs, buildings }) {
+  const { width: screenWidth } = useWindowDimensions();
+  const [selectedId, setSelectedId] = useState(null);
+  const horizontalScrollRef = useRef(null);
+  const verticalScrollRef = useRef(null);
 
   const model = useMemo(() => {
-    const areas = cityMap?.unlocked_areas || [];
-    const blockedRaw = cityMap?.blocked_areas || [];
-    const allEnts = (cityMap?.entities || []).filter((e) => e.x != null && e.y != null);
+    const areas = Array.isArray(cityMap?.unlocked_areas)
+      ? cityMap.unlocked_areas
+      : Object.values(cityMap?.unlocked_areas || {});
+    const blockedRaw = Array.isArray(cityMap?.blocked_areas)
+      ? cityMap.blocked_areas
+      : Object.values(cityMap?.blocked_areas || {});
+    const sourceEntities = Array.isArray(buildings) && buildings.length
+      ? buildings
+      : cityMap?.entities || [];
+    const allEntities = sourceEntities.filter(
+      (entity) => Number.isFinite(Number(entity?.x)) && Number.isFinite(Number(entity?.y))
+    );
     if (!areas.length) return null;
 
-    // --- сектори у сітці секторів ---
-    const key = (sc, sr) => `${sc},${sr}`;
+    const sectorKey = (column, row) => `${column},${row}`;
     const unlockedSet = new Set();
-    for (const a of areas) {
-      const w = a.width || SECTOR;
-      const l = a.length || SECTOR;
-      for (let x = a.x; x < a.x + w; x += SECTOR)
-        for (let y = a.y; y < a.y + l; y += SECTOR) unlockedSet.add(key(x / SECTOR, y / SECTOR));
+    for (const area of areas) {
+      const x = Number(area?.x);
+      const y = Number(area?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const width = positive(area.width) || SECTOR;
+      const length = positive(area.length) || SECTOR;
+      for (let tileX = x; tileX < x + width; tileX += SECTOR) {
+        for (let tileY = y; tileY < y + length; tileY += SECTOR) {
+          unlockedSet.add(sectorKey(tileX / SECTOR, tileY / SECTOR));
+        }
+      }
     }
-    const blockedSet = new Set();
-    for (const b of blockedRaw) blockedSet.add(key((b.x || 0) / SECTOR, (b.y || 0) / SECTOR));
 
-    let scMin = Infinity;
-    let scMax = -Infinity;
-    let srMin = Infinity;
-    let srMax = -Infinity;
-    for (const s of [...unlockedSet, ...blockedSet]) {
-      const [sc, sr] = s.split(',').map(Number);
-      scMin = Math.min(scMin, sc);
-      scMax = Math.max(scMax, sc);
-      srMin = Math.min(srMin, sr);
-      srMax = Math.max(srMax, sr);
+    const blockedSet = new Set();
+    for (const blocked of blockedRaw) {
+      const x = Number(blocked?.x);
+      const y = Number(blocked?.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        blockedSet.add(sectorKey(x / SECTOR, y / SECTOR));
+      }
+    }
+    if (!unlockedSet.size) return null;
+
+    let sectorColumnMin = Infinity;
+    let sectorColumnMax = -Infinity;
+    let sectorRowMin = Infinity;
+    let sectorRowMax = -Infinity;
+    for (const sector of [...unlockedSet, ...blockedSet]) {
+      const [column, row] = sector.split(',').map(Number);
+      sectorColumnMin = Math.min(sectorColumnMin, column);
+      sectorColumnMax = Math.max(sectorColumnMax, column);
+      sectorRowMin = Math.min(sectorRowMin, row);
+      sectorRowMax = Math.max(sectorRowMax, row);
     }
 
     const buyable = [];
     const frame = [];
-    for (let sc = scMin; sc <= scMax; sc += 1) {
-      for (let sr = srMin; sr <= srMax; sr += 1) {
-        const k = key(sc, sr);
-        if (unlockedSet.has(k)) continue;
-        if (blockedSet.has(k)) frame.push({ x: sc * SECTOR, y: sr * SECTOR });
-        else buyable.push({ x: sc * SECTOR, y: sr * SECTOR });
+    for (let column = sectorColumnMin; column <= sectorColumnMax; column += 1) {
+      for (let row = sectorRowMin; row <= sectorRowMax; row += 1) {
+        const key = sectorKey(column, row);
+        if (unlockedSet.has(key)) continue;
+        const cell = { x: column * SECTOR, y: row * SECTOR };
+        if (blockedSet.has(key)) frame.push(cell);
+        else buyable.push(cell);
       }
     }
 
-    // --- поворот на 90° за годинниковою: (x,y,w,l) -> (H - y - l, x, l, w) ---
-    const H = (srMax + 1) * SECTOR;
-    const rc = (x, y, w, l) => ({ x: H - y - l, y: x, width: l, length: w });
-    const rArea = (a) => rc(a.x, a.y, a.width || SECTOR, a.length || SECTOR);
-    const rCell = (c) => rc(c.x, c.y, SECTOR, SECTOR);
-
-    const rAreas = areas.map(rArea);
-    const rBuyable = buyable.map(rCell);
-    const rFrame = frame.map(rCell);
-    const rEnts = allEnts.map((e) => {
-      const d = defs && defs[e.cid];
-      const w = d?.width || 1;
-      const l = d?.length || 1;
-      const r = rc(e.x, e.y, w, l);
-      return { ...e, rx: r.x, ry: r.y, rw: r.width, rl: r.length };
+    // 90° CW: (x,y,w,l) -> (H-y-l,x,l,w)
+    const sourceHeight = (sectorRowMax + 1) * SECTOR;
+    const rotate = (x, y, width, length) => ({
+      x: sourceHeight - y - length,
+      y: x,
+      width: length,
+      length: width,
+    });
+    const rotatedAreas = areas
+      .map((area) => rotate(
+        Number(area?.x),
+        Number(area?.y),
+        positive(area?.width) || SECTOR,
+        positive(area?.length) || SECTOR
+      ))
+      .filter((area) => Number.isFinite(area.x) && Number.isFinite(area.y));
+    const rotatedBuyable = buyable.map((cell) => rotate(cell.x, cell.y, SECTOR, SECTOR));
+    const rotatedFrame = frame.map((cell) => rotate(cell.x, cell.y, SECTOR, SECTOR));
+    const rotatedEntities = allEntities.map((entity, index) => {
+      const definition =
+        entity?.definition || defs?.[entity?.definitionKey] || defs?.[entity?.cid];
+      const sourceWidth = positive(entity?.footprint?.width) || positive(definition?.width);
+      const sourceLength = positive(entity?.footprint?.length) || positive(definition?.length);
+      const width = sourceWidth || 1;
+      const length = sourceLength || 1;
+      const rotated = rotate(Number(entity.x), Number(entity.y), width, length);
+      return {
+        ...entity,
+        mapId: String(
+          entity?.instanceId ??
+          entity?.id ??
+          `${entity?.cid || 'unknown'}:${entity?.x}:${entity?.y}:${index}`
+        ),
+        definition,
+        sourceWidth,
+        sourceLength,
+        rx: rotated.x,
+        ry: rotated.y,
+        rw: rotated.width,
+        rl: rotated.length,
+      };
     });
 
-    // межі малювання = розблоковані + "можна купити"
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    const bump = (x, y, w, h) => {
+    const includeBounds = (x, y, width, height) => {
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x + w);
-      maxY = Math.max(maxY, y + h);
+      maxX = Math.max(maxX, x + width);
+      maxY = Math.max(maxY, y + height);
     };
-    for (const a of rAreas) bump(a.x, a.y, a.width, a.length);
-    for (const b of rBuyable) bump(b.x, b.y, b.width, b.length);
+    rotatedAreas.forEach((area) => includeBounds(area.x, area.y, area.width, area.length));
+    rotatedBuyable.forEach((area) => includeBounds(area.x, area.y, area.width, area.length));
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
 
-    const ents = rEnts.filter((e) => e.rx >= minX && e.rx < maxX && e.ry >= minY && e.ry < maxY);
-
+    const visibleEntities = rotatedEntities.filter(
+      (entity) =>
+        entity.rx + entity.rw > minX &&
+        entity.rx < maxX &&
+        entity.ry + entity.rl > minY &&
+        entity.ry < maxY
+    );
     let cityX = Infinity;
     let cityY = Infinity;
-    for (const a of rAreas) {
-      cityX = Math.min(cityX, a.x);
-      cityY = Math.min(cityY, a.y);
-    }
+    rotatedAreas.forEach((area) => {
+      cityX = Math.min(cityX, area.x);
+      cityY = Math.min(cityY, area.y);
+    });
 
     return {
-      areas: rAreas,
-      buyable: rBuyable,
-      frame: rFrame,
-      ents,
+      areas: rotatedAreas,
+      buyable: rotatedBuyable,
+      frame: rotatedFrame,
+      entities: visibleEntities,
       minX,
       minY,
-      gw: maxX - minX,
-      gh: maxY - minY,
+      width: maxX - minX,
+      height: maxY - minY,
       cityX,
       cityY,
-      counts: { unlocked: unlockedSet.size, buyable: buyable.length },
+      counts: {
+        unlocked: unlockedSet.size,
+        buyable: buyable.length,
+        buildings: visibleEntities.length,
+        resolvedSizes: visibleEntities.filter(
+          (entity) => entity.sourceWidth && entity.sourceLength
+        ).length,
+      },
     };
-  }, [cityMap, defs]);
+  }, [buildings, cityMap, defs]);
 
-  if (!model) return null;
+  const tile = Math.max(2, Math.floor((screenWidth - 20) / VIEW_COLS));
+  const viewportWidth = tile * VIEW_COLS;
+  const viewportHeight = tile * VIEW_ROWS;
+  const contentWidth = (model?.width || 0) * tile;
+  const contentHeight = (model?.height || 0) * tile;
+  const cityOffsetX = model
+    ? Math.max(0, (model.cityX - model.minX - 1) * tile)
+    : 0;
+  const cityOffsetY = model
+    ? Math.max(0, (model.cityY - model.minY - 1) * tile)
+    : 0;
+  const canScroll = !!model;
 
-  const tile = Math.floor((screenW - 20) / VIEW_COLS);
-  const viewW = tile * VIEW_COLS;
-  const viewH = tile * VIEW_ROWS;
-  const contentW = model.gw * tile;
-  const contentH = model.gh * tile;
+  useEffect(() => {
+    setSelectedId(null);
+    if (!canScroll) return undefined;
+    const timer = setTimeout(() => {
+      horizontalScrollRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
+      verticalScrollRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [canScroll, cityMap, cityOffsetX, cityOffsetY]);
 
-  const findAt = (tx, ty) => {
+  const selectedEntity = selectedId
+    ? model?.entities.find((entity) => entity.mapId === selectedId) || null
+    : null;
+
+  if (!model) {
+    return <Text style={styles.hint}>Мапа міста ще не містить відкритих секторів.</Text>;
+  }
+
+  const findAt = (tileX, tileY) => {
     let best = null;
-    for (const e of model.ents) {
-      if (tx >= e.rx && tx < e.rx + e.rw && ty >= e.ry && ty < e.ry + e.rl) {
-        if (!best || (e.type !== 'street' && best.type === 'street')) best = e;
+    for (const entity of model.entities) {
+      if (
+        tileX >= entity.rx &&
+        tileX < entity.rx + entity.rw &&
+        tileY >= entity.ry &&
+        tileY < entity.ry + entity.rl
+      ) {
+        const entityType = entity.definition?.type || entity.type;
+        const bestType = best?.definition?.type || best?.type;
+        if (!best || (entityType !== 'street' && bestType === 'street')) best = entity;
       }
     }
     return best;
   };
 
-  const onTouch = (ev) => {
-    const { locationX, locationY } = ev.nativeEvent;
-    const tx = model.minX + Math.floor(locationX / tile);
-    const ty = model.minY + Math.floor(locationY / tile);
-    const e = findAt(tx, ty);
-    setSel(e ? { e, d: defs && defs[e.cid] } : null);
+  const onTouch = (event) => {
+    const { locationX, locationY } = event.nativeEvent;
+    const tileX = model.minX + Math.floor(locationX / tile);
+    const tileY = model.minY + Math.floor(locationY / tile);
+    setSelectedId(findAt(tileX, tileY)?.mapId || null);
   };
 
-  const cityOffX = Math.max(0, (model.cityX - model.minX - 1) * tile);
-  const cityOffY = Math.max(0, (model.cityY - model.minY - 1) * tile);
-  useEffect(() => {
-    if (didInitScroll.current) return;
-    const t = setTimeout(() => {
-      hScrollRef.current?.scrollTo?.({ x: cityOffX, animated: false });
-      vScrollRef.current?.scrollTo?.({ y: cityOffY, animated: false });
-      didInitScroll.current = true;
-    }, 60);
-    return () => clearTimeout(t);
-  }, [cityOffX, cityOffY]);
+  const selectedDefinition =
+    selectedEntity?.definition ||
+    defs?.[selectedEntity?.definitionKey] ||
+    defs?.[selectedEntity?.cid];
+  const selectedBonuses = Array.isArray(selectedEntity?.bonuses)
+    ? selectedEntity.bonuses
+    : selectedDefinition?.bonuses || [];
+  const shownBonuses = selectedBonuses.map(formatBonus).filter(Boolean).slice(0, 6);
+  const selectedEra = selectedEntity?.era || selectedDefinition?.era;
+  const selectedType = selectedDefinition?.type || selectedEntity?.type || 'unknown';
 
   return (
     <View>
       <ScrollView
-        ref={hScrollRef}
+        ref={horizontalScrollRef}
         horizontal
-        style={{ width: viewW, height: viewH, alignSelf: 'center' }}
+        style={{ width: viewportWidth, height: viewportHeight, alignSelf: 'center' }}
         showsHorizontalScrollIndicator
-        contentOffset={{ x: cityOffX, y: 0 }}
+        contentOffset={{ x: cityOffsetX, y: 0 }}
       >
         <ScrollView
-          ref={vScrollRef}
-          style={{ height: viewH }}
+          ref={verticalScrollRef}
+          style={{ height: viewportHeight }}
           nestedScrollEnabled
           showsVerticalScrollIndicator
-          contentOffset={{ x: 0, y: cityOffY }}
+          contentOffset={{ x: 0, y: cityOffsetY }}
         >
-          <View style={{ width: contentW, height: contentH }}>
+          <View style={{ width: contentWidth, height: contentHeight }}>
             <Svg
-              width={contentW}
-              height={contentH}
-              viewBox={`${model.minX} ${model.minY} ${model.gw} ${model.gh}`}
+              width={contentWidth}
+              height={contentHeight}
+              viewBox={`${model.minX} ${model.minY} ${model.width} ${model.height}`}
             >
               <Defs>
                 <ClipPath id="cityClip">
-                  {model.areas.map((a, i) => (
-                    <Rect key={i} x={a.x} y={a.y} width={a.width} height={a.length} />
+                  {model.areas.map((area, index) => (
+                    <Rect
+                      key={`clip-${index}`}
+                      x={area.x}
+                      y={area.y}
+                      width={area.width}
+                      height={area.length}
+                    />
                   ))}
                 </ClipPath>
               </Defs>
 
-              {/* тло рамки */}
               <Rect
                 x={model.minX}
                 y={model.minY}
-                width={model.gw}
-                height={model.gh}
+                width={model.width}
+                height={model.height}
                 fill={FRAME_FILL}
               />
 
-              {/* сектори "можна купити" — суцільний жовтий */}
-              {model.buyable.map((b, i) => (
+              {model.buyable.map((area, index) => (
                 <Rect
-                  key={`buy${i}`}
-                  x={b.x}
-                  y={b.y}
-                  width={b.width}
-                  height={b.length}
+                  key={`buyable-${index}`}
+                  x={area.x}
+                  y={area.y}
+                  width={area.width}
+                  height={area.length}
                   fill="#ffe100"
                 />
               ))}
 
-              {/* розблоковані сектори — суцільний білий */}
-              {model.areas.map((a, i) => (
+              {model.areas.map((area, index) => (
                 <Rect
-                  key={`a${i}`}
-                  x={a.x}
-                  y={a.y}
-                  width={a.width}
-                  height={a.length}
+                  key={`area-${index}`}
+                  x={area.x}
+                  y={area.y}
+                  width={area.width}
+                  height={area.length}
                   fill="#ffffff"
                 />
               ))}
 
-              {/* сітка клітинок — по всій мапі */}
-              {Array.from({ length: model.gw + 1 }).map((_, i) => (
+              {Array.from({ length: Math.ceil(model.width) + 1 }).map((_, index) => (
                 <Line
-                  key={`v${i}`}
-                  x1={model.minX + i}
+                  key={`vertical-${index}`}
+                  x1={model.minX + index}
                   y1={model.minY}
-                  x2={model.minX + i}
-                  y2={model.minY + model.gh}
+                  x2={model.minX + index}
+                  y2={model.minY + model.height}
                   stroke="#7a7a7a"
                   strokeWidth={0.05}
                 />
               ))}
-              {Array.from({ length: model.gh + 1 }).map((_, i) => (
+              {Array.from({ length: Math.ceil(model.height) + 1 }).map((_, index) => (
                 <Line
-                  key={`h${i}`}
+                  key={`horizontal-${index}`}
                   x1={model.minX}
-                  y1={model.minY + i}
-                  x2={model.minX + model.gw}
-                  y2={model.minY + i}
+                  y1={model.minY + index}
+                  x2={model.minX + model.width}
+                  y2={model.minY + index}
                   stroke="#7a7a7a"
                   strokeWidth={0.05}
                 />
               ))}
 
-              {/* рамка поверх сітки — ховає сітку поза мапою */}
-              {model.frame.map((f, i) => (
+              {model.frame.map((area, index) => (
                 <Rect
-                  key={`f${i}`}
-                  x={f.x}
-                  y={f.y}
-                  width={f.width}
-                  height={f.length}
+                  key={`frame-${index}`}
+                  x={area.x}
+                  y={area.y}
+                  width={area.width}
+                  height={area.length}
                   fill={FRAME_FILL}
                 />
               ))}
 
-              {/* жирна сітка СЕКТОРІВ (кожні 4 клітинки) */}
-              {Array.from({ length: Math.round(model.gw / SECTOR) + 1 }).map((_, i) => (
+              {Array.from({ length: Math.ceil(model.width / SECTOR) + 1 }).map((_, index) => (
                 <Line
-                  key={`sv${i}`}
-                  x1={model.minX + i * SECTOR}
+                  key={`sector-vertical-${index}`}
+                  x1={model.minX + index * SECTOR}
                   y1={model.minY}
-                  x2={model.minX + i * SECTOR}
-                  y2={model.minY + model.gh}
+                  x2={model.minX + index * SECTOR}
+                  y2={model.minY + model.height}
                   stroke="#1b1b1b"
                   strokeWidth={0.14}
                 />
               ))}
-              {Array.from({ length: Math.round(model.gh / SECTOR) + 1 }).map((_, i) => (
+              {Array.from({ length: Math.ceil(model.height / SECTOR) + 1 }).map((_, index) => (
                 <Line
-                  key={`sh${i}`}
+                  key={`sector-horizontal-${index}`}
                   x1={model.minX}
-                  y1={model.minY + i * SECTOR}
-                  x2={model.minX + model.gw}
-                  y2={model.minY + i * SECTOR}
+                  y1={model.minY + index * SECTOR}
+                  x2={model.minX + model.width}
+                  y2={model.minY + index * SECTOR}
                   stroke="#1b1b1b"
                   strokeWidth={0.14}
                 />
               ))}
 
-              {/* жирна межа розблокованого міста */}
-              {model.areas.map((a, i) => (
+              {model.areas.map((area, index) => (
                 <Rect
-                  key={`ab${i}`}
-                  x={a.x}
-                  y={a.y}
-                  width={a.width}
-                  height={a.length}
+                  key={`border-${index}`}
+                  x={area.x}
+                  y={area.y}
+                  width={area.width}
+                  height={area.length}
                   fill="none"
                   stroke="#111111"
                   strokeWidth={0.16}
                 />
               ))}
 
-              {/* будівлі — суцільні кольорові прямокутники поверх білого */}
               <G clipPath="url(#cityClip)">
-                {model.ents.map((e, i) => {
-                  const d = defs && defs[e.cid];
-                  const isSel = sel && sel.e === e;
+                {model.entities.map((entity) => {
+                  const type = entity.definition?.type || entity.type;
+                  const selected = selectedId === entity.mapId;
                   return (
                     <Rect
-                      key={i}
-                      x={e.rx + 0.04}
-                      y={e.ry + 0.04}
-                      width={Math.max(e.rw - 0.08, 0.1)}
-                      height={Math.max(e.rl - 0.08, 0.1)}
-                      fill={colorFor(d?.type || e.type)}
-                      opacity={e.conn === 0 ? 0.4 : 1}
-                      stroke={isSel ? '#ff1744' : 'rgba(0,0,0,0.35)'}
-                      strokeWidth={isSel ? 0.2 : 0.03}
+                      key={entity.mapId}
+                      x={entity.rx + 0.04}
+                      y={entity.ry + 0.04}
+                      width={Math.max(entity.rw - 0.08, 0.1)}
+                      height={Math.max(entity.rl - 0.08, 0.1)}
+                      fill={colorFor(type)}
+                      opacity={entity.conn === 0 ? 0.4 : 1}
+                      stroke={selected ? DarkThemeColors.danger : 'rgba(0,0,0,0.35)'}
+                      strokeWidth={selected ? 0.2 : 0.03}
                     />
                   );
                 })}
               </G>
             </Svg>
 
-            <Pressable style={StyleSheet.absoluteFill} onPress={onTouch} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Мапа будівель міста"
+              style={StyleSheet.absoluteFill}
+              onPress={onTouch}
+            />
           </View>
         </ScrollView>
       </ScrollView>
@@ -364,24 +538,54 @@ export default function FoeCityMap({ cityMap, defs }) {
           <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffe100' }]} />
           <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
         </View>
-        {LEGEND.map(([t, label]) => (
-          <View key={t} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colorFor(t) }]} />
+        {LEGEND.map(([type, label]) => (
+          <View key={type} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: colorFor(type) }]} />
             <Text style={styles.legendText}>{label}</Text>
           </View>
         ))}
       </View>
 
-      {sel ? (
+      <Text style={styles.catalogStatus}>
+        Будівель: {model.counts.buildings} · точні розміри: {model.counts.resolvedSizes}/
+        {model.counts.buildings}
+      </Text>
+
+      {selectedEntity ? (
         <View style={styles.detail}>
-          <Text style={styles.detailName}>{sel.d?.name || sel.e.cid}</Text>
-          <Text style={styles.detailMeta}>
-            {(sel.d?.type || sel.e.type)} · {(sel.d?.width || '?')}×{(sel.d?.length || '?')}
-            {sel.d?.era ? ` · ${sel.d.era}` : ''} · поз. {sel.e.x},{sel.e.y}
-            {sel.e.lvl != null ? ` · рів. ${sel.e.lvl}` : ''}
-            {sel.e.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
+          <Text style={styles.detailName}>
+            {selectedEntity.name || selectedDefinition?.name || selectedEntity.cid}
           </Text>
-          {sel.d?.description ? <Text style={styles.detailDesc}>{sel.d.description}</Text> : null}
+          <Text style={styles.detailMeta}>
+            {TYPE_LABELS[selectedType] || selectedType} ·{' '}
+            {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
+            {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
+            {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''} · поз. {selectedEntity.x},
+            {selectedEntity.y}
+            {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
+            {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
+          </Text>
+          {shownBonuses.length ? (
+            <View style={styles.bonusList}>
+              <Text style={styles.bonusTitle}>
+                Бонуси{selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
+              </Text>
+              {shownBonuses.map((bonus, index) => (
+                <Text key={`${bonus}-${index}`} style={styles.bonusText}>• {bonus}</Text>
+              ))}
+              {selectedBonuses.length > shownBonuses.length ? (
+                <Text style={styles.moreBonuses}>
+                  Ще бонусів: {selectedBonuses.length - shownBonuses.length}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {selectedDefinition?.description ? (
+            <Text style={styles.detailDescription}>{selectedDefinition.description}</Text>
+          ) : null}
+          {!selectedDefinition?.resolved ? (
+            <Text style={styles.pendingText}>Метадані цієї будівлі ще завантажуються.</Text>
+          ) : null}
         </View>
       ) : (
         <Text style={styles.hint}>Мапу можна рухати пальцем. Торкніться будівлі — деталі.</Text>
@@ -394,11 +598,24 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 },
   legendDot: { width: 9, height: 9, borderRadius: 2, marginRight: 3 },
-  legendBox: { borderWidth: 1, borderColor: '#555' },
-  legendText: { color: '#9aa3b2', fontSize: 10 },
-  hint: { color: '#9aa3b2', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
-  detail: { marginTop: 6, padding: 8, backgroundColor: '#0c141c', borderRadius: 6 },
-  detailName: { color: '#f4f7fb', fontWeight: '700' },
-  detailMeta: { color: '#9aa3b2', fontSize: 12, marginTop: 2 },
-  detailDesc: { color: '#c8d0dc', fontSize: 12, marginTop: 4 },
+  legendBox: { borderWidth: 1, borderColor: DarkThemeColors.border },
+  legendText: { color: DarkThemeColors.textSecondary, fontSize: 10 },
+  catalogStatus: { color: DarkThemeColors.textSecondary, fontSize: 10, marginTop: 2 },
+  hint: { color: DarkThemeColors.textSecondary, fontSize: 11, marginTop: 6, fontStyle: 'italic' },
+  detail: {
+    marginTop: 7,
+    padding: 10,
+    backgroundColor: DarkThemeColors.background,
+    borderWidth: 1,
+    borderColor: DarkThemeColors.border,
+    borderRadius: 10,
+  },
+  detailName: { color: DarkThemeColors.text, fontWeight: '700', fontSize: 14 },
+  detailMeta: { color: DarkThemeColors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  detailDescription: { color: DarkThemeColors.text, fontSize: 12, lineHeight: 17, marginTop: 6 },
+  bonusList: { marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: DarkThemeColors.surfaceElevated },
+  bonusTitle: { color: DarkThemeColors.primarySoft, fontSize: 11, fontWeight: '700', marginBottom: 3 },
+  bonusText: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
+  moreBonuses: { color: DarkThemeColors.textSecondary, fontSize: 10, marginTop: 2 },
+  pendingText: { color: DarkThemeColors.warning, fontSize: 11, marginTop: 6 },
 });

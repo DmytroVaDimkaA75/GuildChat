@@ -163,6 +163,7 @@ export default function FoeSyncScreen() {
     consent,
     iconSheet,
     buildingDefs,
+    cityBuildings,
     defsProgress,
     saving,
     saveToGuild,
@@ -254,9 +255,25 @@ export default function FoeSyncScreen() {
             type: d?.type,
             wl: `${d?.width}×${d?.length}`,
             era: d?.era,
+            bonusCount: d?.bonuses?.length || 0,
+            resolved: d?.resolved === true,
           })),
         }
       : null;
+    const cityBuildingsSummary = (cityBuildings || []).map((building) => ({
+      instanceId: building.instanceId,
+      entityId: building.entityId,
+      definitionKey: building.definitionKey,
+      name: building.name,
+      era: building.era,
+      x: building.x,
+      y: building.y,
+      level: building.lvl,
+      connected: building.conn,
+      footprint: building.footprint,
+      bonuses: building.bonuses,
+      definitionStatus: building.definitionStatus,
+    }));
     const text = JSON.stringify(
       {
         url: currentUrl,
@@ -265,6 +282,7 @@ export default function FoeSyncScreen() {
         found: foundSlim,
         buildingUrlsSummary,
         buildingDefs: defsSummary,
+        cityBuildings: cityBuildingsSummary,
         defsProgress,
       },
       null,
@@ -276,7 +294,7 @@ export default function FoeSyncScreen() {
     } catch (e) {
       Alert.alert('Помилка', String(e?.message || e));
     }
-  }, [currentUrl, player, seen, found, buildingDefs, defsProgress]);
+  }, [currentUrl, player, seen, found, buildingDefs, cityBuildings, defsProgress]);
 
   const packets = health.packets || 0;
   const readyRows = collection ? resourceRows(collection.ready, resDefs) : [];
@@ -287,15 +305,16 @@ export default function FoeSyncScreen() {
       {found.cityMap ? (
         <View style={styles.mapTop}>
           <Text style={styles.mapTitle}>
-            Мапа міста{defsProgress ? ` · будівлі ${defsProgress}` : ''}
+            Мапа міста · {cityBuildings?.length || found.cityMap?.entities?.length || 0} будівель
+            {defsProgress ? ` · каталог ${defsProgress}` : ''}
           </Text>
-          <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} />
+          <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} buildings={cityBuildings} />
         </View>
       ) : null}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v65` : '⏳ синхронізація ще триває… · v65'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v66` : '⏳ синхронізація ще триває… · v66'}
       </Text>
       {player ? (
         <Text style={styles.muted}>

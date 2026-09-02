@@ -19,6 +19,7 @@ import React, {
 } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 import { WebView } from 'react-native-webview';
 
 import { GuildContext } from '../../GuildContext';
@@ -27,6 +28,12 @@ import { FOE_CONSENT_KEY } from './foeConsent';
 import { saveFoeStats } from '../../src/services/foeStats';
 import { loadCachedIconSheet, fetchIconSheet } from './FoeIcon';
 import { getBuildingDefs } from '../../src/services/foeBuildings';
+
+const {
+  normalizeEra,
+  normalizeLocale,
+  resolveRequestedBuildingEra,
+} = require('../../src/services/foeBuildingMetadata');
 
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -42,6 +49,7 @@ export const useFoeSync = () => useContext(Ctx);
 
 export function FoeSyncProvider({ children }) {
   const guildContext = useContext(GuildContext);
+  const { i18n } = useTranslation();
 
   const [guildId, setGuildId] = useState(guildContext?.guildId || null);
   const [userId, setUserId] = useState(null);
@@ -60,11 +68,27 @@ export function FoeSyncProvider({ children }) {
   const [defsProgress, setDefsProgress] = useState(null);
 
   const iconSheetUrlsRef = useRef(null);
-  const defsLoadingRef = useRef(false);
+  const guildIdRef = useRef(guildContext?.guildId || null);
+  const defsRequestRef = useRef(0);
+  const defsScopeRef = useRef(null);
+  const relevantDirectUrlsRef = useRef({ signature: '', map: {} });
   const healthRef = useRef(health);
   healthRef.current = health;
   const currentUrlRef = useRef(currentUrl);
   currentUrlRef.current = currentUrl;
+
+  const clearCapturedState = useCallback(() => {
+    defsRequestRef.current += 1;
+    defsScopeRef.current = null;
+    setCurrentUrl('');
+    setHealth({ ready: false, packets: 0, lastAt: 0 });
+    setPlayer(null);
+    setFound({});
+    setSeen(new Set());
+    setBuildingDefs(null);
+    setDefsProgress(null);
+    setWebVisible(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +102,11 @@ export function FoeSyncProvider({ children }) {
       if (cancelled) return;
       setConsent(c === 'yes' ? 'yes' : 'no');
       setUserId(String(u || '').trim() || null);
-      setGuildId((prev) => prev || String(g || '').trim() || null);
+      const storedGuildId = String(g || '').trim() || null;
+      if (!guildIdRef.current && storedGuildId) {
+        guildIdRef.current = storedGuildId;
+        setGuildId(storedGuildId);
+      }
       if (sheet) setIconSheet(sheet);
     })();
     return () => {
@@ -88,8 +116,16 @@ export function FoeSyncProvider({ children }) {
 
   // GuildContext може оновитись пізніше
   useEffect(() => {
-    if (guildContext?.guildId) setGuildId(guildContext.guildId);
-  }, [guildContext?.guildId]);
+    const nextGuildId = String(guildContext?.guildId || '').trim() || null;
+    if (!nextGuildId || nextGuildId === guildIdRef.current) return;
+    const hadPreviousGuild = !!guildIdRef.current;
+    guildIdRef.current = nextGuildId;
+    setGuildId(nextGuildId);
+    if (hadPreviousGuild) {
+      clearCapturedState();
+      setWebKey((key) => key + 1);
+    }
+  }, [clearCapturedState, guildContext?.guildId]);
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
   const injectedJs =
@@ -105,12 +141,9 @@ export function FoeSyncProvider({ children }) {
   }, []);
 
   const reload = useCallback(() => {
-    setFound({});
-    setPlayer(null);
-    setSeen(new Set());
-    setHealth({ ready: false, packets: 0, lastAt: 0 });
+    clearCapturedState();
     setWebKey((k) => k + 1);
-  }, []);
+  }, [clearCapturedState]);
 
   const onMessage = useCallback((event) => {
     let msg;
@@ -183,28 +216,128 @@ export function FoeSyncProvider({ children }) {
     }
   }, []);
 
-  // Довантаження визначень будівель для мапи
+  const playerEra = normalizeEra(player?.era);
+  const activeLocale = normalizeLocale(i18n.resolvedLanguage || i18n.language);
+  const cityEntityIds = useMemo(
+    () => Array.from(new Set(
+      (found.cityMap?.entities || []).map((entity) => entity?.cid).filter(Boolean)
+    )),
+    [found.cityMap]
+  );
+  const cityDefinitionRequests = useMemo(() => {
+    const requests = new Map();
+    for (const entity of found.cityMap?.entities || []) {
+      const entityId = String(entity?.cid || '').trim();
+      if (!entityId) continue;
+      const era = resolveRequestedBuildingEra(entityId, entity?.era, playerEra);
+      const key = `${entityId}@${era || 'unknown'}`;
+      requests.set(key, { entityId, era, key });
+    }
+    return Array.from(requests.values());
+  }, [found.cityMap, playerEra]);
+  const cityDefinitionSignature = cityDefinitionRequests
+    .map((request) => request.key)
+    .join('|');
+  const relevantDirectUrlSignature = useMemo(
+    () => cityEntityIds.map((id) => `${id}=${found.buildingUrls?.[id] || ''}`).join('|'),
+    [cityEntityIds, found.buildingUrls]
+  );
+  if (relevantDirectUrlsRef.current.signature !== relevantDirectUrlSignature) {
+    relevantDirectUrlsRef.current = {
+      signature: relevantDirectUrlSignature,
+      map: Object.fromEntries(
+        cityEntityIds
+          .filter((id) => !!found.buildingUrls?.[id])
+          .map((id) => [id, found.buildingUrls[id]])
+      ),
+    };
+  }
+  const relevantDirectUrls = relevantDirectUrlsRef.current.map;
+
+  // Довантаження визначень будівель для мапи. Кожна зміна списку, епохи,
+  // локалі або CDN-версії створює нове покоління запиту; старе ігнорується.
   useEffect(() => {
-    const cids = found.cityMap?.entities?.map((e) => e.cid).filter(Boolean);
-    if (!cids || !cids.length || defsLoadingRef.current) return;
-    const haveUrls = found.buildingUrls && Object.keys(found.buildingUrls).length;
-    if (!haveUrls && !found.buildingLookupUrl) return; // ще нема звідки тягнути
-    defsLoadingRef.current = true;
+    const requestId = defsRequestRef.current + 1;
+    defsRequestRef.current = requestId;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let active = true;
+
+    if (!cityDefinitionRequests.length) {
+      setBuildingDefs(null);
+      setDefsProgress(null);
+      return () => {
+        active = false;
+        controller?.abort();
+      };
+    }
+
+    const haveDirectUrls = cityEntityIds.some((id) => !!relevantDirectUrls[id]);
+    if (!haveDirectUrls && !found.buildingLookupUrl) {
+      setDefsProgress('очікування метаданих');
+      return () => {
+        active = false;
+        controller?.abort();
+      };
+    }
+
+    const firstDirectUrl = cityEntityIds
+      .map((id) => relevantDirectUrls[id])
+      .find(Boolean);
+    const sourceScope = found.buildingLookupUrl || String(firstDirectUrl || '').split('?')[0];
+    const scopeKey = [guildId, cityDefinitionSignature, activeLocale, sourceScope].join('::');
+    if (defsScopeRef.current !== scopeKey) {
+      defsScopeRef.current = scopeKey;
+      setBuildingDefs(null);
+    }
+    setDefsProgress(`0 / ${cityDefinitionRequests.length}`);
+
     getBuildingDefs(
-      cids,
+      cityDefinitionRequests,
       found.buildingLookupUrl,
-      (d, t) => setDefsProgress(`${d} / ${t}`),
-      found.buildingUrls
+      (done, total) => {
+        if (active && defsRequestRef.current === requestId) {
+          setDefsProgress(`${done} / ${total}`);
+        }
+      },
+      relevantDirectUrls,
+      {
+        playerEra,
+        locale: activeLocale,
+        signal: controller?.signal,
+      }
     )
-      .then((d) => {
-        setBuildingDefs(d);
-        setDefsProgress(null);
+      .then((definitions) => {
+        if (!active || defsRequestRef.current !== requestId) return;
+        setBuildingDefs(definitions);
+        const resolved = Object.values(definitions).filter(
+          (definition) => definition?.resolved && definition.width && definition.length
+        ).length;
+        setDefsProgress(
+          resolved === cityDefinitionRequests.length
+            ? null
+            : `${resolved} / ${cityDefinitionRequests.length}`
+        );
       })
-      .catch(() => setDefsProgress('помилка'))
-      .finally(() => {
-        defsLoadingRef.current = false;
+      .catch((error) => {
+        if (!active || defsRequestRef.current !== requestId || error?.name === 'AbortError') return;
+        setDefsProgress('помилка метаданих');
       });
-  }, [found.cityMap, found.buildingLookupUrl, found.buildingUrls]);
+
+    return () => {
+      active = false;
+      controller?.abort();
+    };
+  }, [
+    activeLocale,
+    cityDefinitionRequests,
+    cityDefinitionSignature,
+    cityEntityIds,
+    guildId,
+    playerEra,
+    found.buildingLookupUrl,
+    relevantDirectUrls,
+    relevantDirectUrlSignature,
+  ]);
 
   // Якщо застрягли на сторінці входу порталу — показати вікно для ручного входу
   useEffect(() => {
@@ -220,6 +353,57 @@ export function FoeSyncProvider({ children }) {
     }, 15000);
     return () => clearTimeout(t);
   }, [currentUrl, health.packets]);
+
+  // Єдина модель списку міських будівель для мапи та подальших екранів.
+  // Інстанс із city_map лишається окремим від спільного визначення каталогу.
+  const cityBuildings = useMemo(
+    () => (found.cityMap?.entities || []).map((entity, index) => {
+      const entityId = String(entity?.cid || '').trim();
+      const requestedEra = resolveRequestedBuildingEra(entityId, entity?.era, playerEra);
+      const definitionKey = `${entityId}@${requestedEra || 'unknown'}`;
+      const definition = entityId ? buildingDefs?.[definitionKey] || null : null;
+      const width = Number(definition?.width);
+      const length = Number(definition?.length);
+      const staticBonuses = Array.isArray(definition?.bonuses) ? definition.bonuses : [];
+      const runtimeBonuses = Array.isArray(entity?.runtimeBonuses) ? entity.runtimeBonuses : [];
+      const bonusIdentity = (bonus) => [
+        bonus?.type,
+        bonus?.targetedFeature || 'all',
+        bonus?.onlyWhenMotivated === true,
+      ].join('|');
+      const runtimeBonusKeys = new Set(runtimeBonuses.map(bonusIdentity));
+      const bonuses = [
+        ...staticBonuses.filter((bonus) => !runtimeBonusKeys.has(bonusIdentity(bonus))),
+        ...runtimeBonuses,
+      ].filter((bonus, bonusIndex, list) =>
+        list.findIndex((item) =>
+          item?.type === bonus?.type &&
+          item?.value === bonus?.value &&
+          item?.targetedFeature === bonus?.targetedFeature &&
+          item?.onlyWhenMotivated === bonus?.onlyWhenMotivated &&
+          item?.condition === bonus?.condition
+        ) === bonusIndex
+      );
+      return {
+        ...entity,
+        instanceId: String(
+          entity?.id ?? `${entityId || 'unknown'}:${entity?.x ?? '?'}:${entity?.y ?? '?'}:${index}`
+        ),
+        entityId,
+        definitionKey,
+        name: definition?.name || entityId,
+        era: definition?.era || requestedEra,
+        footprint: {
+          width: Number.isFinite(width) && width > 0 ? width : null,
+          length: Number.isFinite(length) && length > 0 ? length : null,
+        },
+        bonuses,
+        definition,
+        definitionStatus: definition?.resolved ? 'resolved' : definition?.error || 'loading',
+      };
+    }),
+    [buildingDefs, found.cityMap, playerEra]
+  );
 
   const saveToGuild = useCallback(
     async (payload) => {
@@ -250,6 +434,7 @@ export function FoeSyncProvider({ children }) {
     seen,
     iconSheet,
     buildingDefs,
+    cityBuildings,
     defsProgress,
     saving,
     saveToGuild,

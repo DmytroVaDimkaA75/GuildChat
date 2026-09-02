@@ -79,6 +79,33 @@ export const FOE_INTERCEPTOR_JS = `
     return agg;
   }
 
+  // Залишає лише безпечні числові поля бонусів конкретного інстансу.
+  // Це особливо потрібно для ВС, де поточне значення залежить від рівня.
+  function compactEntityBonuses(entity) {
+    var out = [];
+    function add(value) {
+      if (Array.isArray(value)) {
+        for (var ai = 0; ai < value.length; ai++) { add(value[ai]); }
+        return;
+      }
+      if (!value || typeof value !== 'object') { return; }
+      var numberValue = Number(value.value);
+      if (!value.type || value.value == null || !isFinite(numberValue)) { return; }
+      out.push({
+        type: String(value.type),
+        value: numberValue,
+        targetedFeature: value.targetedFeature || value.feature || 'all',
+        onlyWhenMotivated: value.onlyWhenMotivated === true,
+        condition: (typeof value.condition === 'string')
+          ? value.condition
+          : (value.condition && (value.condition.type || value.condition.id)) || null
+      });
+    }
+    add(entity && entity.bonus);
+    add(entity && entity.bonuses);
+    return out.length ? out : null;
+  }
+
   // Рекурсивно шукає об'єкти, схожі на Величну споруду (type === "greatbuilding"
   // або є поле bonus). Повертає до 3 прикладів (обрізаних), або null.
   function scanForGB(node, depth) {
@@ -190,11 +217,15 @@ export const FOE_INTERCEPTOR_JS = `
       if (cls === 'StartupService' && mth === 'getData' && rd && typeof rd === 'object') {
         var ud = rd.user_data || rd.userData || {};
         if (ud.player_id || ud.user_id || ud.id) {
+          var eraRaw = ud.era;
+          var eraId = (eraRaw && typeof eraRaw === 'object')
+            ? (eraRaw.era || eraRaw.id || eraRaw.value || null)
+            : eraRaw;
           player = {
             id: String(ud.player_id || ud.user_id || ud.id),
             name: String(ud.user_name || ud.name || ''),
             city: ud.city_name || null,
-            era: ud.era || null,
+            era: eraId || null,
             clanId: ud.clan_id || null,
             clanName: ud.clan_name || null
           };
@@ -342,8 +373,10 @@ export const FOE_INTERCEPTOR_JS = `
               y: (me.y != null ? me.y : (me.position && me.position.y)),
               dir: (me.direction != null ? me.direction : me.rotation),
               lvl: (me.level != null ? me.level : (me.state && me.state.level)),
+              era: me.era || me.era_id || (me.state && me.state.era) || null,
               type: me.type,
-              conn: me.connected
+              conn: me.connected,
+              runtimeBonuses: compactEntityBonuses(me)
             });
           }
           found.cityMap = cityMap;
