@@ -218,64 +218,53 @@ export default function FoeSyncScreen() {
   }, [hasData, saveToGuild, player, combat, goods, collection]);
 
   const onCopy = useCallback(async () => {
-    // не тягнемо в дамп величезні мапи URL — лише зведення
-    const { buildingUrls, ...foundSlim } = found;
-    const buildingUrlsSummary = buildingUrls
-      ? { count: Object.keys(buildingUrls).length, sample: Object.entries(buildingUrls).slice(0, 3) }
+    // Компактний дамп — без важких масивів, щоб телефон не завис.
+    const collectKeys = new Set();
+    for (const b of found.prodBuildings || []) {
+      for (const k of Object.keys(b.det || {})) collectKeys.add(k);
+      for (const k of Object.keys(b.guildDet || {})) collectKeys.add('guild:' + k);
+    }
+    const goodDefs = Array.isArray(found.resourceDefs)
+      ? found.resourceDefs
+          .filter((r) => r && (r.era || /good/i.test(String(r.__class__ || ''))))
+          .map((r) => ({ id: r.id, name: r.name, era: r.era }))
+          .slice(0, 160)
       : null;
-    const defsSummary = buildingDefs
-      ? {
-          count: Object.keys(buildingDefs).length,
-          items: Object.values(buildingDefs).map((d) => ({
-            id: d?.id,
-            name: d?.name,
-            type: d?.type,
-            wl: `${d?.width}×${d?.length}`,
-            era: d?.era,
-            bonusCount: d?.bonuses?.length || 0,
-            resolved: d?.resolved === true,
-          })),
-        }
-      : null;
-    const cityBuildingsSummary = (cityBuildings || []).map((building) => ({
-      instanceId: building.instanceId,
-      entityId: building.entityId,
-      definitionKey: building.definitionKey,
-      name: building.name,
-      era: building.era,
-      x: building.x,
-      y: building.y,
-      level: building.lvl,
-      connected: building.conn,
-      footprint: building.footprint,
-      bonuses: building.bonuses,
-      definitionStatus: building.definitionStatus,
-    }));
-    const text = JSON.stringify(
-      {
-        url: currentUrl,
-        player,
-        seen: seen ? Array.from(seen).sort() : [],
-        found: foundSlim,
-        buildingUrlsSummary,
-        buildingDefs: defsSummary,
-        cityBuildings: cityBuildingsSummary,
-        defsProgress,
-        iconSheetFrames: iconSheet ? Object.keys(iconSheet.frames || {}).slice(0, 80) : null,
-        goodsSheet: goodsSheet
-          ? { pngUrl: goodsSheet.pngUrl, frames: Object.keys(goodsSheet.frames || {}) }
-          : null,
+
+    const dump = {
+      v: 'v77',
+      url: currentUrl,
+      player,
+      defsProgress: defsProgress || null,
+      counts: {
+        cityEntities: found.cityMap?.entities?.length || 0,
+        prodBuildings: (found.prodBuildings || []).length,
+        buildingDefs: buildingDefs ? Object.keys(buildingDefs).length : 0,
+        resourceDefs: Array.isArray(found.resourceDefs) ? found.resourceDefs.length : 0,
       },
-      null,
-      1
-    );
+      boosts: found.boostAgg?.sumsAll || found.boostStartupAgg?.sumsAll || null,
+      collectKeys: Array.from(collectKeys),
+      goodDefs,
+      iconSheet: iconSheet
+        ? { pngUrl: iconSheet.pngUrl, frames: Object.keys(iconSheet.frames || {}) }
+        : null,
+      goodsSheet: goodsSheet
+        ? { pngUrl: goodsSheet.pngUrl, frames: Object.keys(goodsSheet.frames || {}) }
+        : null,
+      sampleBuildings: (cityBuildings || []).slice(0, 6).map((b) => ({
+        name: b.name,
+        entityId: b.entityId,
+        era: b.era,
+      })),
+    };
+    const text = JSON.stringify(dump);
     try {
       await Clipboard.setStringAsync(text);
       if (ToastAndroid?.show) ToastAndroid.show(`Скопійовано (${text.length})`, ToastAndroid.SHORT);
     } catch (e) {
       Alert.alert('Помилка', String(e?.message || e));
     }
-  }, [currentUrl, player, seen, found, buildingDefs, cityBuildings, defsProgress, iconSheet, goodsSheet]);
+  }, [currentUrl, player, found, buildingDefs, cityBuildings, defsProgress, iconSheet, goodsSheet]);
 
   const packets = health.packets || 0;
 
