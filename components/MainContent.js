@@ -73,7 +73,7 @@ import SleepSchedule from './Profile/SleepSchedule';
 import QuantScreen from './Quant';
 import FoeSyncScreen from './FoeSync/FoeSyncScreen';
 import { FoeSyncProvider } from './FoeSync/FoeSyncProvider';
-import AllBonusesScreen from './FoeSync/AllBonusesScreen';
+import BonusesModal from './FoeSync/BonusesModal';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -821,6 +821,7 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
   const [isWorldSelectVisible, setIsWorldSelectVisible] = useState(false);
   const [selectedGuildId, setSelectedGuildId] = useState('');
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [bonusesOpen, setBonusesOpen] = useState(false);
 
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const rotation = useRef(new Animated.Value(0)).current;
@@ -1017,9 +1018,17 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
     <View style={styles.drawerContent}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
+      <BonusesModal visible={bonusesOpen} onClose={() => setBonusesOpen(false)} />
+
       <View style={styles.header}>
         <View style={styles.profileRow}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            activeOpacity={0.7}
+            onPress={() => setBonusesOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Показати бонуси з гри"
+          >
             {guildImageUrl ? (
               <Image source={{ uri: guildImageUrl }} style={styles.avatar} />
             ) : (
@@ -1027,7 +1036,7 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
                 <Profile width="24" height="24" fill={COLORS.textSecondary} />
               </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
@@ -2174,26 +2183,14 @@ export default function MainContent({ onLogout }) {
   return (
     <MenuProvider>
       <FoeSyncProvider>
-        <StartupBonusesGate>
-          <AppNavigator
-            onReady={() => setReadyGuildId(String(guildId || ""))}
-            onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
-            onLogout={onLogout}
-          />
-        </StartupBonusesGate>
+        <AppNavigator
+          onReady={() => setReadyGuildId(String(guildId || ""))}
+          onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
+          onLogout={onLogout}
+        />
       </FoeSyncProvider>
     </MenuProvider>
   );
-}
-
-// Перший екран після запуску — усі бонуси з гри. «Далі» ховає його до
-// наступного старту застосунку; окремої навігації на цей екран немає.
-function StartupBonusesGate({ children }) {
-  const [showBonuses, setShowBonuses] = useState(true);
-  if (showBonuses) {
-    return <AllBonusesScreen onClose={() => setShowBonuses(false)} />;
-  }
-  return children;
 }
 
 const styles = StyleSheet.create({
