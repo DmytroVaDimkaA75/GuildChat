@@ -35,6 +35,21 @@ export const HIDDEN_BONUS_TYPES = new Set([
   'cop_playthrough_reward',
 ]);
 
+// Бонуси, значення яких — просте число, а не відсоток.
+export const FLAT_BONUS_TYPES = new Set([
+  'guild_raids_action_points_collection',
+  'guild_raids_action_points_capacity',
+  'guild_raids_coins_start',
+  'guild_raids_supplies_start',
+  'guild_raids_goods_start',
+  'guild_raids_units_start',
+]);
+
+// Перевизначення іконки для типу бонуса (де стандартна назва не підходить).
+export const BONUS_ICON = {
+  guild_raids_action_points_collection: 'icon_bonus_action_points_recharge_gr',
+};
+
 // Людські назви для решти типів бонусів (не бойових 4-х).
 export const BONUS_LABELS = {
   // Виробництво / збір у місті
@@ -42,7 +57,7 @@ export const BONUS_LABELS = {
   supply_production: 'Виробництво припасів',
   goods_production: 'Виробництво товарів',
   special_goods_production: 'Виробництво особливих товарів',
-  forge_points_production: 'Виробництво ОФ',
+  forge_points_production: 'Виробництво СО',
   medal_production: 'Виробництво медалей',
   guild_goods_production: 'Виробництво товарів гільдії',
   diamond_production: 'Виробництво діамантів',
@@ -51,14 +66,14 @@ export const BONUS_LABELS = {
   double_collection: 'Подвійний збір',
 
   // Квантові вторгнення
-  guild_raids_coins_production: 'Монети: виробництво (Кванти)',
-  guild_raids_supplies_production: 'Припаси: виробництво (Кванти)',
-  guild_raids_coins_start: 'Монети на старті (Кванти)',
-  guild_raids_supplies_start: 'Припаси на старті (Кванти)',
-  guild_raids_goods_start: 'Товари на старті (Кванти)',
-  guild_raids_units_start: 'Юніти на старті (Кванти)',
-  guild_raids_action_points_capacity: 'Ліміт очок дій (Кванти)',
-  guild_raids_action_points_collection: 'Збір очок дій (Кванти)',
+  guild_raids_coins_production: 'Виробництво Квантових монет',
+  guild_raids_supplies_production: 'Виробництво Квантових ресурсів',
+  guild_raids_coins_start: 'Квантові монети на старті вторгнення',
+  guild_raids_supplies_start: 'Квантові запаси на старті вторгнення',
+  guild_raids_goods_start: 'Квантові товари на старті вторгнення',
+  guild_raids_units_start: 'Квантові юніти на старті вторгнення',
+  guild_raids_action_points_capacity: 'Місткість Квантових дій',
+  guild_raids_action_points_collection: 'Перезарядка Квантових дій',
 
   // Таверна
   tavern_shop_price: 'Ціни в таверні (знижка)',

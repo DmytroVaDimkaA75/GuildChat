@@ -16,7 +16,13 @@ import {
 } from 'react-native';
 
 import { useFoeSync } from './FoeSyncProvider';
-import { STATS, computeCombat, otherBonusRows } from './foeBonuses';
+import {
+  STATS,
+  computeCombat,
+  otherBonusRows,
+  FLAT_BONUS_TYPES,
+  BONUS_ICON,
+} from './foeBonuses';
 import FoeIcon, { findFrame } from './FoeIcon';
 
 const COLORS = {
@@ -112,9 +118,13 @@ export default function BonusesModal({ visible, onClose }) {
   );
   // Показуємо лише ті бонуси, для яких є ігрова іконка (решта — зайве).
   const others = useMemo(() => {
-    const rows = otherBonusRows(sumsAll);
+    const rows = otherBonusRows(sumsAll).map((r) => ({
+      ...r,
+      iconName: BONUS_ICON[r.type] || r.type,
+      flat: FLAT_BONUS_TYPES.has(r.type),
+    }));
     if (!sheets.length) return rows;
-    return rows.filter((r) => findFrame(sheets, r.type));
+    return rows.filter((r) => findFrame(sheets, r.iconName));
   }, [sumsAll, sheets]);
   const synced = health.packets > 0 && Object.keys(sumsAll).length > 0;
 
@@ -166,14 +176,15 @@ export default function BonusesModal({ visible, onClose }) {
                     <View key={row.type} style={styles.otherRow}>
                       <FoeIcon
                         sheet={sheets}
-                        name={row.type}
+                        name={row.iconName}
                         size={18}
                         style={{ marginRight: 8 }}
                       />
                       <Text style={styles.otherLabel}>{row.label}</Text>
                       <Text style={styles.otherVal}>
                         {row.value > 0 ? '+' : ''}
-                        {row.value}%
+                        {row.value.toLocaleString('uk')}
+                        {row.flat ? '' : '%'}
                       </Text>
                     </View>
                   ))}
