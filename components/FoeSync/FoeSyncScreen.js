@@ -18,6 +18,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { useFoeSync } from './FoeSyncProvider';
 import FoeCityMap from './FoeCityMap';
+import FoeLoadingRing from './FoeLoadingRing';
 import { computeCombat } from './foeBonuses';
 import FoeCollectionPanel from './FoeCollectionPanel';
 
@@ -277,33 +278,47 @@ export default function FoeSyncScreen() {
 
   const packets = health.packets || 0;
 
+  const dp = String(defsProgress || '');
+  const dpMatch = dp.match(/(\d+)\s*\/\s*(\d+)/);
+  const dpDone = dpMatch ? Number(dpMatch[1]) : 0;
+  const dpTotal = dpMatch ? Number(dpMatch[2]) : 0;
+  const mapLoading =
+    !!found.cityMap &&
+    dp !== 'помилка метаданих' &&
+    (dp === 'очікування метаданих' ||
+      (dpMatch && dpDone < dpTotal) ||
+      (!dpMatch && !buildingDefs));
+  const mapPct = dpTotal ? (dpDone / dpTotal) * 100 : 0;
+
   return (
     <View style={styles.container}>
       {/* Мапа — зверху, фіксована, з прокруткою пальцем */}
       {found.cityMap ? (
         <View style={styles.mapTop}>
-          <Text style={styles.mapTitle}>
-            Мапа міста · {cityBuildings?.length || found.cityMap?.entities?.length || 0} будівель
-            {defsProgress ? ` · каталог ${defsProgress}` : ''}
-          </Text>
-          <FoeCityMap
-            cityMap={found.cityMap}
-            defs={buildingDefs}
-            buildings={cityBuildings}
-            collect={collectInfo}
-          />
+          {mapLoading ? (
+            <FoeLoadingRing
+              pct={mapPct}
+              label={
+                dpTotal
+                  ? `Завантаження споруд: ${dpDone} / ${dpTotal}`
+                  : 'Завантаження мапи…'
+              }
+            />
+          ) : (
+            <FoeCityMap
+              cityMap={found.cityMap}
+              defs={buildingDefs}
+              buildings={cityBuildings}
+              collect={collectInfo}
+            />
+          )}
         </View>
       ) : null}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v69` : '⏳ синхронізація ще триває… · v69'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v72` : '⏳ синхронізація ще триває… · v72'}
       </Text>
-      {player ? (
-        <Text style={styles.muted}>
-          {player.name} · {player.city?.trim()} · {player.era}
-        </Text>
-      ) : null}
 
       {packets === 0 ? (
         <View style={styles.hintBox}>
