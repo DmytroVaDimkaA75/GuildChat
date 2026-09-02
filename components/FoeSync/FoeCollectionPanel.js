@@ -126,7 +126,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
     return out;
   }, [ready, sumsAll, isGoodKey]);
 
-  const selFilter = FILTERS.find((f) => f.id === selected) || null;
+  const selFilter = FILTERS.find((f) => f.id === selected && totals[f.id]?.base) || null;
   const isGroup = !!selFilter?.group;
 
   // Епохи для підфільтра (лише для товарних фільтрів)
@@ -193,6 +193,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
         {FILTERS.map((f) => {
           const t = totals[f.id] || { base: 0, boosted: 0, pct: 0 };
+          if (!t.base) return null; // ресурс не збирається — кнопку не показуємо
           const active = selected === f.id;
           const frame = f.icon && iconSheet?.frames?.[f.icon];
           return (

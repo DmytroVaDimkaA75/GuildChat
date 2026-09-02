@@ -13,6 +13,7 @@ import {
   Text,
   ToastAndroid,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import FoeCityMap from './FoeCityMap';
 import FoeLoadingRing from './FoeLoadingRing';
 import { computeCombat } from './foeBonuses';
 import FoeCollectionPanel from './FoeCollectionPanel';
+import { FOE_CONSENT_BODY, FOE_CONSENT_BULLETS, FOE_CONSENT_NOTE } from './foeConsent';
 
 const RES_LABELS = {
   money: 'Монети',
@@ -106,6 +108,7 @@ function formatWhen(unixSec) {
 }
 
 export default function FoeSyncScreen() {
+  const { width: screenWidth, fontScale } = useWindowDimensions();
   const foe = useFoeSync();
   const {
     found = {},
@@ -121,6 +124,7 @@ export default function FoeSyncScreen() {
     saving,
     saveToGuild,
     setWebVisible,
+    acceptConsent,
   } = foe || {};
 
   const [, force] = useState(0);
@@ -284,6 +288,7 @@ export default function FoeSyncScreen() {
   const synced = packets > 0;
   const syncEnabled = consent === 'yes';
   const syncColor = synced ? C.success : syncEnabled ? C.primary : C.warning;
+  const stackActions = screenWidth < 360 || fontScale > 1.2;
 
   return (
     <View style={styles.container}>
@@ -347,6 +352,24 @@ export default function FoeSyncScreen() {
           </View>
         </View>
 
+        {!syncEnabled ? (
+          <View style={styles.consentCard}>
+            <Text style={styles.consentBody}>{FOE_CONSENT_BODY}</Text>
+            {FOE_CONSENT_BULLETS.map((b, i) => (
+              <Text key={i} style={styles.consentBullet}>{'•  '}{b}</Text>
+            ))}
+            <Text style={styles.consentNote}>{FOE_CONSENT_NOTE}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.85}
+              style={styles.consentBtn}
+              onPress={() => acceptConsent?.()}
+            >
+              <Text style={styles.consentBtnText}>Погоджуюсь, продовжити</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {!synced && syncEnabled ? (
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
@@ -377,11 +400,11 @@ export default function FoeSyncScreen() {
           />
         ) : null}
 
-        <View style={styles.btnRow}>
+        <View style={[styles.btnRow, stackActions && styles.btnRowStacked]}>
           <TouchableOpacity
             accessibilityRole="button"
             activeOpacity={0.8}
-            style={styles.secondaryBtn}
+            style={[styles.secondaryBtn, stackActions && styles.fullWidthBtn]}
             onPress={onCopy}
           >
             <MaterialIcons name="content-copy" size={18} color={C.primary} />
@@ -391,7 +414,11 @@ export default function FoeSyncScreen() {
             accessibilityRole="button"
             accessibilityState={{ disabled: !hasData || saving, busy: saving }}
             activeOpacity={0.8}
-            style={[styles.primaryBtn, (!hasData || saving) && styles.disabledBtn]}
+            style={[
+              styles.primaryBtn,
+              stackActions && styles.fullWidthBtn,
+              (!hasData || saving) && styles.disabledBtn,
+            ]}
             onPress={onSave}
             disabled={!hasData || saving}
           >
@@ -406,14 +433,6 @@ export default function FoeSyncScreen() {
           </TouchableOpacity>
         </View>
 
-        {consent !== 'yes' ? (
-          <View style={styles.warningCard}>
-            <MaterialIcons name="warning-amber" size={20} color={C.warning} />
-            <Text style={styles.warningText}>
-              Синхронізацію ще не увімкнено. Відкрийте профіль → «Синхронізація з грою».
-            </Text>
-          </View>
-        ) : null}
       </ScrollView>
     </View>
   );
@@ -478,6 +497,8 @@ const styles = StyleSheet.create({
   },
   openGameButtonText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 8 },
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  btnRowStacked: { flexDirection: 'column' },
+  fullWidthBtn: { flex: 0, width: '100%' },
   primaryBtn: {
     flex: 1.35,
     minHeight: 46,
@@ -488,7 +509,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
   },
-  primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  primaryBtnText: {
+    flexShrink: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+    textAlign: 'center',
+  },
   secondaryBtn: {
     flex: 0.85,
     minHeight: 46,
@@ -501,7 +529,14 @@ const styles = StyleSheet.create({
     borderColor: C.primary,
     backgroundColor: `${C.primary}18`,
   },
-  secondaryBtnText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 7 },
+  secondaryBtnText: {
+    flexShrink: 1,
+    color: C.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 7,
+    textAlign: 'center',
+  },
   disabledBtn: { opacity: 0.4 },
   warningCard: {
     flexDirection: 'row',
@@ -514,4 +549,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   warningText: { flex: 1, color: C.textSecondary, fontSize: 12, lineHeight: 18, marginLeft: 9 },
+  consentCard: {
+    padding: 14,
+    marginTop: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+  },
+  consentBody: { color: C.text, fontSize: 13, lineHeight: 19 },
+  consentBullet: { color: C.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  consentNote: { color: C.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 10, fontStyle: 'italic' },
+  consentBtn: {
+    marginTop: 14,
+    backgroundColor: C.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  consentBtnText: { color: '#00121f', fontSize: 15, fontWeight: '800' },
 });

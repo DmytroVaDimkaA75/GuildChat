@@ -24,6 +24,10 @@ const SECTOR = 4;
 const FRAME_FILL = '#131722';
 const RULER_W = 26; // ширина лівої координатної лінійки
 const RULER_H = 16; // висота верхньої координатної лінійки
+const MIN_TILE = 6;
+const MIN_TILE_WITH_LEGEND = 4;
+const SCREEN_HEIGHT_RESERVE = 286;
+const SCREEN_HEIGHT_RESERVE_WITH_LEGEND = 354;
 
 const TYPE_COLOR = {
   street: '#3a4656',
@@ -314,8 +318,12 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
   const widthTile = Math.floor(
     Math.max(VIEW_COLS * 2, screenWidth - horizontalInset - RULER_W) / VIEW_COLS
   );
+  // Лишаємо місце заголовку навігації, chrome мапи та нижній панелі даних.
   const heightTile = Math.floor(
-    Math.max(VIEW_ROWS * 2, screenHeight * 0.48) / VIEW_ROWS
+    Math.max(
+      VIEW_ROWS * (legendOpen ? MIN_TILE_WITH_LEGEND : MIN_TILE),
+      screenHeight - (legendOpen ? SCREEN_HEIGHT_RESERVE_WITH_LEGEND : SCREEN_HEIGHT_RESERVE)
+    ) / VIEW_ROWS
   );
   const tile = Math.max(2, Math.min(widthTile, heightTile));
   const viewportWidth = tile * VIEW_COLS;
@@ -671,12 +679,21 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
         animationType="fade"
         onRequestClose={() => setSelectedId(null)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setSelectedId(null)}>
-          <Pressable style={styles.popup} onPress={() => {}} accessibilityViewIsModal>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => setSelectedId(null)}
+          accessible={false}
+        >
+          <Pressable
+            style={styles.popup}
+            onPress={() => {}}
+            accessible={false}
+            accessibilityViewIsModal
+          >
             {selectedEntity ? (
               <>
                 <View style={styles.popupHeader}>
-                  <Text style={styles.detailName}>
+                  <Text style={styles.detailName} numberOfLines={2}>
                     {selectedEntity.name || selectedDefinition?.name || selectedEntity.cid}
                   </Text>
                   <TouchableOpacity
@@ -690,23 +707,23 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
                   </TouchableOpacity>
                 </View>
 
-                {isGB ? (
-                  <Text style={styles.detailMeta}>
-                    Велична споруда
-                    {selectedEntity.lvl != null ? ` · рівень ${selectedEntity.lvl}` : ''}
-                  </Text>
-                ) : (
-                  <Text style={styles.detailMeta}>
-                    {TYPE_LABELS[selectedType] || selectedType} ·{' '}
-                    {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
-                    {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
-                    {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
-                    {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
-                    {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
-                  </Text>
-                )}
-
                 <ScrollView style={styles.popupScroll}>
+                  {isGB ? (
+                    <Text style={styles.detailMeta}>
+                      Велична споруда
+                      {selectedEntity.lvl != null ? ` · рівень ${selectedEntity.lvl}` : ''}
+                    </Text>
+                  ) : (
+                    <Text style={styles.detailMeta}>
+                      {TYPE_LABELS[selectedType] || selectedType} ·{' '}
+                      {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
+                      {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
+                      {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
+                      {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
+                      {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
+                    </Text>
+                  )}
+
                   {shownBonuses.length ? (
                     <View style={styles.bonusList}>
                       <Text style={styles.bonusTitle}>Бонуси</Text>
