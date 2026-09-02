@@ -50,6 +50,31 @@ const FILTERS = [
   },
 ];
 
+const ERA_LABELS = {
+  BronzeAge: 'Бронзова доба',
+  IronAge: 'Залізна доба',
+  EarlyMiddleAge: 'Раннє Середньовіччя',
+  HighMiddleAge: 'Високе Середньовіччя',
+  LateMiddleAge: 'Пізнє Середньовіччя',
+  ColonialAge: 'Колоніальна доба',
+  IndustrialAge: 'Індустріальна доба',
+  ProgressiveEra: 'Епоха прогресу',
+  ModernEra: 'Епоха модерну',
+  PostModernEra: 'Постмодерн',
+  ContemporaryEra: 'Новітня епоха',
+  TomorrowEra: 'Епоха майбутнього',
+  FutureEra: 'Майбутнє',
+  ArcticFuture: 'Арктичне майбутнє',
+  OceanicFuture: 'Океанічне майбутнє',
+  VirtualFuture: 'Віртуальне майбутнє',
+  SpaceAgeMars: 'Космос: Марс',
+  SpaceAgeAsteroidBelt: 'Космос: Пояс астероїдів',
+  SpaceAgeVenus: 'Космос: Венера',
+  SpaceAgeJupiterMoon: 'Космос: Супутник Юпітера',
+  SpaceAgeTitan: 'Космос: Титан',
+  SpaceAgeSpaceHub: 'Космос: Космічний вузол',
+};
+const eraLabel = (e) => ERA_LABELS[e] || e;
 const withBonus = (base, pct) => (pct ? Math.floor(base * (1 + pct / 100)) : base);
 const fmt = (n) => Number(n || 0).toLocaleString('uk');
 
@@ -131,7 +156,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
           list.push({
             key: `${b.iid || b.id}:${k}`,
             name: info.name,
-            sub: goodName(k) + (info.era ? ` · ${info.era}` : ''),
+            sub: goodName(k) + (info.era ? ` · ${eraLabel(info.era)}` : ''),
             base: Number(v),
             boosted: withBonus(Number(v), pct),
           });
@@ -206,7 +231,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
               style={[styles.eraBtn, era === e && styles.eraBtnActive]}
               onPress={() => setEra((cur) => (cur === e ? null : e))}
             >
-              <Text style={[styles.eraTxt, era === e && { color: COLORS.primary }]}>{e}</Text>
+              <Text style={[styles.eraTxt, era === e && { color: COLORS.primary }]}>{eraLabel(e)}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
