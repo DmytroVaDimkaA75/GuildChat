@@ -292,17 +292,27 @@ export const FOE_INTERCEPTOR_JS = `
           function flattenProducts(po) {
             // playerResources.resources — це вже конкретний готовий приз,
             // навіть коли isRandom:true (просто щоразу випадає різне).
-            var out = { det: {}, rnd: false, other: [] };
+            var out = { det: {}, guildDet: {}, rnd: false, other: [] };
             var arr = (po && po.products) || [];
             for (var q = 0; q < arr.length; q++) {
               var pr = arr[q];
               if (!pr) { continue; }
               if (pr.isRandom || pr.type === 'random') { out.rnd = true; }
+              var isGuild = /guild/i.test(String(pr.type || '') + ' ' + String(pr.__class__ || ''));
               var res = pr.playerResources && pr.playerResources.resources;
+              var gres = pr.guildResources && pr.guildResources.resources;
+              if (gres && typeof gres === 'object') {
+                for (var grk in gres) {
+                  if (Object.prototype.hasOwnProperty.call(gres, grk)) {
+                    out.guildDet[grk] = (out.guildDet[grk] || 0) + (Number(gres[grk]) || 0);
+                  }
+                }
+              }
               if (res && typeof res === 'object') {
+                var bucket = isGuild ? out.guildDet : out.det;
                 for (var rk in res) {
                   if (Object.prototype.hasOwnProperty.call(res, rk)) {
-                    out.det[rk] = (out.det[rk] || 0) + (Number(res[rk]) || 0);
+                    bucket[rk] = (bucket[rk] || 0) + (Number(res[rk]) || 0);
                   }
                 }
               } else if (pr.type && pr.type !== 'resources') {
@@ -337,6 +347,7 @@ export const FOE_INTERCEPTOR_JS = `
             if (po2 && po2.products) {
               var fl = flattenProducts(po2);
               b.det = fl.det;
+              if (Object.keys(fl.guildDet).length) { b.guildDet = fl.guildDet; }
               if (fl.rnd) { b.rnd = true; }
               if (fl.other.length) { b.other = fl.other; }
             } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {

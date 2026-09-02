@@ -17,9 +17,9 @@ import {
 import * as Clipboard from 'expo-clipboard';
 
 import { useFoeSync } from './FoeSyncProvider';
-import FoeIcon from './FoeIcon';
 import FoeCityMap from './FoeCityMap';
 import { computeCombat } from './foeBonuses';
+import FoeCollectionPanel from './FoeCollectionPanel';
 
 const COLORS = {
   background: '#0f1115',
@@ -276,7 +276,6 @@ export default function FoeSyncScreen() {
   }, [currentUrl, player, seen, found, buildingDefs, cityBuildings, defsProgress]);
 
   const packets = health.packets || 0;
-  const readyRows = collection ? resourceRows(collection.ready, resDefs) : [];
 
   return (
     <View style={styles.container}>
@@ -298,7 +297,7 @@ export default function FoeSyncScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v68` : '⏳ синхронізація ще триває… · v68'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v69` : '⏳ синхронізація ще триває… · v69'}
       </Text>
       {player ? (
         <Text style={styles.muted}>
@@ -317,22 +316,14 @@ export default function FoeSyncScreen() {
         </View>
       ) : null}
 
-      {readyRows.length ? (
-        <>
-          <Text style={styles.section}>Збір з міста</Text>
-          {readyRows.map((r, i) =>
-            r.header ? (
-              <Text key={i} style={styles.subSection}>— {r.header} —</Text>
-            ) : (
-              <View key={i} style={styles.resRow}>
-                <FoeIcon sheet={iconSheet} name={r.key} size={18} style={{ marginRight: 6 }} />
-                <Text style={styles.kv}>
-                  {r.label}: <Text style={styles.kvVal}>{Number(r.value).toLocaleString('uk')}</Text>
-                </Text>
-              </View>
-            )
-          )}
-        </>
+      {found.prodBuildings ? (
+        <FoeCollectionPanel
+          prodBuildings={found.prodBuildings}
+          cityBuildings={cityBuildings}
+          sumsAll={sumsAll}
+          resDefs={resDefs}
+          iconSheet={iconSheet}
+        />
       ) : null}
 
       <View style={styles.btnRow}>
