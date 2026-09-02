@@ -31,10 +31,18 @@ const FILTERS = [
   { id: 'supplies', label: 'Ресурси', icon: 'supplies', boost: 'supply_production' },
   { id: 'premium', label: 'Діаманти', icon: 'premium', boost: null },
   { id: 'medals', label: 'Медалі', icon: 'medals', boost: null },
-  { id: 'goods', label: 'Товари', mat: 'inventory-2', boost: 'goods_production', group: 'det' },
+  {
+    id: 'goods',
+    label: 'Товари',
+    icon: 'goods',
+    mat: 'inventory-2',
+    boost: 'goods_production',
+    group: 'det',
+  },
   {
     id: 'guildGoods',
     label: 'Товари гільдії',
+    icon: 'goods',
     mat: 'account-balance',
     boost: 'goods_production',
     group: 'guildDet',
@@ -205,7 +213,8 @@ export default function FoeCollectionPanel({
           const t = totals[f.id] || { base: 0, boosted: 0, pct: 0 };
           if (!t.base) return null; // ресурс не збирається — кнопку не показуємо
           const active = selected === f.id;
-          const frame = f.icon && iconSheet?.frames?.[f.icon];
+          const frame =
+            f.icon && sheets.some((s) => s?.frames?.[f.icon]);
           return (
             <TouchableOpacity
               key={f.id}
@@ -220,7 +229,7 @@ export default function FoeCollectionPanel({
             >
               <View style={styles.filterHeading}>
                 {frame ? (
-                  <FoeIcon sheet={iconSheet} name={f.icon} size={22} />
+                  <FoeIcon sheet={sheets} name={f.icon} size={22} />
                 ) : (
                   <MaterialIcons
                     name={f.mat || 'inventory'}
