@@ -42,7 +42,7 @@ const FILTERS = [
   {
     id: 'guildGoods',
     label: 'Товари гільдії',
-    icon: 'goods',
+    icon: 'treasury_goods',
     mat: 'account-balance',
     boost: 'goods_production',
     group: 'guildDet',
