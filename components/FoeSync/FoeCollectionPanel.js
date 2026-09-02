@@ -10,17 +10,8 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import { DarkThemeColors as C } from '../../constants/theme';
 import FoeIcon from './FoeIcon';
-
-const COLORS = {
-  surface: '#152330',
-  surfaceHi: '#1b2b3b',
-  primary: '#4ea1ff',
-  textPrimary: '#f4f7fb',
-  textSecondary: '#9aa3b2',
-  success: '#54d18c',
-  separator: '#36516a',
-};
 
 const CORE_KEYS = new Set([
   'money',
@@ -185,8 +176,9 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
   if (!anyTotal) return null;
 
   return (
-    <View>
-      <Text style={styles.section}>Запланований збір</Text>
+    <View style={styles.card}>
+      <Text style={styles.title}>Запланований збір</Text>
+      <Text style={styles.subtitle}>Готові виробництва за ресурсами</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
         {FILTERS.map((f) => {
@@ -199,17 +191,30 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
               style={[styles.filterBtn, active && styles.filterBtnActive]}
               onPress={() => pick(f.id)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${f.label}: ${
+                t.pct ? `${fmt(t.base)} з бази, ${fmt(t.boosted)} з бонусом` : fmt(t.base)
+              }`}
+              accessibilityState={{ selected: active }}
             >
-              {frame ? (
-                <FoeIcon sheet={iconSheet} name={f.icon} size={22} />
-              ) : (
-                <MaterialIcons
-                  name={f.mat || 'inventory'}
-                  size={20}
-                  color={active ? COLORS.primary : COLORS.textSecondary}
-                />
-              )}
-              <Text style={[styles.filterVal, active && { color: COLORS.primary }]}>
+              <View style={styles.filterHeading}>
+                {frame ? (
+                  <FoeIcon sheet={iconSheet} name={f.icon} size={22} />
+                ) : (
+                  <MaterialIcons
+                    name={f.mat || 'inventory'}
+                    size={20}
+                    color={active ? C.primary : C.textSecondary}
+                  />
+                )}
+                <Text
+                  numberOfLines={2}
+                  style={[styles.filterLabel, active && styles.filterLabelActive]}
+                >
+                  {f.label}
+                </Text>
+              </View>
+              <Text style={[styles.filterVal, active && styles.filterValActive]}>
                 {t.pct ? `${fmt(t.base)} / ${fmt(t.boosted)}` : fmt(t.base)}
               </Text>
             </TouchableOpacity>
@@ -222,16 +227,22 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
           <TouchableOpacity
             style={[styles.eraBtn, !era && styles.eraBtnActive]}
             onPress={() => setEra(null)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !era }}
           >
-            <Text style={[styles.eraTxt, !era && { color: COLORS.primary }]}>усі епохи</Text>
+            <Text style={[styles.eraTxt, !era && styles.eraTxtActive]}>усі епохи</Text>
           </TouchableOpacity>
           {eras.map((e) => (
             <TouchableOpacity
               key={e}
               style={[styles.eraBtn, era === e && styles.eraBtnActive]}
               onPress={() => setEra((cur) => (cur === e ? null : e))}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ selected: era === e }}
             >
-              <Text style={[styles.eraTxt, era === e && { color: COLORS.primary }]}>{eraLabel(e)}</Text>
+              <Text style={[styles.eraTxt, era === e && styles.eraTxtActive]}>{eraLabel(e)}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -240,8 +251,14 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
       {selFilter ? (
         rows.length ? (
           <View style={styles.table}>
-            {rows.map((r) => (
-              <View key={r.key} style={styles.tr}>
+            <View style={styles.tableHeader}>
+              <Text style={styles.tableTitle}>{selFilter.label}</Text>
+              {selFilter.boost && totals[selFilter.id]?.pct ? (
+                <Text style={styles.boostBadge}>+{fmt(totals[selFilter.id].pct)}%</Text>
+              ) : null}
+            </View>
+            {rows.map((r, index) => (
+              <View key={r.key} style={[styles.tr, index === rows.length - 1 && styles.trLast]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tdName}>{r.name}</Text>
                   {r.sub ? <Text style={styles.tdSub}>{r.sub}</Text> : null}
@@ -255,57 +272,118 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
             ))}
           </View>
         ) : (
-          <Text style={styles.empty}>Немає завершених виробництв цього ресурсу.</Text>
+          <View style={styles.emptyBox}>
+            <Text style={styles.empty}>Немає завершених виробництв цього ресурсу.</Text>
+          </View>
         )
       ) : (
-        <Text style={styles.empty}>Оберіть фільтр, щоб побачити список споруд.</Text>
+        <View style={styles.emptyBox}>
+          <Text style={styles.empty}>Оберіть ресурс, щоб побачити список споруд.</Text>
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginTop: 16,
-    marginBottom: 8,
+  card: {
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
   },
+  title: {
+    color: C.primarySoft,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  subtitle: { color: C.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 3, marginBottom: 10 },
   filtersRow: { gap: 8, paddingRight: 8 },
   filterBtn: {
-    minWidth: 66,
-    alignItems: 'center',
+    minWidth: 100,
+    minHeight: 66,
+    justifyContent: 'space-between',
     paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.separator,
-    backgroundColor: COLORS.surface,
+    borderColor: C.border,
+    backgroundColor: C.surfaceElevated,
   },
-  filterBtnActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceHi },
-  filterVal: { color: COLORS.textPrimary, fontSize: 11, fontWeight: '700', marginTop: 4 },
-  eraRow: { gap: 6, paddingRight: 8, marginTop: 8 },
+  filterBtnActive: { borderColor: C.primary, backgroundColor: `${C.primary}18` },
+  filterHeading: { flexDirection: 'row', alignItems: 'center' },
+  filterLabel: {
+    flexShrink: 1,
+    color: C.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+    marginLeft: 6,
+  },
+  filterLabelActive: { color: C.text },
+  filterVal: { color: C.text, fontSize: 13, fontWeight: '700', marginTop: 7 },
+  filterValActive: { color: C.primarySoft },
+  eraRow: { gap: 7, paddingRight: 8, marginTop: 10 },
   eraBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 14,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: COLORS.separator,
+    borderColor: C.border,
+    backgroundColor: C.surfaceElevated,
   },
-  eraBtnActive: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceHi },
-  eraTxt: { color: COLORS.textSecondary, fontSize: 11 },
-  table: { marginTop: 10, borderTopWidth: 1, borderTopColor: COLORS.surface },
+  eraBtnActive: { borderColor: C.primary, backgroundColor: `${C.primary}18` },
+  eraTxt: { color: C.textSecondary, fontSize: 12, fontWeight: '600' },
+  eraTxtActive: { color: C.primarySoft },
+  table: {
+    marginTop: 12,
+    overflow: 'hidden',
+    backgroundColor: C.surfaceElevated,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+  },
+  tableHeader: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  tableTitle: { color: C.text, fontSize: 13, fontWeight: '700' },
+  boostBadge: {
+    color: C.success,
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: `${C.success}70`,
+    backgroundColor: `${C.success}12`,
+  },
   tr: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
+    borderBottomColor: C.border,
   },
-  tdName: { color: COLORS.textPrimary, fontSize: 13 },
-  tdSub: { color: COLORS.textSecondary, fontSize: 11, marginTop: 1 },
-  tdVal: { color: COLORS.success, fontSize: 13, fontWeight: '700', marginLeft: 8 },
-  empty: { color: COLORS.textSecondary, fontSize: 12, fontStyle: 'italic', marginTop: 10 },
+  trLast: { borderBottomWidth: 0 },
+  tdName: { color: C.text, fontSize: 13, lineHeight: 18 },
+  tdSub: { color: C.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  tdVal: { color: C.success, fontSize: 13, fontWeight: '700', marginLeft: 8 },
+  emptyBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: C.surfaceElevated,
+    borderRadius: 10,
+  },
+  empty: { color: C.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

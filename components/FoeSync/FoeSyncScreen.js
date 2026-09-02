@@ -6,6 +6,7 @@
 
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -14,24 +15,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
+import { DarkThemeColors as C } from '../../constants/theme';
 import { useFoeSync } from './FoeSyncProvider';
 import FoeCityMap from './FoeCityMap';
 import FoeLoadingRing from './FoeLoadingRing';
 import { computeCombat } from './foeBonuses';
 import FoeCollectionPanel from './FoeCollectionPanel';
-
-const COLORS = {
-  background: '#0f1115',
-  surface: '#152330',
-  primary: '#4ea1ff',
-  textPrimary: '#f4f7fb',
-  textSecondary: '#9aa3b2',
-  danger: '#ff5b5b',
-  success: '#54d18c',
-  separator: '#36516a',
-};
 
 const RES_LABELS = {
   money: 'Монети',
@@ -289,143 +281,227 @@ export default function FoeSyncScreen() {
       (dpMatch && dpDone < dpTotal) ||
       (!dpMatch && !buildingDefs));
   const mapPct = dpTotal ? (dpDone / dpTotal) * 100 : 0;
+  const synced = packets > 0;
 
   return (
     <View style={styles.container}>
       {/* Мапа — зверху, фіксована, з прокруткою пальцем */}
       {found.cityMap ? (
         <View style={styles.mapTop}>
-          {mapLoading ? (
-            <FoeLoadingRing
-              pct={mapPct}
-              label={
-                dpTotal
-                  ? `Завантаження споруд: ${dpDone} / ${dpTotal}`
-                  : 'Завантаження мапи…'
-              }
-            />
-          ) : (
-            <FoeCityMap
-              cityMap={found.cityMap}
-              defs={buildingDefs}
-              buildings={cityBuildings}
-              collect={collectInfo}
-            />
-          )}
+          <View style={styles.mapCard}>
+            {mapLoading ? (
+              <FoeLoadingRing
+                pct={mapPct}
+                label={
+                  dpTotal
+                    ? `Завантаження споруд: ${dpDone} / ${dpTotal}`
+                    : 'Завантаження мапи…'
+                }
+              />
+            ) : (
+              <FoeCityMap
+                cityMap={found.cityMap}
+                defs={buildingDefs}
+                buildings={cityBuildings}
+                collect={collectInfo}
+                horizontalInset={44}
+              />
+            )}
+          </View>
         </View>
       ) : null}
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
-      <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v73` : '⏳ синхронізація ще триває… · v73'}
-      </Text>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <View style={styles.statusCard}>
+          <View
+            style={[
+              styles.statusIcon,
+              { backgroundColor: synced ? `${C.success}18` : `${C.warning}18` },
+            ]}
+          >
+            {synced ? (
+              <MaterialIcons name="cloud-done" size={23} color={C.success} />
+            ) : (
+              <ActivityIndicator size="small" color={C.warning} />
+            )}
+          </View>
+          <View style={styles.statusCopy}>
+            <Text style={styles.statusTitle}>
+              {synced ? 'Синхронізовано з грою' : 'Синхронізація триває'}
+            </Text>
+            <Text style={styles.statusMeta}>
+              {synced
+                ? `Отримано пакетів: ${packets}`
+                : 'Очікуємо перші дані з міста.'}
+            </Text>
+          </View>
+        </View>
 
-      {packets === 0 ? (
-        <View style={styles.hintBox}>
-          <Text style={styles.muted}>
-            Вікно гри вантажиться у фоні. Якщо довго нічого — відкрийте його для входу:
-          </Text>
-          <TouchableOpacity style={styles.smallBtn} onPress={() => setWebVisible?.(true)}>
-            <Text style={styles.smallBtnText}>Показати вікно гри</Text>
+        {!synced ? (
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <MaterialIcons name="info-outline" size={20} color={C.primarySoft} />
+              <Text style={styles.infoText}>
+                Вікно гри вантажиться у фоні. Якщо дані довго не зʼявляються, відкрийте його для входу.
+              </Text>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.8}
+              style={styles.openGameButton}
+              onPress={() => setWebVisible?.(true)}
+            >
+              <MaterialIcons name="open-in-new" size={18} color={C.primary} />
+              <Text style={styles.openGameButtonText}>Показати вікно гри</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {found.prodBuildings ? (
+          <FoeCollectionPanel
+            prodBuildings={found.prodBuildings}
+            cityBuildings={cityBuildings}
+            sumsAll={sumsAll}
+            resDefs={resDefs}
+            iconSheet={iconSheet}
+          />
+        ) : null}
+
+        <View style={styles.btnRow}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.8}
+            style={styles.secondaryBtn}
+            onPress={onCopy}
+          >
+            <MaterialIcons name="content-copy" size={18} color={C.primary} />
+            <Text style={styles.secondaryBtnText}>Копіювати</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !hasData || saving, busy: saving }}
+            activeOpacity={0.8}
+            style={[styles.primaryBtn, (!hasData || saving) && styles.disabledBtn]}
+            onPress={onSave}
+            disabled={!hasData || saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <MaterialIcons name="cloud-upload" size={19} color="#fff" />
+            )}
+            <Text style={styles.primaryBtnText}>
+              {saving ? 'Збереження…' : 'Зберегти у гільдію'}
+            </Text>
           </TouchableOpacity>
         </View>
-      ) : null}
 
-      {found.prodBuildings ? (
-        <FoeCollectionPanel
-          prodBuildings={found.prodBuildings}
-          cityBuildings={cityBuildings}
-          sumsAll={sumsAll}
-          resDefs={resDefs}
-          iconSheet={iconSheet}
-        />
-      ) : null}
-
-      <View style={styles.btnRow}>
-        <TouchableOpacity style={styles.secondaryBtn} onPress={onCopy}>
-          <Text style={styles.secondaryBtnText}>Копіювати</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.primaryBtn, (!hasData || saving) && { opacity: 0.4 }]}
-          onPress={onSave}
-          disabled={!hasData || saving}
-        >
-          <Text style={styles.primaryBtnText}>{saving ? '…' : 'Зберегти у гільдію'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {consent !== 'yes' ? (
-        <Text style={styles.muted}>
-          Синхронізацію ще не увімкнено. Відкрийте профіль → «Синхронізація з грою».
-        </Text>
-      ) : null}
+        {consent !== 'yes' ? (
+          <View style={styles.warningCard}>
+            <MaterialIcons name="warning-amber" size={20} color={C.warning} />
+            <Text style={styles.warningText}>
+              Синхронізацію ще не увімкнено. Відкрийте профіль → «Синхронізація з грою».
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: C.background },
   mapTop: {
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.separator,
-    backgroundColor: COLORS.surface,
-  },
-  mapTitle: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  status: { color: COLORS.primary, fontSize: 14, marginBottom: 4 },
-  muted: { color: COLORS.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 4 },
-  hintBox: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: 10,
-    marginVertical: 8,
-  },
-  section: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginTop: 16,
-    marginBottom: 6,
-  },
-  subSection: { color: COLORS.textSecondary, fontSize: 11, marginTop: 6, marginBottom: 2 },
-  kv: { color: COLORS.textPrimary, fontSize: 14, lineHeight: 21 },
-  kvVal: { color: COLORS.success, fontWeight: '700' },
-  resRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  btnRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  primaryBtn: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: '#00121f', fontSize: 15, fontWeight: '700' },
-  secondaryBtn: {
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.separator,
-  },
-  secondaryBtnText: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '600' },
-  smallBtn: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: COLORS.separator,
-    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingTop: 12,
+    backgroundColor: C.background,
   },
-  smallBtnText: { color: COLORS.primary, fontSize: 13 },
+  mapCard: {
+    padding: 10,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+  },
+  scroll: { flex: 1 },
+  content: { padding: 14, paddingBottom: 28 },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+  },
+  statusIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusCopy: { flex: 1, marginLeft: 12 },
+  statusTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
+  statusMeta: { color: C.textSecondary, fontSize: 13, marginTop: 3 },
+  infoCard: {
+    padding: 14,
+    marginTop: 12,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+  },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  infoText: { flex: 1, color: C.textSecondary, fontSize: 13, lineHeight: 19, marginLeft: 9 },
+  openGameButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingHorizontal: 14,
+    backgroundColor: `${C.primary}18`,
+    borderWidth: 1,
+    borderColor: C.primary,
+    borderRadius: 10,
+  },
+  openGameButtonText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  btnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  primaryBtn: {
+    flex: 1.35,
+    minHeight: 46,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  secondaryBtn: {
+    flex: 0.85,
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.primary,
+    backgroundColor: `${C.primary}18`,
+  },
+  secondaryBtnText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 7 },
+  disabledBtn: { opacity: 0.4 },
+  warningCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    marginTop: 12,
+    backgroundColor: `${C.warning}12`,
+    borderWidth: 1,
+    borderColor: `${C.warning}70`,
+    borderRadius: 12,
+  },
+  warningText: { flex: 1, color: C.textSecondary, fontSize: 12, lineHeight: 18, marginLeft: 9 },
 });

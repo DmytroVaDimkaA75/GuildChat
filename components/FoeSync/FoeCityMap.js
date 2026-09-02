@@ -145,8 +145,8 @@ function formatBonus(bonus) {
   }${motivated}`;
 }
 
-export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
-  const { width: screenWidth } = useWindowDimensions();
+export default function FoeCityMap({ cityMap, defs, buildings, collect, horizontalInset = 44 }) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const horizontalScrollRef = useRef(null);
@@ -311,7 +311,13 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
     };
   }, [buildings, cityMap, defs]);
 
-  const tile = Math.max(2, Math.floor((screenWidth - 20) / VIEW_COLS));
+  const widthTile = Math.floor(
+    Math.max(VIEW_COLS * 2, screenWidth - horizontalInset - RULER_W) / VIEW_COLS
+  );
+  const heightTile = Math.floor(
+    Math.max(VIEW_ROWS * 2, screenHeight * 0.48) / VIEW_ROWS
+  );
+  const tile = Math.max(2, Math.min(widthTile, heightTile));
   const viewportWidth = tile * VIEW_COLS;
   const viewportHeight = tile * VIEW_ROWS;
   const contentWidth = (model?.width || 0) * tile;
@@ -397,7 +403,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
     leftRulerRef.current?.scrollTo?.({ y: e.nativeEvent.contentOffset.y, animated: false });
 
   return (
-    <View>
+    <View style={styles.mapRoot}>
       {/* верхня координатна лінійка */}
       <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
         <View style={{ width: RULER_W, height: RULER_H }} />
@@ -596,7 +602,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
                       height={Math.max(entity.rl - 0.08, 0.1)}
                       fill={colorFor(type)}
                       opacity={entity.conn === 0 ? 0.4 : 1}
-                      stroke={selected ? DarkThemeColors.danger : 'rgba(0,0,0,0.35)'}
+                      stroke={selected ? DarkThemeColors.primarySoft : 'rgba(0,0,0,0.35)'}
                       strokeWidth={selected ? 0.2 : 0.03}
                     />
                   );
@@ -607,6 +613,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Мапа будівель міста"
+              accessibilityHint="Рухайте мапу пальцем і торкніться будівлі, щоб переглянути деталі"
               style={StyleSheet.absoluteFill}
               onPress={onTouch}
             />
@@ -619,9 +626,11 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
 
       {/* згортаний блок легенди */}
       <TouchableOpacity
-        style={styles.legendHeader}
+        style={[styles.legendHeader, legendOpen && styles.legendHeaderOpen]}
         onPress={() => setLegendOpen((open) => !open)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: legendOpen }}
       >
         <Text style={styles.legendHeaderText}>Легенда</Text>
         <MaterialIcons
@@ -671,10 +680,13 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
                     {selectedEntity.name || selectedDefinition?.name || selectedEntity.cid}
                   </Text>
                   <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Закрити деталі будівлі"
+                    style={styles.closeButton}
                     onPress={() => setSelectedId(null)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.close}>✕</Text>
+                    <MaterialIcons name="close" size={24} color={DarkThemeColors.text} />
                   </TouchableOpacity>
                 </View>
 
