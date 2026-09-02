@@ -19,6 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useFoeSync } from './FoeSyncProvider';
 import FoeIcon from './FoeIcon';
 import FoeCityMap from './FoeCityMap';
+import { computeCombat } from './foeBonuses';
 
 const COLORS = {
   background: '#0f1115',
@@ -30,73 +31,6 @@ const COLORS = {
   success: '#54d18c',
   separator: '#36516a',
 };
-
-const STATS = ['attAttacker', 'defAttacker', 'attDefender', 'defDefender'];
-const COMBAT_LABELS = {
-  attAttacker: 'Атака — атакуюча армія',
-  defAttacker: 'Захист — атакуюча армія',
-  attDefender: 'Атака — оборонна армія',
-  defDefender: 'Захист — оборонна армія',
-};
-const GETALL_MAP = {
-  att_boost_attacker: ['attAttacker'],
-  def_boost_attacker: ['defAttacker'],
-  att_boost_defender: ['attDefender'],
-  def_boost_defender: ['defDefender'],
-  att_def_boost_attacker: ['attAttacker', 'defAttacker'],
-  att_def_boost_defender: ['attDefender', 'defDefender'],
-  att_def_boost_attacker_defender: STATS,
-};
-const GB_MAP = {
-  military_boost: ['attAttacker', 'defAttacker'],
-  fierce_resistance: ['attDefender', 'defDefender'],
-  advanced_tactics: STATS,
-};
-
-const empty = () => ({ attAttacker: 0, defAttacker: 0, attDefender: 0, defDefender: 0 });
-const addInto = (dst, keys, v) => keys.forEach((k) => { dst[k] += v; });
-
-function computeCombat(sumsAll, sumsByFeature, cityGBs) {
-  const base = empty();
-  const feat = {};
-  const getFeat = (f) => (feat[f] || (feat[f] = empty()));
-  for (const [type, sum] of Object.entries(sumsAll || {})) {
-    const keys = GETALL_MAP[type];
-    if (keys) addInto(base, keys, sum);
-  }
-  for (const [k, sum] of Object.entries(sumsByFeature || {})) {
-    const [type, f] = k.split(' | ');
-    const keys = GETALL_MAP[type];
-    if (keys) addInto(getFeat(f), keys, sum);
-  }
-  let gbTotal = 0;
-  for (const g of cityGBs || []) {
-    const b = g.bonus;
-    if (!b || b.__class__ !== 'GreatBuildingUnitBonus' || typeof b.value !== 'number') continue;
-    const keys = GB_MAP[b.type];
-    if (!keys) continue;
-    const v = Math.floor(b.value);
-    const target = b.targetedFeature && b.targetedFeature !== 'all' ? getFeat(b.targetedFeature) : base;
-    addInto(target, keys, v);
-    if (target === base) gbTotal += v;
-  }
-  const withFeat = (f) => {
-    const o = { ...base };
-    if (feat[f]) STATS.forEach((k) => { o[k] += feat[f][k]; });
-    return o;
-  };
-  return {
-    base,
-    contexts: {
-      general: base,
-      battleground: withFeat('battleground'),
-      guild_expedition: withFeat('guild_expedition'),
-    },
-    quantum: feat.quantum_incursions || feat.guild_raids || null,
-    feat,
-    gbTotal,
-  };
-}
 
 const RES_LABELS = {
   money: 'Монети',
@@ -364,7 +298,7 @@ export default function FoeSyncScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v67` : '⏳ синхронізація ще триває… · v67'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v68` : '⏳ синхронізація ще триває… · v68'}
       </Text>
       {player ? (
         <Text style={styles.muted}>
@@ -381,27 +315,6 @@ export default function FoeSyncScreen() {
             <Text style={styles.smallBtnText}>Показати вікно гри</Text>
           </TouchableOpacity>
         </View>
-      ) : null}
-
-      {Object.keys(sumsAll).length ? (
-        <>
-          <Text style={styles.section}>Бонуси армії</Text>
-          {STATS.map((k) => (
-            <Text key={k} style={styles.kv}>
-              {COMBAT_LABELS[k]}: <Text style={styles.kvVal}>{combat.base[k]}%</Text>
-            </Text>
-          ))}
-          {combat.feat.battleground ? (
-            <Text style={styles.muted}>
-              ПБГ: {STATS.map((k) => `${combat.contexts.battleground[k]}`).join(' / ')}
-            </Text>
-          ) : null}
-          {combat.feat.guild_expedition ? (
-            <Text style={styles.muted}>
-              Виправа: {STATS.map((k) => `${combat.contexts.guild_expedition[k]}`).join(' / ')}
-            </Text>
-          ) : null}
-        </>
       ) : null}
 
       {readyRows.length ? (

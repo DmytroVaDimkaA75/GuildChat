@@ -73,6 +73,7 @@ import SleepSchedule from './Profile/SleepSchedule';
 import QuantScreen from './Quant';
 import FoeSyncScreen from './FoeSync/FoeSyncScreen';
 import { FoeSyncProvider } from './FoeSync/FoeSyncProvider';
+import AllBonusesScreen from './FoeSync/AllBonusesScreen';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -2173,14 +2174,26 @@ export default function MainContent({ onLogout }) {
   return (
     <MenuProvider>
       <FoeSyncProvider>
-        <AppNavigator
-          onReady={() => setReadyGuildId(String(guildId || ""))}
-          onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
-          onLogout={onLogout}
-        />
+        <StartupBonusesGate>
+          <AppNavigator
+            onReady={() => setReadyGuildId(String(guildId || ""))}
+            onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
+            onLogout={onLogout}
+          />
+        </StartupBonusesGate>
       </FoeSyncProvider>
     </MenuProvider>
   );
+}
+
+// Перший екран після запуску — усі бонуси з гри. «Далі» ховає його до
+// наступного старту застосунку; окремої навігації на цей екран немає.
+function StartupBonusesGate({ children }) {
+  const [showBonuses, setShowBonuses] = useState(true);
+  if (showBonuses) {
+    return <AllBonusesScreen onClose={() => setShowBonuses(false)} />;
+  }
+  return children;
 }
 
 const styles = StyleSheet.create({
