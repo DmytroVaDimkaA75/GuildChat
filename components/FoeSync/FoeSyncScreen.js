@@ -282,6 +282,8 @@ export default function FoeSyncScreen() {
       (!dpMatch && !buildingDefs));
   const mapPct = dpTotal ? (dpDone / dpTotal) * 100 : 0;
   const synced = packets > 0;
+  const syncEnabled = consent === 'yes';
+  const syncColor = synced ? C.success : syncEnabled ? C.primary : C.warning;
 
   return (
     <View style={styles.container}>
@@ -304,7 +306,7 @@ export default function FoeSyncScreen() {
                 defs={buildingDefs}
                 buildings={cityBuildings}
                 collect={collectInfo}
-                horizontalInset={44}
+                horizontalInset={46}
               />
             )}
           </View>
@@ -316,28 +318,36 @@ export default function FoeSyncScreen() {
           <View
             style={[
               styles.statusIcon,
-              { backgroundColor: synced ? `${C.success}18` : `${C.warning}18` },
+              { backgroundColor: `${syncColor}18` },
             ]}
           >
             {synced ? (
               <MaterialIcons name="cloud-done" size={23} color={C.success} />
+            ) : syncEnabled ? (
+              <ActivityIndicator size="small" color={C.primary} />
             ) : (
-              <ActivityIndicator size="small" color={C.warning} />
+              <MaterialIcons name="sync-disabled" size={23} color={C.warning} />
             )}
           </View>
           <View style={styles.statusCopy}>
             <Text style={styles.statusTitle}>
-              {synced ? 'Синхронізовано з грою' : 'Синхронізація триває'}
+              {synced
+                ? 'Синхронізовано з грою'
+                : syncEnabled
+                  ? 'Синхронізація триває'
+                  : 'Синхронізацію не ввімкнено'}
             </Text>
             <Text style={styles.statusMeta}>
               {synced
                 ? `Отримано пакетів: ${packets}`
-                : 'Очікуємо перші дані з міста.'}
+                : syncEnabled
+                  ? 'Очікуємо перші дані з міста.'
+                  : 'Надайте згоду в профілі, щоб почати.'}
             </Text>
           </View>
         </View>
 
-        {!synced ? (
+        {!synced && syncEnabled ? (
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
               <MaterialIcons name="info-outline" size={20} color={C.primarySoft} />

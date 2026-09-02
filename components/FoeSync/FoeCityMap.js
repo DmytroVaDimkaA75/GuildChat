@@ -145,7 +145,7 @@ function formatBonus(bonus) {
   }${motivated}`;
 }
 
-export default function FoeCityMap({ cityMap, defs, buildings, collect, horizontalInset = 44 }) {
+export default function FoeCityMap({ cityMap, defs, buildings, collect, horizontalInset = 46 }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -672,7 +672,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
         onRequestClose={() => setSelectedId(null)}
       >
         <Pressable style={styles.backdrop} onPress={() => setSelectedId(null)}>
-          <Pressable style={styles.popup} onPress={() => {}}>
+          <Pressable style={styles.popup} onPress={() => {}} accessibilityViewIsModal>
             {selectedEntity ? (
               <>
                 <View style={styles.popupHeader}>
@@ -706,7 +706,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
                   </Text>
                 )}
 
-                <ScrollView style={{ maxHeight: 360 }}>
+                <ScrollView style={styles.popupScroll}>
                   {shownBonuses.length ? (
                     <View style={styles.bonusList}>
                       <Text style={styles.bonusTitle}>Бонуси</Text>
@@ -760,7 +760,8 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
 }
 
 const styles = StyleSheet.create({
-  rulerText: { color: DarkThemeColors.textSecondary, fontSize: 9 },
+  mapRoot: { alignItems: 'stretch' },
+  rulerText: { color: DarkThemeColors.textSecondary, fontSize: 10 },
   rulerTop: { position: 'absolute', left: 0, top: 3, textAlign: 'right', paddingRight: 2 },
   rulerLeft: {
     position: 'absolute',
@@ -775,73 +776,114 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    paddingVertical: 6,
-    borderTopWidth: 1,
-    borderTopColor: DarkThemeColors.surfaceElevated,
+    minHeight: 44,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    backgroundColor: DarkThemeColors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: DarkThemeColors.border,
+    borderRadius: 12,
   },
+  legendHeaderOpen: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   legendHeaderText: {
-    color: DarkThemeColors.textSecondary,
+    color: DarkThemeColors.text,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
-  legendBody: { marginBottom: 4 },
+  legendBody: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    backgroundColor: DarkThemeColors.surfaceElevated,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: DarkThemeColors.border,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    backgroundColor: DarkThemeColors.overlay,
     justifyContent: 'center',
-    padding: 18,
+    padding: 20,
   },
   popup: {
-    backgroundColor: DarkThemeColors.background,
-    borderRadius: 14,
+    width: '100%',
+    maxWidth: 460,
+    maxHeight: '84%',
+    backgroundColor: DarkThemeColors.surface,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: DarkThemeColors.border,
-    padding: 14,
+    padding: 16,
   },
   popupHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  close: { color: DarkThemeColors.textSecondary, fontSize: 17, fontWeight: '700', paddingLeft: 12 },
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    backgroundColor: DarkThemeColors.surfaceElevated,
+    borderRadius: 12,
+  },
+  popupScroll: { flexShrink: 1, maxHeight: 360 },
   legend: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 3 },
   legendDot: { width: 9, height: 9, borderRadius: 2, marginRight: 3 },
   legendBox: { borderWidth: 1, borderColor: DarkThemeColors.border },
-  legendText: { color: DarkThemeColors.textSecondary, fontSize: 10 },
-  catalogStatus: { color: DarkThemeColors.textSecondary, fontSize: 10, marginTop: 2 },
-  hint: { color: DarkThemeColors.textSecondary, fontSize: 11, marginTop: 6, fontStyle: 'italic' },
-  detail: {
-    marginTop: 7,
-    padding: 10,
-    backgroundColor: DarkThemeColors.background,
+  legendText: { color: DarkThemeColors.textSecondary, fontSize: 11 },
+  catalogStatus: { color: DarkThemeColors.textSecondary, fontSize: 11, marginTop: 4 },
+  hint: {
+    color: DarkThemeColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  detailName: { flex: 1, color: DarkThemeColors.text, fontWeight: '700', fontSize: 20, lineHeight: 25 },
+  detailMeta: { color: DarkThemeColors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 5 },
+  detailDescription: { color: DarkThemeColors.text, fontSize: 13, lineHeight: 19, marginTop: 12 },
+  bonusList: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: DarkThemeColors.surfaceElevated,
     borderWidth: 1,
     borderColor: DarkThemeColors.border,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  detailName: { color: DarkThemeColors.text, fontWeight: '700', fontSize: 14 },
-  detailMeta: { color: DarkThemeColors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
-  detailDescription: { color: DarkThemeColors.text, fontSize: 12, lineHeight: 17, marginTop: 6 },
-  bonusList: { marginTop: 7, paddingTop: 7, borderTopWidth: 1, borderTopColor: DarkThemeColors.surfaceElevated },
-  bonusTitle: { color: DarkThemeColors.primarySoft, fontSize: 11, fontWeight: '700', marginBottom: 3 },
-  bonusText: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
-  moreBonuses: { color: DarkThemeColors.textSecondary, fontSize: 10, marginTop: 2 },
+  bonusTitle: { color: DarkThemeColors.primarySoft, fontSize: 13, fontWeight: '700', marginBottom: 5 },
+  bonusText: { color: DarkThemeColors.text, fontSize: 12, lineHeight: 18 },
+  moreBonuses: { color: DarkThemeColors.textSecondary, fontSize: 11, marginTop: 4 },
   collectBox: {
-    marginTop: 7,
-    paddingTop: 7,
-    borderTopWidth: 1,
-    borderTopColor: DarkThemeColors.surfaceElevated,
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: DarkThemeColors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: DarkThemeColors.border,
+    borderRadius: 12,
   },
-  collectStatus: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
+  collectStatus: { color: DarkThemeColors.text, fontSize: 12, lineHeight: 18 },
   collectTitle: {
     color: DarkThemeColors.primarySoft,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    marginTop: 4,
-    marginBottom: 2,
+    marginTop: 6,
+    marginBottom: 3,
   },
-  collectRow: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
-  pendingText: { color: DarkThemeColors.warning, fontSize: 11, marginTop: 6 },
+  collectRow: { color: DarkThemeColors.text, fontSize: 12, lineHeight: 18 },
+  pendingText: {
+    color: DarkThemeColors.warning,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: `${DarkThemeColors.warning}12`,
+    borderRadius: 10,
+  },
 });

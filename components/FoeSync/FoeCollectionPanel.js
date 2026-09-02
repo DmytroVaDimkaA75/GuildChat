@@ -6,7 +6,7 @@
 // фільтрами зʼявляється рядок фільтрів по епохах. Натискання показує таблицю
 // «споруда → кількість».
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -93,9 +93,19 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
     return m;
   }, [cityBuildings]);
 
-  const goodName = (k) => resDefs?.[k]?.name || k;
-  const isGoodKey = (k) => !CORE_KEYS.has(k) && (resDefs?.[k]?.era || /^[a-z][a-z0-9_]*$/.test(k));
-  const bInfo = (b) => infoByIid[String(b.iid)] || { name: nameByCid[b.id] || b.id, era: null };
+  const goodName = useCallback((key) => resDefs?.[key]?.name || key, [resDefs]);
+  const isGoodKey = useCallback(
+    (key) => !CORE_KEYS.has(key) && (resDefs?.[key]?.era || /^[a-z][a-z0-9_]*$/.test(key)),
+    [resDefs]
+  );
+  const bInfo = useCallback(
+    (building) =>
+      infoByIid[String(building.iid)] || {
+        name: nameByCid[building.id] || building.id,
+        era: null,
+      },
+    [infoByIid, nameByCid]
+  );
 
   // Сума по кожному фільтру (з уже завершених виробництв)
   const totals = useMemo(() => {
@@ -114,7 +124,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
       out[f.id] = { base, boosted: withBonus(base, pct), pct };
     }
     return out;
-  }, [ready, sumsAll, resDefs]);
+  }, [ready, sumsAll, isGoodKey]);
 
   const selFilter = FILTERS.find((f) => f.id === selected) || null;
   const isGroup = !!selFilter?.group;
@@ -130,7 +140,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
       if (e) set.add(e);
     }
     return Array.from(set).sort();
-  }, [isGroup, selFilter, ready, infoByIid]);
+  }, [isGroup, selFilter, ready, isGoodKey, bInfo]);
 
   // Рядки таблиці для вибраного фільтра
   const rows = useMemo(() => {
@@ -165,7 +175,7 @@ export default function FoeCollectionPanel({ prodBuildings, cityBuildings, sumsA
       }
     }
     return list.sort((a, b) => b.base - a.base);
-  }, [selFilter, isGroup, era, ready, sumsAll, resDefs]);
+  }, [selFilter, isGroup, era, ready, sumsAll, bInfo, goodName, isGoodKey]);
 
   const pick = (id) => {
     setSelected((cur) => (cur === id ? null : id));
