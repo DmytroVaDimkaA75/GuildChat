@@ -32,6 +32,13 @@ const FILTERS = [
   { id: 'premium', label: 'Діаманти', icon: 'premium', boost: null },
   { id: 'medals', label: 'Медалі', icon: 'medals', boost: null },
   {
+    id: 'blueprints',
+    label: 'Креслення',
+    icon: 'blueprint',
+    boost: null,
+    keys: ['blueprints', 'blueprint'],
+  },
+  {
     id: 'goods',
     label: 'Товари',
     icon: 'goods',
@@ -133,7 +140,7 @@ export default function FoeCollectionPanel({
           const det = b[f.group] || {};
           for (const [k, v] of Object.entries(det)) if (isGoodKey(k)) base += Number(v) || 0;
         } else {
-          base += Number((b.det || {})[f.id]) || 0;
+          for (const key of f.keys || [f.id]) base += Number((b.det || {})[key]) || 0;
         }
       }
       const pct = f.boost ? Number(sumsAll?.[f.boost]) || 0 : 0;
@@ -180,11 +187,19 @@ export default function FoeCollectionPanel({
           });
         }
       } else {
-        const v = Number((b.det || {})[selFilter.id]) || 0;
+        let v = 0;
+        let hitKey = selFilter.id;
+        for (const key of selFilter.keys || [selFilter.id]) {
+          const kv = Number((b.det || {})[key]) || 0;
+          if (kv) {
+            v += kv;
+            hitKey = key;
+          }
+        }
         if (!v) continue;
         list.push({
           key: String(b.iid || b.id) + ':' + selFilter.id,
-          resKey: selFilter.id,
+          resKey: hitKey,
           name: info.name,
           sub: null,
           base: v,
