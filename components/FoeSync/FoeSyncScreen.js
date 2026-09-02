@@ -152,6 +152,32 @@ function parseGoods(raw) {
   return map && typeof map === 'object' && !Array.isArray(map) ? map : null;
 }
 
+const PROD_STATUS = [
+  [/Finished|Produced|Ready|Collect/i, 'готово до збору'],
+  [/Producing/i, 'виробляється'],
+  [/Idle/i, 'виробництво не запущено'],
+  [/Construction/i, 'будується'],
+  [/Unconnected/i, 'немає дороги'],
+];
+function prodStatusLabel(st) {
+  for (const [re, label] of PROD_STATUS) if (re.test(String(st || ''))) return label;
+  return String(st || '').replace(/State$/, '') || '—';
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+function formatWhen(unixSec) {
+  if (!unixSec) return null;
+  const d = new Date(Number(unixSec) * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  const diffMin = Math.round((d.getTime() - Date.now()) / 60000);
+  let rel = '';
+  if (diffMin > 0) {
+    if (diffMin < 60) rel = ` (через ${diffMin} хв)`;
+    else if (diffMin < 60 * 24) rel = ` (через ${Math.round(diffMin / 60)} год)`;
+    else rel = ` (через ${Math.round(diffMin / 1440)} дн)`;
+  }
+  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}${rel}`;
+}
+
 export default function FoeSyncScreen() {
   const foe = useFoeSync();
   const {
@@ -213,6 +239,25 @@ export default function FoeSyncScreen() {
     () => (found.prodBuildings ? computeCollection(found.prodBuildings, sumsAll) : null),
     [found.prodBuildings, sumsAll]
   );
+
+  // Збір / стан / час завершення по кожній будівлі — для панелі деталей на мапі.
+  // Ключі: id інстансу (точно) і cityentity_id (запасний, за типом).
+  const collectInfo = useMemo(() => {
+    const byKey = {};
+    for (const b of found.prodBuildings || []) {
+      const scaled = b.det ? applyMultiplier(b.det, sumsAll) : {};
+      const info = {
+        rows: resourceRows(scaled, resDefs),
+        rnd: !!b.rnd,
+        status: prodStatusLabel(b.st),
+        ready: !!b.ready,
+        whenText: b.ready ? null : formatWhen(b.readyAt),
+      };
+      if (b.iid != null) byKey[String(b.iid)] = info;
+      if (b.id && !byKey[b.id]) byKey[b.id] = info;
+    }
+    return byKey;
+  }, [found.prodBuildings, sumsAll, resDefs]);
 
   const hasData = Object.keys(sumsAll).length > 0 || (goods && Object.keys(goods).length);
 
@@ -308,13 +353,18 @@ export default function FoeSyncScreen() {
             Мапа міста · {cityBuildings?.length || found.cityMap?.entities?.length || 0} будівель
             {defsProgress ? ` · каталог ${defsProgress}` : ''}
           </Text>
-          <FoeCityMap cityMap={found.cityMap} defs={buildingDefs} buildings={cityBuildings} />
+          <FoeCityMap
+            cityMap={found.cityMap}
+            defs={buildingDefs}
+            buildings={cityBuildings}
+            collect={collectInfo}
+          />
         </View>
       ) : null}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14 }}>
       <Text style={styles.status}>
-        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v66` : '⏳ синхронізація ще триває… · v66'}
+        {packets > 0 ? `✅ синхронізовано · пакетів: ${packets} · v67` : '⏳ синхронізація ще триває… · v67'}
       </Text>
       {player ? (
         <Text style={styles.muted}>

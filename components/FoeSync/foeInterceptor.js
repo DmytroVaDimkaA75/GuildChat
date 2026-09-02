@@ -328,6 +328,7 @@ export const FOE_INTERCEPTOR_JS = `
               || (pst.next_state_transition_at ? (pst.next_state_transition_at <= nowP) : false);
             var b = {
               id: pe.cityentity_id,
+              iid: pe.id,
               type: pt,
               st: pstc,
               ready: !!ready,

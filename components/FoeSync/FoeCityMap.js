@@ -133,7 +133,7 @@ function formatBonus(bonus) {
   }${motivated}`;
 }
 
-export default function FoeCityMap({ cityMap, defs, buildings }) {
+export default function FoeCityMap({ cityMap, defs, buildings, collect }) {
   const { width: screenWidth } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
   const horizontalScrollRef = useRef(null);
@@ -361,6 +361,14 @@ export default function FoeCityMap({ cityMap, defs, buildings }) {
   const shownBonuses = selectedBonuses.map(formatBonus).filter(Boolean).slice(0, 6);
   const selectedEra = selectedEntity?.era || selectedDefinition?.era;
   const selectedType = selectedDefinition?.type || selectedEntity?.type || 'unknown';
+  const selectedCollect = selectedEntity
+    ? collect?.[String(selectedEntity.id)] ||
+      collect?.[selectedEntity.instanceId] ||
+      collect?.[selectedEntity.entityId] ||
+      collect?.[selectedEntity.cid] ||
+      null
+    : null;
+  const collectRows = (selectedCollect?.rows || []).filter((row) => !row.header && row.value);
 
   return (
     <View>
@@ -583,6 +591,26 @@ export default function FoeCityMap({ cityMap, defs, buildings }) {
           {selectedDefinition?.description ? (
             <Text style={styles.detailDescription}>{selectedDefinition.description}</Text>
           ) : null}
+          {selectedCollect ? (
+            <View style={styles.collectBox}>
+              <Text style={styles.collectStatus}>
+                Стан: {selectedCollect.status}
+                {selectedCollect.whenText ? ` · завершення ${selectedCollect.whenText}` : ''}
+              </Text>
+              {collectRows.length ? (
+                <>
+                  <Text style={styles.collectTitle}>
+                    Збір{selectedCollect.rnd ? ' (випадковий)' : ''}
+                  </Text>
+                  {collectRows.map((row) => (
+                    <Text key={row.key} style={styles.collectRow}>
+                      • {row.label}: {Number(row.value).toLocaleString('uk')}
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+            </View>
+          ) : null}
           {!selectedDefinition?.resolved ? (
             <Text style={styles.pendingText}>Метадані цієї будівлі ще завантажуються.</Text>
           ) : null}
@@ -617,5 +645,20 @@ const styles = StyleSheet.create({
   bonusTitle: { color: DarkThemeColors.primarySoft, fontSize: 11, fontWeight: '700', marginBottom: 3 },
   bonusText: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
   moreBonuses: { color: DarkThemeColors.textSecondary, fontSize: 10, marginTop: 2 },
+  collectBox: {
+    marginTop: 7,
+    paddingTop: 7,
+    borderTopWidth: 1,
+    borderTopColor: DarkThemeColors.surfaceElevated,
+  },
+  collectStatus: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
+  collectTitle: {
+    color: DarkThemeColors.primarySoft,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  collectRow: { color: DarkThemeColors.text, fontSize: 11, lineHeight: 16 },
   pendingText: { color: DarkThemeColors.warning, fontSize: 11, marginTop: 6 },
 });
