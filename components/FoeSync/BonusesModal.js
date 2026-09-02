@@ -48,13 +48,27 @@ const CONTEXTS = [
   ['guild_expedition', 'Виправа'],
 ];
 
-function CombatGrid({ values, sheets }) {
+// суфікс іконки бойового бонуса за контекстом
+const CTX_SUFFIX = {
+  general: '',
+  battleground: '_gbg',
+  guild_expedition: '_gex',
+  quantum: '_gr',
+};
+
+function CombatGrid({ values, sheets, context = 'general' }) {
+  const suffix = CTX_SUFFIX[context] || '';
   return (
     <View style={styles.combatRow}>
       {STATS.map((k) => (
         <View key={k} style={styles.combatCell}>
           <View style={styles.combatCapRow}>
-            <FoeIcon sheet={sheets} name={STAT_ICON[k]} size={16} style={{ marginRight: 5 }} />
+            <FoeIcon
+              sheet={sheets}
+              name={STAT_ICON[k] + suffix}
+              size={16}
+              style={{ marginRight: 5 }}
+            />
             <Text style={styles.combatCap}>{SHORT[k]}</Text>
           </View>
           <Text style={styles.combatNum}>{values[k]}%</Text>
@@ -126,14 +140,14 @@ export default function BonusesModal({ visible, onClose }) {
                 combat.feat[key] ? (
                   <View key={key} style={styles.ctxBlock}>
                     <Text style={styles.ctxLabel}>{label} (разом із загальними)</Text>
-                    <CombatGrid values={combat.contexts[key]} sheets={sheets} />
+                    <CombatGrid values={combat.contexts[key]} sheets={sheets} context={key} />
                   </View>
                 ) : null
               )}
               {combat.quantum ? (
                 <View style={styles.ctxBlock}>
                   <Text style={styles.ctxLabel}>Квантові вторгнення (окремі)</Text>
-                  <CombatGrid values={combat.quantum} sheets={sheets} />
+                  <CombatGrid values={combat.quantum} sheets={sheets} context="quantum" />
                 </View>
               ) : null}
 
