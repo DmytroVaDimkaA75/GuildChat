@@ -232,7 +232,7 @@ export default function FoeSyncScreen() {
       : null;
 
     const dump = {
-      v: 'v87',
+      v: 'v88',
       url: currentUrl,
       player,
       defsProgress: defsProgress || null,

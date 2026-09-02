@@ -294,7 +294,7 @@ export const FOE_INTERCEPTOR_JS = `
           function flattenProducts(po) {
             // playerResources.resources — це вже конкретний готовий приз,
             // навіть коли isRandom:true (просто щоразу випадає різне).
-            var out = { det: {}, guildDet: {}, rnd: false, other: [] };
+            var out = { det: {}, guildDet: {}, rnd: false, other: [], frags: [] };
             var arr = (po && po.products) || [];
             for (var q = 0; q < arr.length; q++) {
               var pr = arr[q];
@@ -319,15 +319,28 @@ export const FOE_INTERCEPTOR_JS = `
                 }
               } else if (pr.type && pr.type !== 'resources') {
                 // не-ресурсний продукт (фрагменти, набори, юніти, ОФ-пакети…)
-                var entry = { type: pr.type, clazz: pr.__class__ };
                 var rw = pr.reward || pr.genericReward || null;
-                if (rw && typeof rw === 'object') {
-                  entry.rewardId = rw.id || rw.subType || null;
-                  entry.rewardType = rw.type || rw.__class__ || null;
-                  if (rw.amount != null) { entry.amount = rw.amount; }
-                  if (rw.name) { entry.name = rw.name; }
+                if (rw && (rw.__class__ === 'FragmentReward' || rw.subType === 'fragment')) {
+                  var asm = rw.assembledReward || {};
+                  out.frags.push({
+                    id: rw.id || null,
+                    amount: Number(rw.amount) || 0,
+                    reqd: rw.requiredAmount != null ? Number(rw.requiredAmount) : null,
+                    asmId: asm.id || null,
+                    asmName: asm.name || rw.name || null,
+                    asmIcon: asm.iconAssetName || 'icon_fragment',
+                    motiv: !!pr.onlyWhenMotivated
+                  });
+                } else {
+                  var entry = { type: pr.type, clazz: pr.__class__ };
+                  if (rw && typeof rw === 'object') {
+                    entry.rewardId = rw.id || rw.subType || null;
+                    entry.rewardType = rw.type || rw.__class__ || null;
+                    if (rw.amount != null) { entry.amount = rw.amount; }
+                    if (rw.name) { entry.name = rw.name; }
+                  }
+                  out.other.push(entry);
                 }
-                out.other.push(entry);
               }
             }
             return out;
@@ -363,6 +376,7 @@ export const FOE_INTERCEPTOR_JS = `
               var fl = flattenProducts(po2);
               b.det = fl.det;
               if (Object.keys(fl.guildDet).length) { b.guildDet = fl.guildDet; }
+              if (fl.frags.length) { b.frags = fl.frags; }
               if (fl.rnd) { b.rnd = true; }
               if (fl.other.length) {
                 b.other = fl.other;

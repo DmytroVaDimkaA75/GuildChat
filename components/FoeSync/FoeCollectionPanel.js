@@ -31,14 +31,7 @@ const FILTERS = [
   { id: 'supplies', label: 'Ресурси', icon: 'supplies', boost: 'supply_production' },
   { id: 'premium', label: 'Діаманти', icon: 'premium', boost: null },
   { id: 'medals', label: 'Медалі', icon: 'medals', boost: null },
-  {
-    id: 'fragments',
-    label: 'Фрагменти',
-    icon: 'icon_fragment',
-    mat: 'extension',
-    boost: null,
-    keys: ['fragments', 'fragment'],
-  },
+  { id: 'fragments', label: 'Фрагменти', icon: 'icon_fragment', mat: 'extension', boost: null, frags: true },
   {
     id: 'goods',
     label: 'Товари',
@@ -137,7 +130,9 @@ export default function FoeCollectionPanel({
     for (const f of FILTERS) {
       let base = 0;
       for (const b of ready) {
-        if (f.group) {
+        if (f.frags) {
+          for (const fr of b.frags || []) base += Number(fr.amount) || 0;
+        } else if (f.group) {
           const det = b[f.group] || {};
           for (const [k, v] of Object.entries(det)) if (isGoodKey(k)) base += Number(v) || 0;
         } else {
@@ -152,19 +147,31 @@ export default function FoeCollectionPanel({
 
   const selFilter = FILTERS.find((f) => f.id === selected && totals[f.id]?.base) || null;
   const isGroup = !!selFilter?.group;
+  const isFrags = !!selFilter?.frags;
 
-  // Епохи для підфільтра (лише для товарних фільтрів)
-  const eras = useMemo(() => {
-    if (!isGroup) return [];
-    const set = new Set();
-    for (const b of ready) {
-      const det = b[selFilter.group] || {};
-      if (!Object.keys(det).some(isGoodKey)) continue;
-      const e = bInfo(b).era;
-      if (e) set.add(e);
+  // Підфільтри: епохи (товари) або зібрані предмети (фрагменти)
+  const subOptions = useMemo(() => {
+    if (isGroup) {
+      const set = new Set();
+      for (const b of ready) {
+        const det = b[selFilter.group] || {};
+        if (!Object.keys(det).some(isGoodKey)) continue;
+        const e = bInfo(b).era;
+        if (e) set.add(e);
+      }
+      return Array.from(set).sort().map((e) => ({ key: e, label: eraLabel(e) }));
     }
-    return Array.from(set).sort();
-  }, [isGroup, selFilter, ready, isGoodKey, bInfo]);
+    if (isFrags) {
+      const map = new Map();
+      for (const b of ready) {
+        for (const fr of b.frags || []) {
+          if (fr.asmName && !map.has(fr.asmName)) map.set(fr.asmName, fr.asmName);
+        }
+      }
+      return Array.from(map.keys()).sort().map((n) => ({ key: n, label: n }));
+    }
+    return [];
+  }, [isGroup, isFrags, selFilter, ready, isGoodKey, bInfo]);
 
   // Рядки таблиці для вибраного фільтра
   const rows = useMemo(() => {
@@ -173,7 +180,23 @@ export default function FoeCollectionPanel({
     const list = [];
     for (const b of ready) {
       const info = bInfo(b);
-      if (isGroup) {
+      if (isFrags) {
+        for (const fr of b.frags || []) {
+          if (!fr.amount) continue;
+          if (era && fr.asmName !== era) continue;
+          list.push({
+            key: `${b.iid || b.id}:${fr.id || fr.asmId}`,
+            resKey: fr.asmIcon || 'icon_fragment',
+            name: info.name,
+            sub:
+              (fr.asmName ? `→ ${fr.asmName}` : '') +
+              (fr.reqd ? ` (потрібно ${fr.reqd})` : '') +
+              (fr.motiv ? ' · за мотивації' : ''),
+            base: Number(fr.amount),
+            boosted: Number(fr.amount),
+          });
+        }
+      } else if (isGroup) {
         if (era && info.era !== era) continue;
         const det = b[selFilter.group] || {};
         for (const [k, v] of Object.entries(det)) {
@@ -209,7 +232,7 @@ export default function FoeCollectionPanel({
       }
     }
     return list.sort((a, b) => b.base - a.base);
-  }, [selFilter, isGroup, era, ready, sumsAll, bInfo, goodName, isGoodKey]);
+  }, [selFilter, isGroup, isFrags, era, ready, sumsAll, bInfo, goodName, isGoodKey]);
 
   const pick = (id) => {
     setSelected((cur) => (cur === id ? null : id));
@@ -268,7 +291,7 @@ export default function FoeCollectionPanel({
         })}
       </ScrollView>
 
-      {isGroup && eras.length ? (
+      {subOptions.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
           <TouchableOpacity
             style={[styles.eraBtn, !era && styles.eraBtnActive]}
@@ -277,18 +300,20 @@ export default function FoeCollectionPanel({
             accessibilityRole="button"
             accessibilityState={{ selected: !era }}
           >
-            <Text style={[styles.eraTxt, !era && styles.eraTxtActive]}>усі епохи</Text>
+            <Text style={[styles.eraTxt, !era && styles.eraTxtActive]}>
+              {isFrags ? 'усі' : 'усі епохи'}
+            </Text>
           </TouchableOpacity>
-          {eras.map((e) => (
+          {subOptions.map((o) => (
             <TouchableOpacity
-              key={e}
-              style={[styles.eraBtn, era === e && styles.eraBtnActive]}
-              onPress={() => setEra((cur) => (cur === e ? null : e))}
+              key={o.key}
+              style={[styles.eraBtn, era === o.key && styles.eraBtnActive]}
+              onPress={() => setEra((cur) => (cur === o.key ? null : o.key))}
               activeOpacity={0.8}
               accessibilityRole="button"
-              accessibilityState={{ selected: era === e }}
+              accessibilityState={{ selected: era === o.key }}
             >
-              <Text style={[styles.eraTxt, era === e && styles.eraTxtActive]}>{eraLabel(e)}</Text>
+              <Text style={[styles.eraTxt, era === o.key && styles.eraTxtActive]}>{o.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
