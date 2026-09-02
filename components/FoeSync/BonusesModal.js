@@ -17,7 +17,7 @@ import {
 
 import { useFoeSync } from './FoeSyncProvider';
 import { STATS, computeCombat, otherBonusRows } from './foeBonuses';
-import FoeIcon from './FoeIcon';
+import FoeIcon, { findFrame } from './FoeIcon';
 
 const COLORS = {
   background: '#0f1115',
@@ -81,7 +81,10 @@ function CombatGrid({ values, sheets, context = 'general' }) {
 export default function BonusesModal({ visible, onClose }) {
   const foe = useFoeSync();
   const { found = {}, player, health = { packets: 0 }, iconSheet, goodsSheet } = foe || {};
-  const sheets = [iconSheet, goodsSheet].filter(Boolean);
+  const sheets = useMemo(
+    () => [iconSheet, goodsSheet].filter(Boolean),
+    [iconSheet, goodsSheet]
+  );
 
   const sumsAll = useMemo(() => {
     const merged = {};
@@ -107,7 +110,12 @@ export default function BonusesModal({ visible, onClose }) {
     () => computeCombat(sumsAll, sumsByFeature, found.cityGBs),
     [sumsAll, sumsByFeature, found.cityGBs]
   );
-  const others = useMemo(() => otherBonusRows(sumsAll), [sumsAll]);
+  // Показуємо лише ті бонуси, для яких є ігрова іконка (решта — зайве).
+  const others = useMemo(() => {
+    const rows = otherBonusRows(sumsAll);
+    if (!sheets.length) return rows;
+    return rows.filter((r) => findFrame(sheets, r.type));
+  }, [sumsAll, sheets]);
   const synced = health.packets > 0 && Object.keys(sumsAll).length > 0;
 
   return (

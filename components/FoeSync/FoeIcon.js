@@ -69,6 +69,16 @@ function frameFor(sheet, name) {
   return null;
 }
 
+// Чи є для цього імені кадр хоч в одному з листів (sheet — лист або масив).
+export function findFrame(sheet, name) {
+  const sheets = (Array.isArray(sheet) ? sheet : [sheet]).filter(Boolean);
+  for (const s of sheets) {
+    const fr = frameFor(s, name);
+    if (fr) return fr;
+  }
+  return null;
+}
+
 // <FoeIcon sheet={iconSheet} name="medals" size={20} />
 // sheet може бути одним листом або масивом (пробуються по черзі).
 export default function FoeIcon({ sheet, name, size = 20, style }) {
