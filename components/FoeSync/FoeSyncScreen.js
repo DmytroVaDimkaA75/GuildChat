@@ -114,6 +114,7 @@ export default function FoeSyncScreen() {
     found = {},
     player,
     userId,
+    guildId,
     health = { packets: 0 },
     currentUrl,
     seen,
@@ -402,6 +403,7 @@ export default function FoeSyncScreen() {
             iconSheet={iconSheet}
             goodsSheet={goodsSheet}
             userId={userId}
+            guildId={guildId}
             onHighlight={setHighlightIds}
             onFocusBuilding={focusBuilding}
           />

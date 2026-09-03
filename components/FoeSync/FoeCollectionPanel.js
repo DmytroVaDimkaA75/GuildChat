@@ -102,6 +102,7 @@ export default function FoeCollectionPanel({
   iconSheet,
   goodsSheet,
   userId,
+  guildId,
   onHighlight,
   onFocusBuilding,
 }) {
@@ -114,9 +115,13 @@ export default function FoeCollectionPanel({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!userId) return undefined;
-    return subscribeFoeFilters(userId, setSavedFilters);
-  }, [userId]);
+    if (!userId || !guildId) {
+      setSavedFilters([]);
+      return undefined;
+    }
+    setSavedFilters([]);
+    return subscribeFoeFilters(userId, guildId, setSavedFilters);
+  }, [userId, guildId]);
 
   const ready = useMemo(
     () => (prodBuildings || []).filter((b) => b && b.ready),
@@ -320,7 +325,7 @@ export default function FoeCollectionPanel({
     if (!name || !selFilter) return;
     setBusy(true);
     try {
-      await saveFoeFilter(userId, { name, filterId: selected, subKey: era });
+      await saveFoeFilter(userId, guildId, { name, filterId: selected, subKey: era });
       setSaveOpen(false);
     } catch (e) {
       Alert.alert('Не вдалося зберегти', String(e?.message || e));
@@ -334,7 +339,7 @@ export default function FoeCollectionPanel({
       {
         text: 'Видалити',
         style: 'destructive',
-        onPress: () => deleteFoeFilter(userId, sf.id).catch(() => {}),
+        onPress: () => deleteFoeFilter(userId, guildId, sf.id).catch(() => {}),
       },
     ]);
   };
@@ -364,7 +369,7 @@ export default function FoeCollectionPanel({
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.hdrBtn, !hasSelection && styles.hdrBtnOff]}
-          disabled={!hasSelection || !userId}
+          disabled={!hasSelection || !userId || !guildId}
           onPress={() => {
             setSaveName('');
             setSaveOpen(true);
@@ -375,7 +380,7 @@ export default function FoeCollectionPanel({
           <MaterialIcons
             name="bookmark-add"
             size={20}
-            color={hasSelection && userId ? C.primary : C.textSecondary}
+            color={hasSelection && userId && guildId ? C.primary : C.textSecondary}
           />
         </TouchableOpacity>
       </View>
