@@ -22,7 +22,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import FoeIcon from './FoeIcon';
-import { goodEra, eraIndex, isSpecialGood, SPECIAL_KEY } from './foeGoods';
+import { goodEra, eraIndex, eraLabel, isSpecialGood, SPECIAL_KEY } from './foeGoods';
 import { subscribeFoeFilters, saveFoeFilter, deleteFoeFilter } from '../../src/services/foeFilters';
 
 const SAVED_KEY = '__saved__';
@@ -64,33 +64,6 @@ const FILTERS = [
   },
 ];
 
-const ERA_LABELS = {
-  BronzeAge: 'Бронзова доба',
-  IronAge: 'Залізна доба',
-  EarlyMiddleAge: 'Раннє Середньовіччя',
-  HighMiddleAge: 'Високе Середньовіччя',
-  LateMiddleAge: 'Пізнє Середньовіччя',
-  ColonialAge: 'Колоніальна доба',
-  IndustrialAge: 'Індустріальна доба',
-  ProgressiveEra: 'Епоха прогресу',
-  ModernEra: 'Епоха модерну',
-  PostModernEra: 'Постмодерн',
-  ContemporaryEra: 'Новітня епоха',
-  TomorrowEra: 'Епоха майбутнього',
-  FutureEra: 'Майбутнє',
-  ArcticFuture: 'Арктичне майбутнє',
-  OceanicFuture: 'Океанічне майбутнє',
-  VirtualFuture: 'Віртуальне майбутнє',
-  SpaceAgeMars: 'Космос: Марс',
-  SpaceAgeAsteroidBelt: 'Космос: Пояс астероїдів',
-  SpaceAgeVenus: 'Космос: Венера',
-  SpaceAgeJupiterMoon: 'Космос: Супутник Юпітера',
-  SpaceAgeTitan: 'Космос: Титан',
-  SpaceAgeSpaceHub: 'Космос: Космічний вузол',
-  StellarAgeDiscovery: 'Зоряна ера: Відкриття',
-  StellarAgeColonization: 'Зоряна ера: Колонізація',
-};
-const eraLabel = (e) => ERA_LABELS[e] || e;
 const withBonus = (base, pct) => (pct ? Math.floor(base * (1 + pct / 100)) : base);
 const fmt = (n) => Number(n || 0).toLocaleString('uk');
 

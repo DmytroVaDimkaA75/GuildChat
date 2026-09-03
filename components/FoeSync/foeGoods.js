@@ -88,3 +88,36 @@ export const isSpecialGood = (key, resDefs) => {
 };
 
 export const SPECIAL_KEY = '__special__';
+
+// Єдиний список назв епох (використовується і на мапі, і у фільтрах).
+export const ERA_LABELS = {
+  NoAge: 'поза епохою',
+  StoneAge: 'Кам’яна доба',
+  BronzeAge: 'Бронзова доба',
+  IronAge: 'Залізна доба',
+  EarlyMiddleAge: 'Раннє Середньовіччя',
+  HighMiddleAge: 'Високе Середньовіччя',
+  LateMiddleAge: 'Пізнє Середньовіччя',
+  ColonialAge: 'Колоніальна доба',
+  IndustrialAge: 'Індустріальна доба',
+  ProgressiveEra: 'Епоха прогресу',
+  ModernEra: 'Епоха модерну',
+  PostModernEra: 'Постмодерн',
+  ContemporaryEra: 'Новітня епоха',
+  TomorrowEra: 'Епоха майбутнього',
+  FutureEra: 'Майбутнє',
+  ArcticFuture: 'Арктичне майбутнє',
+  OceanicFuture: 'Океанічне майбутнє',
+  VirtualFuture: 'Віртуальне майбутнє',
+  SpaceAgeMars: 'Космічна ера: Марс',
+  SpaceAgeAsteroidBelt: 'Космічна ера: Пояс астероїдів',
+  SpaceAgeVenus: 'Космічна ера: Венера',
+  SpaceAgeJupiterMoon: 'Космічна ера: Супутник Юпітера',
+  SpaceAgeTitan: 'Космічна ера: Титан',
+  SpaceAgeSpaceHub: 'Космічна ера: Космічний вузол',
+  StellarAgeDiscovery: 'Зоряна ера: Відкриття',
+  StellarAgeColonization: 'Зоряна ера: Колонізація',
+  AllAge: 'усі епохи',
+};
+
+export const eraLabel = (era) => ERA_LABELS[era] || era;

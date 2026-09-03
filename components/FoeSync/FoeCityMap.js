@@ -24,6 +24,7 @@ import Animated, {
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import { DarkThemeColors } from '../../constants/theme';
+import { eraLabel } from './foeGoods';
 
 const VIEW_COLS = 24;
 const VIEW_ROWS = 20;
@@ -69,35 +70,6 @@ const TYPE_LABELS = {
   unknown: 'тип уточнюється',
 };
 
-const ERA_LABELS = {
-  NoAge: 'поза епохою',
-  StoneAge: 'Кам’яна доба',
-  BronzeAge: 'Бронзова доба',
-  IronAge: 'Залізна доба',
-  EarlyMiddleAge: 'Раннє Середньовіччя',
-  HighMiddleAge: 'Високе Середньовіччя',
-  LateMiddleAge: 'Пізнє Середньовіччя',
-  ColonialAge: 'Колоніальна доба',
-  IndustrialAge: 'Індустріальна доба',
-  ProgressiveEra: 'Епоха прогресу',
-  ModernEra: 'Епоха модерну',
-  PostModernEra: 'Постмодерн',
-  ContemporaryEra: 'Новітня епоха',
-  TomorrowEra: 'Епоха майбутнього',
-  FutureEra: 'Майбутнє',
-  ArcticFuture: 'Арктичне майбутнє',
-  OceanicFuture: 'Океанічне майбутнє',
-  VirtualFuture: 'Віртуальне майбутнє',
-  SpaceAgeMars: 'Космічна ера: Марс',
-  SpaceAgeAsteroidBelt: 'Космічна ера: Пояс астероїдів',
-  SpaceAgeVenus: 'Космічна ера: Венера',
-  SpaceAgeJupiterMoon: 'Космічна ера: Супутник Юпітера',
-  SpaceAgeTitan: 'Космічна ера: Титан',
-  SpaceAgeSpaceHub: 'Космічна ера: Космічний вузол',
-  StellarAgeDiscovery: 'Зоряна ера: Відкриття',
-  AllAge: 'усі епохи',
-};
-
 const BONUS_LABELS = {
   att_boost_attacker: 'атака атакуючої армії',
   def_boost_attacker: 'захист атакуючої армії',
@@ -138,7 +110,6 @@ const positive = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
 };
-const eraLabel = (era) => ERA_LABELS[era] || era;
 const bonusLabel = (type) => BONUS_LABELS[type] || String(type || '').replace(/_/g, ' ');
 
 function formatBonus(bonus) {
