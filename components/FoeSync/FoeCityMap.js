@@ -379,6 +379,14 @@ export default function FoeCityMap({
   const topRulerAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
   const leftRulerAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
 
+  // Зміна фільтра (набору підсвічених споруд) знімає окреме підсвічування
+  // будівлі, обраної тапом по рядку/мапі.
+  const highlightSig = Array.isArray(highlightIds) ? highlightIds.join(',') : '';
+  useEffect(() => {
+    setSelectedId(null);
+    setPopupOpen(false);
+  }, [highlightSig]);
+
   useEffect(() => {
     setSelectedId(null);
     setPopupOpen(false);
