@@ -25,7 +25,6 @@ import { WebView } from 'react-native-webview';
 import { GuildContext } from '../../GuildContext';
 import { FOE_INTERCEPTOR_JS } from './foeInterceptor';
 import { FOE_CONSENT_KEY } from './foeConsent';
-import { saveFoeStats } from '../../src/services/foeStats';
 import {
   loadCachedIconSheet,
   fetchIconSheet,
@@ -61,13 +60,19 @@ export function FoeSyncProvider({ children }) {
   const [consent, setConsent] = useState(null); // null | 'yes' | 'no'
   const [webKey, setWebKey] = useState(0);
   const [webVisible, setWebVisible] = useState(false);
+  // Коли вікно гри відкрив користувач вручну — не згортати його автоматично
+  // після першого пакета (треба встигнути зробити щось у грі).
+  const [keepWebOpen, setKeepWebOpen] = useState(false);
+  const keepWebOpenRef = useRef(false);
+  keepWebOpenRef.current = keepWebOpen;
+  const openGameWindow = useCallback(() => { setKeepWebOpen(true); setWebVisible(true); }, []);
+  const closeGameWindow = useCallback(() => { setKeepWebOpen(false); setWebVisible(false); }, []);
 
   const [currentUrl, setCurrentUrl] = useState('');
   const [health, setHealth] = useState({ ready: false, packets: 0, lastAt: 0 });
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({});
   const [seen, setSeen] = useState(() => new Set());
-  const [saving, setSaving] = useState(false);
   const [iconSheet, setIconSheet] = useState(null);
   const [goodsSheet, setGoodsSheet] = useState(null);
   const [buildingDefs, setBuildingDefs] = useState(null);
@@ -355,7 +360,7 @@ export function FoeSyncProvider({ children }) {
   // Якщо застрягли на сторінці входу порталу — показати вікно для ручного входу
   useEffect(() => {
     if (health.packets > 0) {
-      setWebVisible(false);
+      if (!keepWebOpenRef.current) setWebVisible(false);
       return;
     }
     if (!/forgeofempires\.com\/(page|game)/.test(currentUrl || '')) return;
@@ -418,19 +423,6 @@ export function FoeSyncProvider({ children }) {
     [buildingDefs, found.cityMap, playerEra]
   );
 
-  const saveToGuild = useCallback(
-    async (payload) => {
-      setSaving(true);
-      try {
-        await saveFoeStats(guildId, userId, payload);
-        return true;
-      } finally {
-        setSaving(false);
-      }
-    },
-    [guildId, userId]
-  );
-
   const value = {
     guildId,
     userId,
@@ -439,6 +431,8 @@ export function FoeSyncProvider({ children }) {
     reload,
     webVisible,
     setWebVisible,
+    openGameWindow,
+    closeGameWindow,
     currentUrl,
     health,
     synced: health.packets > 0,
@@ -450,8 +444,6 @@ export function FoeSyncProvider({ children }) {
     buildingDefs,
     cityBuildings,
     defsProgress,
-    saving,
-    saveToGuild,
   };
 
   return (
@@ -486,7 +478,7 @@ export function FoeSyncProvider({ children }) {
               }}
             >
               <Text style={{ color: '#f4f7fb', fontWeight: '700' }}>Вхід у гру</Text>
-              <TouchableOpacity onPress={() => setWebVisible(false)}>
+              <TouchableOpacity onPress={closeGameWindow}>
                 <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>Готово</Text>
               </TouchableOpacity>
             </View>

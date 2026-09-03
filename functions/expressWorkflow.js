@@ -16,6 +16,7 @@ const PUSH = Object.freeze({
   cancelledOwner: "Нажаль для прокачки вашої ВС не зібралося достатньої кількості учасників. Експрес прокачка скасовується",
   cancelledParticipant: "Нажаль для експрес прокачки не зібралося достатньої кількості учасників. Експрес прокачка скасовується",
   postponed: "Заплановану експрес-прокачку було відтерміновано. Якщо бажаєте взяти участь у новий час, підтвердіть своє бажання повторно.",
+  started: "Експрес починається",
 });
 
 const values = (object) => Object.values(object || {}).filter(Boolean);
@@ -25,8 +26,10 @@ const ownersOf = (group) => new Set(values(group.gbs).map((gb) => String(gb.user
 const byPriority = (a, b) => numeric(b[1].contributionMultiplier) - numeric(a[1].contributionMultiplier)
   || numeric(a[1].rank, Number.MAX_SAFE_INTEGER) - numeric(b[1].rank, Number.MAX_SAFE_INTEGER)
   || a[0].localeCompare(b[0]);
+// Final contributor order mirrors the selection priority: Arc multiplier, then
+// sign-up order (rank). Confirmation is a yes/no gate only — how fast someone
+// tapped "confirm" after the push must not affect their place.
 const byFinalOrder = (a, b) => numeric(b[1].contributionMultiplier) - numeric(a[1].contributionMultiplier)
-  || numeric(a[1].confirmationTime, Number.MAX_SAFE_INTEGER) - numeric(b[1].confirmationTime, Number.MAX_SAFE_INTEGER)
   || numeric(a[1].rank, Number.MAX_SAFE_INTEGER) - numeric(b[1].rank, Number.MAX_SAFE_INTEGER)
   || a[0].localeCompare(b[0]);
 
@@ -141,9 +144,11 @@ function advanceExpress(group, now, multiplierFor = (_uid, record) => numeric(re
       const ownerRank = Math.min(...values(next.gbs).filter((gb) => String(gb.user) === uid).map((gb) => numeric(gb.rank, numeric(gb.timestamp, Number.MAX_SAFE_INTEGER))));
       return [uid, { ...record, rank: record.owner ? ownerRank : next.ranks?.[uid] }];
     });
-    next.finalOrder = Object.fromEntries(finalCandidates.sort(byFinalOrder).map(([uid, record], index) => [index + 1, { userId: uid, owner: Boolean(record.owner), contributionMultiplier: numeric(record.contributionMultiplier), confirmationTime: numeric(record.confirmationTime) }]));
+    // 0-indexed: RTDB stores this as a dense array (keys 1..N leave a null hole at 0 on read).
+    next.finalOrder = finalCandidates.sort(byFinalOrder).map(([uid, record]) => ({ userId: uid, owner: Boolean(record.owner), contributionMultiplier: numeric(record.contributionMultiplier), confirmationTime: numeric(record.confirmationTime) }));
     next.workflow.stage = "final";
     next.workflow.finalizedAt = now;
+    values(next.finalOrder).forEach((row) => notices.push(makeNotice("started", row.userId, PUSH.started)));
   }
   return { group: next, notices, deleteGroup: false };
 }

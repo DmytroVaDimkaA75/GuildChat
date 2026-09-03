@@ -4,23 +4,20 @@
 // Саме вікно гри й слухач живуть у FoeSyncProvider (фон), тут їх немає.
 // Керування синхронізацією (згода / вхід) — у блоці профілю.
 
-import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import { useFoeSync } from './FoeSyncProvider';
 import FoeCityMap from './FoeCityMap';
 import FoeLoadingRing from './FoeLoadingRing';
-import { computeCombat } from './foeBonuses';
 import FoeCollectionPanel from './FoeCollectionPanel';
 
 const RES_LABELS = {
@@ -45,19 +42,6 @@ function applyMultiplier(map, sumsAll) {
   }
   return out;
 }
-function computeCollection(buildings, sumsAll) {
-  const readyBase = {};
-  const pendingBase = {};
-  for (const b of buildings || []) {
-    const det = b.det || {};
-    const target = b.ready ? readyBase : pendingBase;
-    for (const [k, v] of Object.entries(det)) target[k] = (target[k] || 0) + v;
-  }
-  return {
-    ready: applyMultiplier(readyBase, sumsAll || {}),
-    pending: applyMultiplier(pendingBase, sumsAll || {}),
-  };
-}
 function resourceRows(map, resDefs) {
   const entries = Object.entries(map || {}).filter(([, v]) => v);
   const name = (k) => resDefs?.[k]?.name || RES_LABELS[k] || k;
@@ -72,11 +56,6 @@ function resourceRows(map, resDefs) {
   }
   return rows;
 }
-function parseGoods(raw) {
-  const map = raw?.resources?.resources || raw?.resources || null;
-  return map && typeof map === 'object' && !Array.isArray(map) ? map : null;
-}
-
 const PROD_STATUS = [
   [/Finished|Produced|Ready|Collect/i, 'готово до збору'],
   [/Producing/i, 'виробляється'],
@@ -108,7 +87,6 @@ export default function FoeSyncScreen() {
   const foe = useFoeSync();
   const {
     found = {},
-    player,
     userId,
     guildId,
     health = { packets: 0 },
@@ -118,8 +96,6 @@ export default function FoeSyncScreen() {
     buildingDefs,
     cityBuildings,
     defsProgress,
-    saveToGuild,
-    setWebVisible,
   } = foe || {};
 
   const [, force] = useState(0);
@@ -141,8 +117,6 @@ export default function FoeSyncScreen() {
     return m;
   }, [found.resourceDefs]);
 
-  const goods = useMemo(() => parseGoods(found.goods), [found.goods]);
-
   const sumsAll = useMemo(() => {
     const merged = {};
     const add = (mm) => mm && Object.entries(mm).forEach(([k, v]) => { merged[k] = (merged[k] || 0) + v; });
@@ -152,24 +126,6 @@ export default function FoeSyncScreen() {
     if (!found.boostAgg) add(found.boostStartupAgg?.sumsAll);
     return merged;
   }, [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg, found.boostStartupAgg]);
-
-  const sumsByFeature = useMemo(() => {
-    const merged = {};
-    for (const src of [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg]) {
-      if (!src?.sumsByFeature) continue;
-      for (const [k, v] of Object.entries(src.sumsByFeature)) merged[k] = (merged[k] || 0) + v;
-    }
-    return merged;
-  }, [found.boostAgg, found.boostLimitedAgg, found.boostTimerAgg]);
-
-  const combat = useMemo(
-    () => computeCombat(sumsAll, sumsByFeature, found.cityGBs),
-    [sumsAll, sumsByFeature, found.cityGBs]
-  );
-  const collection = useMemo(
-    () => (found.prodBuildings ? computeCollection(found.prodBuildings, sumsAll) : null),
-    [found.prodBuildings, sumsAll]
-  );
 
   // Збір / стан / час завершення по кожній будівлі — для панелі деталей на мапі.
   // Ключі: id інстансу (точно) і cityentity_id (запасний, за типом).
@@ -189,55 +145,6 @@ export default function FoeSyncScreen() {
     }
     return byKey;
   }, [found.prodBuildings, sumsAll, resDefs]);
-
-  const hasData = Object.keys(sumsAll).length > 0 || (goods && Object.keys(goods).length);
-
-  // Дані у гільдію зберігаються автоматично при відкритті екрана (раз за сеанс).
-  const savedOnceRef = useRef(false);
-  useEffect(() => {
-    if (savedOnceRef.current || !hasData || !saveToGuild) return;
-    savedOnceRef.current = true;
-    saveToGuild({
-      player,
-      boosts: {
-        general: combat.base,
-        contexts: combat.contexts,
-        quantum: combat.quantum,
-        featureDeltas: combat.feat,
-      },
-      goods,
-      collection: collection ? { ready: collection.ready, pending: collection.pending } : null,
-    }).catch(() => {});
-  }, [hasData, saveToGuild, player, combat, goods, collection]);
-
-  // Прихована діагностика (довгий тап на підказці мапи) — для налагодження.
-  const copyDiag = useCallback(async () => {
-    const gbFromMap = (found.cityGBs || []).map((g) => ({
-      id: g.id,
-      level: g.level,
-      bonusTypes: (Array.isArray(g.bonuses) ? g.bonuses : g.bonus ? [g.bonus] : [])
-        .map((b) => b?.type)
-        .filter(Boolean),
-    }));
-    const prodGB = (found.prodBuildings || [])
-      .filter((b) => /greatbuilding/i.test(String(b.type || '')))
-      .map((b) => ({ id: b.id, st: b.st, ready: b.ready, cp: b.cp, det: b.det, guildDet: b.guildDet, other: b.other }));
-    const dump = {
-      v: 'v109',
-      player,
-      prodStateCounts: found.prodStateCounts || null,
-      gbCount: (found.cityGBs || []).length,
-      gbFromMap,
-      prodGB,
-      gbStateSamples: found.gbStateSamples || null,
-    };
-    const text = JSON.stringify(dump);
-    try {
-      await Clipboard.setStringAsync(text);
-    } catch (_e) {
-      /* ignore */
-    }
-  }, [found, player]);
 
   const packets = health.packets || 0;
 
@@ -304,18 +211,10 @@ export default function FoeSyncScreen() {
             <View style={styles.infoRow}>
               <MaterialIcons name="info-outline" size={20} color={C.primarySoft} />
               <Text style={styles.infoText}>
-                Вікно гри вантажиться у фоні. Якщо дані довго не зʼявляються, відкрийте його для входу.
+                Вікно гри вантажиться у фоні. Якщо дані довго не зʼявляються, увійдіть у гру
+                через Профіль → «Синхронізація з грою».
               </Text>
             </View>
-            <TouchableOpacity
-              accessibilityRole="button"
-              activeOpacity={0.8}
-              style={styles.openGameButton}
-              onPress={() => setWebVisible?.(true)}
-            >
-              <MaterialIcons name="open-in-new" size={18} color={C.primary} />
-              <Text style={styles.openGameButtonText}>Показати вікно гри</Text>
-            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -334,9 +233,6 @@ export default function FoeSyncScreen() {
           />
         ) : null}
 
-        <TouchableOpacity onPress={copyDiag} style={styles.diagLink} accessibilityRole="button">
-          <Text style={styles.diagLinkText}>Копіювати діагностику</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -387,21 +283,6 @@ const styles = StyleSheet.create({
   },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start' },
   infoText: { flex: 1, color: C.textSecondary, fontSize: 13, lineHeight: 19, marginLeft: 9 },
-  openGameButton: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    paddingHorizontal: 14,
-    backgroundColor: `${C.primary}18`,
-    borderWidth: 1,
-    borderColor: C.primary,
-    borderRadius: 10,
-  },
-  openGameButtonText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 8 },
-  diagLink: { marginTop: 22, alignSelf: 'center', padding: 6 },
-  diagLinkText: { color: C.textSecondary, fontSize: 11, opacity: 0.5 },
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   btnRowStacked: { flexDirection: 'column' },
   fullWidthBtn: { flex: 0, width: '100%' },

@@ -37,7 +37,7 @@ test('T-5 fills only confirmed shortage from established reserve', () => {
   assert.equal(result.group.interested.r3, undefined);
 });
 
-test('final order uses multiplier, confirmation time, then rank', () => {
+test('final order uses multiplier then rank, ignoring confirmation speed', () => {
   const t = 2_000_000;
   const rows = {
     owner: { owner: true, contributionMultiplier: 1.9, confirmationTime: 5, rank: 1 },
@@ -48,5 +48,6 @@ test('final order uses multiplier, confirmation time, then rank', () => {
     e: { owner: false, contributionMultiplier: 1.7, confirmationTime: 1, rank: 1 },
   };
   const result = advanceExpress({ scheduleTime: t, gbs: { a: { ...gb('owner'), rank: 1 } }, ranks: { a: 3, b: 9, c: 2, d: 1, e: 1 }, interested: rows, workflow: { stage: 'reserve_confirmation' } }, t - 2 * 60_000);
-  assert.deepEqual(Object.values(result.group.finalOrder).map((x) => x.userId), ['b', 'c', 'a', 'owner', 'd', 'e']);
+  assert.deepEqual(Object.values(result.group.finalOrder).map((x) => x.userId), ['c', 'a', 'b', 'owner', 'd', 'e']);
+  assert.deepEqual(result.notices.filter((n) => n.event === 'started').map((n) => n.userId).sort(), ['a', 'b', 'c', 'd', 'e', 'owner']);
 });

@@ -162,8 +162,11 @@ const GBNewExpress = ({ route, navigation }) => {
 
     const fetchApiAndLevelAndCalculate = async () => {
       const buildId = buildingId || allowedGB;
-      if (buildId && levelThreshold > 1) {
-        try {
+      if (!buildId || levelThreshold < 1) {
+        if (!cancelled) setTotalCost(0);
+        return;
+      }
+      try {
           const storedGuildId = await AsyncStorage.getItem('guildId');
           const storedUserId = await AsyncStorage.getItem('userId');
 
@@ -225,9 +228,8 @@ const GBNewExpress = ({ route, navigation }) => {
           S = costs.reduce((a, b) => a + b, 0);
           console.log("Загальна вартість прокачки:", S);
           if (!cancelled) setTotalCost(S);
-        } catch (error) {
-          // Не виводимо помилки
-        }
+      } catch (error) {
+        // Не виводимо помилки
       }
     };
     const calculationTimer = setTimeout(fetchApiAndLevelAndCalculate, 300);

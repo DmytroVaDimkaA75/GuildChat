@@ -7,7 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { filterGbgBots } from '../../src/utils/guildBots';
 
 const C = { bg: '#07111b', card: '#0d1925', soft: '#102235', border: '#2d3a48', line: '#263646', blue: '#2f87ff', text: '#f4f7fb', muted: '#a9b3c3' };
-const INFO = 'Підтвердіть ваше бажання взяти участь в експрес-прокачці. Під час формування складу враховується коефіцієнт, який дає ваша Арка, а також черговість підтвердження. Якщо вас буде відібрано, ви отримаєте повідомлення за 10 хвилин до початку експресу.';
+const INFO = 'Підтвердіть ваше бажання взяти участь в експрес-прокачці. Під час формування складу враховується коефіцієнт, який дає ваша Арка, а також черговість запису на експрес. Якщо вас буде відібрано, ви отримаєте повідомлення за 10 хвилин до початку експресу.';
 const formatTime = (v) => new Date(Number(v)).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const localize = (v, lang) => typeof v === 'object' ? v?.[lang] || v?.uk || v?.ua || v?.en || Object.values(v || {})[0] || '' : v || '';
 const multiplier = (user) => {
@@ -45,14 +45,14 @@ const SelectionModal = ({ state, selected, setSelected, close, submit }) => <Mod
 export default function GBExpress() {
   const navigation = useNavigation();
   const [guildId, setGuildId] = useState(''); const [uid, setUid] = useState(''); const [lang, setLang] = useState('uk');
-  const [root, setRoot] = useState({}); const [users, setUsers] = useState({}); const [catalog, setCatalog] = useState({});
+  const [root, setRoot] = useState({}); const [users, setUsers] = useState({}); const [usersReady, setUsersReady] = useState(false); const [catalog, setCatalog] = useState({});
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(''); const [modal, setModal] = useState(null); const [selected, setSelected] = useState([]);
   const [serverOffset, setServerOffset] = useState(0);
   useEffect(() => { AsyncStorage.multiGet(['guildId', 'userId', 'userLanguage']).then((rows) => { const x = Object.fromEntries(rows); setGuildId(x.guildId || ''); setUid(x.userId || ''); setLang((x.userLanguage || 'uk').split('-')[0]); }); }, []);
   useEffect(() => {
     if (!guildId || !uid) return undefined;
     const er = database().ref(`guilds/${guildId}/express`); const ur = database().ref(`guilds/${guildId}/guildUsers`); const cr = database().ref('greatBuildings');
-    const eh = (x) => { setRoot(x.val() || {}); setLoading(false); }; const uh = async (x) => setUsers(await filterGbgBots(guildId, x.val() || {})); const ch = (x) => setCatalog(x.val() || {});
+    const eh = (x) => { setRoot(x.val() || {}); setLoading(false); }; const uh = async (x) => { const filtered = await filterGbgBots(guildId, x.val() || {}); setUsers(filtered); if (Object.keys(filtered).length) setUsersReady(true); }; const ch = (x) => setCatalog(x.val() || {});
     er.on('value', eh, () => setLoading(false)); ur.on('value', uh); cr.on('value', ch);
     return () => { er.off('value', eh); ur.off('value', uh); cr.off('value', ch); };
   }, [guildId, uid]);
@@ -84,14 +84,24 @@ export default function GBExpress() {
 
   const card = ({ item: group }) => {
     const mine = owned(group); const owner = mine.length > 0; const me = group.interested?.[uid]; const stage = group.workflow?.stage || 'open';
-    const visible = stage === 'postponement' ? owner : ['initial_confirmation', 'reserve_confirmation'].includes(stage) ? Boolean(me) : stage === 'final' ? Object.values(group.finalOrder || {}).some((x) => String(x.userId) === uid) : true;
+    const joinPending = !owner && !me && !usersReady;
+    // Older records stored finalOrder with keys 1..N, which Firebase reads back as a sparse array (null at 0).
+    const finalRows = Object.values(group.finalOrder || {}).filter(Boolean);
+    const visible = stage === 'postponement' ? owner : ['initial_confirmation', 'reserve_confirmation'].includes(stage) ? Boolean(me) : stage === 'final' ? finalRows.some((x) => String(x.userId) === uid) : true;
     if (!visible) return null;
-    const count = new Set([...Object.keys(group.interested || {}), ...Object.values(group.gbs || {}).map((gb) => String(gb.user))]).size;
+    // Усі учасники (охочі + власники всіх ВС експресу) мінус сам користувач —
+    // у власну ВС він не вкладає, тож себе в лічильник не рахуємо.
+    const participants = new Set([
+      ...Object.keys(group.interested || {}).map(String),
+      ...Object.values(group.gbs || {}).map((gb) => String(gb.user || '')),
+    ]);
+    participants.delete(String(uid));
+    const count = participants.size;
     return <View style={s.card}><View style={s.schedule}><Ionicons name="calendar-outline" size={20} color={C.blue} /><Text style={s.scheduleText}>Запланований час: {formatTime(group.scheduleTime)}</Text>{owner && <View style={s.counter}><Ionicons name="people-outline" size={20} color={C.blue} /><Text style={s.count}>{count}</Text></View>}</View>
-      {Object.entries(group.gbs || {}).map(([gbId, gb], index) => { const info = catalog[gb.allowedGB] || {}; const gbOwner = users[gb.user] || {}; const rows = Object.values(group.finalOrder || {}).filter((x) => String(x.userId) !== String(gb.user)); return <View key={gbId} style={[s.gb, index > 0 && s.gbLine]}><View style={s.gbTop}>{info.buildingImage ? <Image source={{ uri: typeof info.buildingImage === 'string' ? info.buildingImage : info.buildingImage.uri }} style={s.gbImage} resizeMode="contain" /> : <Ionicons name="business-outline" size={48} color={C.blue} />}<View style={s.gbCopy}><Text style={s.gbTitle}>{gbOwner.userName || gbOwner.name || gb.user} ({localize(info.buildingName, lang) || gb.allowedGB})</Text><Text style={s.muted}>Орієнтовно {gb.levelThreshold || 0} рівнів</Text></View></View>
+      {Object.entries(group.gbs || {}).map(([gbId, gb], index) => { const info = catalog[gb.allowedGB] || {}; const gbOwner = users[gb.user] || {}; const rows = finalRows.filter((x) => String(x.userId) !== String(gb.user)); return <View key={gbId} style={[s.gb, index > 0 && s.gbLine]}><View style={s.gbTop}>{info.buildingImage ? <Image source={{ uri: typeof info.buildingImage === 'string' ? info.buildingImage : info.buildingImage.uri }} style={s.gbImage} resizeMode="contain" /> : <Ionicons name="business-outline" size={48} color={C.blue} />}<View style={s.gbCopy}><Text style={s.gbTitle}>{gbOwner.userName || gbOwner.name || gb.user} ({localize(info.buildingName, lang) || gb.allowedGB})</Text><Text style={s.muted}>Орієнтовно {gb.levelThreshold || 0} рівнів</Text></View></View>
         {stage === 'final' && <View style={s.table}><View style={s.tableHead}><Text style={s.place}>Місце</Text><Text style={s.contributor}>Вкладник</Text></View>{rows.map((row, i) => { const p = users[row.userId] || {}; return <View key={row.userId} style={s.tableRow}><Text style={s.place}>{i + 1}</Text><View style={[s.contributor, s.person]}>{p.avatar || p.photoURL ? <Image source={{ uri: p.avatar || p.photoURL }} style={s.avatar} /> : <Ionicons name="person-circle-outline" size={28} color={C.muted} />}<Text style={s.personName}>{p.userName || p.login || p.name || row.userId}</Text></View></View>; })}</View>}
         {stage === 'final' && String(gb.user) === uid && <TouchableOpacity disabled={Date.now() + serverOffset < Number(group.scheduleTime) || Boolean(busy)} onPress={() => complete(group, gbId)} style={[s.complete, Date.now() + serverOffset < Number(group.scheduleTime) && s.disabled]}><Text style={s.primaryText}>Прокачка закінченна</Text></TouchableOpacity>}</View>; })}
-      {stage !== 'final' && <View style={s.actions}>{stage === 'postponement' && owner ? <><TouchableOpacity style={s.secondary} onPress={() => ownerAction(group, 'cancel')}><Text style={s.secondaryText}>Скасувати</Text></TouchableOpacity><TouchableOpacity style={s.primary} onPress={() => ownerAction(group, 'postpone')}><Text style={s.primaryText}>Відтермінувати</Text></TouchableOpacity></> : ['initial_confirmation', 'reserve_confirmation'].includes(stage) ? <TouchableOpacity disabled={Boolean(me?.confirmationTime) || Boolean(busy)} style={[s.primary, me?.confirmationTime && s.disabled]} onPress={() => confirm(group)}><Text style={s.primaryText}>{me?.confirmationTime ? 'Підтверджено' : me?.owner ? 'Підтвердити свої наміри' : 'Підтвердити своє бажання'}</Text></TouchableOpacity> : <><TouchableOpacity style={owner || me ? s.secondary : s.primary} onPress={() => owner ? ownerAction(group, 'cancel') : interest(group, !me)}><Text style={owner || me ? s.secondaryText : s.primaryText}>{owner || me ? 'Скасувати' : 'Взяти участь'}</Text></TouchableOpacity><TouchableOpacity style={s.secondary} onPress={() => navigation.navigate('GBNewExpress', { scheduleTime: group.scheduleTime, chatId: group.id })}><Text style={s.secondaryText}>Додати свій експрес</Text></TouchableOpacity></>}</View>}
+      {stage !== 'final' && <View style={s.actions}>{stage === 'postponement' && owner ? <><TouchableOpacity style={s.secondary} onPress={() => ownerAction(group, 'cancel')}><Text style={s.secondaryText}>Скасувати</Text></TouchableOpacity><TouchableOpacity style={s.primary} onPress={() => ownerAction(group, 'postpone')}><Text style={s.primaryText}>Відтермінувати</Text></TouchableOpacity></> : ['initial_confirmation', 'reserve_confirmation'].includes(stage) ? <TouchableOpacity disabled={Boolean(me?.confirmationTime) || Boolean(busy)} style={[s.primary, me?.confirmationTime && s.disabled]} onPress={() => confirm(group)}><Text style={s.primaryText}>{me?.confirmationTime ? 'Підтверджено' : me?.owner ? 'Підтвердити свої наміри' : 'Підтвердити своє бажання'}</Text></TouchableOpacity> : <><TouchableOpacity disabled={joinPending || Boolean(busy)} style={[owner || me ? s.secondary : s.primary, joinPending && s.disabled]} onPress={() => owner ? ownerAction(group, 'cancel') : interest(group, !me)}>{joinPending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={owner || me ? s.secondaryText : s.primaryText}>{owner || me ? 'Скасувати' : 'Взяти участь'}</Text>}</TouchableOpacity><TouchableOpacity style={s.secondary} onPress={() => navigation.navigate('GBNewExpress', { scheduleTime: group.scheduleTime, chatId: group.id })}><Text style={s.secondaryText}>Додати свій експрес</Text></TouchableOpacity></>}</View>}
     </View>;
   };
   if (loading) return <View style={s.center}><ActivityIndicator size="large" color={C.blue} /></View>;

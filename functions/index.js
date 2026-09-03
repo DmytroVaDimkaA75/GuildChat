@@ -3228,3 +3228,48 @@ exports.notifyExpressOwnerCancellation = onValueWritten(
     return null;
   }
 );
+
+/**
+ * Коли створено НОВИЙ експрес (свіже планування або перепланування після
+ * невдалого збору) — запросити всю гільдію приєднатись. Додавання своєї ВС до
+ * вже наявного експресу ("Додати свій експрес") нового вузла не створює, тож
+ * цей тригер не спрацьовує.
+ */
+exports.notifyExpressCreated = onValueCreated(
+  { ref: "/guilds/{guildId}/express/{chatId}", region: "europe-west1" },
+  async (event) => {
+    const group = event.data.val();
+    if (!group || !group.gbs) return null;
+    const stage = group.workflow?.stage || "open";
+    if (stage !== "open") return null;
+
+    const { guildId, chatId } = event.params;
+    const db = admin.database();
+    const [guildUsersSnap, catalogSnap] = await Promise.all([
+      db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+      db.ref("/greatBuildings").once("value"),
+    ]);
+    const guildUsers = guildUsersSnap.val() || {};
+    const catalog = catalogSnap.val() || {};
+
+    const gbs = Object.values(group.gbs).filter(Boolean);
+    const owners = new Set(gbs.map((gb) => String(gb.user || "")).filter(Boolean));
+    if (!owners.size) return null;
+    const ownerId = [...owners][0];
+    const ownerName = guildUsers[ownerId]?.userName || guildUsers[ownerId]?.name || String(ownerId);
+
+    const buildingNameOf = (key) => {
+      const bn = catalog[key]?.buildingName;
+      if (!bn) return key;
+      return bn.uk || bn.ua || bn.ru || bn.en || Object.values(bn)[0] || key;
+    };
+    const buildNames = [...new Set(gbs.map((gb) => buildingNameOf(gb.allowedGB)))].join(", ");
+
+    const body = `Користувач ${ownerName} пропонує приєднатися до експрес прокачки ${buildNames}`;
+    const recipients = Object.keys(guildUsers).filter((uid) => !owners.has(String(uid)));
+    await Promise.all(recipients.map((userId) => sendExpressPush({
+      db, guildId, chatId, notice: { event: "invite", userId, body },
+    }).catch((error) => logger.error("[EXPRESS_INVITE]", { guildId, chatId, userId, error: error?.message }))));
+    return null;
+  }
+);

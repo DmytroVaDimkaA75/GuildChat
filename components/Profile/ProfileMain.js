@@ -60,7 +60,6 @@ const ProfileMain = () => {
   const [userName, setUserName] = useState('');
   const [activeWorld, setActiveWorld] = useState('');
   const [guilds, setGuilds] = useState([]);
-  const [foeSync, setFoeSync] = useState({ loading: true, syncedAt: null });
   const [foeExpanded, setFoeExpanded] = useState(false);
   const foe = useFoeSync();
   const [googleStatus, setGoogleStatus] = useState('loading');
@@ -142,15 +141,6 @@ const ProfileMain = () => {
           listeners.push({ ref: worldNameRef, callback: onWorldNameUpdate });
         }
 
-        if (guildId && userId) {
-          const foeRef = database().ref(`/guilds/${guildId}/foeStats/${userId}/updatedAt`);
-          const onFoe = snap => setFoeSync({ loading: false, syncedAt: snap.val() || null });
-          foeRef.on('value', onFoe);
-          listeners.push({ ref: foeRef, callback: onFoe });
-        } else {
-          setFoeSync({ loading: false, syncedAt: null });
-        }
-        
       } catch (e) {
         console.error(e);
       }
@@ -375,7 +365,7 @@ const ProfileMain = () => {
         {/* Синхронізація з грою */}
         {(() => {
           const consented = foe?.consent === 'yes';
-          const synced = !!foe?.synced || (!foeSync.loading && !!foeSync.syncedAt);
+          const synced = !!foe?.synced;
           const active = !synced;
           return (
             <View style={styles.section}>
@@ -389,11 +379,7 @@ const ProfileMain = () => {
                 {synced ? (
                   <View style={styles.rowContent}>
                     <Ionicons name="checkmark-circle" size={18} color={DarkThemeColors.success} />
-                    <Text style={styles.foeSyncedText}>
-                      {foeSync.syncedAt
-                        ? new Date(foeSync.syncedAt).toLocaleDateString('uk')
-                        : 'активна'}
-                    </Text>
+                    <Text style={styles.foeSyncedText}>активна</Text>
                   </View>
                 ) : consented ? (
                   <View style={styles.rowContent}>
@@ -434,14 +420,12 @@ const ProfileMain = () => {
                     Вікно гри завантажується у фоні. Зачекайте кілька секунд — блок
                     згорнеться, щойно надійде перший пакет з гри.
                   </Text>
-                  {foe?.health?.packets === 0 ? (
-                    <TouchableOpacity
-                      style={styles.foeConsentBtn}
-                      onPress={() => foe?.setWebVisible?.(true)}
-                    >
-                      <Text style={styles.foeConsentBtnText}>Показати вікно гри (для входу)</Text>
-                    </TouchableOpacity>
-                  ) : null}
+                  <TouchableOpacity
+                    style={styles.foeConsentBtn}
+                    onPress={() => foe?.openGameWindow?.()}
+                  >
+                    <Text style={styles.foeConsentBtnText}>Показати вікно гри (для входу)</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
