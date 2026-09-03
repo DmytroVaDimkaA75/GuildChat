@@ -248,7 +248,7 @@ export default function FoeSyncScreen() {
     })();
 
     const dump = {
-      v: 'v90',
+      v: 'v91',
       url: currentUrl,
       player,
       defsProgress: defsProgress || null,

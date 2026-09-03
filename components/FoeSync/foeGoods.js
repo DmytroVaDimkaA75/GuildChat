@@ -69,3 +69,22 @@ export const eraIndex = (era) => {
 
 // Епоха товару: спершу з живих resourceDefs, далі — із запасної таблиці.
 export const goodEra = (key, resDefs) => resDefs?.[key]?.era || GOOD_ERA[key] || null;
+
+// «Особливі ресурси» епохи (аванпост/сектор): по одному на Космічну/Зоряну еру.
+// Ознака в грі: abilities містить specialResource і НЕ містить goodsProduceable.
+const SPECIAL_GOODS = new Set([
+  'promethium', 'orichalcum',
+  'mars_ore', 'asteroid_ice', 'venus_carbon', 'unknown_dna',
+  'crystallized_hydrocarbons', 'dark_matter', 'stel_void_shard',
+]);
+
+export const isSpecialGood = (key, resDefs) => {
+  const ab = resDefs?.[key]?.abilities;
+  if (ab && typeof ab === 'object') {
+    const has = Array.isArray(ab) ? (n) => ab.includes(n) : (n) => n in ab;
+    return has('specialResource') && !has('goodsProduceable');
+  }
+  return SPECIAL_GOODS.has(key);
+};
+
+export const SPECIAL_KEY = '__special__';

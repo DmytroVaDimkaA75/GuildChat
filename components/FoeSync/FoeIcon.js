@@ -80,17 +80,21 @@ export function findFrame(sheet, name) {
 }
 
 // <FoeIcon sheet={iconSheet} name="medals" size={20} />
-// sheet може бути одним листом або масивом (пробуються по черзі).
+// sheet — лист або масив листів (пробуються по черзі).
+// name — назва кадру або масив назв-запасних варіантів.
 export default function FoeIcon({ sheet, name, size = 20, style }) {
   const sheets = (Array.isArray(sheet) ? sheet : [sheet]).filter(Boolean);
+  const names = (Array.isArray(name) ? name : [name]).filter(Boolean);
   let picked = null;
   let frame = null;
-  for (const s of sheets) {
-    const fr = frameFor(s, name);
-    if (fr && s.pngUrl && s.sheetW && s.sheetH) {
-      picked = s;
-      frame = fr;
-      break;
+  outer: for (const nm of names) {
+    for (const s of sheets) {
+      const fr = frameFor(s, nm);
+      if (fr && s.pngUrl && s.sheetW && s.sheetH) {
+        picked = s;
+        frame = fr;
+        break outer;
+      }
     }
   }
   if (!picked || !frame) return null;

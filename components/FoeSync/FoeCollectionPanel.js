@@ -12,7 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import FoeIcon from './FoeIcon';
-import { goodEra, eraIndex } from './foeGoods';
+import { goodEra, eraIndex, isSpecialGood, SPECIAL_KEY } from './foeGoods';
 
 const CORE_KEYS = new Set([
   'money',
@@ -156,17 +156,22 @@ export default function FoeCollectionPanel({
   const subOptions = useMemo(() => {
     if (isGroup) {
       const set = new Set();
+      let hasSpecial = false;
       for (const b of ready) {
         const det = b[selFilter.group] || {};
         for (const k of Object.keys(det)) {
           if (!isGoodKey(k) || !det[k]) continue;
+          if (isSpecialGood(k, resDefs)) hasSpecial = true;
           const e = goodEra(k, resDefs);
           if (e) set.add(e);
         }
       }
-      return Array.from(set)
+      const eraChips = Array.from(set)
         .sort((a, z) => eraIndex(a) - eraIndex(z))
         .map((e) => ({ key: e, label: eraLabel(e) }));
+      return hasSpecial
+        ? [{ key: SPECIAL_KEY, label: 'Спеціальні ресурси' }, ...eraChips]
+        : eraChips;
     }
     if (isFrags) {
       const map = new Map();
@@ -193,7 +198,7 @@ export default function FoeCollectionPanel({
           if (era && fr.asmName !== era) continue;
           list.push({
             key: `${b.iid || b.id}:${fr.id || fr.asmId}`,
-            resKey: fr.asmIcon || 'icon_fragment',
+            resKey: [fr.asmIcon, 'icon_fragment'],
             name: info.name,
             sub:
               (fr.asmName ? `→ ${fr.asmName}` : '') +
@@ -208,12 +213,14 @@ export default function FoeCollectionPanel({
         for (const [k, v] of Object.entries(det)) {
           if (!isGoodKey(k) || !v) continue;
           const gEra = goodEra(k, resDefs);
-          if (era && gEra !== era) continue;
+          const special = isSpecialGood(k, resDefs);
+          if (era === SPECIAL_KEY ? !special : era && gEra !== era) continue;
           list.push({
             key: `${b.iid || b.id}:${k}`,
             resKey: k,
             name: info.name,
             sub: goodName(k) + (gEra ? ` · ${eraLabel(gEra)}` : ''),
+            special,
             base: Number(v),
             boosted: withBonus(Number(v), pct),
           });
@@ -337,11 +344,20 @@ export default function FoeCollectionPanel({
               ) : null}
             </View>
             {rows.map((r, index) => (
-              <View key={r.key} style={[styles.tr, index === rows.length - 1 && styles.trLast]}>
+              <View
+                key={r.key}
+                style={[
+                  styles.tr,
+                  index === rows.length - 1 && styles.trLast,
+                  r.special && styles.trSpecial,
+                ]}
+              >
                 <FoeIcon sheet={sheets} name={r.resKey} size={20} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.tdName}>{r.name}</Text>
-                  {r.sub ? <Text style={styles.tdSub}>{r.sub}</Text> : null}
+                  <Text style={[styles.tdName, r.special && styles.tdNameSpecial]}>{r.name}</Text>
+                  {r.sub ? (
+                    <Text style={[styles.tdSub, r.special && styles.tdSubSpecial]}>{r.sub}</Text>
+                  ) : null}
                 </View>
                 <Text style={styles.tdVal}>
                   {selFilter.boost && totals[selFilter.id]?.pct
@@ -456,8 +472,15 @@ const styles = StyleSheet.create({
     borderBottomColor: C.border,
   },
   trLast: { borderBottomWidth: 0 },
+  trSpecial: {
+    backgroundColor: `${C.success}14`,
+    borderLeftWidth: 3,
+    borderLeftColor: C.success,
+  },
   tdName: { color: C.text, fontSize: 13, lineHeight: 18 },
+  tdNameSpecial: { color: C.success, fontWeight: '700' },
   tdSub: { color: C.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  tdSubSpecial: { color: `${C.success}cc` },
   tdVal: { color: C.success, fontSize: 13, fontWeight: '700', marginLeft: 8 },
   emptyBox: {
     marginTop: 12,
