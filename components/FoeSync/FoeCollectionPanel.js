@@ -66,6 +66,8 @@ const FILTERS = [
 
 const withBonus = (base, pct) => (pct ? Math.floor(base * (1 + pct / 100)) : base);
 const fmt = (n) => Number(n || 0).toLocaleString('uk');
+// Збір з ВС фіксований — бонуси виробництва на нього не діють.
+const isGbBuilding = (b) => /greatbuilding/i.test(String(b?.type || ''));
 
 export default function FoeCollectionPanel({
   prodBuildings,
@@ -135,18 +137,29 @@ export default function FoeCollectionPanel({
     const out = {};
     for (const f of FILTERS) {
       let base = 0;
+      let gbBase = 0; // частина збору з ВС — на неї бонус не діє
       for (const b of ready) {
+        const gb = isGbBuilding(b);
         if (f.frags) {
           for (const fr of b.frags || []) base += Number(fr.amount) || 0;
         } else if (f.group) {
           const det = b[f.group] || {};
-          for (const [k, v] of Object.entries(det)) if (isGoodKey(k)) base += Number(v) || 0;
+          for (const [k, v] of Object.entries(det))
+            if (isGoodKey(k)) {
+              const n = Number(v) || 0;
+              base += n;
+              if (gb) gbBase += n;
+            }
         } else {
-          for (const key of f.keys || [f.id]) base += Number((b.det || {})[key]) || 0;
+          for (const key of f.keys || [f.id]) {
+            const n = Number((b.det || {})[key]) || 0;
+            base += n;
+            if (gb) gbBase += n;
+          }
         }
       }
       const pct = f.boost ? Number(sumsAll?.[f.boost]) || 0 : 0;
-      out[f.id] = { base, boosted: withBonus(base, pct), pct };
+      out[f.id] = { base, boosted: withBonus(base - gbBase, pct) + gbBase, pct };
     }
     return out;
   }, [ready, sumsAll, isGoodKey]);
@@ -203,6 +216,8 @@ export default function FoeCollectionPanel({
     const list = [];
     for (const b of ready) {
       const info = bInfo(b);
+      const gb = isGbBuilding(b);
+      const boost = (n) => (gb ? n : withBonus(n, pct));
       if (isFrags) {
         for (const fr of b.frags || []) {
           if (!fr.amount) continue;
@@ -215,6 +230,7 @@ export default function FoeCollectionPanel({
               (fr.asmName ? `→ ${fr.asmName}` : '') +
               (fr.reqd ? ` (потрібно ${fr.reqd})` : '') +
               (fr.motiv ? ' · за мотивації' : ''),
+            gb,
             base: Number(fr.amount),
             boosted: Number(fr.amount),
           });
@@ -232,8 +248,9 @@ export default function FoeCollectionPanel({
             name: info.name,
             sub: goodName(k) + (gEra ? ` · ${eraLabel(gEra)}` : ''),
             special,
+            gb,
             base: Number(v),
-            boosted: withBonus(Number(v), pct),
+            boosted: boost(Number(v)),
           });
         }
       } else {
@@ -252,8 +269,9 @@ export default function FoeCollectionPanel({
           resKey: hitKey,
           name: info.name,
           sub: null,
+          gb,
           base: v,
-          boosted: withBonus(v, pct),
+          boosted: boost(v),
         });
       }
     }
@@ -515,11 +533,22 @@ export default function FoeCollectionPanel({
                   styles.tr,
                   index === rows.length - 1 && styles.trLast,
                   r.special && styles.trSpecial,
+                  r.gb && !r.special && styles.trGbBg,
+                  r.gb && styles.trGbBorder,
                 ]}
               >
                 <FoeIcon sheet={sheets} name={r.resKey} size={20} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.tdName, r.special && styles.tdNameSpecial]}>{r.name}</Text>
+                  <Text
+                    style={[
+                      styles.tdName,
+                      r.special && styles.tdNameSpecial,
+                      r.gb && !r.special && styles.tdNameGb,
+                    ]}
+                  >
+                    {r.gb ? '★ ' : ''}
+                    {r.name}
+                  </Text>
                   {r.sub ? (
                     <Text style={[styles.tdSub, r.special && styles.tdSubSpecial]}>{r.sub}</Text>
                   ) : null}
@@ -710,8 +739,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: C.success,
   },
+  trGbBg: { backgroundColor: '#ff6f0014' },
+  trGbBorder: { borderLeftWidth: 3, borderLeftColor: '#ff6f00' },
   tdName: { color: C.text, fontSize: 13, lineHeight: 18 },
   tdNameSpecial: { color: C.success, fontWeight: '700' },
+  tdNameGb: { color: '#ff8f3a', fontWeight: '700' },
   tdSub: { color: C.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
   tdSubSpecial: { color: `${C.success}cc` },
   tdVal: { color: C.success, fontSize: 13, fontWeight: '700', marginLeft: 8 },
