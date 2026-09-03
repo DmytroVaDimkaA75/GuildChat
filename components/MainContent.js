@@ -1094,7 +1094,9 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
           const { drawerLabel, drawerIconComponent } = props.descriptors[route.key].options;
           const shouldShowTopSeparator = route.name === 'youtube' || route.name === 'profile';
 
-          const iconColor = focused ? COLORS.primary : COLORS.textSecondary;
+          // Іконку не фарбуємо в синій на виборі — деякі SVG це не підтримують,
+          // тож вигляд був неоднаковим. Активний стан показуємо текстом і смужкою.
+          const iconColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
           const textColor = focused ? COLORS.textPrimary : COLORS.textSecondary;
           const bgColor = focused ? COLORS.surface : 'transparent';
 
