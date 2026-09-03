@@ -155,6 +155,7 @@ export default function FoeCityMap({
   buildings,
   collect,
   highlightIds,
+  focusId,
   horizontalInset = 46,
 }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -410,6 +411,30 @@ export default function FoeCityMap({
     }, 40);
     return () => clearTimeout(timer);
   }, [highlightIds, model, tile, viewportWidth, viewportHeight]);
+
+  // Тап по рядку у відфільтрованому списку — підсвітити цю споруду й
+  // прокрутити мапу до неї (попап не відкриваємо).
+  useEffect(() => {
+    const raw = focusId && typeof focusId === 'object' ? focusId.id : focusId;
+    if (!model || !raw) return;
+    const fid = String(raw);
+    const ent = model.entities.find(
+      (e) =>
+        String(e.id) === fid || String(e.instanceId) === fid || String(e.entityId) === fid
+    );
+    if (!ent) return;
+    setSelectedId(ent.mapId);
+    setPopupOpen(false);
+    const targetX = Math.max(0, (ent.rx + ent.rw / 2 - model.minX) * tile - viewportWidth / 2);
+    const targetY = Math.max(0, (ent.ry + ent.rl / 2 - model.minY) * tile - viewportHeight / 2);
+    const timer = setTimeout(() => {
+      horizontalScrollRef.current?.scrollTo?.({ x: targetX, animated: true });
+      verticalScrollRef.current?.scrollTo?.({ y: targetY, animated: true });
+      topRulerRef.current?.scrollTo?.({ x: targetX, animated: true });
+      leftRulerRef.current?.scrollTo?.({ y: targetY, animated: true });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [focusId, model, tile, viewportWidth, viewportHeight]);
 
   const selectedEntity = selectedId
     ? model?.entities.find((entity) => entity.mapId === selectedId) || null

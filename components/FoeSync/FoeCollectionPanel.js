@@ -103,6 +103,7 @@ export default function FoeCollectionPanel({
   goodsSheet,
   userId,
   onHighlight,
+  onFocusBuilding,
 }) {
   const sheets = [iconSheet, goodsSheet].filter(Boolean);
   const [selected, setSelected] = useState(null);
@@ -528,8 +529,10 @@ export default function FoeCollectionPanel({
               ) : null}
             </View>
             {rows.map((r, index) => (
-              <View
+              <TouchableOpacity
                 key={r.key}
+                activeOpacity={0.6}
+                onPress={() => onFocusBuilding?.(String(r.key).split(':')[0])}
                 style={[
                   styles.tr,
                   index === rows.length - 1 && styles.trLast,
@@ -548,7 +551,7 @@ export default function FoeCollectionPanel({
                     ? `${fmt(r.base)} / ${fmt(r.boosted)}`
                     : fmt(r.base)}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         ) : (

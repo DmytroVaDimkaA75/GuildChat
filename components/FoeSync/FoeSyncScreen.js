@@ -137,6 +137,8 @@ export default function FoeSyncScreen() {
 
   // Споруди, підсвічені поточним фільтром «Запланованого збору», — для мапи.
   const [highlightIds, setHighlightIds] = useState(null);
+  const [focusReq, setFocusReq] = useState(null);
+  const focusBuilding = useCallback((id) => setFocusReq({ id, n: Date.now() }), []);
 
   const resDefs = useMemo(() => {
     const arr = found.resourceDefs;
@@ -344,6 +346,7 @@ export default function FoeSyncScreen() {
                 buildings={cityBuildings}
                 collect={collectInfo}
                 highlightIds={highlightIds}
+                focusId={focusReq}
                 horizontalInset={46}
               />
             )}
@@ -400,6 +403,7 @@ export default function FoeSyncScreen() {
             goodsSheet={goodsSheet}
             userId={userId}
             onHighlight={setHighlightIds}
+            onFocusBuilding={focusBuilding}
           />
         ) : null}
 
