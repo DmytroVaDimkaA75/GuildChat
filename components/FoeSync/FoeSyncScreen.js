@@ -22,7 +22,6 @@ import FoeCityMap from './FoeCityMap';
 import FoeLoadingRing from './FoeLoadingRing';
 import { computeCombat } from './foeBonuses';
 import FoeCollectionPanel from './FoeCollectionPanel';
-import { FOE_CONSENT_BODY, FOE_CONSENT_BULLETS, FOE_CONSENT_NOTE } from './foeConsent';
 
 const RES_LABELS = {
   money: 'Монети',
@@ -121,7 +120,6 @@ export default function FoeSyncScreen() {
     defsProgress,
     saveToGuild,
     setWebVisible,
-    acceptConsent,
   } = foe || {};
 
   const [, force] = useState(0);
@@ -290,20 +288,14 @@ export default function FoeSyncScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {!syncEnabled ? (
-          <View style={styles.consentCard}>
-            <Text style={styles.consentBody}>{FOE_CONSENT_BODY}</Text>
-            {FOE_CONSENT_BULLETS.map((b, i) => (
-              <Text key={i} style={styles.consentBullet}>{'•  '}{b}</Text>
-            ))}
-            <Text style={styles.consentNote}>{FOE_CONSENT_NOTE}</Text>
-            <TouchableOpacity
-              accessibilityRole="button"
-              activeOpacity={0.85}
-              style={styles.consentBtn}
-              onPress={() => acceptConsent?.()}
-            >
-              <Text style={styles.consentBtnText}>Погоджуюсь, продовжити</Text>
-            </TouchableOpacity>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <MaterialIcons name="info-outline" size={20} color={C.primarySoft} />
+              <Text style={styles.infoText}>
+                Синхронізацію ще не ввімкнено. Відкрийте Профіль → «Синхронізація з грою»,
+                щоб надати згоду.
+              </Text>
+            </View>
           </View>
         ) : null}
 

@@ -3133,7 +3133,9 @@ const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
     await ledgerRef.update({ status: "no_token", completedAt: admin.database.ServerValue.TIMESTAMP });
     return;
   }
-  const title = "Експрес прокачка";
+  const title = "🚀 Експрес прокачка";
+  const worldContexts = await getPushWorldContext({ db, guildId, userIds: [notice.userId] });
+  const body = addWorldNameToPushBody(notice.body, worldContexts.get(String(notice.userId)));
   await admin.messaging().send(ensureVisibleNotificationPayload({
     token,
     data: {
@@ -3142,15 +3144,15 @@ const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
       guildId: String(guildId),
       chatId: String(chatId),
       title,
-      body: notice.body,
+      body,
       sound: "1",
       notificationEventId: `${chatId}_${notice.event}_${notice.userId}`,
     },
     android: {
       priority: "high",
-      notification: { title, body: notice.body, channelId: "express_upgrade", sound: "kirpich" },
+      notification: { title, body, channelId: "express_upgrade", sound: "kirpich" },
     },
-    apns: { payload: { aps: { alert: { title, body: notice.body }, sound: "kirpich.mp3", "content-available": 1 } } },
+    apns: { payload: { aps: { alert: { title, body }, sound: "kirpich.mp3", "content-available": 1 } } },
   }));
   await ledgerRef.update({ status: "sent", completedAt: admin.database.ServerValue.TIMESTAMP });
 };
