@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import { useFoeSync } from './FoeSyncProvider';
@@ -211,6 +212,34 @@ export default function FoeSyncScreen() {
     }).catch(() => {});
   }, [hasData, saveToGuild, player, combat, goods, collection]);
 
+  // Прихована діагностика (довгий тап на підказці мапи) — для налагодження.
+  const copyDiag = useCallback(async () => {
+    const gbFromMap = (found.cityGBs || []).map((g) => ({
+      id: g.id,
+      level: g.level,
+      bonusTypes: (Array.isArray(g.bonuses) ? g.bonuses : g.bonus ? [g.bonus] : [])
+        .map((b) => b?.type)
+        .filter(Boolean),
+    }));
+    const prodGB = (found.prodBuildings || [])
+      .filter((b) => /greatbuilding/i.test(String(b.type || '')))
+      .map((b) => ({ id: b.id, st: b.st, ready: b.ready, det: b.det, other: b.other }));
+    const dump = {
+      v: 'v109',
+      player,
+      prodStateCounts: found.prodStateCounts || null,
+      gbCount: (found.cityGBs || []).length,
+      gbFromMap,
+      prodGB,
+      gbStateSamples: found.gbStateSamples || null,
+    };
+    const text = JSON.stringify(dump);
+    try {
+      await Clipboard.setStringAsync(text);
+    } catch (_e) {
+      /* ignore */
+    }
+  }, [found, player]);
 
   const packets = health.packets || 0;
 
@@ -313,7 +342,9 @@ export default function FoeSyncScreen() {
           />
         ) : null}
 
-
+        <TouchableOpacity onPress={copyDiag} style={styles.diagLink} accessibilityRole="button">
+          <Text style={styles.diagLinkText}>Копіювати діагностику</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -377,6 +408,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   openGameButtonText: { color: C.primary, fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  diagLink: { marginTop: 22, alignSelf: 'center', padding: 6 },
+  diagLinkText: { color: C.textSecondary, fontSize: 11, opacity: 0.5 },
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   btnRowStacked: { flexDirection: 'column' },
   fullWidthBtn: { flex: 0, width: '100%' },

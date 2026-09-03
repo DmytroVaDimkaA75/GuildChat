@@ -269,6 +269,7 @@ export const FOE_INTERCEPTOR_JS = `
         if (ents && typeof ents === 'object') {
           var list = Array.isArray(ents) ? ents : Object.keys(ents).map(function (k) { return ents[k]; });
           var gbs = [];
+          var gbStateSamples = [];
           for (var e = 0; e < list.length; e++) {
             var en = list[e];
             if (!en || typeof en !== 'object') { continue; }
@@ -279,9 +280,24 @@ export const FOE_INTERCEPTOR_JS = `
               bonus: en.bonus,
               bonuses: en.bonuses
             });
+            if (gbStateSamples.length < 8) {
+              try {
+                gbStateSamples.push({
+                  cid: en.cityentity_id,
+                  level: en.level,
+                  entKeys: Object.keys(en),
+                  stateClass: en.state && en.state.__class__,
+                  stateKeys: en.state ? Object.keys(en.state) : [],
+                  state: JSON.stringify(en.state || {}).slice(0, 1400),
+                  bonuses: en.bonuses,
+                  bonus: en.bonus
+                });
+              } catch (er) {}
+            }
           }
           found.cityGBs = gbs;
           found.cityGBsAll = gbs.length;
+          found.gbStateSamples = gbStateSamples;
 
           // Виробничі будівлі: розбираємо продукцію кожної.
           var nowP = Math.floor(Date.now() / 1000);
