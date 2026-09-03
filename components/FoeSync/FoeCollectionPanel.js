@@ -382,11 +382,15 @@ export default function FoeCollectionPanel({
             accessibilityState={{ selected: selected === SAVED_KEY }}
           >
             <View style={styles.filterHeading}>
-              <MaterialIcons
-                name="bookmark"
-                size={20}
-                color={selected === SAVED_KEY ? C.primary : C.textSecondary}
-              />
+              {sheets.some((s) => s?.frames?.icon_favorite || s?.frames?.stars) ? (
+                <FoeIcon sheet={sheets} name={['icon_favorite', 'stars']} size={22} />
+              ) : (
+                <MaterialIcons
+                  name="bookmark"
+                  size={20}
+                  color={selected === SAVED_KEY ? C.primary : C.textSecondary}
+                />
+              )}
               <Text
                 numberOfLines={2}
                 style={[styles.filterLabel, selected === SAVED_KEY && styles.filterLabelActive]}
