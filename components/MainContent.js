@@ -1110,8 +1110,10 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
                 style={[styles.menuItem, { backgroundColor: bgColor }]}
                 activeOpacity={0.8}
               >
-                <View style={styles.iconWrapper}>
-                  {drawerIconComponent && drawerIconComponent({ color: iconColor })}
+                <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+                  <View style={{ opacity: focused ? 1 : 0.7 }}>
+                    {drawerIconComponent && drawerIconComponent({ color: iconColor })}
+                  </View>
                 </View>
                 <Text style={[styles.menuItemText, { color: textColor, fontWeight: focused ? '600' : '500' }]}>
                   {drawerLabel}
@@ -2330,10 +2332,15 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   iconWrapper: {
-    width: 24,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 20,
+    marginRight: 14,
+  },
+  iconWrapperActive: {
+    backgroundColor: `${COLORS.primary}22`,
   },
   menuItemText: {
     fontSize: 16,
