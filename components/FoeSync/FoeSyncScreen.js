@@ -32,7 +32,7 @@ const RES_LABELS = {
   supplies: 'Припаси',
   medals: 'Медалі',
   premium: 'Діаманти',
-  strategy_points: 'Очки Форджа (ВП)',
+  strategy_points: 'Стратегічні очки',
   total_battlepoints: 'Бойові бали',
   clan_power: 'Сила гільдії',
 };

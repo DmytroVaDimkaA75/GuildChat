@@ -81,7 +81,7 @@ const BONUS_LABELS = {
   coin_production: 'виробництво монет',
   supply_production: 'виробництво припасів',
   goods_production: 'виробництво товарів',
-  forge_points_production: 'виробництво очок Форджа',
+  forge_points_production: 'виробництво стратегічних очок',
   military_boost: 'атака й захист атакуючої армії',
   fierce_resistance: 'атака й захист оборонної армії',
   advanced_tactics: 'атака й захист усіх армій',

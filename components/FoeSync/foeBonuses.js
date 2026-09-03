@@ -79,7 +79,7 @@ export const BONUS_LABELS = {
   tavern_shop_price: 'Ціни в таверні (знижка)',
   tavern_silver_collect_bonus: 'Збір срібла таверни',
   tavern_visit_silver_drop: 'Срібло за візит',
-  tavern_visit_fp_drop: 'ОФ за візит',
+  tavern_visit_fp_drop: 'СО за візит',
 
   // Інші механіки
   outpost_cooldown_time: 'Відкат форпосту',
