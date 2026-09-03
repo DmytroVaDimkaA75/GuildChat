@@ -714,17 +714,37 @@ export default function FoeCityMap({
                       height={Math.max(entity.rl - 0.08, 0.1)}
                       fill={colorFor(type)}
                       opacity={dimmed ? 0.28 : entity.conn === 0 ? 0.4 : 1}
-                      stroke={
-                        selected
-                          ? DarkThemeColors.primarySoft
-                          : inFilter
-                            ? '#00e5ff'
-                            : 'rgba(0,0,0,0.35)'
-                      }
-                      strokeWidth={selected ? 0.2 : inFilter ? 0.16 : 0.03}
+                      stroke={inFilter ? '#00e5ff' : 'rgba(0,0,0,0.35)'}
+                      strokeWidth={inFilter ? 0.16 : 0.03}
                     />
                   );
                 })}
+
+                {/* Обрана споруда — окрема яскрава рамка поверх усього */}
+                {model.entities
+                  .filter((entity) => selectedId === entity.mapId)
+                  .map((entity) => (
+                    <React.Fragment key={`sel-${entity.mapId}`}>
+                      <Rect
+                        x={entity.rx - 0.06}
+                        y={entity.ry - 0.06}
+                        width={entity.rw + 0.12}
+                        height={entity.rl + 0.12}
+                        fill="none"
+                        stroke="#ffffff"
+                        strokeWidth={0.34}
+                      />
+                      <Rect
+                        x={entity.rx - 0.06}
+                        y={entity.ry - 0.06}
+                        width={entity.rw + 0.12}
+                        height={entity.rl + 0.12}
+                        fill="none"
+                        stroke="#ff2d55"
+                        strokeWidth={0.16}
+                      />
+                    </React.Fragment>
+                  ))}
               </G>
             </Svg>
 
