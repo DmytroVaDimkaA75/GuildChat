@@ -449,25 +449,43 @@ export default function FoeCollectionPanel({
       </ScrollView>
 
       {selected === SAVED_KEY ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
-          {savedFilters.length === 0 ? (
-            <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
-          ) : (
-            subOptions.map((o) => (
-              <TouchableOpacity
-                key={o.key}
-                style={[styles.eraBtn, !o.enabled && styles.eraBtnOff]}
-                disabled={!o.enabled}
-                onPress={() => applySaved(o.saved)}
-                onLongPress={() => removeSaved(o.saved)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-              >
-                <Text style={[styles.eraTxt, !o.enabled && styles.eraTxtOff]}>{o.label}</Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+        <View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
+            {savedFilters.length === 0 ? (
+              <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
+            ) : (
+              subOptions.map((o) => (
+                <View
+                  key={o.key}
+                  style={[styles.savedChip, !o.enabled && styles.eraBtnOff]}
+                >
+                  <TouchableOpacity
+                    style={styles.savedChipBody}
+                    disabled={!o.enabled}
+                    onPress={() => applySaved(o.saved)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Увімкнути фільтр ${o.label}`}
+                  >
+                    <Text style={[styles.eraTxt, !o.enabled && styles.eraTxtOff]}>{o.label}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.savedChipX}
+                    onPress={() => removeSaved(o.saved)}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Видалити фільтр ${o.label}`}
+                  >
+                    <MaterialIcons name="close" size={15} color={C.danger} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </ScrollView>
+          {savedFilters.length > 0 ? (
+            <Text style={styles.savedHint}>Тап — увімкнути · ✕ — видалити</Text>
+          ) : null}
+        </View>
       ) : subOptions.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
           <TouchableOpacity
@@ -643,6 +661,24 @@ const styles = StyleSheet.create({
   },
   eraBtnActive: { borderColor: C.primary, backgroundColor: `${C.primary}18` },
   eraBtnOff: { opacity: 0.4 },
+  savedChip: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surfaceElevated,
+  },
+  savedChipBody: { paddingLeft: 12, paddingRight: 6, height: '100%', justifyContent: 'center' },
+  savedChipX: {
+    paddingRight: 10,
+    paddingLeft: 4,
+    height: '100%',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: C.border,
+  },
   eraTxt: { color: C.textSecondary, fontSize: 12, fontWeight: '600' },
   eraTxtActive: { color: C.primarySoft },
   eraTxtOff: { color: C.textSecondary },
