@@ -113,6 +113,7 @@ export default function FoeSyncScreen() {
   const {
     found = {},
     player,
+    userId,
     health = { packets: 0 },
     currentUrl,
     seen,
@@ -397,6 +398,7 @@ export default function FoeSyncScreen() {
             resDefs={resDefs}
             iconSheet={iconSheet}
             goodsSheet={goodsSheet}
+            userId={userId}
             onHighlight={setHighlightIds}
           />
         ) : null}

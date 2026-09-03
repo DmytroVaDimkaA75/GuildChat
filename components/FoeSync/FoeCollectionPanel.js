@@ -7,12 +7,25 @@
 // «споруда → кількість».
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import FoeIcon from './FoeIcon';
 import { goodEra, eraIndex, isSpecialGood, SPECIAL_KEY } from './foeGoods';
+import { subscribeFoeFilters, saveFoeFilter, deleteFoeFilter } from '../../src/services/foeFilters';
+
+const SAVED_KEY = '__saved__';
 
 const CORE_KEYS = new Set([
   'money',
@@ -88,11 +101,21 @@ export default function FoeCollectionPanel({
   resDefs,
   iconSheet,
   goodsSheet,
+  userId,
   onHighlight,
 }) {
   const sheets = [iconSheet, goodsSheet].filter(Boolean);
   const [selected, setSelected] = useState(null);
   const [era, setEra] = useState(null);
+  const [savedFilters, setSavedFilters] = useState([]);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    return subscribeFoeFilters(userId, setSavedFilters);
+  }, [userId]);
 
   const ready = useMemo(
     () => (prodBuildings || []).filter((b) => b && b.ready),
@@ -153,8 +176,16 @@ export default function FoeCollectionPanel({
   const isGroup = !!selFilter?.group;
   const isFrags = !!selFilter?.frags;
 
-  // Підфільтри: епохи (товари) або зібрані предмети (фрагменти)
+  // Підфільтри: збережені фільтри / епохи (товари) / зібрані предмети (фрагменти)
   const subOptions = useMemo(() => {
+    if (selected === SAVED_KEY) {
+      return savedFilters.map((sf) => ({
+        key: sf.id,
+        label: sf.name,
+        saved: sf,
+        enabled: !!totals[sf.filterId]?.base,
+      }));
+    }
     if (isGroup) {
       const set = new Set();
       let hasSpecial = false;
@@ -184,7 +215,7 @@ export default function FoeCollectionPanel({
       return Array.from(map.keys()).sort().map((n) => ({ key: n, label: n }));
     }
     return [];
-  }, [isGroup, isFrags, selFilter, ready, isGoodKey, resDefs]);
+  }, [selected, savedFilters, totals, isGroup, isFrags, selFilter, ready, isGoodKey, resDefs]);
 
   // Рядки таблиці для вибраного фільтра
   const rows = useMemo(() => {
@@ -265,16 +296,111 @@ export default function FoeCollectionPanel({
     setSelected((cur) => (cur === id ? null : id));
     setEra(null);
   };
+  const applySaved = (sf) => {
+    setSelected(sf.filterId);
+    setEra(sf.subKey || null);
+  };
+  const resetFilter = () => {
+    setSelected(null);
+    setEra(null);
+  };
+  const hasSelection = !!selFilter;
+
+  const doSave = async () => {
+    const name = saveName.trim();
+    if (!name || !selFilter) return;
+    setBusy(true);
+    try {
+      await saveFoeFilter(userId, { name, filterId: selected, subKey: era });
+      setSaveOpen(false);
+    } catch (e) {
+      Alert.alert('Не вдалося зберегти', String(e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removeSaved = (sf) => {
+    Alert.alert('Видалити фільтр?', sf.name, [
+      { text: 'Скасувати', style: 'cancel' },
+      {
+        text: 'Видалити',
+        style: 'destructive',
+        onPress: () => deleteFoeFilter(userId, sf.id).catch(() => {}),
+      },
+    ]);
+  };
 
   const anyTotal = FILTERS.some((f) => totals[f.id]?.base > 0);
   if (!anyTotal) return null;
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Запланований збір</Text>
-      <Text style={styles.subtitle}>Готові виробництва за ресурсами</Text>
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Запланований збір</Text>
+          <Text style={styles.subtitle}>Готові виробництва за ресурсами</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.hdrBtn, !hasSelection && styles.hdrBtnOff]}
+          disabled={!hasSelection}
+          onPress={resetFilter}
+          accessibilityRole="button"
+          accessibilityLabel="Скинути фільтр"
+        >
+          <MaterialIcons
+            name="filter-alt-off"
+            size={20}
+            color={hasSelection ? C.primary : C.textSecondary}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.hdrBtn, !hasSelection && styles.hdrBtnOff]}
+          disabled={!hasSelection || !userId}
+          onPress={() => {
+            setSaveName('');
+            setSaveOpen(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Зберегти фільтр"
+        >
+          <MaterialIcons
+            name="bookmark-add"
+            size={20}
+            color={hasSelection && userId ? C.primary : C.textSecondary}
+          />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+        {savedFilters.length ? (
+          <TouchableOpacity
+            style={[styles.filterBtn, selected === SAVED_KEY && styles.filterBtnActive]}
+            onPress={() => pick(SAVED_KEY)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Мої фільтри"
+            accessibilityState={{ selected: selected === SAVED_KEY }}
+          >
+            <View style={styles.filterHeading}>
+              <MaterialIcons
+                name="bookmark"
+                size={20}
+                color={selected === SAVED_KEY ? C.primary : C.textSecondary}
+              />
+              <Text
+                numberOfLines={2}
+                style={[styles.filterLabel, selected === SAVED_KEY && styles.filterLabelActive]}
+              >
+                Мої фільтри
+              </Text>
+            </View>
+            <Text
+              style={[styles.filterVal, selected === SAVED_KEY && styles.filterValActive]}
+            >
+              {savedFilters.length}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
         {FILTERS.map((f) => {
           const t = totals[f.id] || { base: 0, boosted: 0, pct: 0 };
           if (!t.base) return null; // ресурс не збирається — кнопку не показуємо
@@ -318,7 +444,27 @@ export default function FoeCollectionPanel({
         })}
       </ScrollView>
 
-      {subOptions.length ? (
+      {selected === SAVED_KEY ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
+          {savedFilters.length === 0 ? (
+            <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
+          ) : (
+            subOptions.map((o) => (
+              <TouchableOpacity
+                key={o.key}
+                style={[styles.eraBtn, !o.enabled && styles.eraBtnOff]}
+                disabled={!o.enabled}
+                onPress={() => applySaved(o.saved)}
+                onLongPress={() => removeSaved(o.saved)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.eraTxt, !o.enabled && styles.eraTxtOff]}>{o.label}</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
+      ) : subOptions.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
           <TouchableOpacity
             style={[styles.eraBtn, !era && styles.eraBtnActive]}
@@ -389,6 +535,40 @@ export default function FoeCollectionPanel({
           <Text style={styles.empty}>Оберіть ресурс, щоб побачити список споруд.</Text>
         </View>
       )}
+
+      <Modal
+        visible={saveOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSaveOpen(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setSaveOpen(false)}>
+          <Pressable style={styles.saveCard} onPress={() => {}}>
+            <Text style={styles.saveTitle}>Назва фільтру</Text>
+            <TextInput
+              style={styles.saveInput}
+              value={saveName}
+              onChangeText={setSaveName}
+              placeholder="Напр. Товари Зоряної ери"
+              placeholderTextColor={C.textSecondary}
+              autoFocus
+              maxLength={40}
+            />
+            <View style={styles.saveActions}>
+              <TouchableOpacity onPress={() => setSaveOpen(false)}>
+                <Text style={styles.saveCancel}>Скасувати</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={busy || !saveName.trim()}
+                onPress={doSave}
+                style={[styles.saveOk, (busy || !saveName.trim()) && { opacity: 0.4 }]}
+              >
+                <Text style={styles.saveOkTxt}>{busy ? '…' : 'Зберегти'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -408,6 +588,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subtitle: { color: C.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 3, marginBottom: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  hdrBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  hdrBtnOff: { opacity: 0.4 },
+  savedHint: { color: C.textSecondary, fontSize: 12, fontStyle: 'italic', paddingVertical: 8 },
   filtersRow: { gap: 8, paddingRight: 8 },
   filterBtn: {
     minWidth: 100,
@@ -444,8 +638,10 @@ const styles = StyleSheet.create({
     backgroundColor: C.surfaceElevated,
   },
   eraBtnActive: { borderColor: C.primary, backgroundColor: `${C.primary}18` },
+  eraBtnOff: { opacity: 0.4 },
   eraTxt: { color: C.textSecondary, fontSize: 12, fontWeight: '600' },
   eraTxtActive: { color: C.primarySoft },
+  eraTxtOff: { color: C.textSecondary },
   table: {
     marginTop: 12,
     overflow: 'hidden',
@@ -501,4 +697,43 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   empty: { color: C.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  saveCard: {
+    backgroundColor: C.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+  },
+  saveTitle: { color: C.text, fontSize: 15, fontWeight: '700', marginBottom: 10 },
+  saveInput: {
+    color: C.text,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: C.surface,
+  },
+  saveActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 16,
+  },
+  saveCancel: { color: C.textSecondary, fontSize: 14, fontWeight: '600' },
+  saveOk: {
+    backgroundColor: C.primary,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  saveOkTxt: { color: '#00121f', fontSize: 14, fontWeight: '800' },
 });
