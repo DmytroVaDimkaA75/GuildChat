@@ -75,7 +75,8 @@ const GBChatList = () => {
         setUserId(storedUserId);
         if (storedGuildId && storedUserId) {
           // НОВИЙ СИНТАКСИС
-          arcRef = database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/greatBuild/The Arc`);
+          // Ключ ВС «Арка» в даних — X_FutureEra_Landmark1.
+          arcRef = database().ref(`guilds/${storedGuildId}/guildUsers/${storedUserId}/greatBuild/X_FutureEra_Landmark1`);
           onArcChange = (snapshot) => {
             if (snapshot.exists()) {
               const arcData = snapshot.val();

@@ -11,7 +11,7 @@ const INFO = 'Підтвердіть ваше бажання взяти учас
 const formatTime = (v) => new Date(Number(v)).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const localize = (v, lang) => typeof v === 'object' ? v?.[lang] || v?.uk || v?.ua || v?.en || Object.values(v || {})[0] || '' : v || '';
 const multiplier = (user) => {
-  const level = Math.max(0, Number(user?.greatBuild?.['The Arc']?.level) || 0);
+  const level = Math.max(0, Number(user?.greatBuild?.['X_FutureEra_Landmark1']?.level) || 0);
   if (!level) return 1;
   if (level <= 10) return 1 + [10, 12, 14, 17, 19, 22, 24, 26, 29, 31][level - 1] / 100;
   if (level <= 58) return 1 + (level + 21) / 100;

@@ -3114,7 +3114,7 @@ exports.calculateGreatBuildingGuaranteeOnUpdatedAt = onValueWritten(
 
 /** Scheduled express-upgrade state machine. The transaction makes every minute tick idempotent. */
 const getExpressMultiplier = (guildUsers, uid, record = {}) => {
-  const level = Math.max(0, Math.trunc(Number(guildUsers?.[uid]?.greatBuild?.["The Arc"]?.level) || 0));
+  const level = Math.max(0, Math.trunc(Number(guildUsers?.[uid]?.greatBuild?.["X_FutureEra_Landmark1"]?.level) || 0));
   const boost = level > 0 ? ARC_CONTRIBUTION_BOOSTS[Math.min(level, ARC_CONTRIBUTION_BOOSTS.length) - 1] : 0;
   const calculated = 1 + Number(boost || 0) / 100;
   return Number.isFinite(calculated) ? calculated : Number(record.contributionMultiplier) || 1;
