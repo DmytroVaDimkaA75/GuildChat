@@ -165,6 +165,13 @@ export default function FoeCityMap({
   const verticalScrollRef = useRef(null);
   const topRulerRef = useRef(null);
   const leftRulerRef = useRef(null);
+  const scrollXRef = useRef(0);
+  const scrollYRef = useRef(0);
+
+  const highlightSet = useMemo(
+    () => new Set((Array.isArray(highlightIds) ? highlightIds : []).map(String)),
+    [highlightIds]
+  );
 
   const model = useMemo(() => {
     const areas = Array.isArray(cityMap?.unlocked_areas)
@@ -351,6 +358,8 @@ export default function FoeCityMap({
     setPopupOpen(false);
     if (!canScroll) return undefined;
     const timer = setTimeout(() => {
+      scrollXRef.current = cityOffsetX;
+      scrollYRef.current = cityOffsetY;
       horizontalScrollRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
       verticalScrollRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
       topRulerRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
@@ -358,6 +367,49 @@ export default function FoeCityMap({
     }, 60);
     return () => clearTimeout(timer);
   }, [canScroll, cityMap, cityOffsetX, cityOffsetY]);
+
+  // Якщо жодна з відфільтрованих споруд не в полі зору — центрувати мапу
+  // на першій зі списку (порядок = порядок рядків таблиці).
+  useEffect(() => {
+    if (!model || !Array.isArray(highlightIds) || highlightIds.length === 0) return undefined;
+    const order = new Map(highlightIds.map((id, i) => [String(id), i]));
+    const idxOf = (e) =>
+      Math.min(
+        order.has(String(e.id)) ? order.get(String(e.id)) : Infinity,
+        order.has(String(e.instanceId)) ? order.get(String(e.instanceId)) : Infinity,
+        order.has(String(e.entityId)) ? order.get(String(e.entityId)) : Infinity
+      );
+    const matches = model.entities
+      .filter((e) => Number.isFinite(idxOf(e)))
+      .sort((a, b) => idxOf(a) - idxOf(b));
+    if (!matches.length) return undefined;
+
+    const vx0 = model.minX + scrollXRef.current / tile;
+    const vy0 = model.minY + scrollYRef.current / tile;
+    const vx1 = vx0 + VIEW_COLS;
+    const vy1 = vy0 + VIEW_ROWS;
+    const anyVisible = matches.some(
+      (e) => e.rx + e.rw > vx0 && e.rx < vx1 && e.ry + e.rl > vy0 && e.ry < vy1
+    );
+    if (anyVisible) return undefined;
+
+    const first = matches[0];
+    const targetX = Math.max(
+      0,
+      (first.rx + first.rw / 2 - model.minX) * tile - viewportWidth / 2
+    );
+    const targetY = Math.max(
+      0,
+      (first.ry + first.rl / 2 - model.minY) * tile - viewportHeight / 2
+    );
+    const timer = setTimeout(() => {
+      horizontalScrollRef.current?.scrollTo?.({ x: targetX, animated: true });
+      verticalScrollRef.current?.scrollTo?.({ y: targetY, animated: true });
+      topRulerRef.current?.scrollTo?.({ x: targetX, animated: true });
+      leftRulerRef.current?.scrollTo?.({ y: targetY, animated: true });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [highlightIds, model, tile, viewportWidth, viewportHeight]);
 
   const selectedEntity = selectedId
     ? model?.entities.find((entity) => entity.mapId === selectedId) || null
@@ -420,12 +472,16 @@ export default function FoeCityMap({
   const sectorsX = Math.ceil(model.width / SECTOR);
   const sectorsY = Math.ceil(model.height / SECTOR);
   const isGB = /greatbuilding/i.test(selectedType);
-  const hasFilter = highlightIds instanceof Set && highlightIds.size > 0;
+  const hasFilter = highlightSet.size > 0;
 
-  const syncTopRuler = (e) =>
+  const syncTopRuler = (e) => {
+    scrollXRef.current = e.nativeEvent.contentOffset.x;
     topRulerRef.current?.scrollTo?.({ x: e.nativeEvent.contentOffset.x, animated: false });
-  const syncLeftRuler = (e) =>
+  };
+  const syncLeftRuler = (e) => {
+    scrollYRef.current = e.nativeEvent.contentOffset.y;
     leftRulerRef.current?.scrollTo?.({ y: e.nativeEvent.contentOffset.y, animated: false });
+  };
 
   return (
     <View style={styles.mapRoot}>
@@ -620,9 +676,9 @@ export default function FoeCityMap({
                   const selected = selectedId === entity.mapId;
                   const inFilter =
                     hasFilter &&
-                    (highlightIds.has(String(entity.id)) ||
-                      highlightIds.has(String(entity.instanceId)) ||
-                      highlightIds.has(String(entity.entityId)));
+                    (highlightSet.has(String(entity.id)) ||
+                      highlightSet.has(String(entity.instanceId)) ||
+                      highlightSet.has(String(entity.entityId)));
                   const dimmed = hasFilter && !inFilter && !selected;
                   return (
                     <Rect

@@ -282,15 +282,23 @@ export default function FoeCollectionPanel({
   }, [selFilter, isGroup, isFrags, era, ready, sumsAll, bInfo, goodName, isGoodKey, resDefs]);
 
   // Ідентифікатори споруд, що потрапляють у поточний фільтр/підфільтр —
-  // для підсвічування на мапі.
-  const matchIds = useMemo(
-    () => new Set(rows.map((r) => String(r.key).split(':')[0])),
-    [rows]
-  );
+  // для підсвічування на мапі (у порядку рядків таблиці: найбільше — першим).
+  const matchIds = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const r of rows) {
+      const id = String(r.key).split(':')[0];
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push(id);
+      }
+    }
+    return list;
+  }, [rows]);
   useEffect(() => {
     onHighlight?.(matchIds);
   }, [matchIds, onHighlight]);
-  useEffect(() => () => onHighlight?.(new Set()), [onHighlight]);
+  useEffect(() => () => onHighlight?.([]), [onHighlight]);
 
   const pick = (id) => {
     setSelected((cur) => (cur === id ? null : id));
