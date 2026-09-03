@@ -332,7 +332,7 @@ function FoeSyncStack() {
         name="FoeSyncScreen"
         component={FoeSyncScreen}
         options={{
-          title: 'Синхронізація з грою',
+          title: 'Місто',
           headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
         }}
       />
@@ -1293,9 +1293,9 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
             // lazy:false — екран монтується одразу з меню, тож вікно гри
             // починає завантажуватись у фоні ще до відкриття пункту.
             lazy: false,
-            drawerLabel: hasTesterAccess ? 'Синхронізація з грою' : null,
+            drawerLabel: 'Місто',
             drawerIconComponent: ({ color }) => (
-              <MaterialIcons name="sync" size={24} color={color} />
+              <MaterialIcons name="location-city" size={24} color={color} />
             )
           }}
         />

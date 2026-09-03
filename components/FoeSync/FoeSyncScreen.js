@@ -4,20 +4,16 @@
 // Саме вікно гри й слухач живуть у FoeSyncProvider (фон), тут їх немає.
 // Керування синхронізацією (згода / вхід) — у блоці профілю.
 
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
-  ToastAndroid,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 
 import { DarkThemeColors as C } from '../../constants/theme';
 import { useFoeSync } from './FoeSyncProvider';
@@ -116,15 +112,12 @@ export default function FoeSyncScreen() {
     userId,
     guildId,
     health = { packets: 0 },
-    currentUrl,
-    seen,
     consent,
     iconSheet,
     goodsSheet,
     buildingDefs,
     cityBuildings,
     defsProgress,
-    saving,
     saveToGuild,
     setWebVisible,
     acceptConsent,
@@ -200,113 +193,24 @@ export default function FoeSyncScreen() {
 
   const hasData = Object.keys(sumsAll).length > 0 || (goods && Object.keys(goods).length);
 
-  const onSave = useCallback(async () => {
-    if (!hasData) {
-      Alert.alert('Ще нема що зберігати', 'Синхронізація ще не завершилась.');
-      return;
-    }
-    try {
-      await saveToGuild({
-        player,
-        boosts: {
-          general: combat.base,
-          contexts: combat.contexts,
-          quantum: combat.quantum,
-          featureDeltas: combat.feat,
-        },
-        goods,
-        collection: collection ? { ready: collection.ready, pending: collection.pending } : null,
-      });
-      if (ToastAndroid?.show) ToastAndroid.show('Збережено у гільдію', ToastAndroid.SHORT);
-      else Alert.alert('Готово', 'Дані збережено у гільдію.');
-    } catch (e) {
-      Alert.alert('Не вдалося зберегти', String(e?.message || e));
-    }
+  // Дані у гільдію зберігаються автоматично при відкритті екрана (раз за сеанс).
+  const savedOnceRef = useRef(false);
+  useEffect(() => {
+    if (savedOnceRef.current || !hasData || !saveToGuild) return;
+    savedOnceRef.current = true;
+    saveToGuild({
+      player,
+      boosts: {
+        general: combat.base,
+        contexts: combat.contexts,
+        quantum: combat.quantum,
+        featureDeltas: combat.feat,
+      },
+      goods,
+      collection: collection ? { ready: collection.ready, pending: collection.pending } : null,
+    }).catch(() => {});
   }, [hasData, saveToGuild, player, combat, goods, collection]);
 
-  const onCopy = useCallback(async () => {
-    // Компактний дамп — без важких масивів, щоб телефон не завис.
-    const collectKeys = new Set();
-    for (const b of found.prodBuildings || []) {
-      for (const k of Object.keys(b.det || {})) collectKeys.add(k);
-      for (const k of Object.keys(b.guildDet || {})) collectKeys.add('guild:' + k);
-    }
-    const goodDefs = Array.isArray(found.resourceDefs)
-      ? found.resourceDefs
-          .filter((r) => r && (r.era || /good/i.test(String(r.__class__ || ''))))
-          .map((r) => ({ id: r.id, name: r.name, era: r.era }))
-          .slice(0, 160)
-      : null;
-
-    // повні визначення товарів, зібраних у місті (abilities — лише ключі)
-    const rawGoodDefs = (() => {
-      const arr = found.resourceDefs;
-      if (!Array.isArray(arr)) return null;
-      const want = new Set(Array.from(collectKeys).map((k) => k.replace(/^guild:/, '')));
-      return arr
-        .filter((r) => r && want.has(r.id))
-        .map((r) => {
-          const o = {};
-          for (const [k, v] of Object.entries(r)) {
-            o[k] = v && typeof v === 'object' ? Object.keys(v) : v;
-          }
-          return o;
-        });
-    })();
-
-    const dump = {
-      v: 'v91',
-      url: currentUrl,
-      player,
-      defsProgress: defsProgress || null,
-      counts: {
-        cityEntities: found.cityMap?.entities?.length || 0,
-        prodBuildings: (found.prodBuildings || []).length,
-        buildingDefs: buildingDefs ? Object.keys(buildingDefs).length : 0,
-        resourceDefs: Array.isArray(found.resourceDefs) ? found.resourceDefs.length : 0,
-      },
-      boosts: found.boostAgg?.sumsAll || found.boostStartupAgg?.sumsAll || null,
-      collectKeys: Array.from(collectKeys),
-      collectGoodEras: (() => {
-        const arr = found.resourceDefs;
-        const m = {};
-        if (Array.isArray(arr)) for (const r of arr) if (r?.id) m[r.id] = r;
-        return Array.from(collectKeys)
-          .map((k) => k.replace(/^guild:/, ''))
-          .filter((k, i, a) => a.indexOf(k) === i)
-          .map((k) => ({ key: k, name: m[k]?.name || null, era: m[k]?.era || null }));
-      })(),
-      rawGoodDefs,
-      prodStateCounts: found.prodStateCounts || null,
-      prodProductClasses: found.prodProductClasses || null,
-      prodProductSamples: found.prodProductSamples || null,
-      resourceDefsWithFragment: Array.isArray(found.resourceDefs)
-        ? found.resourceDefs
-            .filter((r) => /frag/i.test(String(r?.id || '')) || /фрагмент/i.test(String(r?.name || '')))
-            .map((r) => ({ id: r.id, name: r.name }))
-            .slice(0, 40)
-        : null,
-      goodDefs,
-      iconSheet: iconSheet
-        ? { pngUrl: iconSheet.pngUrl, frames: Object.keys(iconSheet.frames || {}) }
-        : null,
-      goodsSheet: goodsSheet
-        ? { pngUrl: goodsSheet.pngUrl, frames: Object.keys(goodsSheet.frames || {}) }
-        : null,
-      sampleBuildings: (cityBuildings || []).slice(0, 6).map((b) => ({
-        name: b.name,
-        entityId: b.entityId,
-        era: b.era,
-      })),
-    };
-    const text = JSON.stringify(dump);
-    try {
-      await Clipboard.setStringAsync(text);
-      if (ToastAndroid?.show) ToastAndroid.show(`Скопійовано (${text.length})`, ToastAndroid.SHORT);
-    } catch (e) {
-      Alert.alert('Помилка', String(e?.message || e));
-    }
-  }, [currentUrl, player, found, buildingDefs, cityBuildings, defsProgress, iconSheet, goodsSheet]);
 
   const packets = health.packets || 0;
 
@@ -409,38 +313,6 @@ export default function FoeSyncScreen() {
           />
         ) : null}
 
-        <View style={[styles.btnRow, stackActions && styles.btnRowStacked]}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            activeOpacity={0.8}
-            style={[styles.secondaryBtn, stackActions && styles.fullWidthBtn]}
-            onPress={onCopy}
-          >
-            <MaterialIcons name="content-copy" size={18} color={C.primary} />
-            <Text style={styles.secondaryBtnText}>Копіювати</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !hasData || saving, busy: saving }}
-            activeOpacity={0.8}
-            style={[
-              styles.primaryBtn,
-              stackActions && styles.fullWidthBtn,
-              (!hasData || saving) && styles.disabledBtn,
-            ]}
-            onPress={onSave}
-            disabled={!hasData || saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <MaterialIcons name="cloud-upload" size={19} color="#fff" />
-            )}
-            <Text style={styles.primaryBtnText}>
-              {saving ? 'Збереження…' : 'Зберегти у гільдію'}
-            </Text>
-          </TouchableOpacity>
-        </View>
 
       </ScrollView>
     </View>
