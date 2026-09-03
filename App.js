@@ -18,6 +18,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { DarkThemeColors } from "./constants/theme";
 import { GuildContext, GuildProvider } from "./GuildContext";
@@ -921,15 +922,17 @@ const AppContent = () => {
 
 export default function App() {
   return (
-    <GuildProvider>
-      <SafeAreaProvider>
-        <AppUpdateChecker />
-        <StatusBar barStyle="light-content" backgroundColor={DarkThemeColors.background} />
-        <SafeAreaView style={styles.appSafeArea} edges={['bottom']}>
-          <AppContent />
-        </SafeAreaView>
-      </SafeAreaProvider>
-    </GuildProvider>
+    <GestureHandlerRootView style={styles.appSafeArea}>
+      <GuildProvider>
+        <SafeAreaProvider>
+          <AppUpdateChecker />
+          <StatusBar barStyle="light-content" backgroundColor={DarkThemeColors.background} />
+          <SafeAreaView style={styles.appSafeArea} edges={['bottom']}>
+            <AppContent />
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GuildProvider>
+    </GestureHandlerRootView>
   );
 }
 

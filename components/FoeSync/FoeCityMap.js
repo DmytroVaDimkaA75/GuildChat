@@ -2,7 +2,7 @@
 // а локалізовані назви, footprint і бонуси потрібної епохи — з каталогу
 // building_entity. Уся мапа повернута на 90° за годинниковою, як у грі.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -14,6 +14,13 @@ import {
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, { ClipPath, Defs, G, Line, Rect } from 'react-native-svg';
 
 import { DarkThemeColors } from '../../constants/theme';
@@ -162,12 +169,10 @@ export default function FoeCityMap({
   const [selectedId, setSelectedId] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
-  const horizontalScrollRef = useRef(null);
-  const verticalScrollRef = useRef(null);
-  const topRulerRef = useRef(null);
-  const leftRulerRef = useRef(null);
-  const scrollXRef = useRef(0);
-  const scrollYRef = useRef(0);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const panStartX = useSharedValue(0);
+  const panStartY = useSharedValue(0);
 
   const highlightSet = useMemo(
     () => new Set((Array.isArray(highlightIds) ? highlightIds : []).map(String)),
@@ -354,20 +359,33 @@ export default function FoeCityMap({
     : 0;
   const canScroll = !!model;
 
+  // Межі вільного перетягування мапи (translate у [minT, 0]).
+  const minTx = Math.min(0, viewportWidth - contentWidth);
+  const minTy = Math.min(0, viewportHeight - contentHeight);
+
+  const panTo = useCallback(
+    (targetX, targetY, animated = true) => {
+      const nx = Math.min(Math.max(-targetX, minTx), 0);
+      const ny = Math.min(Math.max(-targetY, minTy), 0);
+      tx.value = animated ? withTiming(nx, { duration: 300 }) : nx;
+      ty.value = animated ? withTiming(ny, { duration: 300 }) : ny;
+    },
+    [minTx, minTy, tx, ty]
+  );
+
+  const contentAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }],
+  }));
+  const topRulerAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
+  const leftRulerAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
+
   useEffect(() => {
     setSelectedId(null);
     setPopupOpen(false);
     if (!canScroll) return undefined;
-    const timer = setTimeout(() => {
-      scrollXRef.current = cityOffsetX;
-      scrollYRef.current = cityOffsetY;
-      horizontalScrollRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
-      verticalScrollRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
-      topRulerRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
-      leftRulerRef.current?.scrollTo?.({ y: cityOffsetY, animated: false });
-    }, 60);
+    const timer = setTimeout(() => panTo(cityOffsetX, cityOffsetY, false), 60);
     return () => clearTimeout(timer);
-  }, [canScroll, cityMap, cityOffsetX, cityOffsetY]);
+  }, [canScroll, cityMap, cityOffsetX, cityOffsetY, panTo]);
 
   // Якщо жодна з відфільтрованих споруд не в полі зору — центрувати мапу
   // на першій зі списку (порядок = порядок рядків таблиці).
@@ -385,8 +403,8 @@ export default function FoeCityMap({
       .sort((a, b) => idxOf(a) - idxOf(b));
     if (!matches.length) return undefined;
 
-    const vx0 = model.minX + scrollXRef.current / tile;
-    const vy0 = model.minY + scrollYRef.current / tile;
+    const vx0 = model.minX + -tx.value / tile;
+    const vy0 = model.minY + -ty.value / tile;
     const vx1 = vx0 + VIEW_COLS;
     const vy1 = vy0 + VIEW_ROWS;
     const anyVisible = matches.some(
@@ -395,22 +413,16 @@ export default function FoeCityMap({
     if (anyVisible) return undefined;
 
     const first = matches[0];
-    const targetX = Math.max(
-      0,
-      (first.rx + first.rw / 2 - model.minX) * tile - viewportWidth / 2
+    const timer = setTimeout(
+      () =>
+        panTo(
+          (first.rx + first.rw / 2 - model.minX) * tile - viewportWidth / 2,
+          (first.ry + first.rl / 2 - model.minY) * tile - viewportHeight / 2
+        ),
+      40
     );
-    const targetY = Math.max(
-      0,
-      (first.ry + first.rl / 2 - model.minY) * tile - viewportHeight / 2
-    );
-    const timer = setTimeout(() => {
-      horizontalScrollRef.current?.scrollTo?.({ x: targetX, animated: true });
-      verticalScrollRef.current?.scrollTo?.({ y: targetY, animated: true });
-      topRulerRef.current?.scrollTo?.({ x: targetX, animated: true });
-      leftRulerRef.current?.scrollTo?.({ y: targetY, animated: true });
-    }, 40);
     return () => clearTimeout(timer);
-  }, [highlightIds, model, tile, viewportWidth, viewportHeight]);
+  }, [highlightIds, model, tile, viewportWidth, viewportHeight, panTo, tx, ty]);
 
   // Тап по рядку у відфільтрованому списку — підсвітити цю споруду й
   // прокрутити мапу до неї (попап не відкриваємо).
@@ -425,55 +437,75 @@ export default function FoeCityMap({
     if (!ent) return;
     setSelectedId(ent.mapId);
     setPopupOpen(false);
-    const targetX = Math.max(0, (ent.rx + ent.rw / 2 - model.minX) * tile - viewportWidth / 2);
-    const targetY = Math.max(0, (ent.ry + ent.rl / 2 - model.minY) * tile - viewportHeight / 2);
-    const timer = setTimeout(() => {
-      horizontalScrollRef.current?.scrollTo?.({ x: targetX, animated: true });
-      verticalScrollRef.current?.scrollTo?.({ y: targetY, animated: true });
-      topRulerRef.current?.scrollTo?.({ x: targetX, animated: true });
-      leftRulerRef.current?.scrollTo?.({ y: targetY, animated: true });
-    }, 40);
+    const timer = setTimeout(
+      () =>
+        panTo(
+          (ent.rx + ent.rw / 2 - model.minX) * tile - viewportWidth / 2,
+          (ent.ry + ent.rl / 2 - model.minY) * tile - viewportHeight / 2
+        ),
+      40
+    );
     return () => clearTimeout(timer);
-  }, [focusId, model, tile, viewportWidth, viewportHeight]);
+  }, [focusId, model, tile, viewportWidth, viewportHeight, panTo]);
 
   const selectedEntity = selectedId
     ? model?.entities.find((entity) => entity.mapId === selectedId) || null
     : null;
 
+  // viewportX/Y — координати дотику всередині вікна мапи (без урахування панорами)
+  const handleTapAt = useCallback(
+    (viewportX, viewportY) => {
+      if (!model) return;
+      const contentX = viewportX - tx.value;
+      const contentY = viewportY - ty.value;
+      const tileX = model.minX + Math.floor(contentX / tile);
+      const tileY = model.minY + Math.floor(contentY / tile);
+      let hit = null;
+      for (const entity of model.entities) {
+        if (
+          tileX >= entity.rx &&
+          tileX < entity.rx + entity.rw &&
+          tileY >= entity.ry &&
+          tileY < entity.ry + entity.rl
+        ) {
+          const eType = entity.definition?.type || entity.type;
+          const hType = hit?.definition?.type || hit?.type;
+          if (!hit || (eType !== 'street' && hType === 'street')) hit = entity;
+        }
+      }
+      if (hit) {
+        setSelectedId(hit.mapId);
+        setPopupOpen(true);
+      } else {
+        setSelectedId(null);
+        setPopupOpen(false);
+      }
+    },
+    [model, tile, tx, ty]
+  );
+
+  const mapGesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .minDistance(4)
+      .onStart(() => {
+        panStartX.value = tx.value;
+        panStartY.value = ty.value;
+      })
+      .onUpdate((e) => {
+        tx.value = Math.min(Math.max(panStartX.value + e.translationX, minTx), 0);
+        ty.value = Math.min(Math.max(panStartY.value + e.translationY, minTy), 0);
+      });
+    const tap = Gesture.Tap()
+      .maxDistance(10)
+      .onEnd((e) => {
+        runOnJS(handleTapAt)(e.x, e.y);
+      });
+    return Gesture.Race(pan, tap);
+  }, [minTx, minTy, tx, ty, panStartX, panStartY, handleTapAt]);
+
   if (!model) {
     return <Text style={styles.hint}>Мапа міста ще не містить відкритих секторів.</Text>;
   }
-
-  const findAt = (tileX, tileY) => {
-    let best = null;
-    for (const entity of model.entities) {
-      if (
-        tileX >= entity.rx &&
-        tileX < entity.rx + entity.rw &&
-        tileY >= entity.ry &&
-        tileY < entity.ry + entity.rl
-      ) {
-        const entityType = entity.definition?.type || entity.type;
-        const bestType = best?.definition?.type || best?.type;
-        if (!best || (entityType !== 'street' && bestType === 'street')) best = entity;
-      }
-    }
-    return best;
-  };
-
-  const onTouch = (event) => {
-    const { locationX, locationY } = event.nativeEvent;
-    const tileX = model.minX + Math.floor(locationX / tile);
-    const tileY = model.minY + Math.floor(locationY / tile);
-    const hit = findAt(tileX, tileY);
-    if (hit) {
-      setSelectedId(hit.mapId);
-      setPopupOpen(true); // тап по будівлі — підсвітити й відкрити попап
-    } else {
-      setSelectedId(null); // тап по порожньому — зняти підсвічування
-      setPopupOpen(false);
-    }
-  };
 
   const selectedDefinition =
     selectedEntity?.definition ||
@@ -499,28 +531,15 @@ export default function FoeCityMap({
   const isGB = /greatbuilding/i.test(selectedType);
   const hasFilter = highlightSet.size > 0;
 
-  const syncTopRuler = (e) => {
-    scrollXRef.current = e.nativeEvent.contentOffset.x;
-    topRulerRef.current?.scrollTo?.({ x: e.nativeEvent.contentOffset.x, animated: false });
-  };
-  const syncLeftRuler = (e) => {
-    scrollYRef.current = e.nativeEvent.contentOffset.y;
-    leftRulerRef.current?.scrollTo?.({ y: e.nativeEvent.contentOffset.y, animated: false });
-  };
-
   return (
     <View style={styles.mapRoot}>
       {/* верхня координатна лінійка */}
       <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
         <View style={{ width: RULER_W, height: RULER_H }} />
-        <ScrollView
-          ref={topRulerRef}
-          horizontal
-          scrollEnabled={false}
-          showsHorizontalScrollIndicator={false}
-          style={{ width: viewportWidth, height: RULER_H }}
-        >
-          <View style={{ width: contentWidth, height: RULER_H }}>
+        <View style={{ width: viewportWidth, height: RULER_H, overflow: 'hidden' }}>
+          <Animated.View
+            style={[{ width: contentWidth, height: RULER_H }, topRulerAnimStyle]}
+          >
             {Array.from({ length: sectorsX }).map((_, s) =>
               s === 0 ? null : (
                 <Text
@@ -532,19 +551,16 @@ export default function FoeCityMap({
                 </Text>
               )
             )}
-          </View>
-        </ScrollView>
+          </Animated.View>
+        </View>
       </View>
 
       <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
         {/* ліва координатна лінійка */}
-        <ScrollView
-          ref={leftRulerRef}
-          scrollEnabled={false}
-          showsVerticalScrollIndicator={false}
-          style={{ width: RULER_W, height: viewportHeight }}
-        >
-          <View style={{ width: RULER_W, height: contentHeight }}>
+        <View style={{ width: RULER_W, height: viewportHeight, overflow: 'hidden' }}>
+          <Animated.View
+            style={[{ width: RULER_W, height: contentHeight }, leftRulerAnimStyle]}
+          >
             {Array.from({ length: sectorsY }).map((_, s) =>
               s === 0 ? null : (
                 <View key={`ry-${s}`} style={[styles.rulerLeft, { height: s * SECTOR * tile }]}>
@@ -554,28 +570,14 @@ export default function FoeCityMap({
                 </View>
               )
             )}
-          </View>
-        </ScrollView>
+          </Animated.View>
+        </View>
 
-        <ScrollView
-          ref={horizontalScrollRef}
-          horizontal
-          style={{ width: viewportWidth, height: viewportHeight }}
-          showsHorizontalScrollIndicator
-          contentOffset={{ x: cityOffsetX, y: 0 }}
-          onScroll={syncTopRuler}
-          scrollEventThrottle={16}
-        >
-          <ScrollView
-            ref={verticalScrollRef}
-            style={{ height: viewportHeight }}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            contentOffset={{ x: 0, y: cityOffsetY }}
-            onScroll={syncLeftRuler}
-            scrollEventThrottle={16}
+        <GestureDetector gesture={mapGesture}>
+          <View style={{ width: viewportWidth, height: viewportHeight, overflow: 'hidden' }}>
+          <Animated.View
+            style={[{ width: contentWidth, height: contentHeight }, contentAnimStyle]}
           >
-          <View style={{ width: contentWidth, height: contentHeight }}>
             <Svg
               width={contentWidth}
               height={contentHeight}
@@ -747,20 +749,12 @@ export default function FoeCityMap({
                   ))}
               </G>
             </Svg>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Мапа будівель міста"
-              accessibilityHint="Рухайте мапу пальцем і торкніться будівлі, щоб переглянути деталі"
-              style={StyleSheet.absoluteFill}
-              onPress={onTouch}
-            />
+          </Animated.View>
           </View>
-          </ScrollView>
-        </ScrollView>
+        </GestureDetector>
       </View>
 
-      <Text style={styles.hint}>Мапу можна рухати пальцем. Торкніться будівлі — деталі.</Text>
+      <Text style={styles.hint}>Мапу можна рухати пальцем у будь-який бік. Торкніться будівлі — деталі.</Text>
 
       {/* згортаний блок легенди */}
       <TouchableOpacity
