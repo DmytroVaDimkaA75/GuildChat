@@ -449,16 +449,17 @@ export default function FoeCollectionPanel({
       </ScrollView>
 
       {selected === SAVED_KEY ? (
-        <View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
-            {savedFilters.length === 0 ? (
-              <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
-            ) : (
-              subOptions.map((o) => (
-                <View
-                  key={o.key}
-                  style={[styles.savedChip, !o.enabled && styles.eraBtnOff]}
-                >
+        savedFilters.length === 0 ? (
+          <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
+        ) : (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.eraRow}
+            >
+              {subOptions.map((o) => (
+                <View key={o.key} style={[styles.savedChip, !o.enabled && styles.eraBtnOff]}>
                   <TouchableOpacity
                     style={styles.savedChipBody}
                     disabled={!o.enabled}
@@ -472,20 +473,18 @@ export default function FoeCollectionPanel({
                   <TouchableOpacity
                     style={styles.savedChipX}
                     onPress={() => removeSaved(o.saved)}
-                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 4, right: 8 }}
                     accessibilityRole="button"
                     accessibilityLabel={`Видалити фільтр ${o.label}`}
                   >
-                    <MaterialIcons name="close" size={15} color={C.danger} />
+                    <MaterialIcons name="close" size={16} color={C.danger} />
                   </TouchableOpacity>
                 </View>
-              ))
-            )}
-          </ScrollView>
-          {savedFilters.length > 0 ? (
+              ))}
+            </ScrollView>
             <Text style={styles.savedHint}>Тап — увімкнути · ✕ — видалити</Text>
-          ) : null}
-        </View>
+          </>
+        )
       ) : subOptions.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
           <TouchableOpacity
@@ -662,19 +661,19 @@ const styles = StyleSheet.create({
   eraBtnActive: { borderColor: C.primary, backgroundColor: `${C.primary}18` },
   eraBtnOff: { opacity: 0.4 },
   savedChip: {
-    minHeight: 38,
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: C.border,
     backgroundColor: C.surfaceElevated,
+    overflow: 'hidden',
   },
-  savedChipBody: { paddingLeft: 12, paddingRight: 6, height: '100%', justifyContent: 'center' },
+  savedChipBody: { paddingLeft: 12, paddingRight: 8, alignSelf: 'stretch', justifyContent: 'center' },
   savedChipX: {
-    paddingRight: 10,
-    paddingLeft: 4,
-    height: '100%',
+    paddingHorizontal: 9,
+    alignSelf: 'stretch',
     justifyContent: 'center',
     borderLeftWidth: 1,
     borderLeftColor: C.border,
