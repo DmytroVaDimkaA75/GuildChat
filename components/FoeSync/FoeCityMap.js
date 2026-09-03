@@ -152,6 +152,7 @@ function formatBonus(bonus) {
 export default function FoeCityMap({ cityMap, defs, buildings, collect, horizontalInset = 46 }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
+  const [popupOpen, setPopupOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const horizontalScrollRef = useRef(null);
   const verticalScrollRef = useRef(null);
@@ -340,6 +341,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
 
   useEffect(() => {
     setSelectedId(null);
+    setPopupOpen(false);
     if (!canScroll) return undefined;
     const timer = setTimeout(() => {
       horizontalScrollRef.current?.scrollTo?.({ x: cityOffsetX, animated: false });
@@ -379,7 +381,14 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
     const { locationX, locationY } = event.nativeEvent;
     const tileX = model.minX + Math.floor(locationX / tile);
     const tileY = model.minY + Math.floor(locationY / tile);
-    setSelectedId(findAt(tileX, tileY)?.mapId || null);
+    const hit = findAt(tileX, tileY);
+    if (hit) {
+      setSelectedId(hit.mapId);
+      setPopupOpen(true); // тап по будівлі — підсвітити й відкрити попап
+    } else {
+      setSelectedId(null); // тап по порожньому — зняти підсвічування
+      setPopupOpen(false);
+    }
   };
 
   const selectedDefinition =
@@ -672,16 +681,16 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
         </View>
       ) : null}
 
-      {/* попап деталей будівлі */}
+      {/* попап деталей будівлі — закриття НЕ знімає підсвічування */}
       <Modal
-        visible={!!selectedEntity}
+        visible={popupOpen && !!selectedEntity}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedId(null)}
+        onRequestClose={() => setPopupOpen(false)}
       >
         <Pressable
           style={styles.backdrop}
-          onPress={() => setSelectedId(null)}
+          onPress={() => setPopupOpen(false)}
           accessible={false}
         >
           <Pressable
@@ -700,7 +709,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
                     accessibilityRole="button"
                     accessibilityLabel="Закрити деталі будівлі"
                     style={styles.closeButton}
-                    onPress={() => setSelectedId(null)}
+                    onPress={() => setPopupOpen(false)}
                     activeOpacity={0.8}
                   >
                     <MaterialIcons name="close" size={24} color={DarkThemeColors.text} />
