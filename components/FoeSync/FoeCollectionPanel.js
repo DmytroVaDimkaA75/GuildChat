@@ -452,7 +452,6 @@ export default function FoeCollectionPanel({
         savedFilters.length === 0 ? (
           <Text style={styles.savedHint}>Немає збережених фільтрів.</Text>
         ) : (
-          <>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -482,8 +481,6 @@ export default function FoeCollectionPanel({
                 </View>
               ))}
             </ScrollView>
-            <Text style={styles.savedHint}>Тап — увімкнути · ✕ — видалити</Text>
-          </>
         )
       ) : subOptions.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eraRow}>
