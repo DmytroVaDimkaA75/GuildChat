@@ -845,16 +845,9 @@ export default function FoeCityMap({
                       Велична споруда
                       {selectedEntity.lvl != null ? ` · рівень ${selectedEntity.lvl}` : ''}
                     </Text>
-                  ) : (
-                    <Text style={styles.detailMeta}>
-                      {TYPE_LABELS[selectedType] || selectedType} ·{' '}
-                      {selectedEntity.sourceWidth || selectedEntity.footprint?.width || '?'}×
-                      {selectedEntity.sourceLength || selectedEntity.footprint?.length || '?'}
-                      {selectedEra ? ` · ${eraLabel(selectedEra)}` : ''}
-                      {selectedEntity.lvl != null ? ` · рів. ${selectedEntity.lvl}` : ''}
-                      {selectedEntity.conn === 0 ? ' · БЕЗ ДОРОГИ' : ''}
-                    </Text>
-                  )}
+                  ) : selectedEra ? (
+                    <Text style={styles.detailMeta}>{eraLabel(selectedEra)}</Text>
+                  ) : null}
 
                   {shownBonuses.length ? (
                     <View style={styles.bonusList}>
