@@ -384,14 +384,46 @@ export const FOE_INTERCEPTOR_JS = `
               ready: !!ready,
               readyAt: pst.next_state_transition_at || null
             };
+            // Величні споруди й деякі будівлі мають одинарний current_product
+            // ({name, product:{resources}} або {goods:[{good_id,value}]}).
+            var cp1 = pst.current_product;
+            if (cp1 && !cp1.products && (cp1.product || cp1.goods)) {
+              var cpRes = cp1.product && cp1.product.resources;
+              if (cpRes && typeof cpRes === 'object') {
+                b.det = b.det || {};
+                for (var crk in cpRes) {
+                  if (Object.prototype.hasOwnProperty.call(cpRes, crk)) {
+                    b.det[crk] = (b.det[crk] || 0) + (Number(cpRes[crk]) || 0);
+                  }
+                }
+              }
+              if (Array.isArray(cp1.goods)) {
+                var toGuild = /clan|guild/i.test(
+                  String(cp1.__class__ || '') + ' ' + String(cp1.name || '')
+                );
+                var gbucket = toGuild ? (b.guildDet = b.guildDet || {}) : (b.det = b.det || {});
+                for (var cgi = 0; cgi < cp1.goods.length; cgi++) {
+                  var cg = cp1.goods[cgi];
+                  if (cg && cg.good_id) {
+                    gbucket[cg.good_id] = (gbucket[cg.good_id] || 0) + (Number(cg.value) || 0);
+                  }
+                }
+              }
+              b.cp = cp1.name || null;
+              productClassCounts[cp1.__class__ || 'current_product'] =
+                (productClassCounts[cp1.__class__ || 'current_product'] || 0) + 1;
+            }
+
             if (po2 && po2.products) {
               for (var qc = 0; qc < po2.products.length; qc++) {
                 var pcc = po2.products[qc] && po2.products[qc].__class__;
                 if (pcc) { productClassCounts[pcc] = (productClassCounts[pcc] || 0) + 1; }
               }
               var fl = flattenProducts(po2);
-              b.det = fl.det;
-              if (Object.keys(fl.guildDet).length) { b.guildDet = fl.guildDet; }
+              b.det = Object.assign(b.det || {}, fl.det);
+              if (Object.keys(fl.guildDet).length) {
+                b.guildDet = Object.assign(b.guildDet || {}, fl.guildDet);
+              }
               if (fl.frags.length) { b.frags = fl.frags; }
               if (fl.rnd) { b.rnd = true; }
               if (fl.other.length) {
@@ -405,7 +437,7 @@ export const FOE_INTERCEPTOR_JS = `
                   } catch (e) {}
                 }
               }
-            } else if (!/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
+            } else if (!b.det && !b.guildDet && !/Idle|Construction|Unconnected|None|none/i.test(pstc)) {
               unknownStates[pstc] = (unknownStates[pstc] || 0) + 1;
               b.stateKeys = Object.keys(pst);
             }

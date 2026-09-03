@@ -223,7 +223,7 @@ export default function FoeSyncScreen() {
     }));
     const prodGB = (found.prodBuildings || [])
       .filter((b) => /greatbuilding/i.test(String(b.type || '')))
-      .map((b) => ({ id: b.id, st: b.st, ready: b.ready, det: b.det, other: b.other }));
+      .map((b) => ({ id: b.id, st: b.st, ready: b.ready, cp: b.cp, det: b.det, guildDet: b.guildDet, other: b.other }));
     const dump = {
       v: 'v109',
       player,
