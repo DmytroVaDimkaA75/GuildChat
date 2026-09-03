@@ -6,7 +6,7 @@
 // фільтрами зʼявляється рядок фільтрів по епохах. Натискання показує таблицю
 // «споруда → кількість».
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -88,6 +88,7 @@ export default function FoeCollectionPanel({
   resDefs,
   iconSheet,
   goodsSheet,
+  onHighlight,
 }) {
   const sheets = [iconSheet, goodsSheet].filter(Boolean);
   const [selected, setSelected] = useState(null);
@@ -248,6 +249,17 @@ export default function FoeCollectionPanel({
     }
     return list.sort((a, b) => b.base - a.base);
   }, [selFilter, isGroup, isFrags, era, ready, sumsAll, bInfo, goodName, isGoodKey, resDefs]);
+
+  // Ідентифікатори споруд, що потрапляють у поточний фільтр/підфільтр —
+  // для підсвічування на мапі.
+  const matchIds = useMemo(
+    () => new Set(rows.map((r) => String(r.key).split(':')[0])),
+    [rows]
+  );
+  useEffect(() => {
+    onHighlight?.(matchIds);
+  }, [matchIds, onHighlight]);
+  useEffect(() => () => onHighlight?.(new Set()), [onHighlight]);
 
   const pick = (id) => {
     setSelected((cur) => (cur === id ? null : id));

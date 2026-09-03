@@ -149,7 +149,14 @@ function formatBonus(bonus) {
   }${motivated}`;
 }
 
-export default function FoeCityMap({ cityMap, defs, buildings, collect, horizontalInset = 46 }) {
+export default function FoeCityMap({
+  cityMap,
+  defs,
+  buildings,
+  collect,
+  highlightIds,
+  horizontalInset = 46,
+}) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [selectedId, setSelectedId] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
@@ -413,6 +420,7 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
   const sectorsX = Math.ceil(model.width / SECTOR);
   const sectorsY = Math.ceil(model.height / SECTOR);
   const isGB = /greatbuilding/i.test(selectedType);
+  const hasFilter = highlightIds instanceof Set && highlightIds.size > 0;
 
   const syncTopRuler = (e) =>
     topRulerRef.current?.scrollTo?.({ x: e.nativeEvent.contentOffset.x, animated: false });
@@ -610,6 +618,12 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
                 {model.entities.map((entity) => {
                   const type = entity.definition?.type || entity.type;
                   const selected = selectedId === entity.mapId;
+                  const inFilter =
+                    hasFilter &&
+                    (highlightIds.has(String(entity.id)) ||
+                      highlightIds.has(String(entity.instanceId)) ||
+                      highlightIds.has(String(entity.entityId)));
+                  const dimmed = hasFilter && !inFilter && !selected;
                   return (
                     <Rect
                       key={entity.mapId}
@@ -618,9 +632,15 @@ export default function FoeCityMap({ cityMap, defs, buildings, collect, horizont
                       width={Math.max(entity.rw - 0.08, 0.1)}
                       height={Math.max(entity.rl - 0.08, 0.1)}
                       fill={colorFor(type)}
-                      opacity={entity.conn === 0 ? 0.4 : 1}
-                      stroke={selected ? DarkThemeColors.primarySoft : 'rgba(0,0,0,0.35)'}
-                      strokeWidth={selected ? 0.2 : 0.03}
+                      opacity={dimmed ? 0.28 : entity.conn === 0 ? 0.4 : 1}
+                      stroke={
+                        selected
+                          ? DarkThemeColors.primarySoft
+                          : inFilter
+                            ? '#00e5ff'
+                            : 'rgba(0,0,0,0.35)'
+                      }
+                      strokeWidth={selected ? 0.2 : inFilter ? 0.16 : 0.03}
                     />
                   );
                 })}

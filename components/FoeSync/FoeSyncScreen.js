@@ -134,6 +134,9 @@ export default function FoeSyncScreen() {
     return () => clearInterval(t);
   }, []);
 
+  // Споруди, підсвічені поточним фільтром «Запланованого збору», — для мапи.
+  const [highlightIds, setHighlightIds] = useState(null);
+
   const resDefs = useMemo(() => {
     const arr = found.resourceDefs;
     if (!Array.isArray(arr)) return null;
@@ -339,6 +342,7 @@ export default function FoeSyncScreen() {
                 defs={buildingDefs}
                 buildings={cityBuildings}
                 collect={collectInfo}
+                highlightIds={highlightIds}
                 horizontalInset={46}
               />
             )}
@@ -393,6 +397,7 @@ export default function FoeSyncScreen() {
             resDefs={resDefs}
             iconSheet={iconSheet}
             goodsSheet={goodsSheet}
+            onHighlight={setHighlightIds}
           />
         ) : null}
 
