@@ -902,6 +902,7 @@ const styles = StyleSheet.create({
     color: DarkThemeColors.text,
     fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 1,
     textTransform: 'uppercase',
   },
   legendBody: {
@@ -997,6 +998,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 10,
     backgroundColor: `${DarkThemeColors.warning}12`,
+    borderWidth: 1,
+    borderColor: `${DarkThemeColors.warning}50`,
     borderRadius: 10,
   },
 });
