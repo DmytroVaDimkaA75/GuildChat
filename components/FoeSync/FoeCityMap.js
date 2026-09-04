@@ -171,11 +171,19 @@ export default function FoeCityMap({
     if (!areas.length) return null;
 
     const sectorKey = (column, row) => `${column},${row}`;
+    // Гра серіалізує координати як клас Position і ПРОПУСКАЄ поля зі значенням 0
+    // ({"x":4} насправді означає {x:4, y:0}, {} означає {x:0, y:0}). Тому
+    // відсутню координату читаємо як 0, а не відкидаємо запис — інакше зникав
+    // увесь нульовий стовпчик/ряд секторів (перший ряд і останній стовпчик мапи).
+    const coord = (value) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : 0;
+    };
     const unlockedSet = new Set();
     for (const area of areas) {
-      const x = Number(area?.x);
-      const y = Number(area?.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (!area || typeof area !== 'object') continue;
+      const x = coord(area.x);
+      const y = coord(area.y);
       const width = positive(area.width) || SECTOR;
       const length = positive(area.length) || SECTOR;
       for (let tileX = x; tileX < x + width; tileX += SECTOR) {
@@ -187,10 +195,15 @@ export default function FoeCityMap({
 
     const blockedSet = new Set();
     for (const blocked of blockedRaw) {
-      const x = Number(blocked?.x);
-      const y = Number(blocked?.y);
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        blockedSet.add(sectorKey(x / SECTOR, y / SECTOR));
+      if (!blocked || typeof blocked !== 'object') continue;
+      const x = coord(blocked.x);
+      const y = coord(blocked.y);
+      const width = positive(blocked.width) || SECTOR;
+      const length = positive(blocked.length) || SECTOR;
+      for (let tileX = x; tileX < x + width; tileX += SECTOR) {
+        for (let tileY = y; tileY < y + length; tileY += SECTOR) {
+          blockedSet.add(sectorKey(tileX / SECTOR, tileY / SECTOR));
+        }
       }
     }
     if (!unlockedSet.size) return null;
@@ -228,9 +241,10 @@ export default function FoeCityMap({
       length: width,
     });
     const rotatedAreas = areas
+      .filter((area) => area && typeof area === 'object')
       .map((area) => rotate(
-        Number(area?.x),
-        Number(area?.y),
+        coord(area.x),
+        coord(area.y),
         positive(area?.width) || SECTOR,
         positive(area?.length) || SECTOR
       ))
