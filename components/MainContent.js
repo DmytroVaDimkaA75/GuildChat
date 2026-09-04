@@ -33,6 +33,7 @@ import {
   readPendingNotificationRoute,
   savePendingNotificationRoute,
 } from '../src/notifications/notificationRouting';
+import { trimDisplayedNotifications } from '../src/notifications/trimDisplayedNotifications';
 
 // Импорт компонентов
 import AdminMain from './Admin/AdminMain';
@@ -1854,12 +1855,14 @@ export default function MainContent({ onLogout }) {
         restoreWithRetry();
         clearSectorNotifications(String(guildIdRef.current || ""));
         clearCultureNotifications("", String(guildIdRef.current || ""));
+        trimDisplayedNotifications();
       }
     });
 
     restoreWithRetry();
     clearSectorNotifications(String(guildIdRef.current || ""));
     clearCultureNotifications("", String(guildIdRef.current || ""));
+    trimDisplayedNotifications();
 
     return () => {
       subscription.remove();
@@ -2165,6 +2168,9 @@ export default function MainContent({ onLogout }) {
             pressAction: { id: 'default' },
           },
         });
+
+        // Тримаємо кількість сповіщень у "шторці" нижче системного ліміту.
+        trimDisplayedNotifications();
       });
 
       return unsubscribeOnMessage;

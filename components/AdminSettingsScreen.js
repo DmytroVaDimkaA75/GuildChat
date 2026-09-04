@@ -172,6 +172,20 @@ const AdminSettingsScreen = ({
     if (isApplyButtonEnabled) {
       setIsSubmitting(true);
       try {
+        if (!addWorldMode) {
+          const existingGuildSnapshot = await database()
+            .ref(`guilds/${uril}_${guildId}`)
+            .once("value");
+          if (existingGuildSnapshot.exists()) {
+            Alert.alert(
+              t("adminSettings.guildExistsTitle"),
+              t("adminSettings.guildExistsMessage", { guildId }),
+              [{ text: t("adminSettings.ok") }]
+            );
+            return;
+          }
+        }
+
         const newUril = `https://foe.scoredb.io/${uril}/Guild/${guildId}/Activity`;
         const result = await parseGuildData(newUril);
 

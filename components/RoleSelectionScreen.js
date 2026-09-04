@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkThemeColors } from "../constants/theme";
 import {
   discardAuthenticatedSession,
@@ -29,6 +30,7 @@ const createSessionError = (code, message) => {
 
 const RoleSelectionScreen = ({ navigation, onCompleteAppSession }) => {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const [isBusy, setIsBusy] = useState(false);
   const [guilds, setGuilds] = useState([]);
   const [pendingUserId, setPendingUserId] = useState("");
@@ -207,7 +209,12 @@ const RoleSelectionScreen = ({ navigation, onCompleteAppSession }) => {
         onRequestClose={closeGuildModal}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+          <View
+            style={[
+              styles.modalContent,
+              { paddingBottom: 20 + Math.max(insets.bottom, 8) },
+            ]}
+          >
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>
               {t("userSettings.selectGuildTitle")}

@@ -603,11 +603,19 @@ export const FOE_INTERCEPTOR_JS = `
   }
 
   var lastAdvance = 0;
+  var authedSent = false;
+  // Сигнал застосунку: вхід у гру підтверджено (логін/пароль прийнято).
+  // Далі вікно гри можна прибрати з екрана — автоперехід доробить у фоні.
+  function markAuthed() {
+    if (authedSent) { return; }
+    authedSent = true;
+    post({ __foeSync: true, kind: 'authed' });
+  }
   function autoAdvance() {
     try {
       var w = window.__FOE_WORLD || '';
       var href = String(location.href || '');
-      if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { return; }
+      if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { markAuthed(); return; }
 
       var worlds = [];
       var playBtns = [];
@@ -621,6 +629,7 @@ export const FOE_INTERCEPTOR_JS = `
 
       // Кнопки вибору світу: <a class="world_select_button" value="ru3">Сигард</a>
       var wsb = document.querySelectorAll('a.world_select_button, .world_select_button, [class*="world_select"]');
+      if (wsb.length) { markAuthed(); }
       for (var wi = 0; wi < wsb.length; wi++) {
         var wv = wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '';
         report.push('WSB value="' + wv + '" "' + (wsb[wi].textContent || '').trim() + '"');

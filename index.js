@@ -14,6 +14,7 @@ import {
   normalizeNotificationRoute,
   savePendingNotificationRoute,
 } from "./src/notifications/notificationRouting";
+import { trimDisplayedNotifications } from "./src/notifications/trimDisplayedNotifications";
 
 const normalizeGuildId = (value) => String(value || "").trim();
 
@@ -81,6 +82,9 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   if (type !== EventType.PRESS && type !== EventType.ACTION_PRESS) return;
   if (!await AsyncStorage.getItem("userId")) return;
 
+  // Користувач відкрив одне сповіщення — заразом підчистимо старі.
+  await trimDisplayedNotifications();
+
   const notification = detail?.notification;
   const route = normalizeNotificationRoute({
     ...(notification?.data || {}),
@@ -109,6 +113,10 @@ AppRegistry.registerHeadlessTask("GbgWidgetRefreshTask", () => async () => {
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
     if (!await AsyncStorage.getItem("userId")) return;
+
+    // Не даємо сповіщенням у "шторці" накопичитися до системного ліміту (50),
+    // після якого Android перестає показувати нові.
+    trimDisplayedNotifications();
 
     const data = remoteMessage?.data || {};
     const recordType = String(data.kind || data.type || "");

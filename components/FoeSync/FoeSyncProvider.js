@@ -18,6 +18,7 @@ import React, {
   useState,
 } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { WebView } from 'react-native-webview';
@@ -54,19 +55,27 @@ export const useFoeSync = () => useContext(Ctx);
 export function FoeSyncProvider({ children }) {
   const guildContext = useContext(GuildContext);
   const { i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [guildId, setGuildId] = useState(guildContext?.guildId || null);
   const [userId, setUserId] = useState(null);
   const [consent, setConsent] = useState(null); // null | 'yes' | 'no'
   const [webKey, setWebKey] = useState(0);
   const [webVisible, setWebVisible] = useState(false);
-  // Коли вікно гри відкрив користувач вручну — не згортати його автоматично
-  // після першого пакета (треба встигнути зробити щось у грі).
-  const [keepWebOpen, setKeepWebOpen] = useState(false);
-  const keepWebOpenRef = useRef(false);
-  keepWebOpenRef.current = keepWebOpen;
-  const openGameWindow = useCallback(() => { setKeepWebOpen(true); setWebVisible(true); }, []);
-  const closeGameWindow = useCallback(() => { setKeepWebOpen(false); setWebVisible(false); }, []);
+  // Вікно гри показуємо лише для ручного вводу логіна/пароля. Щойно вхід
+  // підтверджено (interceptor шле kind:'authed') або пішли пакети — згортаємо
+  // його назад у прихований 1×1 WebView, який доробляє все у фоні.
+  //
+  // Перед показом монтуємо WebView заново (setWebKey), щоб він народжувався вже
+  // на весь екран. Той самий інстанс, який жив прихованим 1×1, на частині
+  // Android-пристроїв не під'єднується до екранної клавіатури — тап по полю
+  // пароля фокусує його, але клавіатура не спливає. Свіжий повнорозмірний
+  // WebView такої вади не має.
+  const openGameWindow = useCallback(() => {
+    setWebKey((k) => k + 1);
+    setWebVisible(true);
+  }, []);
+  const closeGameWindow = useCallback(() => { setWebVisible(false); }, []);
 
   const [currentUrl, setCurrentUrl] = useState('');
   const [health, setHealth] = useState({ ready: false, packets: 0, lastAt: 0 });
@@ -170,6 +179,13 @@ export function FoeSyncProvider({ children }) {
 
     if (msg.kind === 'ready') {
       setHealth((h) => ({ ...h, ready: true }));
+      return;
+    }
+    if (msg.kind === 'authed') {
+      // Логін/пароль прийнято — вхід у гру підтверджено. Прибираємо вікно гри
+      // з екрана; WebView лишається змонтованим і доробляє вибір світу та
+      // збір даних у фоні.
+      setWebVisible(false);
       return;
     }
     if (msg.kind === 'packet') {
@@ -360,12 +376,16 @@ export function FoeSyncProvider({ children }) {
   // Якщо застрягли на сторінці входу порталу — показати вікно для ручного входу
   useEffect(() => {
     if (health.packets > 0) {
-      if (!keepWebOpenRef.current) setWebVisible(false);
+      // Пішли справжні дані гри — логін точно вдався, тримати вікно немає сенсу.
+      setWebVisible(false);
       return;
     }
     if (!/forgeofempires\.com\/(page|game)/.test(currentUrl || '')) return;
     const t = setTimeout(() => {
       if (healthRef.current.packets === 0 && /\/page/.test(currentUrlRef.current || '')) {
+        // Свіжий повнорозмірний WebView — інакше на частині пристроїв у полі
+        // логіна/пароля не спливає екранна клавіатура.
+        setWebKey((k) => k + 1);
         setWebVisible(true);
       }
     }, 15000);
@@ -473,7 +493,8 @@ export function FoeSyncProvider({ children }) {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 paddingHorizontal: 14,
-                paddingVertical: 10,
+                paddingTop: 10 + insets.top,
+                paddingBottom: 10,
                 backgroundColor: '#152330',
               }}
             >

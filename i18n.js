@@ -46,7 +46,9 @@ const ukTranslation = {
     guildNotFoundTitle: "Гільдія не знайдена",
     guildNotFoundMessage: "Гільдія з ID {{guildId}} не знайдена у вибраному вами світі на цьому сервері.",
     ok: "OK",
-    timeoutError: "Перевищено час очікування."
+    timeoutError: "Перевищено час очікування.",
+    guildExistsTitle: "Гільдія вже існує",
+    guildExistsMessage: "Гільдія з ID {{guildId}} у цьому світі вже зареєстрована в застосунку. Створити її повторно не можна — це стерло б наявні дані. Якщо ви голова цієї гільдії, увійдіть до неї у розділі «Користувач»."
   },
   userSettings: {
     requestAccessCode: "Запросіть код доступу у голови гільдії",
@@ -455,7 +457,9 @@ const ruTranslation = {
     guildNotFoundTitle: "Гильдия не найдена",
     guildNotFoundMessage: "Гильдия с ID {{guildId}} не найдена в выбранном вами мире на этом сервере.",
     ok: "OK",
-    timeoutError: "Превышено время ожидания."
+    timeoutError: "Превышено время ожидания.",
+    guildExistsTitle: "Гильдия уже существует",
+    guildExistsMessage: "Гильдия с ID {{guildId}} в этом мире уже зарегистрирована в приложении. Создать её повторно нельзя — это стёрло бы имеющиеся данные. Если вы глава этой гильдии, войдите в неё в разделе «Пользователь»."
   },
   userSettings: {
     requestAccessCode: "Запросите код доступа у главы гильдии",
@@ -864,7 +868,9 @@ const beTranslation = {
     guildNotFoundTitle: "Гільдыя не знойдзена",
     guildNotFoundMessage: "Гільдыя з ID {{guildId}} не знойдзена ў абраным вамі свеце на гэтым серверы.",
     ok: "OK",
-    timeoutError: "Перавышаны час чакання."
+    timeoutError: "Перавышаны час чакання.",
+    guildExistsTitle: "Гільдыя ўжо існуе",
+    guildExistsMessage: "Гільдыя з ID {{guildId}} у гэтым свеце ўжо зарэгістравана ў дадатку. Стварыць яе паўторна нельга — гэта сцёрла б наяўныя дадзеныя. Калі вы кіраўнік гэтай гільдыі, увайдзіце ў яе ў раздзеле «Карыстальнік»."
   },
   userSettings: {
     requestAccessCode: "Запытайце код доступу ў старшыні гільдыі",
@@ -1273,7 +1279,9 @@ const deTranslation = {
     guildNotFoundTitle: "Gilde nicht gefunden",
     guildNotFoundMessage: "Gilde mit der ID {{guildId}} wurde in der von Ihnen gewählten Welt auf diesem Server nicht gefunden.",
     ok: "OK",
-    timeoutError: "Zeitüberschreitung."
+    timeoutError: "Zeitüberschreitung.",
+    guildExistsTitle: "Gilde existiert bereits",
+    guildExistsMessage: "Eine Gilde mit der ID {{guildId}} in dieser Welt ist in der App bereits registriert. Sie kann nicht erneut erstellt werden, da dies vorhandene Daten überschreiben würde. Wenn Sie der Gildenanführer sind, melden Sie sich im Bereich „Benutzer“ bei der Gilde an."
   },
   userSettings: {
     requestAccessCode: "Fordern Sie den Zugangscode vom Gildenleiter an",
@@ -1693,7 +1701,9 @@ const enOverrides = {
     defaultWorld: "World",
     guildNotFoundTitle: "Guild not found",
     guildNotFoundMessage: "Guild with ID {{guildId}} was not found in the selected world on this server.",
-    timeoutError: "Request timed out"
+    timeoutError: "Request timed out",
+    guildExistsTitle: "Guild already exists",
+    guildExistsMessage: "A guild with ID {{guildId}} in this world is already registered in the app. It cannot be created again, as that would overwrite the existing data. If you are the leader of this guild, sign in to it from the \"User\" section."
   },
   guildAdmin: {
     telegram: {
@@ -1962,7 +1972,9 @@ const plOverrides = {
     defaultWorld: "Świat",
     guildNotFoundTitle: "Nie znaleziono gildii",
     guildNotFoundMessage: "Gildia z ID {{guildId}} nie została znaleziona w wybranym świecie na tym serwerze.",
-    timeoutError: "Przekroczono czas oczekiwania"
+    timeoutError: "Przekroczono czas oczekiwania",
+    guildExistsTitle: "Gildia już istnieje",
+    guildExistsMessage: "Gildia o ID {{guildId}} w tym świecie jest już zarejestrowana w aplikacji. Nie można jej utworzyć ponownie, ponieważ nadpisałoby to istniejące dane. Jeśli jesteś przywódcą tej gildii, zaloguj się do niej w sekcji „Użytkownik”."
   },
   guildAdmin: {
     telegram: {
