@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 // import { database } from '../../firebaseConfig'; // УДАЛЕНО
 import { FOE_CONSENT_BODY, FOE_CONSENT_BULLETS, FOE_CONSENT_NOTE } from '../FoeSync/foeConsent';
-import { useFoeSync } from '../FoeSync/FoeSyncProvider';
+import { useFoeSync, useFoeSyncActive } from '../FoeSync/FoeSyncProvider';
 import { getUkrainianRoleLabel } from '../../constants/roles';
 import { DarkThemeColors } from '../../constants/theme';
 import {
@@ -62,6 +62,10 @@ const ProfileMain = () => {
   const [guilds, setGuilds] = useState([]);
   const [foeExpanded, setFoeExpanded] = useState(false);
   const foe = useFoeSync();
+  // Поки відкритий Профіль, згода надана, а даних ще нема — вантажимо вікно гри
+  // (тут користувач вмикає синхронізацію та за потреби входить у гру). Щойно
+  // дані зібрані — вікно не потрібне, Профіль лише показує статус.
+  useFoeSyncActive(foe?.consent === 'yes' && !foe?.synced);
   const [googleStatus, setGoogleStatus] = useState('loading');
   const [googleAccount, setGoogleAccount] = useState(null);
   const [googleActionBusy, setGoogleActionBusy] = useState(false);

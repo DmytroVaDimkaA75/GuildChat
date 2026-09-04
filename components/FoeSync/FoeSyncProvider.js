@@ -2,8 +2,15 @@
 //
 // Єдиний "двигун" синхронізації з грою. Тримає прихований WebView з Forge of
 // Empires, слухач (foeInterceptor) ловить пакети, тут же збираються всі дані
-// (бонуси, збір, мапа, іконки). Монтується один раз високо в дереві
-// (MainContent), тож працює у фоні на всіх екранах.
+// (бонуси, збір, мапа, іконки). Провайдер монтується високо в дереві
+// (MainContent), але сам WebView живе НЕ постійно.
+//
+// Щоб не садити батарею, приховане вікно гри вантажиться лише тоді, коли
+// відкритий екран, якому потрібні свіжі дані (Синхронізація з грою, Профіль,
+// попап бонусів). Такий екран "замовляє" синхронізацію через useFoeSyncActive().
+// Коли останній замовник зникає, WebView живе ще SYNC_LINGER_MS (доробити збір)
+// і згортається. Зібрані дані лишаються в пам'яті — екран одразу показує
+// останнє відоме, поки підвантажується свіже.
 //
 // Вікно гри показується ("webVisible") лише коли треба руками увійти в гру
 // (автоперехід не впорався). Зазвичай — невидиме.
@@ -49,8 +56,24 @@ const gameUrlFromGuildId = (g) => {
   return w ? `https://${w}.forgeofempires.com/game/index?` : null;
 };
 
+// Скільки тримати приховане вікно гри після того, як зник останній екран-
+// замовник. Вистачає, щоб добрати перші пакети, бонуси й мапу міста.
+const SYNC_LINGER_MS = 90 * 1000;
+
 const Ctx = createContext(null);
 export const useFoeSync = () => useContext(Ctx);
+
+// Екран, якому потрібні свіжі дані з гри, викликає це у своєму тілі. Поки такий
+// екран змонтований (і active !== false), приховане вікно гри працює; коли всі
+// вони зникли — воно згортається (з невеликою затримкою на доробку збору).
+export function useFoeSyncActive(active = true) {
+  const ctx = useContext(Ctx);
+  const retain = ctx?.retainSync;
+  useEffect(() => {
+    if (!active || typeof retain !== 'function') return undefined;
+    return retain();
+  }, [active, retain]);
+}
 
 export function FoeSyncProvider({ children }) {
   const guildContext = useContext(GuildContext);
@@ -76,6 +99,41 @@ export function FoeSyncProvider({ children }) {
     setWebVisible(true);
   }, []);
   const closeGameWindow = useCallback(() => { setWebVisible(false); }, []);
+
+  // Скільки екранів зараз "замовили" синхронізацію (див. useFoeSyncActive).
+  const [demand, setDemand] = useState(0);
+  const demandRef = useRef(0);
+  const retainSync = useCallback(() => {
+    demandRef.current += 1;
+    setDemand(demandRef.current);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      demandRef.current = Math.max(0, demandRef.current - 1);
+      setDemand(demandRef.current);
+    };
+  }, []);
+
+  // "Задіяні" = хтось відкрив потрібний екран або показане вікно ручного входу.
+  const engaged = demand > 0 || webVisible;
+  const engagedRef = useRef(engaged);
+  engagedRef.current = engaged;
+  const [linger, setLinger] = useState(false);
+  const prevEngagedRef = useRef(false);
+  useEffect(() => {
+    const wasEngaged = prevEngagedRef.current;
+    prevEngagedRef.current = engaged;
+    if (engaged) {
+      setLinger(false);
+      return undefined;
+    }
+    if (!wasEngaged) return undefined;
+    // Замовників не лишилось — тримаємо вікно ще трохи, щоб доробити збір.
+    setLinger(true);
+    const t = setTimeout(() => setLinger(false), SYNC_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [engaged]);
 
   const [currentUrl, setCurrentUrl] = useState('');
   const [health, setHealth] = useState({ ready: false, packets: 0, lastAt: 0 });
@@ -382,7 +440,11 @@ export function FoeSyncProvider({ children }) {
     }
     if (!/forgeofempires\.com\/(page|game)/.test(currentUrl || '')) return;
     const t = setTimeout(() => {
-      if (healthRef.current.packets === 0 && /\/page/.test(currentUrlRef.current || '')) {
+      if (
+        engagedRef.current &&
+        healthRef.current.packets === 0 &&
+        /\/page/.test(currentUrlRef.current || '')
+      ) {
         // Свіжий повнорозмірний WebView — інакше на частині пристроїв у полі
         // логіна/пароля не спливає екранна клавіатура.
         setWebKey((k) => k + 1);
@@ -443,12 +505,18 @@ export function FoeSyncProvider({ children }) {
     [buildingDefs, found.cityMap, playerEra]
   );
 
+  // Приховане вікно гри вантажимо лише коли є замовник (або доробка збору,
+  // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
+  const webActive = consent === 'yes' && !!gameUrl && (engaged || linger);
+
   const value = {
     guildId,
     userId,
     consent,
     acceptConsent,
     reload,
+    retainSync,
+    webActive,
     webVisible,
     setWebVisible,
     openGameWindow,
@@ -469,7 +537,7 @@ export function FoeSyncProvider({ children }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {consent === 'yes' && gameUrl ? (
+      {webActive ? (
         <View
           pointerEvents={webVisible ? 'auto' : 'none'}
           style={

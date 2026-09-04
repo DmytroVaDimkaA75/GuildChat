@@ -15,7 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { DarkThemeColors as C } from '../../constants/theme';
-import { useFoeSync } from './FoeSyncProvider';
+import { useFoeSync, useFoeSyncActive } from './FoeSyncProvider';
 import FoeCityMap from './FoeCityMap';
 import FoeLoadingRing from './FoeLoadingRing';
 import FoeCollectionPanel from './FoeCollectionPanel';
@@ -84,6 +84,8 @@ function formatWhen(unixSec) {
 
 export default function FoeSyncScreen() {
   const { width: screenWidth, fontScale } = useWindowDimensions();
+  // Поки цей екран відкритий — приховане вікно гри працює й оновлює дані.
+  useFoeSyncActive();
   const foe = useFoeSync();
   const {
     found = {},

@@ -2,7 +2,7 @@
 // а локалізовані назви, footprint і бонуси потрібної епохи — з каталогу
 // building_entity. Уся мапа повернута на 90° за годинниковою, як у грі.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -144,6 +144,11 @@ export default function FoeCityMap({
   const ty = useSharedValue(0);
   const panStartX = useSharedValue(0);
   const panStartY = useSharedValue(0);
+  // Межі перетягування тримаємо в shared values, щоб жест панорами будувався
+  // один раз і не переставав слухати палець щоразу, коли гра надсилає свіжі
+  // дані міста (інакше активне перетягування обривалося посеред руху).
+  const minTxSV = useSharedValue(0);
+  const minTySV = useSharedValue(0);
 
   const highlightSet = useMemo(
     () => new Set((Array.isArray(highlightIds) ? highlightIds : []).map(String)),
@@ -269,6 +274,9 @@ export default function FoeCityMap({
     };
     rotatedAreas.forEach((area) => includeBounds(area.x, area.y, area.width, area.length));
     rotatedBuyable.forEach((area) => includeBounds(area.x, area.y, area.width, area.length));
+    // Заблоковані сектори теж входять у межі — інакше рамка міста, що виступає
+    // за крайній відкритий/доступний сектор, обрізалася б і не прокручувалася.
+    rotatedFrame.forEach((area) => includeBounds(area.x, area.y, area.width, area.length));
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
 
     const visibleEntities = rotatedEntities.filter(
@@ -333,6 +341,17 @@ export default function FoeCityMap({
   // Межі вільного перетягування мапи (translate у [minT, 0]).
   const minTx = Math.min(0, viewportWidth - contentWidth);
   const minTy = Math.min(0, viewportHeight - contentHeight);
+  useEffect(() => {
+    minTxSV.value = minTx;
+    minTySV.value = minTy;
+  }, [minTx, minTy, minTxSV, minTySV]);
+
+  // Модель і розмір плитки для обробника тапу — через ref, щоб він лишався
+  // стабільним і не перебудовував жест панорами на кожному оновленні даних.
+  const modelRef = useRef(model);
+  modelRef.current = model;
+  const tileRef = useRef(tile);
+  tileRef.current = tile;
 
   const panTo = useCallback(
     (targetX, targetY, animated = true) => {
@@ -358,13 +377,24 @@ export default function FoeCityMap({
     setPopupOpen(false);
   }, [highlightSig]);
 
+  // Підпис геометрії мапи: центруємо камеру лише коли мапа вперше зʼявилась
+  // або справді змінила межі. Дані з гри оновлюються, поки екран відкритий, і
+  // кожне оновлення дає новий об'єкт cityMap — без цього захисту камера
+  // смикалася б назад до центру міста, не даючи прокрутити до першого ряду.
+  const mapSignature = model
+    ? `${model.minX},${model.minY},${model.width},${model.height},${model.cityX},${model.cityY}`
+    : null;
+  const centeredSigRef = useRef(null);
+
   useEffect(() => {
+    if (!canScroll || !mapSignature) return undefined;
+    if (centeredSigRef.current === mapSignature) return undefined;
+    centeredSigRef.current = mapSignature;
     setSelectedId(null);
     setPopupOpen(false);
-    if (!canScroll) return undefined;
     const timer = setTimeout(() => panTo(cityOffsetX, cityOffsetY, false), 60);
     return () => clearTimeout(timer);
-  }, [canScroll, cityMap, cityOffsetX, cityOffsetY, panTo]);
+  }, [canScroll, mapSignature, cityOffsetX, cityOffsetY, panTo]);
 
   // Якщо жодна з відфільтрованих споруд не в полі зору — центрувати мапу
   // на першій зі списку (порядок = порядок рядків таблиці).
@@ -434,6 +464,8 @@ export default function FoeCityMap({
   // viewportX/Y — координати дотику всередині вікна мапи (без урахування панорами)
   const handleTapAt = useCallback(
     (viewportX, viewportY) => {
+      const model = modelRef.current;
+      const tile = tileRef.current;
       if (!model) return;
       const contentX = viewportX - tx.value;
       const contentY = viewportY - ty.value;
@@ -460,9 +492,11 @@ export default function FoeCityMap({
         setPopupOpen(false);
       }
     },
-    [model, tile, tx, ty]
+    [tx, ty]
   );
 
+  // Жест будується один раз: межі перетягування читаються з shared values,
+  // тож свіжі дані з гри більше не перетворюють активне перетягування карти.
   const mapGesture = useMemo(() => {
     const pan = Gesture.Pan()
       .minDistance(4)
@@ -471,8 +505,8 @@ export default function FoeCityMap({
         panStartY.value = ty.value;
       })
       .onUpdate((e) => {
-        tx.value = Math.min(Math.max(panStartX.value + e.translationX, minTx), 0);
-        ty.value = Math.min(Math.max(panStartY.value + e.translationY, minTy), 0);
+        tx.value = Math.min(Math.max(panStartX.value + e.translationX, minTxSV.value), 0);
+        ty.value = Math.min(Math.max(panStartY.value + e.translationY, minTySV.value), 0);
       });
     const tap = Gesture.Tap()
       .maxDistance(10)
@@ -480,7 +514,7 @@ export default function FoeCityMap({
         runOnJS(handleTapAt)(e.x, e.y);
       });
     return Gesture.Race(pan, tap);
-  }, [minTx, minTy, tx, ty, panStartX, panStartY, handleTapAt]);
+  }, [tx, ty, panStartX, panStartY, minTxSV, minTySV, handleTapAt]);
 
   if (!model) {
     return <Text style={styles.hint}>Мапа міста ще не містить відкритих секторів.</Text>;

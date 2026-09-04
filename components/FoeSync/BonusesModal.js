@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 
-import { useFoeSync } from './FoeSyncProvider';
+import { useFoeSync, useFoeSyncActive } from './FoeSyncProvider';
 import {
   STATS,
   computeCombat,
@@ -127,6 +127,11 @@ export default function BonusesModal({ visible, onClose }) {
     return rows.filter((r) => findFrame(sheets, r.iconName));
   }, [sumsAll, sheets]);
   const synced = health.packets > 0 && Object.keys(sumsAll).length > 0;
+
+  // Бонуси майже не змінюються в реальному часі. Тримаємо приховане вікно гри
+  // лише доти, доки не отримали бонуси (або поки взагалі нема даних) — далі
+  // попап може висіти відкритим скільки завгодно без фонового навантаження.
+  useFoeSyncActive(!!visible && !synced);
 
   return (
     <Modal visible={!!visible} transparent animationType="fade" onRequestClose={onClose}>
