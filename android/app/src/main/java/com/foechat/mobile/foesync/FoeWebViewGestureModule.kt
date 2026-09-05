@@ -19,12 +19,12 @@ import kotlin.math.ceil
 import kotlin.math.max
 
 /**
- * Replays a real Android touch drag directly on the Forge of Empires WebView.
+ * Replays real Android touch gestures directly on the Forge of Empires WebView.
  *
  * JavaScript-created TouchEvent/MouseEvent objects reach DOM listeners, but they
  * do not travel through Android WebView's native input pipeline. The game camera
- * relies on that pipeline for dragging, so the settlement diagnostic uses this
- * narrow bridge for the pan and keeps the existing JavaScript click afterwards.
+ * relies on that pipeline, so the settlement diagnostic uses this narrow bridge
+ * for both panning and tapping.
  */
 class FoeWebViewGestureModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -39,6 +39,7 @@ class FoeWebViewGestureModule(private val reactContext: ReactApplicationContext)
     private const val MAX_SEGMENTS = 24
     private const val MAX_ABS_DELTA_RATIO = 16.0
     private const val JS_HANDSHAKE_TIMEOUT_MS = 1_000L
+    private const val TAP_HOLD_MS = 90L
   }
 
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -148,6 +149,112 @@ class FoeWebViewGestureModule(private val reactContext: ReactApplicationContext)
           gestureRunning = false
           promise.reject(code, message)
         },
+      )
+    }
+  }
+
+  /**
+   * @param reactTag native tag emitted by react-native-webview in event.nativeEvent.target
+   * @param xRatio tap X coordinate divided by the WebView width
+   * @param yRatio tap Y coordinate divided by the WebView height
+   * @param attemptId watcher token armed in the current WebView document
+   */
+  @ReactMethod
+  fun tap(
+    reactTag: Double,
+    xRatio: Double,
+    yRatio: Double,
+    attemptId: String,
+    promise: Promise,
+  ) {
+    if (!reactTag.isFinite() || reactTag <= 0 || reactTag != reactTag.toInt().toDouble()) {
+      promise.reject("E_INVALID_TAG", "WebView tag is invalid")
+      return
+    }
+    if (attemptId.isBlank() || attemptId.length > 128) {
+      promise.reject("E_INVALID_ATTEMPT", "WebView tap attempt identifier is invalid")
+      return
+    }
+    if (
+      !xRatio.isFinite() ||
+      !yRatio.isFinite() ||
+      xRatio !in 0.0..1.0 ||
+      yRatio !in 0.0..1.0
+    ) {
+      promise.reject("E_INVALID_COORDINATES", "WebView tap coordinates are invalid")
+      return
+    }
+
+    mainHandler.post {
+      if (gestureRunning) {
+        promise.reject("E_GESTURE_BUSY", "Another WebView gesture is already running")
+        return@post
+      }
+
+      val tag = reactTag.toInt()
+      val wrapper = try {
+        UIManagerHelper.getUIManagerForReactTag(reactContext, tag)?.resolveView(tag)
+      } catch (_error: Exception) {
+        null
+      }
+      val webView = findWebView(wrapper)
+
+      if (webView == null || !webView.isAttachedToWindow) {
+        promise.reject("E_WEBVIEW_NOT_FOUND", "Forge of Empires WebView is not mounted")
+        return@post
+      }
+      if (!isForgeOfEmpiresUrl(webView.url)) {
+        promise.reject("E_WRONG_WEBVIEW", "Resolved WebView is not Forge of Empires")
+        return@post
+      }
+      if (webView.width <= 0 || webView.height <= 0) {
+        promise.reject("E_WEBVIEW_SIZE", "Forge of Empires WebView has no visible size")
+        return@post
+      }
+
+      val x = (xRatio * webView.width).toFloat().coerceIn(0f, webView.width - 1f)
+      val y = (yRatio * webView.height).toFloat().coerceIn(0f, webView.height - 1f)
+      gestureRunning = true
+
+      try {
+        webView.requestFocusFromTouch()
+      } catch (_error: Exception) {
+        gestureRunning = false
+        promise.reject("E_WEBVIEW_FOCUS", "Forge of Empires WebView could not receive focus")
+        return@post
+      }
+
+      if (!webView.isAttachedToWindow || webView.width <= 0 || webView.height <= 0) {
+        gestureRunning = false
+        promise.reject("E_WEBVIEW_DETACHED", "Forge of Empires WebView detached before the tap")
+        return@post
+      }
+
+      val downTime = SystemClock.uptimeMillis()
+      if (!dispatchTouch(webView, downTime, MotionEvent.ACTION_DOWN, x, y)) {
+        gestureRunning = false
+        promise.reject("E_TOUCH_NOT_HANDLED", "Forge of Empires WebView rejected the tap")
+        return@post
+      }
+
+      mainHandler.postDelayed(
+        tapRelease@{
+          if (!webView.isAttachedToWindow || webView.width <= 0 || webView.height <= 0) {
+            dispatchTouch(webView, downTime, MotionEvent.ACTION_CANCEL, x, y)
+            gestureRunning = false
+            promise.reject("E_WEBVIEW_DETACHED", "Forge of Empires WebView was detached during the tap")
+            return@tapRelease
+          }
+
+          val handled = dispatchTouch(webView, downTime, MotionEvent.ACTION_UP, x, y)
+          gestureRunning = false
+          if (handled) {
+            promise.resolve(true)
+          } else {
+            promise.reject("E_TOUCH_NOT_HANDLED", "Forge of Empires WebView rejected the tap")
+          }
+        },
+        TAP_HOLD_MS,
       )
     }
   }

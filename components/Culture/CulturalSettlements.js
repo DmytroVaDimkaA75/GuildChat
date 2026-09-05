@@ -89,7 +89,14 @@ function detectSettlementFromCid(cid) {
 
 const CulturalSettlements = () => {
   const navigation = useNavigation();
-  const { found = {}, autoEnterSettlementQuietly, stealthEntering, autoEnterLog = [] } = useFoeSync() || {};
+  const {
+    found = {},
+    autoEnterSettlementQuietly,
+    stealthEntering,
+    autoEnterLog = [],
+    calibPoints = {},
+  } = useFoeSync() || {};
+  const hasCalibShip = !!calibPoints?.ship;
   const settlementMap = found.settlementMap;
   // Поки не маємо мапи поселення — тримаємо фонову синхронізацію активною
   // (потрібна мапа міста, щоб дізнатись координати корабля/ратуші). Щойно
@@ -111,19 +118,30 @@ const CulturalSettlements = () => {
   // спроби показати кнопку "Спробувати ще раз" замість вічного "зараз
   // спробуємо…" (раніше екран просто зависав без жодної ознаки провалу).
   const [attempts, setAttempts] = React.useState(0);
+  // Захист від повторного накладання: found.cityMap (і похідні ship/townhall)
+  // отримують новий обʼєкт-посилання майже на кожен пакет від гри, тож без
+  // цього прапорця ефект нижче міг би запускати другу спробу поверх ще
+  // незавершеної першої щоразу, коли приходять нові дані.
+  const runningRef = React.useRef(false);
   const runAutoEnter = React.useCallback(() => {
+    if (runningRef.current) return;
+    runningRef.current = true;
     Promise.resolve(autoEnterSettlementQuietly?.()).finally(() => {
+      runningRef.current = false;
       setAttempts((n) => n + 1);
     });
   }, [autoEnterSettlementQuietly]);
 
-  // ТИМЧАСОВО: щойно відомі координати корабля й ратуші — самі, непомітно
-  // для користувача, заходимо в поселення у фоні, щоб отримати його мапу.
+  // Автозапуск — тепер на ОСНОВІ ОДНОРАЗОВОЇ ручної калібровки (реальні
+  // координати з "Корабель", підтверджено надійні через кнопку "Тест"),
+  // а не здогадної формули "з ігрових координат" (та була ненадійна й
+  // покинута — див. пам'ять settlement-diag-temp-screen). Спрацьовує сам,
+  // без жодної дії користувача, щойно калібровка є.
   useEffect(() => {
-    if (settlementMap || !ship || !townhall || attempts > 0) return;
+    if (settlementMap || !hasCalibShip || attempts > 0 || runningRef.current) return;
     runAutoEnter();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settlementMap, ship, townhall]);
+  }, [settlementMap, hasCalibShip]);
 
   const sectorStats = useMemo(() => {
     if (!settlementMap) return null;
@@ -168,11 +186,11 @@ const CulturalSettlements = () => {
           <ActivityIndicator color={COLORS.accent} />
           <Text style={styles.loadingText}>Отримуємо дані поселення…</Text>
         </View>
-      ) : ship && townhall && attempts > 0 ? (
+      ) : hasCalibShip && attempts > 0 ? (
         <>
           <Text style={styles.note}>
             Не вдалось автоматично отримати мапу поселення. Можна спробувати
-            ще раз, або зробити вручну через «Технічні дані поселення».
+            ще раз, або зробити вручну через «Технічні дані поселення» → «Тест».
           </Text>
           {autoEnterLog.length ? (
             <Text style={styles.debugLog}>
@@ -190,11 +208,14 @@ const CulturalSettlements = () => {
             <Text style={styles.retryButtonText}>Спробувати ще раз</Text>
           </TouchableOpacity>
         </>
+      ) : hasCalibShip ? (
+        <Text style={styles.note}>Зараз спробуємо отримати мапу поселення автоматично…</Text>
       ) : (
         <Text style={styles.note}>
-          {ship && townhall
-            ? 'Зараз спробуємо отримати мапу поселення автоматично…'
-            : 'Дані ще завантажуються з гри у фоні. Якщо довго нічого не зʼявляється — відкрийте «Технічні дані поселення» → «Авто-наведення» вручну.'}
+          Потрібне одноразове калібрування: відкрийте «Технічні дані
+          поселення» → «Відкрити гру» → прогорніть до кораблика поселення й
+          натисніть «Корабель» (один тап). Після цього вхід відбуватиметься
+          автоматично щоразу, без жодних дій.
         </Text>
       )}
 

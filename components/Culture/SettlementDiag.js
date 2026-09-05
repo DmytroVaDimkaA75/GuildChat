@@ -38,6 +38,15 @@ const AUTO_STEP_LABELS = {
   autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
   autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
   autoaim_panning: 'авто-наведення: прогортаю за формулою…',
+  interaction_wait: 'чекаю, поки сцена гри стане інтерактивною…',
+  interaction_ready: 'сцена гри готова ✓',
+  interaction_not_ready: 'сцена гри не стала інтерактивною',
+  watch_armed: 'чекаю відповідь мапи…',
+  touch_started: 'нативний дотик доставлено у гру…',
+  request_sent: 'запит мапи відправлено…',
+  no_request: 'клієнт не створив запит входу',
+  request_no_response: 'запит пішов, але відповідь не надійшла',
+  native_tap_failed: 'нативний клік не виконано',
 };
 
 function ts(t) {
@@ -66,6 +75,8 @@ export default function SettlementDiag() {
     resetCalibration,
     autoEnterLog = [],
     health = { packets: 0 },
+    debugScrollAndReveal,
+    stealthEntering,
   } = foe;
 
   const [copied, setCopied] = useState('');
@@ -245,9 +256,33 @@ export default function SettlementDiag() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Debug: скрол + маркер (без кліку)</Text>
+        <Text style={styles.note}>
+          Тихо перезавантажує гру у фоні, прогортає записаними координатами
+          («Корабель»), тоді сам відкриває гру видимою з яскравим маркером
+          там, куди мав би клацнути — без самого кліку. Дивись, наскільки
+          маркер збігається з кораблем, і скажи розробнику.
+        </Text>
+        <TouchableOpacity
+          onPress={() => debugScrollAndReveal?.()}
+          disabled={!calibPoints.ship || stealthEntering}
+          style={[
+            styles.btn,
+            styles.btnPrimary,
+            { marginTop: 8, opacity: !calibPoints.ship || stealthEntering ? 0.4 : 1 },
+          ]}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.btnPrimaryText}>
+            {stealthEntering ? 'Виконується…' : 'Прогорнути й показати маркер'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.sectionTitle}>Дані для авто-наведення (без ручного тапу)</Text>
         <Text style={styles.note}>
-          Координати "корабля" й ратуші з мапи міста — гра вже надсилає їх сама,
+          Координати «корабля» й ратуші з мапи міста — гра вже надсилає їх сама,
           тап не потрібен. Разом зі старим калібруванням кліка це дає числа,
           щоб порахувати формулу переведення ігрових координат у скрол, і
           прибрати ручний тап зовсім. «Відкрити гру» хоч раз (щоб мапа міста

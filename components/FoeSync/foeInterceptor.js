@@ -12,6 +12,7 @@ export const FOE_INTERCEPTOR_JS = `
 (function () {
   if (window.__foeSyncHook) { return; }
   window.__foeSyncHook = true;
+  var syncDocumentId = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
 
   // Буфер ресурсних таймінгів переповнюється (у грі > 2800 файлів будівель),
   // тож ловимо URL-и і напряму через PerformanceObserver, і збільшуємо буфер.
@@ -37,6 +38,13 @@ export const FOE_INTERCEPTOR_JS = `
   function post(payload) {
     try {
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        var generation = window.__FOE_SYNC_GENERATION;
+        if (payload && typeof payload === 'object' && generation != null) {
+          payload.generation = generation;
+        }
+        if (payload && typeof payload === 'object') {
+          payload.documentId = syncDocumentId;
+        }
         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
       }
     } catch (e) {}
@@ -136,7 +144,7 @@ export const FOE_INTERCEPTOR_JS = `
   // ТИМЧАСОВО: яскравий маркер поверх гри в точці (x,y) — щоб бачити ОКОМ,
   // куди саме прийшовся синтетичний клік авто-наведення, навіть якщо мапу
   // міста самé не видно чітко (десктопний режим у вузькому вікні).
-  window.__foeShowAimMarker = function (x, y) {
+  window.__foeShowAimMarker = function (x, y, durationMs) {
     try {
       var old = document.getElementById('__foeAimMarker');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
@@ -151,7 +159,7 @@ export const FOE_INTERCEPTOR_JS = `
       document.body.appendChild(el);
       setTimeout(function () {
         if (el.parentNode) { el.parentNode.removeChild(el); }
-      }, 15000);
+      }, Number(durationMs) > 0 ? Number(durationMs) : 15000);
     } catch (err) {}
   };
   // ТИМЧАСОВО: розмір/позиція canvas гри без тапу — для авто-наведення на
@@ -169,7 +177,133 @@ export const FOE_INTERCEPTOR_JS = `
       post({ __foeSync: true, kind: 'canvasRect', rect: null });
     }
   };
+
+  function pickInteractionTarget() {
+    var canvases = document.querySelectorAll('canvas');
+    var openfl = document.getElementById('openfl-content');
+    var target = null;
+    if (openfl && String(openfl.tagName || '').toLowerCase() === 'canvas') {
+      target = openfl;
+    } else if (openfl) {
+      target = openfl.querySelector('canvas');
+    }
+    if (!target && canvases.length) {
+      var maxArea = -1;
+      for (var i = 0; i < canvases.length; i++) {
+        var candidateRect = canvases[i].getBoundingClientRect();
+        var area = candidateRect.width * candidateRect.height;
+        if (area > maxArea) {
+          maxArea = area;
+          target = canvases[i];
+        }
+      }
+    }
+    return { target: target, canvasCount: canvases.length };
+  }
+
+  function interactionSample() {
+    var selected = pickInteractionTarget();
+    var target = selected.target;
+    var rect = target && target.getBoundingClientRect ? target.getBoundingClientRect() : null;
+    return {
+      target: target,
+      canvasCount: selected.canvasCount,
+      rect: rect ? {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      } : null,
+    };
+  }
+
+  // Перевірка, що OpenFL/canvas уже існує і його геометрія стабільна між
+  // двома відмальованими кадрами. Це діагностичний бар'єр готовності, а не
+  // синтетичний ввід і не підтвердження відповіді гри.
+  window.__foeProbeInteraction = function (nonce) {
+    try {
+      requestAnimationFrame(function (firstAt) {
+        var first = interactionSample();
+        requestAnimationFrame(function (secondAt) {
+          var second = interactionSample();
+          var a = first.rect;
+          var b = second.rect;
+          var sameTarget = !!first.target && first.target === second.target;
+          var maxDelta = (a && b) ? Math.max(
+            Math.abs(a.left - b.left),
+            Math.abs(a.top - b.top),
+            Math.abs(a.width - b.width),
+            Math.abs(a.height - b.height)
+          ) : Infinity;
+          var style = null;
+          try { style = second.target ? window.getComputedStyle(second.target) : null; } catch (e) {}
+          var targetVisible = !!(
+            b && b.width > 0 && b.height > 0 &&
+            (!style || (style.display !== 'none' && style.visibility !== 'hidden'))
+          );
+          var activation = null;
+          try {
+            if (navigator.userActivation) {
+              activation = {
+                isActive: navigator.userActivation.isActive === true,
+                hasBeenActive: navigator.userActivation.hasBeenActive === true,
+              };
+            }
+          } catch (e) {}
+          var target = second.target;
+          post({
+            __foeSync: true,
+            kind: 'interactionProbe',
+            nonce: nonce,
+            probe: {
+              readyState: document.readyState,
+              visibilityState: document.visibilityState || null,
+              hidden: document.hidden === true,
+              hasFocus: typeof document.hasFocus === 'function' ? document.hasFocus() : null,
+              userActivation: activation,
+              viewportW: Math.round(window.innerWidth || 0),
+              viewportH: Math.round(window.innerHeight || 0),
+              dpr: Number(window.devicePixelRatio) || 1,
+              canvasId: target ? (target.id || null) : null,
+              canvasTag: target ? String(target.tagName || '').toLowerCase() : null,
+              canvasClass: target && typeof target.className === 'string' ? target.className : null,
+              canvasCount: second.canvasCount,
+              rect: b,
+              targetVisible: targetVisible,
+              frameDeltaMs: Math.max(0, secondAt - firstAt),
+              stable: sameTarget && targetVisible && maxDelta <= 0.5,
+            },
+          });
+        });
+      });
+    } catch (e) {
+      post({
+        __foeSync: true,
+        kind: 'interactionProbe',
+        nonce: nonce,
+        probe: {
+          readyState: document.readyState,
+          visibilityState: document.visibilityState || null,
+          hidden: document.hidden === true,
+          hasFocus: null,
+          userActivation: null,
+          viewportW: Math.round(window.innerWidth || 0),
+          viewportH: Math.round(window.innerHeight || 0),
+          dpr: Number(window.devicePixelRatio) || 1,
+          canvasId: null,
+          canvasCount: document.querySelectorAll('canvas').length,
+          rect: null,
+          targetVisible: false,
+          frameDeltaMs: null,
+          stable: false,
+          error: String(e),
+        },
+      });
+    }
+  };
+  document.addEventListener('pointerdown', markNativeAutoTapStart, true);
   document.addEventListener('touchstart', function (e) {
+    markNativeAutoTapStart(e);
     var t = e.touches && e.touches[0];
     if (t) { handleCalibEvent('touchstart', t.clientX, t.clientY); }
   }, true);
@@ -185,23 +319,257 @@ export const FOE_INTERCEPTOR_JS = `
   // Підтвердження — ТІЛЬКИ за відповіддю сервера (CityMapService.getCityMap з
   // gridId:"cultural_outpost", потім CityMapService.getEntities(["main"])),
   // не за таймером і не за картинкою — так само, як звіряв Codex.
-  var autoWatch = null; // { cls, mth, matchReq, onMatch, timeoutId }
-  function armWatch(cls, mth, matchReq, onMatch, ms) {
+  var autoWatch = null; // { cls, mth, matchReq, onMatch, timeoutId, requestSent, attemptId }
+  function armWatch(cls, mth, matchReq, onMatch, ms, attemptId) {
     if (autoWatch && autoWatch.timeoutId) { clearTimeout(autoWatch.timeoutId); }
-    var to = setTimeout(function () {
+    var watch = {
+      cls: cls,
+      mth: mth,
+      matchReq: matchReq,
+      onMatch: onMatch,
+      timeoutId: null,
+      requestSent: false,
+      requestSentAt: null,
+      requestIds: [],
+      attemptId: attemptId == null ? null : String(attemptId),
+      tapStarted: false,
+      tapStartedAt: null,
+      tapSerial: 0,
+      nativeTapPending: false,
+    };
+    watch.timeoutId = setTimeout(function () {
+      if (autoWatch !== watch) { return; }
       autoWatch = null;
-      onMatch(null, null);
+      onMatch(null, null, watch);
     }, ms);
-    autoWatch = { cls: cls, mth: mth, matchReq: matchReq, onMatch: onMatch, timeoutId: to };
+    autoWatch = watch;
   }
-  function checkAutoWatch(cls, mth, rd, reqData) {
+
+  // Позначає початок спроби лише з реального DOM pointerdown/touchstart, який
+  // WebView породжує у відповідь на Android ACTION_DOWN. Так фоновий запит,
+  // що завершив розбір між Kotlin-handshake та ACTION_DOWN, не приписується
+  // тапу. nativeTapPending не дає другій із цих подій інкрементувати serial.
+  function markNativeAutoTapStart(e) {
+    try {
+      var watch = autoWatch;
+      if (
+        !watch || !watch.attemptId || !watch.nativeTapPending || watch.tapStarted ||
+        (e && e.isTrusted === false)
+      ) {
+        return;
+      }
+      watch.nativeTapPending = false;
+      watch.tapStarted = true;
+      watch.tapStartedAt = Date.now();
+      watch.tapSerial += 1;
+      post({
+        __foeSync: true,
+        kind: 'autoEnter',
+        step: 'touch_started',
+        attemptId: watch.attemptId,
+        at: watch.tapStartedAt,
+      });
+    } catch (e) {}
+  }
+
+  function checkAutoWatch(cls, mth, rd, reqData, requestId) {
     if (!autoWatch || cls !== autoWatch.cls || mth !== autoWatch.mth) { return; }
     if (autoWatch.matchReq && !autoWatch.matchReq(reqData)) { return; }
+    if (autoWatch.attemptId && !autoWatch.tapStarted) { return; }
+    // Для нативної спроби сторонню відповідь приймаємо лише після запиту,
+    // який побачили ПІСЛЯ озброєння watcher. cultural_outpost сам по собі є
+    // остаточним підтвердженням і лишається валідним, навіть якщо тіло XHR не
+    // вдалося розібрати (наприклад, воно було Blob/FormData).
+    if (
+      autoWatch.attemptId && !autoWatch.requestSent &&
+      !(rd && rd.gridId === 'cultural_outpost')
+    ) {
+      return;
+    }
+    if (
+      !(rd && rd.gridId === 'cultural_outpost') &&
+      autoWatch.requestIds.length && requestId != null &&
+      autoWatch.requestIds.indexOf(String(requestId)) === -1
+    ) {
+      return;
+    }
     var w = autoWatch;
     clearTimeout(w.timeoutId);
     autoWatch = null;
-    w.onMatch(rd, reqData);
+    w.onMatch(rd, reqData, w);
   }
+
+  function parsedRequestsFromBody(body) {
+    var text = null;
+    if (typeof body === 'string') {
+      text = body;
+    } else {
+      try {
+        if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+          text = body.toString();
+        }
+      } catch (e) {}
+    }
+    if (!text) { return null; }
+
+    function parse(value) {
+      try {
+        var parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) { return parsed; }
+        if (parsed && Array.isArray(parsed.requests)) { return parsed.requests; }
+      } catch (e) {}
+      return null;
+    }
+
+    var direct = parse(text);
+    if (direct) { return direct; }
+    try {
+      var params = new URLSearchParams(text);
+      var names = ['request', 'requests', 'json'];
+      for (var i = 0; i < names.length; i++) {
+        var value = params.get(names[i]);
+        var decoded = value && parse(value);
+        if (decoded) { return decoded; }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function inspectAutoWatchRequest(url, body, expectedWatch, expectedTapSerial) {
+    try {
+      var watch = autoWatch;
+      if (arguments.length >= 3 && watch !== expectedWatch) { return; }
+      if (
+        arguments.length >= 4 && watch &&
+        Number(watch.tapSerial) !== Number(expectedTapSerial)
+      ) {
+        return;
+      }
+      if (!watch || String(url || '').indexOf('/game/json') === -1) { return; }
+      if (watch.attemptId && !watch.tapStarted) { return; }
+      var requests = parsedRequestsFromBody(body);
+      if (!requests) { return; }
+      for (var i = 0; i < requests.length; i++) {
+        var request = requests[i];
+        if (!request || String(request.requestClass || '') !== watch.cls ||
+            String(request.requestMethod || '') !== watch.mth) { continue; }
+        if (watch.matchReq && !watch.matchReq(request.requestData)) { continue; }
+        if (autoWatch !== watch || watch.requestSent) { return; }
+        watch.requestSent = true;
+        watch.requestSentAt = Date.now();
+        if (request.requestId != null) {
+          watch.requestIds.push(String(request.requestId));
+        }
+        post({
+          __foeSync: true,
+          kind: 'autoEnter',
+          step: 'request_sent',
+          requestClass: watch.cls,
+          requestMethod: watch.mth,
+          attemptId: watch.attemptId,
+          at: watch.requestSentAt,
+        });
+        return;
+      }
+    } catch (e) {}
+  }
+
+  function describeTargetAt(x, y) {
+    var stack = [];
+    try {
+      var all = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [];
+      if (!all.length) {
+        var single = document.elementFromPoint(x, y);
+        if (single) { all = [single]; }
+      }
+      for (var i = 0; i < all.length && i < 6; i++) {
+        var el = all[i];
+        stack.push((el.tagName || '?') + (el.id ? '#' + el.id : '') +
+          (el.className ? '.' + String(el.className).replace(/\\s+/g, '.') : ''));
+      }
+    } catch (e) {}
+    return stack.join(' > ');
+  }
+
+  function postAutoEnterWatchResult(rd, watch) {
+    if (rd && rd.gridId === 'cultural_outpost') {
+      post({
+        __foeSync: true, kind: 'autoEnter', step: 'entered', gridId: rd.gridId,
+        attemptId: watch && watch.attemptId, at: Date.now(),
+      });
+    } else if (rd && rd.gridId) {
+      post({
+        __foeSync: true, kind: 'autoEnter', step: 'wrong_grid', gridId: rd.gridId,
+        attemptId: watch && watch.attemptId, at: Date.now(),
+      });
+    } else {
+      post({
+        __foeSync: true,
+        kind: 'autoEnter',
+        step: watch && watch.requestSent ? 'request_no_response' : 'no_request',
+        attemptId: watch && watch.attemptId,
+        at: Date.now(),
+      });
+    }
+  }
+
+  // Нативний тап надсилається Android-модулем окремо. Тут лише озброюємо
+  // мережеве підтвердження та фіксуємо елемент під майбутньою точкою тапу.
+  window.__foeArmNativeAutoEnter = function (x, y, attemptId) {
+    try {
+      armWatch('CityMapService', 'getCityMap', null, function (rd, reqData, watch) {
+        postAutoEnterWatchResult(rd, watch);
+      }, 20000, attemptId);
+      // Готуємо capture-phase watcher вже в тому самому JS task, що й arm.
+      // Kotlin може одразу слати ACTION_DOWN: саме trusted pointer/touch подія
+      // нижче позначить фактичний початок вводу.
+      if (autoWatch && String(autoWatch.attemptId) === String(attemptId)) {
+        autoWatch.nativeTapPending = true;
+      }
+      post({
+        __foeSync: true, kind: 'autoEnter', step: 'watch_armed',
+        attemptId: attemptId, x: x, y: y, at: Date.now(),
+      });
+      post({
+        __foeSync: true,
+        kind: 'autoEnter',
+        step: 'target',
+        attemptId: attemptId,
+        target: describeTargetAt(x, y),
+        x: x,
+        y: y,
+        at: Date.now(),
+      });
+      return true;
+    } catch (e) {
+      post({
+        __foeSync: true, kind: 'autoEnter', step: 'error',
+        attemptId: attemptId, message: String(e), at: Date.now(),
+      });
+      return false;
+    }
+  };
+
+  // Kotlin викликає це через evaluateJavascript і лише після callback шле
+  // ACTION_DOWN. Handshake тільки звіряє спробу та готує очікування; момент
+  // фактичного вводу фіксує capture-phase touchstart вище.
+  window.__foeNativeTapStarted = function (attemptId) {
+    try {
+      if (
+        !autoWatch || !autoWatch.attemptId ||
+        String(autoWatch.attemptId) !== String(attemptId)
+      ) {
+        return false;
+      }
+      if (!autoWatch.tapStarted) {
+        autoWatch.tapStartedAt = null;
+        autoWatch.nativeTapPending = true;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 
   function dispatchMouseFallback(target, x, y) {
     var base = {
@@ -422,15 +790,9 @@ export const FOE_INTERCEPTOR_JS = `
         var attempts = 0;
         var maxAttempts = 4;
 
-        armWatch('CityMapService', 'getCityMap', null, function (rd) {
+        armWatch('CityMapService', 'getCityMap', null, function (rd, reqData, watch) {
           confirmed = true;
-          if (rd && rd.gridId === 'cultural_outpost') {
-            post({ __foeSync: true, kind: 'autoEnter', step: 'entered', gridId: rd.gridId, at: Date.now() });
-          } else if (rd && rd.gridId) {
-            post({ __foeSync: true, kind: 'autoEnter', step: 'wrong_grid', gridId: rd.gridId, at: Date.now() });
-          } else {
-            post({ __foeSync: true, kind: 'autoEnter', step: 'enter_failed', at: Date.now() });
-          }
+          postAutoEnterWatchResult(rd, watch);
         }, 11000);
 
         function attempt() {
@@ -715,7 +1077,7 @@ export const FOE_INTERCEPTOR_JS = `
 
       var rd = entry.responseData;
       maybeRawLog(key, rd);
-      checkAutoWatch(cls, mth, rd, entry.requestData);
+      checkAutoWatch(cls, mth, rd, entry.requestData, entry.requestId);
 
       if (WANTED[key] && rd != null) {
         found[WANTED[key]] = rd;
@@ -1109,6 +1471,11 @@ export const FOE_INTERCEPTOR_JS = `
     };
     XMLHttpRequest.prototype.send = function () {
       var xhr = this;
+      try {
+        var watchAtSend = autoWatch;
+        var tapSerialAtSend = watchAtSend && watchAtSend.tapSerial;
+        inspectAutoWatchRequest(xhr.__foeUrl, arguments[0], watchAtSend, tapSerialAtSend);
+      } catch (e) {}
       this.addEventListener('load', function () {
         try { maybeHandle(xhr.__foeUrl, xhr.responseText); } catch (e) {}
       });
@@ -1123,6 +1490,18 @@ export const FOE_INTERCEPTOR_JS = `
       window.fetch = function () {
         var args = arguments;
         var url = (args[0] && args[0].url) ? args[0].url : args[0];
+        var requestBody = args[1] && args[1].body;
+        var watchAtFetch = autoWatch;
+        var tapSerialAtFetch = watchAtFetch && watchAtFetch.tapSerial;
+        try {
+          if (requestBody != null) {
+            inspectAutoWatchRequest(url, requestBody, watchAtFetch, tapSerialAtFetch);
+          } else if (args[0] && typeof args[0].clone === 'function') {
+            args[0].clone().text().then(function (body) {
+              inspectAutoWatchRequest(url, body, watchAtFetch, tapSerialAtFetch);
+            }).catch(function () {});
+          }
+        } catch (e) {}
         return origFetch.apply(this, args).then(function (res) {
           try {
             res.clone().text().then(function (t) { maybeHandle(url, t); }).catch(function () {});

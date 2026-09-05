@@ -24,7 +24,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { NativeModules, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, NativeModules, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
@@ -79,6 +79,10 @@ const gameUrlFromGuildId = (g) => {
 // Скільки тримати приховане вікно гри після того, як зник останній екран-
 // замовник. Вистачає, щоб добрати перші пакети, бонуси й мапу міста.
 const SYNC_LINGER_MS = 90 * 1000;
+// StartupService може вже віддати мапу, коли Haxe/OpenFL ще добудовує сцену
+// та обробники вводу. Відлік починаємо лише з переходу на ПОВНИЙ розмір:
+// час, проведений у прихованому 1×1 WebView, не зараховується.
+const GAME_SCENE_VISIBLE_WARMUP_MS = 25 * 1000;
 const CALIB_KEY = 'foeSettlementCalib_v1'; // ТИМЧАСОВО: діагностика поселень
 const { FoeWebViewGesture } = NativeModules;
 const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків тесту автовходу
@@ -100,6 +104,15 @@ const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків т
   autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
   autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
   autoaim_panning: 'авто-наведення: прогортаю за формулою…',
+  interaction_wait: 'чекаю, поки сцена гри стане інтерактивною…',
+  interaction_ready: 'сцена гри готова ✓',
+  interaction_not_ready: 'сцена гри не стала інтерактивною',
+  watch_armed: 'чекаю відповідь мапи…',
+  touch_started: 'нативний дотик доставлено у гру…',
+  request_sent: 'запит мапи відправлено…',
+  no_request: 'клієнт не створив запит входу',
+  request_no_response: 'запит пішов, але відповідь не надійшла',
+  native_tap_failed: 'нативний клік не виконано',
 };
 
 const Ctx = createContext(null);
@@ -126,6 +139,8 @@ export function FoeSyncProvider({ children }) {
   const [userId, setUserId] = useState(null);
   const [consent, setConsent] = useState(null); // null | 'yes' | 'no'
   const [webKey, setWebKey] = useState(0);
+  const webGenerationRef = useRef(webKey);
+  webGenerationRef.current = webKey;
   const [webVisible, setWebVisible] = useState(false);
   // Вікно гри показуємо лише для ручного вводу логіна/пароля. Щойно вхід
   // підтверджено (interceptor шле kind:'authed') або пішли пакети — згортаємо
@@ -153,13 +168,23 @@ export function FoeSyncProvider({ children }) {
   // розмірі canvas — бо саме різні екрани, а не різні світи/акаунти, є
   // реальним ризиком для "працює для будь-кого без калібрування".
   const [debugShrink, setDebugShrink] = useState(false);
-  // ТИМЧАСОВО: "тихий" автовхід у поселення — вікно гри монтується на повний
-  // розмір (щоб авто-наведення рахувало правильно) але невидиме (opacity 0,
-  // pointerEvents none), користувач нічого не бачить. Окремо від webVisible/
+  // ТИМЧАСОВО: "тихий" автовхід у поселення — прогрітий WebView тимчасово
+  // розгортається на повний розмір (щоб OpenFL реально малював кадри), але
+  // накривається непрозорим екраном завантаження. Окремо від webVisible/
   // webPinned, щоб не зачіпати ручний потік і панель кнопок.
   const [stealthEntering, setStealthEntering] = useState(false);
   const stealthEnteringRef = useRef(false);
-  const pendingAuthedResolveRef = useRef(null);
+  const webFullSizeActiveRef = useRef(false);
+  const webFullSizeSinceRef = useRef(0);
+  useEffect(() => {
+    const fullSizeActive = webVisible || stealthEntering;
+    if (fullSizeActive && !webFullSizeActiveRef.current) {
+      webFullSizeSinceRef.current = Date.now();
+    } else if (!fullSizeActive) {
+      webFullSizeSinceRef.current = 0;
+    }
+    webFullSizeActiveRef.current = fullSizeActive;
+  }, [stealthEntering, webVisible]);
   const pinGameWindow = useCallback(() => {
     setWebPinned(true);
     setWebVisible(true);
@@ -174,7 +199,15 @@ export function FoeSyncProvider({ children }) {
   // тож замість вгадувати — записуємо, куди САМ користувач тапнув, і зберігаємо.
   const webViewRef = useRef(null);
   const webViewTagRef = useRef(null);
-  const canvasRectResolverRef = useRef(null);
+  const webDocumentEpochRef = useRef(0);
+  const webDocumentIdRef = useRef(null);
+  const cityMapDocumentEpochRef = useRef(null);
+  const interactionProbeResolverRef = useRef(null);
+  const interactionProbeNonceRef = useRef(0);
+  const nativeWatchResolverRef = useRef(null);
+  const nativeWatchNonceRef = useRef(0);
+  const activeAutoEnterNonceRef = useRef(null);
+  const autoEnterRequestSentRef = useRef(false);
   // ТИМЧАСОВО: `found` іще не оголошено на цьому рівні файлу (нижче), а
   // авто-наведення (tryAutoAimEnter) оголошується вище за нього — тож читає
   // найсвіжіше значення через ref, а не напряму зі стану.
@@ -206,8 +239,9 @@ export function FoeSyncProvider({ children }) {
     if (armed && calibPoints[armed]) { setArmed(null); }
   }, [armed, calibPoints]);
 
-  // ТИМЧАСОВО: тестовий автоклік по вже збереженій точці "корабель" — щоб
-  // перевірити, чи гра взагалі реагує на синтетичний клік (не справжній дотик).
+  // ТИМЧАСОВО: тестовий автоклік по вже збереженій точці "корабель". На
+  // Android і свайп, і тап проходять через нативний MotionEvent; JS-варіант
+  // лишається лише запасним шляхом для інших платформ.
   // Кліка "повернутись у місто" свідомо нема: це вікно гри однаково скоро
   // закриється/перезавантажиться, тож заходимо в поселення останнім кроком.
   const [autoEnterLog, setAutoEnterLog] = useState([]);
@@ -220,6 +254,14 @@ export function FoeSyncProvider({ children }) {
       clearTimeout(autoEnterTimeoutRef.current);
       autoEnterTimeoutRef.current = null;
     }
+    if (nativeWatchResolverRef.current) {
+      const pending = nativeWatchResolverRef.current;
+      nativeWatchResolverRef.current = null;
+      clearTimeout(pending.timeoutId);
+      pending.resolve(null);
+    }
+    activeAutoEnterNonceRef.current = null;
+    autoEnterRequestSentRef.current = false;
     autoEnterBusyRef.current = false;
     setAutoEnterBusy(false);
     if (pendingAutoEnterResolveRef.current) {
@@ -230,7 +272,203 @@ export function FoeSyncProvider({ children }) {
   }, []);
   useEffect(() => () => {
     if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
+    autoEnterBusyRef.current = false;
+    if (interactionProbeResolverRef.current) {
+      const pending = interactionProbeResolverRef.current;
+      interactionProbeResolverRef.current = null;
+      clearTimeout(pending.timeoutId);
+      pending.resolve(null);
+    }
+    if (nativeWatchResolverRef.current) {
+      const pending = nativeWatchResolverRef.current;
+      nativeWatchResolverRef.current = null;
+      clearTimeout(pending.timeoutId);
+      pending.resolve(null);
+    }
+    activeAutoEnterNonceRef.current = null;
+    autoEnterRequestSentRef.current = false;
   }, []);
+
+  const requestInteractionProbe = useCallback(() => new Promise((resolve) => {
+    if (!webViewRef.current) { resolve(null); return; }
+
+    if (interactionProbeResolverRef.current) {
+      const previous = interactionProbeResolverRef.current;
+      interactionProbeResolverRef.current = null;
+      clearTimeout(previous.timeoutId);
+      previous.resolve(null);
+    }
+
+    interactionProbeNonceRef.current += 1;
+    const nonce = `${Date.now()}-${interactionProbeNonceRef.current}`;
+    const timeoutId = setTimeout(() => {
+      const pending = interactionProbeResolverRef.current;
+      if (pending?.nonce !== nonce) return;
+      interactionProbeResolverRef.current = null;
+      resolve(null);
+    }, 1800);
+    interactionProbeResolverRef.current = { nonce, resolve, timeoutId };
+
+    try {
+      webViewRef.current.injectJavaScript(
+        `window.__foeProbeInteraction && window.__foeProbeInteraction(${JSON.stringify(nonce)}); true;`
+      );
+    } catch (_error) {
+      clearTimeout(timeoutId);
+      if (interactionProbeResolverRef.current?.nonce === nonce) {
+        interactionProbeResolverRef.current = null;
+      }
+      resolve(null);
+    }
+  }), []);
+
+  const waitForInteractiveGame = useCallback(async (timeoutMs = 75000) => {
+    const deadline = Date.now() + timeoutMs;
+    let stableCount = 0;
+    let lastSignature = '';
+
+    while (Date.now() < deadline && autoEnterBusyRef.current) {
+      const probe = await requestInteractionProbe();
+      const rect = probe?.rect;
+      const frameDeltaMs = Number(probe?.frameDeltaMs);
+      const ready =
+        !!rect &&
+        Number(rect.width) > 100 &&
+        Number(rect.height) > 100 &&
+        Number(probe?.viewportW) > 100 &&
+        Number(probe?.viewportH) > 100 &&
+        Number(probe?.canvasCount) > 0 &&
+        String(probe?.canvasTag || '') === 'canvas' &&
+        ['interactive', 'complete'].includes(String(probe?.readyState || '')) &&
+        String(probe?.visibilityState || 'visible') === 'visible' &&
+        webFullSizeSinceRef.current > 0 &&
+        Date.now() - webFullSizeSinceRef.current >= GAME_SCENE_VISIBLE_WARMUP_MS &&
+        cityMapDocumentEpochRef.current === webDocumentEpochRef.current &&
+        probe?.stable === true &&
+        Number.isFinite(frameDeltaMs) &&
+        frameDeltaMs > 0 &&
+        frameDeltaMs < 500;
+
+      if (ready) {
+        const signature = [
+          rect.left,
+          rect.top,
+          rect.width,
+          rect.height,
+          probe.viewportW,
+          probe.viewportH,
+        ].map((value) => Math.round(Number(value) || 0)).join(':');
+        if (signature === lastSignature) {
+          stableCount += 1;
+        } else {
+          stableCount = 1;
+        }
+        lastSignature = signature;
+        if (stableCount >= 3) return probe;
+      } else {
+        stableCount = 0;
+        lastSignature = '';
+      }
+
+      await new Promise((probeDelayResolve) => setTimeout(probeDelayResolve, 300));
+    }
+    return null;
+  }, [requestInteractionProbe]);
+
+  const armNativeAutoEnterWatch = useCallback((x, y) => new Promise((resolve) => {
+    if (!webViewRef.current) { resolve(null); return; }
+
+    if (nativeWatchResolverRef.current) {
+      const previous = nativeWatchResolverRef.current;
+      nativeWatchResolverRef.current = null;
+      clearTimeout(previous.timeoutId);
+      previous.resolve(null);
+    }
+
+    nativeWatchNonceRef.current += 1;
+    const nonce = `${Date.now()}-${nativeWatchNonceRef.current}`;
+    activeAutoEnterNonceRef.current = nonce;
+    autoEnterRequestSentRef.current = false;
+    const generation = webGenerationRef.current;
+    const timeoutId = setTimeout(() => {
+      if (nativeWatchResolverRef.current?.nonce !== nonce) return;
+      nativeWatchResolverRef.current = null;
+      resolve(null);
+    }, 1800);
+    nativeWatchResolverRef.current = { nonce, generation, resolve, timeoutId };
+
+    try {
+      webViewRef.current.injectJavaScript(
+        `(function () {
+          var attemptId = ${JSON.stringify(nonce)};
+          var armed = window.__foeArmNativeAutoEnter &&
+            window.__foeArmNativeAutoEnter(${x}, ${y}, attemptId);
+          if (armed && typeof window.__foeNativeTapStarted === 'function') {
+            window.__foeNativeTapStarted(attemptId);
+          }
+        })(); true;`
+      );
+    } catch (_error) {
+      clearTimeout(timeoutId);
+      if (nativeWatchResolverRef.current?.nonce === nonce) {
+        nativeWatchResolverRef.current = null;
+      }
+      if (activeAutoEnterNonceRef.current === nonce) activeAutoEnterNonceRef.current = null;
+      resolve(null);
+    }
+  }), []);
+
+  const runNativeAutoEnterTaps = useCallback(async ({
+    reactTag,
+    x,
+    y,
+    viewportWidth,
+    viewportHeight,
+  }) => {
+    if (Platform.OS !== 'android' || typeof FoeWebViewGesture?.tap !== 'function') {
+      return false;
+    }
+    if (
+      !Number.isInteger(reactTag) || reactTag <= 0 ||
+      ![x, y, viewportWidth, viewportHeight].every(Number.isFinite) ||
+      viewportWidth <= 0 || viewportHeight <= 0
+    ) {
+      return false;
+    }
+
+    const xRatio = Math.max(0, Math.min(1, x / viewportWidth));
+    const yRatio = Math.max(0, Math.min(1, y / viewportHeight));
+    const attemptId = await armNativeAutoEnterWatch(x, y);
+    if (!attemptId) {
+      const error = new Error('The game response watcher was not armed');
+      error.code = 'E_WATCH_NOT_ARMED';
+      throw error;
+    }
+
+    if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
+    autoEnterTimeoutRef.current = setTimeout(() => {
+      setAutoEnterLog((prev) => [...prev, { step: 'enter_failed', at: Date.now() }].slice(-20));
+      finishAutoEnter();
+    }, 25 * 1000);
+
+    for (
+      let attempt = 1;
+      attempt <= 4 && autoEnterBusyRef.current && !autoEnterRequestSentRef.current;
+      attempt += 1
+    ) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: attempt === 1 ? 'click_ship' : 'retry_click',
+        n: attempt,
+        at: Date.now(),
+      }].slice(-20));
+      await FoeWebViewGesture.tap(reactTag, xRatio, yRatio, attemptId);
+      if (attempt < 4 && autoEnterBusyRef.current && !autoEnterRequestSentRef.current) {
+        await new Promise((tapDelayResolve) => setTimeout(tapDelayResolve, 2200));
+      }
+    }
+    return true;
+  }, [armNativeAutoEnterWatch, finishAutoEnter]);
+
   const tryAutoEnter = useCallback(async (points) => {
     const ship = points?.ship;
     if (!ship || autoEnterBusyRef.current) { return; }
@@ -259,16 +497,27 @@ export function FoeSyncProvider({ children }) {
     setAutoEnterLog([{ step: 'start', at: Date.now() }]);
 
     const hasRecordedPan = scrollDx !== 0 || scrollDy !== 0;
-    if (Platform.OS !== 'android' || !hasRecordedPan) {
+    if (Platform.OS !== 'android') {
       if (!injectAutoEnter(scrollDx, scrollDy)) { finishAutoEnter(); }
       return;
     }
 
     const reactTag = Number(webViewTagRef.current);
-    const viewportWidth = Number(ship.viewportW || ship.canvasW);
-    const viewportHeight = Number(ship.viewportH || ship.canvasH);
+    // ВАЖЛИВО: беремо РЕАЛЬНИЙ поточний розмір вікна гри (не той, що був
+    // записаний під час калібрування). Нативний swipe/tap приймає частку
+    // (ratio) і множить її на СВІЙ, актуальний webView.width/height — якщо
+    // тут підставити старий, записаний розмір (напр. з калібрування під
+    // панеллю кнопок), а зараз вікно іншого розміру (напр. тихий вхід на
+    // весь екран, без панелі) — та сама частка помножиться на інше число,
+    // і записана кількість пікселів прокрутки/кліка "розтягнеться" чи
+    // "стиснеться" неправильно. Тому ratio завжди рахуємо від АКТУАЛЬНОГО
+    // розміру, а не від того, що зберігся в calibPoints.
+    const liveProbe = await requestInteractionProbe();
+    const viewportWidth = Number(liveProbe?.rect?.width) || Number(ship.viewportW || ship.canvasW);
+    const viewportHeight = Number(liveProbe?.rect?.height) || Number(ship.viewportH || ship.canvasH);
     if (
-      typeof FoeWebViewGesture?.swipe !== 'function' ||
+      (hasRecordedPan && typeof FoeWebViewGesture?.swipe !== 'function') ||
+      typeof FoeWebViewGesture?.tap !== 'function' ||
       !Number.isInteger(reactTag) ||
       reactTag <= 0 ||
       !Number.isFinite(viewportWidth) ||
@@ -277,7 +526,7 @@ export function FoeSyncProvider({ children }) {
       viewportHeight <= 0
     ) {
       setAutoEnterLog((prev) => [...prev, {
-        step: 'native_pan_failed',
+        step: 'native_tap_failed',
         target: 'міст або розміри WebView недоступні — потрібна нова Android-збірка/калібровка',
         at: Date.now(),
       }].slice(-20));
@@ -285,27 +534,38 @@ export function FoeSyncProvider({ children }) {
       return;
     }
 
-    setAutoEnterLog((prev) => [...prev, {
-      step: 'panning', target: 'Android MotionEvent', at: Date.now(),
-    }].slice(-20));
+    let failureStep = hasRecordedPan ? 'native_pan_failed' : 'native_tap_failed';
     try {
-      await FoeWebViewGesture.swipe(
+      if (hasRecordedPan) {
+        setAutoEnterLog((prev) => [...prev, {
+          step: 'panning', target: 'Android MotionEvent', at: Date.now(),
+        }].slice(-20));
+        await FoeWebViewGesture.swipe(
+          reactTag,
+          scrollDx / viewportWidth,
+          scrollDy / viewportHeight
+        );
+        setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      failureStep = 'native_tap_failed';
+      const usedNativeTap = await runNativeAutoEnterTaps({
         reactTag,
-        scrollDx / viewportWidth,
-        scrollDy / viewportHeight
-      );
-      setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (!injectAutoEnter(0, 0)) { finishAutoEnter(); }
+        x: shipX,
+        y: shipY,
+        viewportWidth,
+        viewportHeight,
+      });
+      if (!usedNativeTap) finishAutoEnter();
     } catch (error) {
       setAutoEnterLog((prev) => [...prev, {
-        step: 'native_pan_failed',
-        target: String(error?.code || 'невідома помилка'),
+        step: failureStep,
+        target: [error?.code, error?.message].filter(Boolean).join(': ') || 'невідома помилка',
         at: Date.now(),
       }].slice(-20));
       finishAutoEnter();
     }
-  }, [finishAutoEnter]);
+  }, [finishAutoEnter, runNativeAutoEnterTaps, requestInteractionProbe]);
   // ТИМЧАСОВО: клік на нерухомій точці (без скролу) — щоб перевірити, чи
   // винен скрол камери, а не сам механізм синтетичного кліка.
   const tryProbeClick = useCallback((point) => {
@@ -315,20 +575,6 @@ export function FoeSyncProvider({ children }) {
       `window.__foeSynthClickAt && window.__foeSynthClickAt(${point.clientX}, ${point.clientY}); true;`
     );
   }, []);
-
-  // ТИМЧАСОВО: розмір/позиція canvas гри без тапу (потрібно, щоб знати, куди
-  // саме на екрані центрувати корабель, і без жодного калібрування).
-  const getCanvasRect = useCallback(() => new Promise((resolve) => {
-    if (!webViewRef.current) { resolve(null); return; }
-    canvasRectResolverRef.current = resolve;
-    webViewRef.current.injectJavaScript('window.__foeGetCanvasRect && window.__foeGetCanvasRect(); true;');
-    setTimeout(() => {
-      if (canvasRectResolverRef.current === resolve) {
-        canvasRectResolverRef.current = null;
-        resolve(null);
-      }
-    }, 1500);
-  }), []);
 
   // ТИМЧАСОВО (експеримент): вхід у поселення БЕЗ ручного калібрування —
   // перевіряє, що потрібні дані з мапи міста (корабель + ратуша) вже є, тоді
@@ -346,40 +592,68 @@ export function FoeSyncProvider({ children }) {
       ![ship.x, ship.y, townhall.x, townhall.y].every(Number.isFinite)
     ) {
       setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      finishAutoEnter();
       return;
     }
     if (
       Platform.OS !== 'android' ||
-      typeof FoeWebViewGesture?.swipe !== 'function'
+      typeof FoeWebViewGesture?.swipe !== 'function' ||
+      typeof FoeWebViewGesture?.tap !== 'function'
     ) {
       setAutoEnterLog([{ step: 'autoaim_unsupported', at: Date.now() }]);
-      return;
-    }
-    const reactTag = Number(webViewTagRef.current);
-    if (!Number.isInteger(reactTag) || reactTag <= 0) {
-      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      finishAutoEnter();
       return;
     }
 
     autoEnterBusyRef.current = true;
+    const startGeneration = webGenerationRef.current;
     setAutoEnterBusy(true);
-    setAutoEnterLog([{ step: 'autoaim_start', at: Date.now() }]);
+    setAutoEnterLog([
+      { step: 'autoaim_start', at: Date.now() },
+      { step: 'interaction_wait', at: Date.now() },
+    ]);
+
+    // URL/DOM-евристика `authed` означає лише, що портал пропустив нас до
+    // /game/index. Для дотику цього замало: OpenFL має вже створити canvas,
+    // отримати реальний viewport і стабільно відмалювати кілька кадрів.
+    const interaction = await waitForInteractiveGame();
+    if (!autoEnterBusyRef.current) return;
+    if (webGenerationRef.current !== startGeneration) {
+      finishAutoEnter();
+      return;
+    }
+    const rect = interaction?.rect;
+    if (!rect || !rect.width || !rect.height) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'interaction_not_ready',
+        at: Date.now(),
+      }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+    setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
+    const readyDocumentEpoch = webDocumentEpochRef.current;
+
+    const reactTag = Number(webViewTagRef.current);
+    if (!Number.isInteger(reactTag) || reactTag <= 0) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'autoaim_missing_data',
+        target: 'WebView ще не має нативного tag',
+        at: Date.now(),
+      }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
 
     // Спроба закрити спливаюче вікно "останні події" (якщо є) ще до
     // прокрутки/кліка — інакше клік по кораблю може лише закрити його.
     webViewRef.current?.injectJavaScript('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
-    // Canvas може ще не існувати відразу після завантаження сторінки
-    // (особливо в тихому фоновому вході, де немає людини, яка чекає оком) —
-    // тому пробуємо кілька разів із паузою, а не один раз.
-    let rect = null;
-    for (let attempt = 0; attempt < 5 && !(rect && rect.width && rect.height); attempt += 1) {
-      if (attempt > 0) { await new Promise((resolve) => setTimeout(resolve, 800)); }
-      rect = await getCanvasRect();
-    }
-    if (!rect || !rect.width || !rect.height) {
-      setAutoEnterLog((prev) => [...prev, { step: 'autoaim_no_canvas', at: Date.now() }].slice(-20));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (
+      !autoEnterBusyRef.current ||
+      webGenerationRef.current !== startGeneration ||
+      webDocumentEpochRef.current !== readyDocumentEpoch
+    ) {
       finishAutoEnter();
       return;
     }
@@ -406,65 +680,108 @@ export function FoeSyncProvider({ children }) {
       return;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    if (!webViewRef.current) { finishAutoEnter(); return; }
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    if (
+      !autoEnterBusyRef.current ||
+      !webViewRef.current ||
+      webGenerationRef.current !== startGeneration ||
+      webDocumentEpochRef.current !== readyDocumentEpoch
+    ) {
+      finishAutoEnter();
+      return;
+    }
     const clampX = rect.left + rect.width * SHIP_TARGET_X_RATIO;
     const clampY = rect.top + rect.height * SHIP_CLAMP_Y_RATIO;
     webViewRef.current.injectJavaScript(
-      `window.__foeShowAimMarker && window.__foeShowAimMarker(${clampX}, ${clampY});
-       window.__foeAutoEnterTest && window.__foeAutoEnterTest(${clampX}, ${clampY}, 0, 0); true;`
+      `window.__foeShowAimMarker && window.__foeShowAimMarker(${clampX}, ${clampY}); true;`
     );
-    if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
-    autoEnterTimeoutRef.current = setTimeout(() => {
-      setAutoEnterLog((prev) => [...prev, { step: 'enter_failed', at: Date.now() }].slice(-20));
+    try {
+      const usedNativeTap = await runNativeAutoEnterTaps({
+        reactTag,
+        x: clampX,
+        y: clampY,
+        viewportWidth: Number(interaction.viewportW),
+        viewportHeight: Number(interaction.viewportH),
+      });
+      if (!usedNativeTap) {
+        setAutoEnterLog((prev) => [...prev, {
+          step: 'native_tap_failed',
+          target: 'потрібна нова Android-збірка з методом tap',
+          at: Date.now(),
+        }].slice(-20));
+        finishAutoEnter();
+      }
+    } catch (error) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'native_tap_failed',
+        target: [error?.code, error?.message].filter(Boolean).join(': ') || 'невідома помилка',
+        at: Date.now(),
+      }].slice(-20));
       finishAutoEnter();
-    }, 35 * 1000);
-  }, [finishAutoEnter, getCanvasRect]);
+    }
+  }, [finishAutoEnter, runNativeAutoEnterTaps, waitForInteractiveGame]);
 
-  // ТИМЧАСОВО: повністю фоновий, непомітний вхід у поселення. Монтує вікно
-  // гри НАНОВО (webKey, як «Відкрити гру») на повний розмір — авто-наведення
-  // рахує координати правильно тільки з реальним розміром canvas, — але
-  // невидиме (opacity 0, поза дотиком користувача). Заходить у поселення тим
-  // самим механізмом (tryAutoAimEnter), тоді відразу стискається назад до
-  // звичного прихованого 1×1, щоб не тримати повнорозмірний рендер довше,
-  // ніж треба для одного входу.
+  // "Тихий" вхід у поселення на ВЖЕ прогрітому інстансі WebView — без
+  // ручного тапу КОЖНОГО разу, але на основі ОДНОРАЗОВОЇ ручної калібровки
+  // (calibPoints.ship), а не здогадної формули "з ігрових координат" —
+  // та формула (tryAutoAimEnter) виявилась ненадійною й покинута (див.
+  // пам'ять settlement-diag-temp-screen). tryAutoEnter з реальними
+  // координатами вже підтверджено надійний через кнопку "Тест".
   const autoEnterSettlementQuietly = useCallback(async () => {
     if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
+    if (webPinnedRef.current) { return; }
     if (foundRef.current?.settlementMap) { return; }
-    const entities = foundRef.current?.cityMap?.entities || [];
-    const ship = entities.find((e) => e.type === 'outpost_ship');
-    const townhall = entities.find((e) => e.type === 'main_building');
-    if (!ship || !townhall) { return; }
+    const ship = calibPoints?.ship;
+    if (!ship) {
+      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      return;
+    }
 
     stealthEnteringRef.current = true;
+    setWebVisible(false);
     setStealthEntering(true);
+    // КРИТИЧНО: записана прокрутка (scrollDx/scrollDy) розрахована на камеру
+    // ТІЛЬКИ-ЩО завантаженої гри (як після "Відкрити гру" вручну) — а не на
+    // вже запущений фоновий інстанс, що встиг накопичити довільний власний
+    // стан. Тому "тихий" вхід теж має перезавантажити гру з нуля (webKey),
+    // інакше клік по записаних координатах поцілить будь-куди, залежно від
+    // того, де камера випадково опинилась у фоні.
     setWebKey((k) => k + 1);
+    setAutoEnterLog([{ step: 'interaction_wait', at: Date.now() }]);
 
     try {
-      await new Promise((resolve) => {
-        pendingAuthedResolveRef.current = resolve;
-        setTimeout(() => {
-          if (pendingAuthedResolveRef.current === resolve) {
-            pendingAuthedResolveRef.current = null;
-            resolve();
-          }
-        }, 15000);
-      });
-      // Дати грі час доробити початкову ініціалізацію (вибір світу, побудова
-      // canvas тощо) перш ніж рахувати його розмір і клікати. У видимому
-      // режимі на це фактично йшов час, поки людина сама дивилась на екран
-      // і тицяла кнопку — тут цього немає, тож пауза довша.
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // "Тест" (ручний) не чекає готовності гри, бо людина вже бачить її на
+      // екрані перш ніж натиснути кнопку. Тут цього немає — вікно щойно
+      // розгорнулось до реального розміру, тож чекаємо, поки сцена гри
+      // (canvas/OpenFL) справді стане інтерактивною, перш ніж клікати.
+      // waitForInteractiveGame() дивиться на autoEnterBusyRef — виставляємо
+      // його свідомо, а перед самим tryAutoEnter знімаємо назад, бо той сам
+      // виставляє його з нуля і вважає true "вже триває інша спроба".
+      autoEnterBusyRef.current = true;
+      const ready = await waitForInteractiveGame();
+      autoEnterBusyRef.current = false;
+      if (!ready) {
+        setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
+        return;
+      }
+      setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
 
       await new Promise((resolve) => {
         pendingAutoEnterResolveRef.current = resolve;
-        tryAutoAimEnter();
+        tryAutoEnter(calibPoints).catch((error) => {
+          setAutoEnterLog((prev) => [...prev, {
+            step: 'error',
+            target: String(error?.message || error || 'невідома помилка'),
+            at: Date.now(),
+          }].slice(-20));
+          finishAutoEnter();
+        });
         setTimeout(() => {
           if (pendingAutoEnterResolveRef.current === resolve) {
             pendingAutoEnterResolveRef.current = null;
             resolve();
           }
-        }, 40 * 1000);
+        }, 120 * 1000);
       });
       // Невеликий запас, щоб встигла прийти й розпарситись відповідь мапи
       // поселення (found.settlementMap) до того, як згорнемо вікно.
@@ -472,8 +789,81 @@ export function FoeSyncProvider({ children }) {
     } finally {
       setStealthEntering(false);
       stealthEnteringRef.current = false;
+      autoEnterBusyRef.current = false;
     }
-  }, [tryAutoAimEnter]);
+  }, [finishAutoEnter, tryAutoEnter, calibPoints, waitForInteractiveGame]);
+
+  // ТИМЧАСОВО (налагодження): робить рівно те саме, що "тихий" вхід —
+  // невидиме перезавантаження + прокрутка записаними координатами — але
+  // НЕ клікає. Натомість малює постійний маркер там, куди мав би клацнути,
+  // і показує гру користувачу (як після "Відкрити гру"), щоб звірити оком,
+  // куди реально доїхала прокрутка, і скоригувати calibPoints за скріном.
+  const debugScrollAndReveal = useCallback(async () => {
+    if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
+    const ship = calibPoints?.ship;
+    const shipX = Number(ship?.clientX);
+    const shipY = Number(ship?.clientY);
+    const scrollDx = Number(ship?.scrollDx || 0);
+    const scrollDy = Number(ship?.scrollDy || 0);
+    if (!ship || ![shipX, shipY].every(Number.isFinite)) {
+      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      return;
+    }
+    if (Platform.OS !== 'android' || typeof FoeWebViewGesture?.swipe !== 'function') {
+      setAutoEnterLog([{ step: 'autoaim_unsupported', at: Date.now() }]);
+      return;
+    }
+
+    stealthEnteringRef.current = true;
+    setWebVisible(false);
+    setStealthEntering(true);
+    setWebKey((k) => k + 1);
+    setAutoEnterLog([{ step: 'interaction_wait', at: Date.now() }]);
+    autoEnterBusyRef.current = true;
+
+    try {
+      const ready = await waitForInteractiveGame();
+      if (!ready) {
+        setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
+        return;
+      }
+      setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
+
+      webViewRef.current?.injectJavaScript('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      const reactTag = Number(webViewTagRef.current);
+      const liveProbe = await requestInteractionProbe();
+      const viewportWidth = Number(liveProbe?.rect?.width) || Number(ship.viewportW || ship.canvasW);
+      const viewportHeight = Number(liveProbe?.rect?.height) || Number(ship.viewportH || ship.canvasH);
+      const hasRecordedPan = scrollDx !== 0 || scrollDy !== 0;
+
+      if (
+        hasRecordedPan &&
+        Number.isInteger(reactTag) && reactTag > 0 &&
+        Number.isFinite(viewportWidth) && viewportWidth > 0 &&
+        Number.isFinite(viewportHeight) && viewportHeight > 0
+      ) {
+        setAutoEnterLog((prev) => [...prev, { step: 'panning', target: 'Android MotionEvent', at: Date.now() }].slice(-20));
+        await FoeWebViewGesture.swipe(reactTag, scrollDx / viewportWidth, scrollDy / viewportHeight);
+        setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+
+      webViewRef.current?.injectJavaScript(
+        `window.__foeShowAimMarker && window.__foeShowAimMarker(${shipX}, ${shipY}, 600000); true;`
+      );
+      setAutoEnterLog((prev) => [...prev, { step: 'entered', target: 'маркер показано, гра відкрита', at: Date.now() }].slice(-20));
+    } finally {
+      // Свідомо лишаємо гру видимою (не ховаємо назад) — саме для того,
+      // щоб користувач роздивився маркер і зробив скріншот.
+      setStealthEntering(false);
+      stealthEnteringRef.current = false;
+      autoEnterBusyRef.current = false;
+      setWebPinned(true);
+      setWebVisible(true);
+    }
+  }, [waitForInteractiveGame, requestInteractionProbe, calibPoints]);
 
   // Скільки екранів зараз "замовили" синхронізацію (див. useFoeSyncActive).
   const [demand, setDemand] = useState(0);
@@ -544,12 +934,35 @@ export function FoeSyncProvider({ children }) {
     setSeen(new Set());
     setRawLog([]);
     webViewTagRef.current = null;
+    cityMapDocumentEpochRef.current = null;
+    webDocumentIdRef.current = null;
+    if (interactionProbeResolverRef.current) {
+      const pending = interactionProbeResolverRef.current;
+      interactionProbeResolverRef.current = null;
+      clearTimeout(pending.timeoutId);
+      pending.resolve(null);
+    }
+    if (nativeWatchResolverRef.current) {
+      const pending = nativeWatchResolverRef.current;
+      nativeWatchResolverRef.current = null;
+      clearTimeout(pending.timeoutId);
+      pending.resolve(null);
+    }
     if (autoEnterTimeoutRef.current) {
       clearTimeout(autoEnterTimeoutRef.current);
       autoEnterTimeoutRef.current = null;
     }
+    activeAutoEnterNonceRef.current = null;
+    autoEnterRequestSentRef.current = false;
     autoEnterBusyRef.current = false;
     setAutoEnterBusy(false);
+    if (pendingAutoEnterResolveRef.current) {
+      const resolve = pendingAutoEnterResolveRef.current;
+      pendingAutoEnterResolveRef.current = null;
+      resolve();
+    }
+    stealthEnteringRef.current = false;
+    setStealthEntering(false);
     setWebPinned(false);
     setBuildingDefs(null);
     setDefsProgress(null);
@@ -601,7 +1014,8 @@ export function FoeSyncProvider({ children }) {
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
   const injectedJs =
-    `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n${FOE_INTERCEPTOR_JS}`;
+    `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n` +
+    `window.__FOE_SYNC_GENERATION=${JSON.stringify(webKey)};\n${FOE_INTERCEPTOR_JS}`;
 
   const acceptConsent = useCallback(async () => {
     try {
@@ -624,6 +1038,14 @@ export function FoeSyncProvider({ children }) {
     }
   }, []);
 
+  const onWebViewLoadStart = useCallback((event) => {
+    rememberWebViewTag(event);
+    webDocumentEpochRef.current += 1;
+    webDocumentIdRef.current = null;
+    cityMapDocumentEpochRef.current = null;
+    webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
+  }, [rememberWebViewTag]);
+
   const onMessage = useCallback((event) => {
     rememberWebViewTag(event);
     let msg;
@@ -633,21 +1055,45 @@ export function FoeSyncProvider({ children }) {
       return;
     }
     if (!msg || !msg.__foeSync) return;
+    if (
+      msg.generation != null &&
+      String(msg.generation) !== String(webGenerationRef.current)
+    ) {
+      return;
+    }
 
+    const messageDocumentId = msg.documentId == null ? null : String(msg.documentId);
     if (msg.kind === 'ready') {
+      if (!messageDocumentId) return;
+      if (
+        webDocumentIdRef.current &&
+        webDocumentIdRef.current !== messageDocumentId
+      ) {
+        return;
+      }
+      webDocumentIdRef.current = messageDocumentId;
       setHealth((h) => ({ ...h, ready: true }));
       return;
     }
+    if (!messageDocumentId || messageDocumentId !== webDocumentIdRef.current) {
+      return;
+    }
+
+    if (msg.kind === 'interactionProbe') {
+      const pending = interactionProbeResolverRef.current;
+      if (pending && String(msg.nonce) === String(pending.nonce)) {
+        interactionProbeResolverRef.current = null;
+        clearTimeout(pending.timeoutId);
+        pending.resolve(msg.probe || null);
+      }
+      return;
+    }
+
     if (msg.kind === 'authed') {
       // Логін/пароль прийнято — вхід у гру підтверджено. Прибираємо вікно гри
       // з екрана; WebView лишається змонтованим і доробляє вибір світу та
       // збір даних у фоні. Виняток — коли вікно закріплене вручну (діагностика).
       if (!webPinnedRef.current) setWebVisible(false);
-      if (pendingAuthedResolveRef.current) {
-        const resolve = pendingAuthedResolveRef.current;
-        pendingAuthedResolveRef.current = null;
-        resolve();
-      }
       return;
     }
     if (msg.kind === 'packet') {
@@ -663,20 +1109,40 @@ export function FoeSyncProvider({ children }) {
       return;
     }
     if (msg.kind === 'autoEnter' && msg.step) {
+      const messageNonce = msg.attemptId == null ? null : String(msg.attemptId);
+      if (activeAutoEnterNonceRef.current && !messageNonce) {
+        return;
+      }
+      if (
+        messageNonce &&
+        messageNonce !== String(activeAutoEnterNonceRef.current || '')
+      ) {
+        return;
+      }
+      if (msg.step === 'watch_armed') {
+        const pending = nativeWatchResolverRef.current;
+        if (
+          pending &&
+          messageNonce === String(pending.nonce) &&
+          String(msg.generation) === String(pending.generation)
+        ) {
+          nativeWatchResolverRef.current = null;
+          clearTimeout(pending.timeoutId);
+          pending.resolve(pending.nonce);
+        }
+      }
+      if (msg.step === 'request_sent') {
+        autoEnterRequestSentRef.current = true;
+      }
       // ТИМЧАСОВО: живий лог тестового автокліка.
       setAutoEnterLog((prev) => [...prev, {
         step: msg.step, gridId: msg.gridId, target: msg.target, n: msg.n, at: msg.at || Date.now(),
       }].slice(-20));
-      if (['entered', 'wrong_grid', 'enter_failed', 'error'].includes(msg.step)) {
+      if (
+        ['entered', 'wrong_grid', 'enter_failed', 'no_request', 'request_no_response', 'error']
+          .includes(msg.step)
+      ) {
         finishAutoEnter();
-      }
-      return;
-    }
-    if (msg.kind === 'canvasRect') {
-      // ТИМЧАСОВО: відповідь на запит розміру canvas для авто-наведення.
-      if (canvasRectResolverRef.current) {
-        canvasRectResolverRef.current(msg.rect || null);
-        canvasRectResolverRef.current = null;
       }
       return;
     }
@@ -754,7 +1220,14 @@ export function FoeSyncProvider({ children }) {
     if (msg.kind === 'data') {
       if (msg.player && msg.player.id) setPlayer(msg.player);
       if (msg.found && typeof msg.found === 'object') {
+        const hasSettlementMap = !!msg.found.settlementMap;
+        if (msg.found.cityMap) {
+          cityMapDocumentEpochRef.current = webDocumentEpochRef.current;
+        }
         setFound((prev) => ({ ...prev, ...msg.found }));
+        if (hasSettlementMap && autoEnterBusyRef.current) {
+          finishAutoEnter();
+        }
       }
     }
   }, [finishAutoEnter, rememberWebViewTag]);
@@ -959,7 +1432,7 @@ export function FoeSyncProvider({ children }) {
 
   // Приховане вікно гри вантажимо лише коли є замовник (або доробка збору,
   // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
-  const webActive = consent === 'yes' && !!gameUrl && (engaged || linger);
+  const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering);
 
   const value = {
     guildId,
@@ -983,6 +1456,7 @@ export function FoeSyncProvider({ children }) {
     tryProbeClick,
     tryAutoAimEnter,
     autoEnterSettlementQuietly,
+    debugScrollAndReveal,
     stealthEntering,
     autoEnterLog,
     autoEnterBusy,
@@ -1005,7 +1479,7 @@ export function FoeSyncProvider({ children }) {
       {children}
       {webActive ? (
         <View
-          pointerEvents={webVisible ? 'auto' : 'none'}
+          pointerEvents={webVisible || stealthEntering ? 'auto' : 'none'}
           style={
             webVisible
               ? {
@@ -1019,18 +1493,20 @@ export function FoeSyncProvider({ children }) {
                 }
               : stealthEntering
                 ? {
-                    // ВАЖЛИВО: НЕ від'ємний zIndex — інакше Android може
-                    // вважати WebView "поза екраном" і притримувати його
-                    // рендеринг/JS, через що вся авто-навігація тихо виснуть.
-                    // opacity:0 + pointerEvents:'none' (див. вище) достатньо,
-                    // щоб лишатись невидимим і не заважати дотикам.
+                    // ВАЖЛИВО: НЕ opacity:0 і НЕ від'ємний zIndex — обидва
+                    // змушували Android/WebView вважати вікно "невидимим" і
+                    // притримувати рендер/requestAnimationFrame гри, через що
+                    // клік по кораблю ніколи не спрацьовував (enter_failed).
+                    // Тому WebView тут технічно ПОВНІСТЮ видиме (як при
+                    // ручному вході) — просто накрите власним непрозорим
+                    // екраном завантаження нижче, який і бачить користувач.
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     right: 0,
                     bottom: 0,
                     zIndex: 9999,
-                    opacity: 0,
+                    backgroundColor: '#0f1115',
                   }
                 : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
@@ -1235,9 +1711,24 @@ export function FoeSyncProvider({ children }) {
             mixedContentMode="always"
             injectedJavaScriptBeforeContentLoaded={injectedJs}
             injectedJavaScript={injectedJs}
-            onLoadStart={rememberWebViewTag}
+            onLoadStart={onWebViewLoadStart}
             onMessage={onMessage}
           />
+          {stealthEntering ? (
+            // Непрозорий екран поверх ЦІЛКОМ видимого WebView — користувач
+            // бачить тільки це, гру під ним — ніколи.
+            <View
+              style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: '#0f1115', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <ActivityIndicator color="#4ea1ff" size="large" />
+              <Text style={{ color: '#9aa3b2', fontSize: 13, marginTop: 12 }}>
+                Отримуємо дані поселення…
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </Ctx.Provider>
