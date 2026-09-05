@@ -33,6 +33,11 @@ const AUTO_STEP_LABELS = {
   pan_target: 'ціль скролу визначена',
   probe_click: 'клік на нерухомій точці — дивись на екран',
   error: 'помилка скрипта',
+  autoaim_start: 'авто-наведення: рахую координати…',
+  autoaim_missing_data: 'авто-наведення: немає даних (потрібна мапа міста з кораблем і ратушею)',
+  autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
+  autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
+  autoaim_panning: 'авто-наведення: прогортаю за формулою…',
 };
 
 function ts(t) {
@@ -76,6 +81,34 @@ export default function SettlementDiag() {
 
   const foundKeys = useMemo(() => Object.keys(found || {}).sort(), [found]);
   const jsEnvTags = useMemo(() => Object.keys(found.jsEnv || {}).sort(), [found.jsEnv]);
+
+  // ТИМЧАСОВО: координати "корабля" й ратуші з уже захопленої мапи міста —
+  // щоб вивести формулу переведення ігрових координат у пікселі екрана і
+  // прибрати ручний тап (див. розмову про автонаведення без калібрування).
+  const autoAimEntities = useMemo(() => {
+    const entities = found.cityMap?.entities || [];
+    const ship = entities.find((e) => e.type === 'outpost_ship') || null;
+    const townhall = entities.find((e) => e.type === 'main_building') || null;
+    return { ship, townhall };
+  }, [found.cityMap]);
+  const autoAimPayload = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          shipWorld: autoAimEntities.ship
+            ? { x: autoAimEntities.ship.x, y: autoAimEntities.ship.y, cid: autoAimEntities.ship.cid }
+            : null,
+          townhallWorld: autoAimEntities.townhall
+            ? { x: autoAimEntities.townhall.x, y: autoAimEntities.townhall.y }
+            : null,
+          shipCalib: calibPoints.ship || null,
+          shipAfterAutoAim: calibPoints.shipAfterAutoAim || null,
+        },
+        null,
+        2
+      ),
+    [autoAimEntities, calibPoints.ship, calibPoints.shipAfterAutoAim]
+  );
 
   const copy = async (label, text) => {
     try {
@@ -209,6 +242,41 @@ export default function SettlementDiag() {
             </View>
           </>
         ) : null}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Дані для авто-наведення (без ручного тапу)</Text>
+        <Text style={styles.note}>
+          Координати "корабля" й ратуші з мапи міста — гра вже надсилає їх сама,
+          тап не потрібен. Разом зі старим калібруванням кліка це дає числа,
+          щоб порахувати формулу переведення ігрових координат у скрол, і
+          прибрати ручний тап зовсім. «Відкрити гру» хоч раз (щоб мапа міста
+          завантажилась), тоді копіюй.
+        </Text>
+        <Text style={styles.mono}>
+          {autoAimEntities.ship
+            ? `корабель (гра): x=${autoAimEntities.ship.x}, y=${autoAimEntities.ship.y}, cid=${autoAimEntities.ship.cid}`
+            : 'корабель: ще не в мапі міста — відкрий гру'}
+          {'\n'}
+          {autoAimEntities.townhall
+            ? `ратуша (гра): x=${autoAimEntities.townhall.x}, y=${autoAimEntities.townhall.y}`
+            : 'ратуша: ще не в мапі міста — відкрий гру'}
+          {calibPoints.shipAfterAutoAim
+            ? `\nкораблик після авто-наведення: canvas ${calibPoints.shipAfterAutoAim.canvasX},${calibPoints.shipAfterAutoAim.canvasY}` +
+              ` · застосована прокрутка ${Math.round(calibPoints.shipAfterAutoAim.appliedDragX || 0)},${Math.round(calibPoints.shipAfterAutoAim.appliedDragY || 0)}`
+            : ''}
+        </Text>
+        <TouchableOpacity
+          onPress={() => copy('autoAim', autoAimPayload)}
+          style={styles.miniBtn}
+          activeOpacity={0.7}
+          disabled={!autoAimEntities.ship && !autoAimEntities.townhall}
+        >
+          <MaterialIcons name="content-copy" size={14} color={C.primary} />
+          <Text style={styles.miniBtnText}>
+            {copied === 'autoAim' ? 'Скопійовано ✓' : 'Копіювати дані для авто-наведення'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.card}>

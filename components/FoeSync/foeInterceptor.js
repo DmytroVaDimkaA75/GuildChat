@@ -106,6 +106,69 @@ export const FOE_INTERCEPTOR_JS = `
       post({ __foeSync: true, kind: 'calibPoint', point: point });
     } catch (err) {}
   }
+  // ТИМЧАСОВО (експеримент): спроба закрити спливаюче вікно "останні події"
+  // чи будь-яке інше модальне вікно, перш ніж клікати по кораблю поселення
+  // (інакше клік по кораблю може лише закрити спливаюче вікно, а не зайти в
+  // поселення). Два незалежні способи, бо невідомо, чи вікно новин частина
+  // canvas гри (тоді працює лише Esc) чи окремий HTML-елемент (тоді працює
+  // пошук кнопки закриття):
+  window.__foeDismissPopups = function () {
+    var closed = false;
+    try {
+      var esc = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true };
+      document.dispatchEvent(new KeyboardEvent('keydown', esc));
+      document.dispatchEvent(new KeyboardEvent('keyup', esc));
+    } catch (err) {}
+    try {
+      var selectors = [
+        '.dialog .close', '.window-frame .close', '[class*="close-button"]',
+        '[class*="CloseButton"]', '[aria-label="Close"]', '[aria-label="Закрити"]',
+      ].join(', ');
+      var btns = document.querySelectorAll(selectors);
+      for (var i = 0; i < btns.length; i++) {
+        var el = btns[i];
+        var r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) { el.click(); closed = true; }
+      }
+    } catch (err) {}
+    post({ __foeSync: true, kind: 'dismissPopups', closed: closed });
+  };
+  // ТИМЧАСОВО: яскравий маркер поверх гри в точці (x,y) — щоб бачити ОКОМ,
+  // куди саме прийшовся синтетичний клік авто-наведення, навіть якщо мапу
+  // міста самé не видно чітко (десктопний режим у вузькому вікні).
+  window.__foeShowAimMarker = function (x, y) {
+    try {
+      var old = document.getElementById('__foeAimMarker');
+      if (old && old.parentNode) { old.parentNode.removeChild(old); }
+      var el = document.createElement('div');
+      el.id = '__foeAimMarker';
+      el.style.cssText = [
+        'position:fixed', 'left:' + (x - 18) + 'px', 'top:' + (y - 18) + 'px',
+        'width:36px', 'height:36px', 'border-radius:50%',
+        'border:3px solid #ff1744', 'box-shadow:0 0 0 3px #fff, 0 0 12px 4px rgba(255,23,68,0.9)',
+        'z-index:2147483647', 'pointer-events:none', 'background:rgba(255,23,68,0.25)',
+      ].join(';');
+      document.body.appendChild(el);
+      setTimeout(function () {
+        if (el.parentNode) { el.parentNode.removeChild(el); }
+      }, 15000);
+    } catch (err) {}
+  };
+  // ТИМЧАСОВО: розмір/позиція canvas гри без тапу — для авто-наведення на
+  // корабель поселення за ігровими координатами (без ручного калібрування).
+  window.__foeGetCanvasRect = function () {
+    try {
+      var cvs = document.querySelector('canvas');
+      var rect = cvs ? cvs.getBoundingClientRect() : null;
+      post({
+        __foeSync: true,
+        kind: 'canvasRect',
+        rect: rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null,
+      });
+    } catch (err) {
+      post({ __foeSync: true, kind: 'canvasRect', rect: null });
+    }
+  };
   document.addEventListener('touchstart', function (e) {
     var t = e.touches && e.touches[0];
     if (t) { handleCalibEvent('touchstart', t.clientX, t.clientY); }
@@ -705,6 +768,41 @@ export const FOE_INTERCEPTOR_JS = `
           }
         }
         found.metaInfo = meta;
+        got = true;
+      }
+
+      // Мапа ПОСЕЛЕННЯ (не головного міста) — приходить окремим викликом
+      // CityMapService.getCityMap із власним gridId (напр. "cultural_outpost"),
+      // а не всередині StartupService.getData, як для головного міста.
+      // Формуємо в тій самій формі {gridId, unlocked_areas, blocked_areas,
+      // entities}, яку вже розуміє FoeCityMap, — щоб можна було відобразити
+      // мапу поселення тим самим компонентом.
+      if (
+        cls === 'CityMapService' && mth === 'getCityMap' && rd &&
+        typeof rd === 'object' && rd.gridId && rd.gridId !== 'main' &&
+        Array.isArray(rd.entities)
+      ) {
+        found.settlementMap = {
+          gridId: rd.gridId,
+          unlocked_areas: rd.unlocked_areas || null,
+          blocked_areas: rd.blocked_areas || null,
+          tilesets: rd.tilesets || null,
+          entities: rd.entities.map(function (me) {
+            if (!me || typeof me !== 'object') { return null; }
+            return {
+              id: me.id,
+              cid: me.cityentity_id,
+              x: (me.x != null ? me.x : (me.position && me.position.x)),
+              y: (me.y != null ? me.y : (me.position && me.position.y)),
+              dir: (me.direction != null ? me.direction : me.rotation),
+              lvl: (me.level != null ? me.level : (me.state && me.state.level)),
+              era: me.era || me.era_id || (me.state && me.state.era) || null,
+              type: me.type,
+              conn: me.connected,
+              runtimeBonuses: compactEntityBonuses(me)
+            };
+          }).filter(Boolean)
+        };
         got = true;
       }
 

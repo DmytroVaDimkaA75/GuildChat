@@ -819,7 +819,7 @@ function ProfileStack() {
 }
 
 // --- DRAWER CONTENT ---
-function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
+function CustomDrawerContent({ onLogout, onManualGuildSwitch, hasTesterAccess, ...props }) {
   const { t } = useTranslation();
   const { guildId, setGuildId } = useContext(GuildContext);
   const [guildName, setGuildName] = useState('');
@@ -927,6 +927,15 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
 
   const handleCultureMenuPress = async () => {
     try {
+      // Тестери й розробники завжди бачать екран "Культурні поселення"
+      // (активне поселення з гри + тимчасові технічні дані), а не
+      // ярлик-пропуск одразу в планувальник/налаштування за збереженим
+      // статусом — незалежно від того, у якому зі своїх світів вони зараз.
+      if (hasTesterAccess) {
+        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
+        return;
+      }
+
       const userId = await AsyncStorage.getItem('userId');
       const activeGuildId = await AsyncStorage.getItem('guildId');
 
@@ -1246,6 +1255,7 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
             {...props}
             onLogout={onLogout}
             onManualGuildSwitch={onManualGuildSwitch}
+            hasTesterAccess={hasTesterAccess}
           />
         )}
         initialRouteName="GBG"

@@ -50,6 +50,26 @@ const {
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// ТИМЧАСОВО: по Y камера впирається в межу мапи (перевірено: запит
+// прокрутки на 686px замість 495px дав ІДЕНТИЧНИЙ результат — canvasY=237
+// обидва рази, той самий canvas 1024×908) — тому для Y досить прокрутити
+// ЗАВІДОМО забагато (вона однаково впреться в межу) і клікнути туди, де
+// корабель щоразу реально опиняється (SHIP_CLAMP_Y_RATIO = 0.261 висоти).
+//
+// По X межі НЕМАЄ — камера просто їде далі й далі на всю запитану відстань
+// (перевірено: 646.7px і 699.4px дали РІЗний, хоч і близький, результат:
+// canvasX 419 і 407). Тому для X — НЕ "із запасом", а якомога точніше
+// виміряне значення: SHIP_DRAG_X_PX (середнє з двох замірів на canvas
+// шириною 1024; масштабування на іншу ширину поки не перевірене).
+// Виміряне 0.261/0.403 влучило (поселення відкрилось), але користувач
+// сказав, що сам тапнув би трохи правіше й трохи вище — невеликий зсув
+// цільової точки клікання (сам скрол/SHIP_DRAG_X_PX не чіпаємо).
+const SHIP_CLAMP_Y_RATIO = 0.261 - 0.03;
+const SHIP_OVERDRIVE_Y_DIR = 1;
+const SHIP_OVERDRIVE_MULT = 2.5; // помножується на висоту canvas
+const SHIP_DRAG_X_PX = -673; // середнє: -699.42 та -646.7
+const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реально опинився після SHIP_DRAG_X_PX (canvasX≈413 з 1024)
+
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
 const gameUrlFromGuildId = (g) => {
   const w = worldIdFromGuildId(g);
@@ -75,6 +95,11 @@ const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків т
   pan_target: 'ціль скролу визначена',
   probe_click: 'клік на нерухомій точці — дивись на екран',
   error: 'помилка скрипта',
+  autoaim_start: 'авто-наведення: рахую координати…',
+  autoaim_missing_data: 'авто-наведення: немає даних (потрібна мапа міста з кораблем і ратушею)',
+  autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
+  autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
+  autoaim_panning: 'авто-наведення: прогортаю за формулою…',
 };
 
 const Ctx = createContext(null);
@@ -123,6 +148,18 @@ export function FoeSyncProvider({ children }) {
   const [webPinned, setWebPinned] = useState(false);
   const webPinnedRef = useRef(false);
   webPinnedRef.current = webPinned;
+  // ТИМЧАСОВО: штучно звужує вікно гри (без іншого телефона), щоб
+  // перевірити, чи авто-наведення в поселення лишається точним на ІНШОМУ
+  // розмірі canvas — бо саме різні екрани, а не різні світи/акаунти, є
+  // реальним ризиком для "працює для будь-кого без калібрування".
+  const [debugShrink, setDebugShrink] = useState(false);
+  // ТИМЧАСОВО: "тихий" автовхід у поселення — вікно гри монтується на повний
+  // розмір (щоб авто-наведення рахувало правильно) але невидиме (opacity 0,
+  // pointerEvents none), користувач нічого не бачить. Окремо від webVisible/
+  // webPinned, щоб не зачіпати ручний потік і панель кнопок.
+  const [stealthEntering, setStealthEntering] = useState(false);
+  const stealthEnteringRef = useRef(false);
+  const pendingAuthedResolveRef = useRef(null);
   const pinGameWindow = useCallback(() => {
     setWebPinned(true);
     setWebVisible(true);
@@ -137,6 +174,17 @@ export function FoeSyncProvider({ children }) {
   // тож замість вгадувати — записуємо, куди САМ користувач тапнув, і зберігаємо.
   const webViewRef = useRef(null);
   const webViewTagRef = useRef(null);
+  const canvasRectResolverRef = useRef(null);
+  // ТИМЧАСОВО: `found` іще не оголошено на цьому рівні файлу (нижче), а
+  // авто-наведення (tryAutoAimEnter) оголошується вище за нього — тож читає
+  // найсвіжіше значення через ref, а не напряму зі стану.
+  const foundRef = useRef({});
+  // ТИМЧАСОВО: світові координати + застосована прокрутка останнього запуску
+  // авто-наведення — щоб, коли користувач тапне на кораблик там, де він
+  // зʼявився ПІСЛЯ цієї прокрутки, отримати другу незалежну точку для
+  // перевірки/уточнення формули (одна точка формулу лише підганяє, не
+  // перевіряє).
+  const lastAutoAimRef = useRef(null);
   const [calibPoints, setCalibPoints] = useState({});
   const armCalibration = useCallback((name) => {
     webViewRef.current?.injectJavaScript(
@@ -166,6 +214,7 @@ export function FoeSyncProvider({ children }) {
   const autoEnterBusyRef = useRef(false);
   const autoEnterTimeoutRef = useRef(null);
   const [autoEnterBusy, setAutoEnterBusy] = useState(false);
+  const pendingAutoEnterResolveRef = useRef(null);
   const finishAutoEnter = useCallback(() => {
     if (autoEnterTimeoutRef.current) {
       clearTimeout(autoEnterTimeoutRef.current);
@@ -173,6 +222,11 @@ export function FoeSyncProvider({ children }) {
     }
     autoEnterBusyRef.current = false;
     setAutoEnterBusy(false);
+    if (pendingAutoEnterResolveRef.current) {
+      const resolve = pendingAutoEnterResolveRef.current;
+      pendingAutoEnterResolveRef.current = null;
+      resolve();
+    }
   }, []);
   useEffect(() => () => {
     if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
@@ -262,6 +316,165 @@ export function FoeSyncProvider({ children }) {
     );
   }, []);
 
+  // ТИМЧАСОВО: розмір/позиція canvas гри без тапу (потрібно, щоб знати, куди
+  // саме на екрані центрувати корабель, і без жодного калібрування).
+  const getCanvasRect = useCallback(() => new Promise((resolve) => {
+    if (!webViewRef.current) { resolve(null); return; }
+    canvasRectResolverRef.current = resolve;
+    webViewRef.current.injectJavaScript('window.__foeGetCanvasRect && window.__foeGetCanvasRect(); true;');
+    setTimeout(() => {
+      if (canvasRectResolverRef.current === resolve) {
+        canvasRectResolverRef.current = null;
+        resolve(null);
+      }
+    }, 1500);
+  }), []);
+
+  // ТИМЧАСОВО (експеримент): вхід у поселення БЕЗ ручного калібрування —
+  // перевіряє, що потрібні дані з мапи міста (корабель + ратуша) вже є, тоді
+  // свідомо прокручує "занадто багато" в перевіреному напрямку (камера сама
+  // впреться в межу мапи) і клікає туди, де корабель тоді реально опиняється
+  // (SHIP_CLAMP_X/Y_RATIO). Якщо позиція невірна — просто не влучить;
+  // калібрування вручну лишається як резерв.
+  const tryAutoAimEnter = useCallback(async () => {
+    if (autoEnterBusyRef.current) { return; }
+    const entities = foundRef.current?.cityMap?.entities || [];
+    const ship = entities.find((e) => e.type === 'outpost_ship');
+    const townhall = entities.find((e) => e.type === 'main_building');
+    if (
+      !ship || !townhall ||
+      ![ship.x, ship.y, townhall.x, townhall.y].every(Number.isFinite)
+    ) {
+      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      return;
+    }
+    if (
+      Platform.OS !== 'android' ||
+      typeof FoeWebViewGesture?.swipe !== 'function'
+    ) {
+      setAutoEnterLog([{ step: 'autoaim_unsupported', at: Date.now() }]);
+      return;
+    }
+    const reactTag = Number(webViewTagRef.current);
+    if (!Number.isInteger(reactTag) || reactTag <= 0) {
+      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
+      return;
+    }
+
+    autoEnterBusyRef.current = true;
+    setAutoEnterBusy(true);
+    setAutoEnterLog([{ step: 'autoaim_start', at: Date.now() }]);
+
+    // Спроба закрити спливаюче вікно "останні події" (якщо є) ще до
+    // прокрутки/кліка — інакше клік по кораблю може лише закрити його.
+    webViewRef.current?.injectJavaScript('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    // Canvas може ще не існувати відразу після завантаження сторінки
+    // (особливо в тихому фоновому вході, де немає людини, яка чекає оком) —
+    // тому пробуємо кілька разів із паузою, а не один раз.
+    let rect = null;
+    for (let attempt = 0; attempt < 5 && !(rect && rect.width && rect.height); attempt += 1) {
+      if (attempt > 0) { await new Promise((resolve) => setTimeout(resolve, 800)); }
+      rect = await getCanvasRect();
+    }
+    if (!rect || !rect.width || !rect.height) {
+      setAutoEnterLog((prev) => [...prev, { step: 'autoaim_no_canvas', at: Date.now() }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+
+    const dx = ship.x - townhall.x;
+    const dy = ship.y - townhall.y;
+    // X — точне виміряне значення (тут немає межі, яка б сама зупинила рух).
+    // Y — свідомо "занадто багато": камера впреться в межу мапи сама.
+    const dragX = SHIP_DRAG_X_PX;
+    const dragY = SHIP_OVERDRIVE_Y_DIR * SHIP_OVERDRIVE_MULT * rect.height;
+    lastAutoAimRef.current = { dx, dy, appliedDragX: dragX, appliedDragY: dragY };
+
+    setAutoEnterLog((prev) => [...prev, { step: 'autoaim_panning', at: Date.now() }].slice(-20));
+    try {
+      await FoeWebViewGesture.swipe(reactTag, dragX / rect.width, dragY / rect.height);
+      setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
+    } catch (error) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'native_pan_failed',
+        target: String(error?.code || 'невідома помилка'),
+        at: Date.now(),
+      }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (!webViewRef.current) { finishAutoEnter(); return; }
+    const clampX = rect.left + rect.width * SHIP_TARGET_X_RATIO;
+    const clampY = rect.top + rect.height * SHIP_CLAMP_Y_RATIO;
+    webViewRef.current.injectJavaScript(
+      `window.__foeShowAimMarker && window.__foeShowAimMarker(${clampX}, ${clampY});
+       window.__foeAutoEnterTest && window.__foeAutoEnterTest(${clampX}, ${clampY}, 0, 0); true;`
+    );
+    if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
+    autoEnterTimeoutRef.current = setTimeout(() => {
+      setAutoEnterLog((prev) => [...prev, { step: 'enter_failed', at: Date.now() }].slice(-20));
+      finishAutoEnter();
+    }, 35 * 1000);
+  }, [finishAutoEnter, getCanvasRect]);
+
+  // ТИМЧАСОВО: повністю фоновий, непомітний вхід у поселення. Монтує вікно
+  // гри НАНОВО (webKey, як «Відкрити гру») на повний розмір — авто-наведення
+  // рахує координати правильно тільки з реальним розміром canvas, — але
+  // невидиме (opacity 0, поза дотиком користувача). Заходить у поселення тим
+  // самим механізмом (tryAutoAimEnter), тоді відразу стискається назад до
+  // звичного прихованого 1×1, щоб не тримати повнорозмірний рендер довше,
+  // ніж треба для одного входу.
+  const autoEnterSettlementQuietly = useCallback(async () => {
+    if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
+    if (foundRef.current?.settlementMap) { return; }
+    const entities = foundRef.current?.cityMap?.entities || [];
+    const ship = entities.find((e) => e.type === 'outpost_ship');
+    const townhall = entities.find((e) => e.type === 'main_building');
+    if (!ship || !townhall) { return; }
+
+    stealthEnteringRef.current = true;
+    setStealthEntering(true);
+    setWebKey((k) => k + 1);
+
+    try {
+      await new Promise((resolve) => {
+        pendingAuthedResolveRef.current = resolve;
+        setTimeout(() => {
+          if (pendingAuthedResolveRef.current === resolve) {
+            pendingAuthedResolveRef.current = null;
+            resolve();
+          }
+        }, 15000);
+      });
+      // Дати грі час доробити початкову ініціалізацію (вибір світу, побудова
+      // canvas тощо) перш ніж рахувати його розмір і клікати. У видимому
+      // режимі на це фактично йшов час, поки людина сама дивилась на екран
+      // і тицяла кнопку — тут цього немає, тож пауза довша.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      await new Promise((resolve) => {
+        pendingAutoEnterResolveRef.current = resolve;
+        tryAutoAimEnter();
+        setTimeout(() => {
+          if (pendingAutoEnterResolveRef.current === resolve) {
+            pendingAutoEnterResolveRef.current = null;
+            resolve();
+          }
+        }, 40 * 1000);
+      });
+      // Невеликий запас, щоб встигла прийти й розпарситись відповідь мапи
+      // поселення (found.settlementMap) до того, як згорнемо вікно.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } finally {
+      setStealthEntering(false);
+      stealthEnteringRef.current = false;
+    }
+  }, [tryAutoAimEnter]);
+
   // Скільки екранів зараз "замовили" синхронізацію (див. useFoeSyncActive).
   const [demand, setDemand] = useState(0);
   const demandRef = useRef(0);
@@ -301,6 +514,7 @@ export function FoeSyncProvider({ children }) {
   const [health, setHealth] = useState({ ready: false, packets: 0, lastAt: 0 });
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({});
+  foundRef.current = found;
   const [seen, setSeen] = useState(() => new Set());
   const [rawLog, setRawLog] = useState([]); // ТИМЧАСОВО: діагностика поселень
   const [iconSheet, setIconSheet] = useState(null);
@@ -429,6 +643,11 @@ export function FoeSyncProvider({ children }) {
       // з екрана; WebView лишається змонтованим і доробляє вибір світу та
       // збір даних у фоні. Виняток — коли вікно закріплене вручну (діагностика).
       if (!webPinnedRef.current) setWebVisible(false);
+      if (pendingAuthedResolveRef.current) {
+        const resolve = pendingAuthedResolveRef.current;
+        pendingAuthedResolveRef.current = null;
+        resolve();
+      }
       return;
     }
     if (msg.kind === 'packet') {
@@ -453,10 +672,24 @@ export function FoeSyncProvider({ children }) {
       }
       return;
     }
+    if (msg.kind === 'canvasRect') {
+      // ТИМЧАСОВО: відповідь на запит розміру canvas для авто-наведення.
+      if (canvasRectResolverRef.current) {
+        canvasRectResolverRef.current(msg.rect || null);
+        canvasRectResolverRef.current = null;
+      }
+      return;
+    }
     if (msg.kind === 'calibPoint' && msg.point && msg.point.name) {
       // ТИМЧАСОВО: справжній дотик користувача — запамʼятовуємо й зберігаємо.
+      // Для 'shipAfterAutoAim' довантажуємо, яку прокрутку ми щойно самі
+      // застосували (для перевірки/уточнення формули авто-наведення).
+      let point = msg.point;
+      if (point.name === 'shipAfterAutoAim' && lastAutoAimRef.current) {
+        point = { ...point, ...lastAutoAimRef.current };
+      }
       setCalibPoints((prev) => {
-        const next = { ...prev, [msg.point.name]: msg.point };
+        const next = { ...prev, [point.name]: point };
         AsyncStorage.setItem(CALIB_KEY, JSON.stringify(next)).catch(() => {});
         return next;
       });
@@ -748,6 +981,9 @@ export function FoeSyncProvider({ children }) {
     resetCalibration,
     tryAutoEnter,
     tryProbeClick,
+    tryAutoAimEnter,
+    autoEnterSettlementQuietly,
+    stealthEntering,
     autoEnterLog,
     autoEnterBusy,
     currentUrl,
@@ -775,13 +1011,28 @@ export function FoeSyncProvider({ children }) {
               ? {
                   position: 'absolute',
                   top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
+                  left: debugShrink ? '12%' : 0,
+                  right: debugShrink ? '12%' : 0,
+                  bottom: debugShrink ? '18%' : 0,
                   zIndex: 9999,
                   backgroundColor: '#0f1115',
                 }
-              : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
+              : stealthEntering
+                ? {
+                    // ВАЖЛИВО: НЕ від'ємний zIndex — інакше Android може
+                    // вважати WebView "поза екраном" і притримувати його
+                    // рендеринг/JS, через що вся авто-навігація тихо виснуть.
+                    // opacity:0 + pointerEvents:'none' (див. вище) достатньо,
+                    // щоб лишатись невидимим і не заважати дотикам.
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 9999,
+                    opacity: 0,
+                  }
+                : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
         >
           {webVisible && webPinned ? (
@@ -803,6 +1054,18 @@ export function FoeSyncProvider({ children }) {
                   <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>Сховати гру</Text>
                 </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                onPress={() => setDebugShrink((v) => !v)}
+                style={{
+                  marginTop: 6, minHeight: 30, borderRadius: 8, alignItems: 'center',
+                  justifyContent: 'center', backgroundColor: debugShrink ? '#ffa51f33' : '#1b2b3b',
+                  borderWidth: 1, borderColor: debugShrink ? '#ffa51f' : '#36516a',
+                }}
+              >
+                <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
+                  {debugShrink ? '✓ Стиснуте вікно (тест іншого екрана) — вимкнути' : 'Стиснути вікно (тест іншого екрана)'}
+                </Text>
+              </TouchableOpacity>
               <Text style={{ color: '#9aa3b2', fontSize: 11, marginTop: 4 }}>
                 Прогорни місто ОДНИМ пальцем (важливо — записуємо сам скрол,
                 щоб «Тест» міг його повторити) до корабля поселення, закрий
@@ -871,6 +1134,66 @@ export function FoeSyncProvider({ children }) {
                   <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Тест точки</Text>
                 </TouchableOpacity>
               </View>
+              <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 6 }}>
+                Експеримент: узагалі без тапу — сам рахує, куди прогорнути, за
+                координатами корабля й ратуші з мапи міста.
+              </Text>
+              <TouchableOpacity
+                disabled={
+                  autoEnterBusy ||
+                  !(found.cityMap?.entities || []).some((e) => e.type === 'outpost_ship') ||
+                  !(found.cityMap?.entities || []).some((e) => e.type === 'main_building')
+                }
+                onPress={tryAutoAimEnter}
+                style={{
+                  minHeight: 36, borderRadius: 8, alignItems: 'center',
+                  justifyContent: 'center', backgroundColor: '#2e7d32', marginTop: 6,
+                  opacity:
+                    autoEnterBusy ||
+                    !(found.cityMap?.entities || []).some((e) => e.type === 'outpost_ship') ||
+                    !(found.cityMap?.entities || []).some((e) => e.type === 'main_building')
+                      ? 0.35
+                      : 1,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                  Авто-наведення (без тапу)
+                </Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 6 }}>
+                Якщо кораблик зараз видно на екрані (навіть не по центру) —
+                тапни по ньому один раз: це друга точка для перевірки формули.
+              </Text>
+              <TouchableOpacity
+                onPress={() => arm('shipAfterAutoAim')}
+                style={{
+                  minHeight: 36, borderRadius: 8, alignItems: 'center',
+                  justifyContent: 'center', marginTop: 6,
+                  backgroundColor: armed === 'shipAfterAutoAim' ? '#ffa51f33' : '#1b2b3b',
+                  borderWidth: 1, borderColor: armed === 'shipAfterAutoAim' ? '#ffa51f' : '#36516a',
+                }}
+              >
+                <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
+                  {calibPoints.shipAfterAutoAim ? '✓ ' : ''}
+                  {armed === 'shipAfterAutoAim' ? 'Чекаю тап…' : 'Кораблик зараз тут'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  webViewRef.current?.injectJavaScript(
+                    'window.__foeDismissPopups && window.__foeDismissPopups(); true;'
+                  )
+                }
+                style={{
+                  minHeight: 32, borderRadius: 8, alignItems: 'center',
+                  justifyContent: 'center', marginTop: 6,
+                  backgroundColor: '#1b2b3b', borderWidth: 1, borderColor: '#36516a',
+                }}
+              >
+                <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
+                  Закрити спливаючі вікна (тест)
+                </Text>
+              </TouchableOpacity>
               {autoEnterLog.length ? (
                 <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 4 }} numberOfLines={2}>
                   {AUTO_STEP_LABELS[autoEnterLog[autoEnterLog.length - 1].step] ||
