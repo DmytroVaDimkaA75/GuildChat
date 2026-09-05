@@ -16,6 +16,7 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
+import com.foechat.mobile.foesync.FoeWebViewGesturePackage
 import com.foechat.mobile.widgets.GbgWidgetBridgePackage
 import com.foechat.mobile.widgets.GbgWidgetRefreshScheduler
 
@@ -26,6 +27,7 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
+              add(FoeWebViewGesturePackage())
               add(GbgWidgetBridgePackage())
             }
 

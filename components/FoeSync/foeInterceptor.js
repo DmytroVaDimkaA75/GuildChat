@@ -42,6 +42,377 @@ export const FOE_INTERCEPTOR_JS = `
     } catch (e) {}
   }
 
+  // --- ТИМЧАСОВО: калібрування кліків (діагностика поселень) ---
+  // Застосунок "озброює" режим через injectJavaScript (window.__foeCalib.mode = 'ship'),
+  // далі просто чекаємо СПРАВЖНІЙ дотик користувача по грі — не заважаємо йому
+  // (не викликаємо preventDefault/stopPropagation), лише записуємо координати.
+  // Слухаємо і touch, і click: гра на телефоні реагує на дотик і часто "гасить"
+  // синтетичний click після нього, тож самого click недостатньо.
+  window.__foeCalib = { mode: null };
+
+  // Стежимо за СУМАРНИМ прогортанням міста пальцем від завантаження сторінки
+  // (не скидається, рахує всі свайпи поспіль). Камера при новому запуску вікна
+  // гри стоїть НЕ там, де під час калібрування — тож перед тестовим кліком
+  // треба спершу відтворити той самий скрол, а вже тоді клікати.
+  var panAccum = { dx: 0, dy: 0 };
+  var panLast = null;
+  var panTouchId = null;
+  document.addEventListener('touchstart', function (e) {
+    // Нативне відтворення вже використовує збережений panAccum. Не додаємо
+    // його до калібровки вдруге, якщо користувач повторить тест у цьому сеансі.
+    if (window.__foeNativePanActive) { panLast = null; panTouchId = null; return; }
+    var t = e.touches && e.touches[0];
+    if (t) { panTouchId = t.identifier; panLast = { x: t.clientX, y: t.clientY }; }
+  }, true);
+  document.addEventListener('touchmove', function (e) {
+    if (window.__foeNativePanActive) { return; }
+    if (!panLast) { return; }
+    var t = null;
+    for (var i = 0; i < e.touches.length; i++) {
+      if (e.touches[i].identifier === panTouchId) { t = e.touches[i]; break; }
+    }
+    if (!t) { t = e.touches[0]; }
+    if (!t) { return; }
+    panAccum.dx += t.clientX - panLast.x;
+    panAccum.dy += t.clientY - panLast.y;
+    panLast = { x: t.clientX, y: t.clientY };
+  }, true);
+  document.addEventListener('touchend', function () {
+    panLast = null;
+    panTouchId = null;
+  }, true);
+
+  function handleCalibEvent(type, clientX, clientY) {
+    try {
+      var mode = window.__foeCalib && window.__foeCalib.mode;
+      if (!mode || clientX == null || clientY == null) { return; }
+      window.__foeCalib.mode = null;
+      var cvs = document.querySelector('canvas');
+      var rect = cvs ? cvs.getBoundingClientRect() : null;
+      var point = {
+        name: mode,
+        via: type,
+        clientX: clientX,
+        clientY: clientY,
+        canvasX: rect ? Math.round(clientX - rect.left) : null,
+        canvasY: rect ? Math.round(clientY - rect.top) : null,
+        canvasW: rect ? Math.round(rect.width) : null,
+        canvasH: rect ? Math.round(rect.height) : null,
+        viewportW: Math.round(window.innerWidth || (rect && rect.width) || 0),
+        viewportH: Math.round(window.innerHeight || (rect && rect.height) || 0),
+        scrollDx: Math.round(panAccum.dx),
+        scrollDy: Math.round(panAccum.dy),
+      };
+      post({ __foeSync: true, kind: 'calibPoint', point: point });
+    } catch (err) {}
+  }
+  document.addEventListener('touchstart', function (e) {
+    var t = e.touches && e.touches[0];
+    if (t) { handleCalibEvent('touchstart', t.clientX, t.clientY); }
+  }, true);
+  document.addEventListener('touchend', function (e) {
+    var t = e.changedTouches && e.changedTouches[0];
+    if (t) { handleCalibEvent('touchend', t.clientX, t.clientY); }
+  }, true);
+  document.addEventListener('click', function (e) {
+    handleCalibEvent('click', e.clientX, e.clientY);
+  }, true);
+
+  // --- ТИМЧАСОВО: тестовий автоклік по збережених координатах ---
+  // Підтвердження — ТІЛЬКИ за відповіддю сервера (CityMapService.getCityMap з
+  // gridId:"cultural_outpost", потім CityMapService.getEntities(["main"])),
+  // не за таймером і не за картинкою — так само, як звіряв Codex.
+  var autoWatch = null; // { cls, mth, matchReq, onMatch, timeoutId }
+  function armWatch(cls, mth, matchReq, onMatch, ms) {
+    if (autoWatch && autoWatch.timeoutId) { clearTimeout(autoWatch.timeoutId); }
+    var to = setTimeout(function () {
+      autoWatch = null;
+      onMatch(null, null);
+    }, ms);
+    autoWatch = { cls: cls, mth: mth, matchReq: matchReq, onMatch: onMatch, timeoutId: to };
+  }
+  function checkAutoWatch(cls, mth, rd, reqData) {
+    if (!autoWatch || cls !== autoWatch.cls || mth !== autoWatch.mth) { return; }
+    if (autoWatch.matchReq && !autoWatch.matchReq(reqData)) { return; }
+    var w = autoWatch;
+    clearTimeout(w.timeoutId);
+    autoWatch = null;
+    w.onMatch(rd, reqData);
+  }
+
+  function dispatchMouseFallback(target, x, y) {
+    var base = {
+      bubbles: true, cancelable: true, composed: true,
+      clientX: x, clientY: y, button: 0, buttons: 1, view: window,
+    };
+    var ptr = Object.assign(
+      { pointerId: 1, pointerType: 'touch', isPrimary: true, width: 1, height: 1 }, base
+    );
+    try { target.dispatchEvent(new PointerEvent('pointerdown', ptr)); } catch (e) {}
+    try { target.dispatchEvent(new MouseEvent('mousedown', base)); } catch (e) {}
+    try { target.dispatchEvent(new PointerEvent('pointerup', ptr)); } catch (e) {}
+    try { target.dispatchEvent(new MouseEvent('mouseup', base)); } catch (e) {}
+    try { target.dispatchEvent(new MouseEvent('click', base)); } catch (e) {}
+  }
+
+  // Повертає рядок з описом реального елемента під точкою (для логу).
+  function synthClick(x, y) {
+    var stackStr = '';
+    try {
+      // Цілимось у РЕАЛЬНИЙ елемент під цією точкою (може бути не canvas,
+      // а прозорий шар кліків поверх нього), а не в перший-ліпший canvas.
+      var target = null;
+      var stack = [];
+      try {
+        target = document.elementFromPoint(x, y);
+        var all = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [];
+        for (var si = 0; si < all.length && si < 6; si++) {
+          var el = all[si];
+          stack.push((el.tagName || '?') + (el.id ? '#' + el.id : '') + (el.className ? '.' + String(el.className).replace(/\s+/g, '.') : ''));
+        }
+      } catch (e) {}
+      if (!target) { target = document.querySelector('canvas') || document.body; }
+      stackStr = stack.join(' > ');
+
+      // Гра на телефоні реагує на дотик (touch), не на мишу. Між "натиснув" і
+      // "відпустив" лишаємо невелику паузу — як у справжнього пальця (0-мс тап
+      // рушій міг зрідка відкидати як підозрілий; звідси нестабільні спрацювання).
+      var touch = null;
+      try {
+        touch = new Touch({
+          identifier: Date.now() % 100000, target: target,
+          clientX: x, clientY: y, pageX: x, pageY: y,
+          screenX: x, screenY: y, radiusX: 1, radiusY: 1, force: 1,
+        });
+      } catch (e) {}
+
+      if (touch) {
+        var touchBase = {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          touches: [touch], targetTouches: [touch], changedTouches: [touch],
+        };
+        try { target.dispatchEvent(new TouchEvent('touchstart', touchBase)); } catch (e) {}
+        setTimeout(function () {
+          try {
+            target.dispatchEvent(new TouchEvent('touchend', Object.assign({}, touchBase, { touches: [], targetTouches: [] })));
+          } catch (e) {}
+          dispatchMouseFallback(target, x, y);
+        }, 90);
+      } else {
+        dispatchMouseFallback(target, x, y);
+      }
+    } catch (e) {}
+    return stackStr;
+  }
+
+  // Відтворює свайп на задану сумарну відстань (dx,dy) кількома кроками —
+  // так само, як реальний палець прогортав би місто до корабля. Викликає cb,
+  // коли рух завершено (не чекає на жодну відповідь сервера — це чисто рух
+  // камери, тут нема чого підтверджувати).
+  function synthPan(dx, dy, cb) {
+    try {
+      if (!dx && !dy) { cb(); return; }
+      var cvs = document.querySelector('canvas') || document.body;
+      var rect = cvs.getBoundingClientRect
+        ? cvs.getBoundingClientRect()
+        : { left: 0, top: 0, width: 400, height: 700 };
+      // Цілимось у РЕАЛЬНИЙ елемент під стартовою точкою руху (як і для кліка) —
+      // раптом там інший шар, ніж перший-ліпший canvas.
+      var target = cvs;
+      var panTargetInfo = '';
+      try {
+        var probeX = rect.left + rect.width / 2;
+        var probeY = rect.top + rect.height / 2;
+        var el = document.elementFromPoint(probeX, probeY);
+        if (el) {
+          target = el;
+          panTargetInfo = (el.tagName || '?') + (el.id ? '#' + el.id : '');
+        }
+      } catch (e) {}
+      post({ __foeSync: true, kind: 'autoEnter', step: 'pan_target', target: panTargetInfo, at: Date.now() });
+      var margin = 40;
+      var maxSegX = Math.max(30, rect.width - margin * 2);
+      var maxSegY = Math.max(30, rect.height - margin * 2);
+
+      // Великий скрол розбиваємо на кілька менших свайпів (як реальна рука),
+      // кожен ПОВНІСТЮ в межах canvas — інакше кінець руху виходить за екран
+      // і рух, схоже, не зараховується.
+      var segments = [];
+      var remDx = dx;
+      var remDy = dy;
+      var guard = 0;
+      while ((Math.abs(remDx) > 1 || Math.abs(remDy) > 1) && guard < 12) {
+        guard += 1;
+        var segDx = Math.max(-maxSegX, Math.min(maxSegX, remDx));
+        var segDy = Math.max(-maxSegY, Math.min(maxSegY, remDy));
+        segments.push({ dx: segDx, dy: segDy });
+        remDx -= segDx;
+        remDy -= segDy;
+      }
+
+      var mkOpts = function (t, empty) {
+        return {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          touches: empty ? [] : [t], targetTouches: empty ? [] : [t], changedTouches: [t],
+        };
+      };
+
+      // Мишине перетягування — ДУБЛЬ до дотикового. Вікно гри видає себе за
+      // десктопний браузер (userAgent), тож перетягування картою гра, схоже,
+      // слухає саме мишею (mousedown/mousemove/mouseup), а не пальцем — на
+      // відміну від простого тапу, який ми й так дублювали і мишею теж.
+      var mouseOpts = function (x, y, buttons) {
+        return {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons: buttons,
+        };
+      };
+
+      function runSegment(idx) {
+        if (idx >= segments.length) { cb(); return; }
+        var seg = segments[idx];
+        // Стартова точка — так, щоб і початок, і кінець руху лишались у межах.
+        var startX = rect.left + Math.max(margin, Math.min(rect.width - margin, (rect.width - seg.dx) / 2));
+        var startY = rect.top + Math.max(margin, Math.min(rect.height - margin, (rect.height - seg.dy) / 2));
+        var steps = 20;
+        var i = 0;
+        var lastTouch = null;
+        var tid = 777000 + idx;
+        try {
+          lastTouch = new Touch({
+            identifier: tid, target: target,
+            clientX: startX, clientY: startY, pageX: startX, pageY: startY,
+            screenX: startX, screenY: startY, radiusX: 1, radiusY: 1, force: 1,
+          });
+        } catch (e) {}
+        try { target.dispatchEvent(new TouchEvent('touchstart', mkOpts(lastTouch || {}))); } catch (e) {}
+        try { target.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, mouseOpts(startX, startY, 1)))); } catch (e) {}
+        try { target.dispatchEvent(new MouseEvent('mousedown', mouseOpts(startX, startY, 1))); } catch (e) {}
+
+        // movementX/movementY браузер зазвичай обчислює сам для справжньої
+        // миші (порівнює із попередньою реальною подією) — у штучних подій
+        // це поле інакше завжди 0. Якщо гра рахує перетягування саме через
+        // нього (а не через різницю clientX між подіями), рух не накопичується.
+        // Тому задаємо його вручну як зсув від попередньої точки.
+        var prevX = startX;
+        var prevY = startY;
+        function step() {
+          i += 1;
+          var progress = i / steps;
+          var cx = startX + seg.dx * progress;
+          var cy = startY + seg.dy * progress;
+          var mvX = cx - prevX;
+          var mvY = cy - prevY;
+          var t2 = null;
+          try {
+            t2 = new Touch({
+              identifier: tid, target: target,
+              clientX: cx, clientY: cy, pageX: cx, pageY: cy,
+              screenX: cx, screenY: cy, radiusX: 1, radiusY: 1, force: 1,
+            });
+          } catch (e) {}
+          if (t2) { lastTouch = t2; try { target.dispatchEvent(new TouchEvent('touchmove', mkOpts(t2))); } catch (e) {} }
+          try {
+            target.dispatchEvent(new PointerEvent('pointermove', Object.assign(
+              { pointerId: 1, pointerType: 'mouse', isPrimary: true }, mouseOpts(cx, cy, 1), { movementX: mvX, movementY: mvY }
+            )));
+          } catch (e) {}
+          try {
+            target.dispatchEvent(new MouseEvent('mousemove', Object.assign(mouseOpts(cx, cy, 1), { movementX: mvX, movementY: mvY })));
+          } catch (e) {}
+          prevX = cx;
+          prevY = cy;
+          if (i < steps) {
+            setTimeout(step, 16);
+          } else {
+            setTimeout(function () {
+              try { target.dispatchEvent(new TouchEvent('touchend', mkOpts(lastTouch || {}, true))); } catch (e) {}
+              try { target.dispatchEvent(new PointerEvent('pointerup', Object.assign({ pointerId: 1, pointerType: 'mouse', isPrimary: true }, mouseOpts(cx, cy, 0)))); } catch (e) {}
+              try { target.dispatchEvent(new MouseEvent('mouseup', mouseOpts(cx, cy, 0))); } catch (e) {}
+              // ТИМЧАСОВО прибрано: колесо миші (wheel) могло само по собі
+              // штовхати камеру на фіксовану дрібну відстань незалежно від
+              // deltaX/deltaY — ізолюємо, чи саме воно давало "дьорнувся".
+              setTimeout(function () { runSegment(idx + 1); }, 90);
+            }, 50);
+          }
+        }
+        // Невелика пауза "утримання" перед початком руху — деякі розпізнавачі
+        // жесту інакше не встигають зрозуміти, що це перетягування, а не тап.
+        setTimeout(step, 150);
+      }
+      runSegment(0);
+    } catch (e) { cb(); }
+  }
+
+  // Без кліка "повернутись у місто": цей запуск вікна гри однаково скоро
+  // закриється/перезавантажиться, тож просто заходимо в поселення останнім
+  // кроком, забираємо карту й відпускаємо вікно — наступного разу воно й так
+  // підʼєднається до гри заново (свіже завантаження = знову головне місто).
+  // Кілька спроб замість однієї: клік зрідка "проскакує" (таймінг), тож
+  // повторюємо, поки не прийде підтвердження або не скінчаться спроби.
+  // Перед кліком спершу відтворюємо збережений скрол — камера при новому
+  // запуску вікна гри інакше стоїть не там, де під час калібрування.
+  window.__foeAutoEnterTest = function (shipX, shipY, scrollDx, scrollDy) {
+    try {
+      function afterPan() {
+        var confirmed = false;
+        var attempts = 0;
+        var maxAttempts = 4;
+
+        armWatch('CityMapService', 'getCityMap', null, function (rd) {
+          confirmed = true;
+          if (rd && rd.gridId === 'cultural_outpost') {
+            post({ __foeSync: true, kind: 'autoEnter', step: 'entered', gridId: rd.gridId, at: Date.now() });
+          } else if (rd && rd.gridId) {
+            post({ __foeSync: true, kind: 'autoEnter', step: 'wrong_grid', gridId: rd.gridId, at: Date.now() });
+          } else {
+            post({ __foeSync: true, kind: 'autoEnter', step: 'enter_failed', at: Date.now() });
+          }
+        }, 11000);
+
+        function attempt() {
+          if (confirmed || attempts >= maxAttempts) { return; }
+          attempts += 1;
+          post({
+            __foeSync: true, kind: 'autoEnter',
+            step: attempts === 1 ? 'click_ship' : 'retry_click', n: attempts, at: Date.now(),
+          });
+          var targetInfo = synthClick(shipX, shipY);
+          if (attempts === 1 && targetInfo) {
+            post({ __foeSync: true, kind: 'autoEnter', step: 'target', target: targetInfo, at: Date.now() });
+          }
+          if (!confirmed && attempts < maxAttempts) { setTimeout(attempt, 2200); }
+        }
+        attempt();
+      }
+
+      if (scrollDx || scrollDy) {
+        post({ __foeSync: true, kind: 'autoEnter', step: 'panning', at: Date.now() });
+        synthPan(scrollDx, scrollDy, function () { setTimeout(afterPan, 300); });
+      } else {
+        afterPan();
+      }
+    } catch (e) {
+      post({ __foeSync: true, kind: 'autoEnter', step: 'error', message: String(e), at: Date.now() });
+    }
+  };
+
+  // ТИМЧАСОВО: перевірка кліка на нерухомій точці (без скролу міста) — щоб
+  // відділити "клік узагалі не працює" від "координати "з'їхали" через скрол
+  // камери між калібруванням і тестом". Підтвердження тут суто візуальне —
+  // дивимось на екран самі, мережевого підтвердження не чекаємо.
+  window.__foeSynthClickAt = function (x, y) {
+    try {
+      post({ __foeSync: true, kind: 'autoEnter', step: 'probe_click', at: Date.now() });
+      var targetInfo = synthClick(x, y);
+      if (targetInfo) {
+        post({ __foeSync: true, kind: 'autoEnter', step: 'target', target: targetInfo, at: Date.now() });
+      }
+    } catch (e) {
+      post({ __foeSync: true, kind: 'autoEnter', step: 'error', message: String(e), at: Date.now() });
+    }
+  };
+
   // Підсумовує масив бонусів від гри.
   // Кожен елемент: { type, value, origin, targetedFeature, entityId, ... }
   function aggregateBoosts(list) {
@@ -137,6 +508,127 @@ export const FOE_INTERCEPTOR_JS = `
 
   var packetNo = 0;
 
+  // --- ТИМЧАСОВО: сирий лог пакетів поселення (карта / квести / ресурси) ---
+  // Дані культурних поселень приходять у OutpostService.getAll (~1.6 МБ), тож
+  // велике сирим не передаємо — робимо компактну СХЕМУ структури + невеликі
+  // під-гілки. Малі пакети (квести, ресурси) передаємо як є.
+  var rawSeq = 0;
+  var lastRawSig = {};
+  var RAWLOG_RE = /outpost|settlement|diploma|quest|chapter|resourcebag|autorefill|startup|citymap|city_map|impediment/i;
+  var BIG_RE = /outpost|settlement|startup|citymap/i;
+  var CAP = 16000;
+
+  // Дістати обʼєкт-карту з відповіді: або rd.city_map (StartupService),
+  // або сам rd (CityMapService.getCityMap).
+  function mapOf(rd) {
+    if (rd && typeof rd === 'object') {
+      if (rd.city_map && typeof rd.city_map === 'object') { return rd.city_map; }
+      if (rd.entities || rd.unlocked_areas || rd.gridId != null) { return rd; }
+    }
+    return null;
+  }
+
+  // Підпис для великих пакетів: OutpostService.getAll — раз за сеанс; карти
+  // (головне місто / поселення) — окремо за gridId + кількістю будівель.
+  function bigSig(key, rd) {
+    var cm = mapOf(rd);
+    if (cm) {
+      var n = (cm.entities && cm.entities.length) || 0;
+      return key + '|grid:' + (cm.gridId != null ? cm.gridId : '?') + '|ent:' + n;
+    }
+    return key;
+  }
+
+  function schemaDump(node, depth) {
+    depth = depth || 0;
+    if (depth > 8) { return '"…"'; }
+    if (node === null) { return 'null'; }
+    var t = typeof node;
+    if (t === 'number' || t === 'boolean') { return String(node); }
+    if (t === 'string') {
+      return JSON.stringify(node.length > 70 ? node.slice(0, 70) + '…' : node);
+    }
+    if (t !== 'object') { return '"' + t + '"'; }
+    if (Object.prototype.toString.call(node) === '[object Array]') {
+      if (!node.length) { return '[]'; }
+      return '[' + node.length + '× ' + schemaDump(node[0], depth + 1) + ']';
+    }
+    var keys = Object.keys(node);
+    var parts = [];
+    for (var i = 0; i < keys.length && i < 80; i++) {
+      parts.push(JSON.stringify(keys[i]) + ':' + schemaDump(node[keys[i]], depth + 1));
+    }
+    if (keys.length > 80) { parts.push('"…+' + (keys.length - 80) + '"'); }
+    return '{' + parts.join(',') + '}';
+  }
+
+  function emitRaw(key, tag, str) {
+    var capped = str.length > CAP
+      ? (str.slice(0, CAP) + '\\u2026[+' + (str.length - CAP) + ' символів]')
+      : str;
+    rawSeq++;
+    post({
+      __foeSync: true,
+      kind: 'rawlog',
+      entry: { seq: rawSeq, t: Date.now(), key: key + tag, size: str.length, json: capped },
+    });
+  }
+
+  function maybeRawLog(key, rd) {
+    try {
+      if (rd == null || !RAWLOG_RE.test(key)) { return; }
+
+      // Велике (OutpostService.getAll ~1.6 МБ, StartupService.getData ~0.5 МБ):
+      // не передаємо сирим цілком — робимо СХЕМУ + невеликі під-гілки. Кожен
+      // унікальний варіант (за bigSig) розбираємо один раз за сеанс.
+      if (BIG_RE.test(key)) {
+        var bsig = bigSig(key, rd);
+        if (lastRawSig[bsig]) { return; }
+        lastRawSig[bsig] = '1';
+        emitRaw(key, ' [СХЕМА]', schemaDump(rd, 0));
+
+        var emitSub = function (path, val) {
+          if (val === undefined) { return; }
+          var s;
+          try { s = JSON.stringify(val); } catch (e) { return; }
+          if (typeof s !== 'string') { return; }
+          if (s.length <= CAP) { emitRaw(path, '', s); }
+          else { emitRaw(path, ' [СХЕМА]', schemaDump(val, 0)); }
+        };
+
+        if (rd && typeof rd === 'object' &&
+            Object.prototype.toString.call(rd) !== '[object Array]') {
+          // Карта та її частини — окремо й першими (це і є карта поселення).
+          var cm = mapOf(rd);
+          if (cm) {
+            var mp = (rd.city_map === cm) ? key + '.city_map' : key + '.map';
+            emitSub(mp + '.entities', cm.entities);
+            if (cm.entities && cm.entities.length) {
+              emitSub(mp + '.entities[0]', cm.entities[0]);
+              emitSub(mp + '.entities[last]', cm.entities[cm.entities.length - 1]);
+            }
+            emitSub(mp + '.unlocked_areas', cm.unlocked_areas);
+            emitSub(mp + '.blocked_areas', cm.blocked_areas);
+            emitSub(mp + '.tilesets', cm.tilesets);
+          }
+          var bk = Object.keys(rd);
+          for (var bi = 0; bi < bk.length && bi < 40; bi++) {
+            if (bk[bi] === 'city_map' || bk[bi] === 'entities') { continue; }
+            emitSub(key + '.' + bk[bi], rd[bk[bi]]);
+          }
+        }
+        return;
+      }
+
+      var rawStr;
+      try { rawStr = JSON.stringify(rd); } catch (e) { return; }
+      var sig = key + ':' + rawStr.length;
+      if (lastRawSig[key] === sig) { return; }
+      lastRawSig[key] = sig;
+      emitRaw(key, '', rawStr);
+    } catch (e) {}
+  }
+
   function handleBody(body) {
     var data;
     try { data = JSON.parse(body); } catch (e) { return; }
@@ -159,6 +651,8 @@ export const FOE_INTERCEPTOR_JS = `
       seen.push(key);
 
       var rd = entry.responseData;
+      maybeRawLog(key, rd);
+      checkAutoWatch(cls, mth, rd, entry.requestData);
 
       if (WANTED[key] && rd != null) {
         found[WANTED[key]] = rd;
@@ -778,6 +1272,110 @@ export const FOE_INTERCEPTOR_JS = `
   }
   setInterval(scanAssets, 4000);
   scanAssets();
+
+  // --- ТИМЧАСОВО: дамп JS-середовища гри (шукаємо гачок «відкрити поселення») ---
+  function jsKeys(o) {
+    try { return Object.getOwnPropertyNames(o); } catch (e) { return []; }
+  }
+  function jsDescribe(v) {
+    var t = typeof v;
+    if (t === 'function') {
+      var src = '';
+      try { src = Function.prototype.toString.call(v).replace(/\\s+/g, ' ').slice(0, 700); } catch (e) {}
+      var own = jsKeys(v).filter(function (k) {
+        return k !== 'length' && k !== 'name' && k !== 'prototype' && k !== 'arguments' && k !== 'caller';
+      }).slice(0, 40);
+      var proto = [];
+      try { if (v.prototype) { proto = jsKeys(v.prototype).slice(0, 40); } } catch (e) {}
+      return { t: 'function', src: src, staticKeys: own, protoKeys: proto };
+    }
+    if (v && t === 'object') {
+      var ks = jsKeys(v).slice(0, 80);
+      var pk = [];
+      try {
+        var p = Object.getPrototypeOf(v);
+        if (p && p !== Object.prototype) { pk = jsKeys(p).slice(0, 80); }
+      } catch (e) {}
+      return { t: 'object', keys: ks, protoKeys: pk };
+    }
+    return { t: t, v: (t === 'string' ? String(v).slice(0, 100) : v) };
+  }
+  var CLASS_RE = /outpost|settlement|cultur|citymap|CityMap|grid|parser|serverrequest|requestqueue|Ajax|proxy|quest|building|entity|hud|menu|view|navigat|context|StartupService|CityMapService/i;
+
+  function dumpJsEnv(tag) {
+    try {
+      var wk = jsKeys(window);
+      var out = { tag: tag, t: Date.now(), keyCount: wk.length };
+
+      // 1) власні (не браузерні) глобали вікна
+      var nonBuiltin = [];
+      for (var i = 0; i < wk.length; i++) {
+        var nm = wk[i];
+        if (/^[A-Z]/.test(nm) && /Element$|Event$|Error$|Observer$|Node$|^Web|^SVG|^HTML|^RTC|^IDB|^Audio|^Media/.test(nm)) { continue; }
+        if (/^(window|document|location|navigator|history|console|self|top|parent|frames|globalThis)$/.test(nm)) { continue; }
+        var tv;
+        try { tv = typeof window[nm]; } catch (e) { continue; }
+        if (tv === 'object' || tv === 'function') { nonBuiltin.push(nm + ':' + tv); }
+      }
+      out.nonBuiltin = nonBuiltin.slice(0, 400).join(',');
+
+      // 2) маркери Haxe / модульних систем
+      var markers = {};
+      ['$hxClasses', '$hx_exports', '$estr', '$s', 'haxe', 'js', 'HxOverrides',
+       'Std', 'Reflect', 'Type', 'EReg', 'Lambda', 'webpackJsonp',
+       '__webpack_require__', 'require', 'define', 'System', 'lime', 'openfl',
+       'MainParser', 'ServerRequestQueue', 'FoEproxy', 'FoEProxy'].forEach(function (n) {
+        try {
+          var v = window[n];
+          if (v == null) { return; }
+          markers[n] = typeof v + (typeof v === 'object' ? ('/' + jsKeys(v).length + 'k') : '');
+        } catch (e) {}
+      });
+      out.markers = markers;
+
+      // 3) реєстр класів Haxe — головна ціль
+      var reg = null;
+      try { reg = window.$hxClasses; } catch (e) {}
+      if (reg && typeof reg === 'object') {
+        var rk = jsKeys(reg);
+        out.hxClassCount = rk.length;
+        var matched = [];
+        for (var r = 0; r < rk.length; r++) {
+          if (CLASS_RE.test(rk[r])) { matched.push(rk[r]); }
+        }
+        out.hxClassMatched = matched.slice(0, 200);
+        // деталі кількох найцікавіших
+        var detail = {};
+        matched.slice(0, 25).forEach(function (cn) {
+          try {
+            var cls = reg[cn];
+            var d = { staticKeys: jsKeys(cls).filter(function (k) {
+              return ['length', 'name', 'prototype', '__name__', '__super__'].indexOf(k) < 0;
+            }).slice(0, 50) };
+            if (cls && cls.prototype) { d.protoKeys = jsKeys(cls.prototype).slice(0, 60); }
+            detail[cn] = d;
+          } catch (e) {}
+        });
+        out.hxClassDetail = detail;
+      } else {
+        out.hxClassCount = 0;
+      }
+
+      // 4) глибокий дамп window.foe і кількох кандидатів
+      var deep = {};
+      ['foe', 'startFoe', 'onGameLoaded', 'preloadFoe'].forEach(function (n) {
+        try { if (window[n] != null) { deep[n] = jsDescribe(window[n]); } } catch (e) {}
+      });
+      out.deep = deep;
+
+      post({ __foeSync: true, kind: 'jsenv', tag: tag, t: out.t, data: out });
+    } catch (e) {
+      post({ __foeSync: true, kind: 'jsenv', tag: tag, t: Date.now(), data: { error: String(e) } });
+    }
+  }
+  setTimeout(function () { dumpJsEnv('t5'); }, 5000);
+  setTimeout(function () { dumpJsEnv('t15'); }, 15000);
+  setTimeout(function () { dumpJsEnv('t35'); }, 35000);
 
   post({ __foeSync: true, kind: 'ready' });
 })();

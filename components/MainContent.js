@@ -53,6 +53,7 @@ import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
 import ObstaclesMap from './Culture/ObstaclesMap';
 import SettlementGamePlanner from './Culture/SettlementGamePlanner';
+import SettlementDiag from './Culture/SettlementDiag'; // ТИМЧАСОВО
 import AddGBComponent from './GB/AddGBComponent';
 import GBChatWindow from './GB/GBChatWindow';
 import GBCenterScreen from './GB/GBCenterScreen';
@@ -546,6 +547,12 @@ function CultureStack() {
           headerStyle: { backgroundColor: COLORS.surfaceHighlight, elevation: 0, shadowOpacity: 0, borderBottomWidth: 0 },
           headerShadowVisible: false,
         })}
+      />
+      {/* ТИМЧАСОВО: діагностика даних поселень */}
+      <Stack.Screen
+        name="SettlementDiag"
+        component={SettlementDiag}
+        options={{ title: 'Технічні дані поселення' }}
       />
       <Stack.Screen
         name="CulturalOptions"

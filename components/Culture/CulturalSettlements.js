@@ -65,6 +65,15 @@ const CulturalSettlements = () => {
 
   return (
     <View style={styles.container}>
+      {/* ТИМЧАСОВО: збір технічних даних поселень для розробника */}
+      <TouchableOpacity
+        style={styles.diagButton}
+        onPress={() => navigation.navigate('SettlementDiag')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.diagButtonText}>🛠 Технічні дані поселення (тимчасово)</Text>
+      </TouchableOpacity>
+
       {SETTLEMENTS.map((item) => (
         <TouchableOpacity
           key={item.value}
@@ -105,6 +114,21 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     color: COLORS.textPrimary,
+  },
+  diagButton: {
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    backgroundColor: 'rgba(78,161,255,0.12)',
+  },
+  diagButtonText: {
+    color: COLORS.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
 

@@ -24,7 +24,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { NativeModules, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
@@ -59,6 +59,23 @@ const gameUrlFromGuildId = (g) => {
 // Скільки тримати приховане вікно гри після того, як зник останній екран-
 // замовник. Вистачає, щоб добрати перші пакети, бонуси й мапу міста.
 const SYNC_LINGER_MS = 90 * 1000;
+const CALIB_KEY = 'foeSettlementCalib_v1'; // ТИМЧАСОВО: діагностика поселень
+const { FoeWebViewGesture } = NativeModules;
+const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків тесту автовходу
+  start: 'старт',
+  click_ship: 'клікаю по кораблю…',
+  retry_click: 'клікаю ще раз…',
+  entered: 'увійшли в поселення ✓ (можна закривати гру)',
+  target: 'ціль визначена',
+  wrong_grid: 'клік потрапив не туди',
+  enter_failed: 'вхід НЕ підтверджено',
+  panning: 'відтворюю скрол до корабля…',
+  pan_done: 'нативний скрол завершено ✓',
+  native_pan_failed: 'нативний скрол не виконано',
+  pan_target: 'ціль скролу визначена',
+  probe_click: 'клік на нерухомій точці — дивись на екран',
+  error: 'помилка скрипта',
+};
 
 const Ctx = createContext(null);
 export const useFoeSync = () => useContext(Ctx);
@@ -100,6 +117,151 @@ export function FoeSyncProvider({ children }) {
   }, []);
   const closeGameWindow = useCallback(() => { setWebVisible(false); }, []);
 
+  // ТИМЧАСОВО (діагностика поселень): "закріплене" вікно гри — його НЕ згортає
+  // авто-приховування після authed / перших пакетів, бо користувач має вручну
+  // зайти у своє поселення. Не перемонтовуємо WebView (граємо в наявному).
+  const [webPinned, setWebPinned] = useState(false);
+  const webPinnedRef = useRef(false);
+  webPinnedRef.current = webPinned;
+  const pinGameWindow = useCallback(() => {
+    setWebPinned(true);
+    setWebVisible(true);
+  }, []);
+  const unpinGameWindow = useCallback(() => {
+    setWebPinned(false);
+    setWebVisible(false);
+  }, []);
+
+  // ТИМЧАСОВО: калібрування кліків для автоматичного входу в поселення.
+  // Координати корабля поселення / кнопки повернення різні на кожному екрані,
+  // тож замість вгадувати — записуємо, куди САМ користувач тапнув, і зберігаємо.
+  const webViewRef = useRef(null);
+  const webViewTagRef = useRef(null);
+  const [calibPoints, setCalibPoints] = useState({});
+  const armCalibration = useCallback((name) => {
+    webViewRef.current?.injectJavaScript(
+      `window.__foeCalib && (window.__foeCalib.mode = ${JSON.stringify(name)}); true;`
+    );
+  }, []);
+  const resetCalibration = useCallback(() => {
+    setCalibPoints({});
+    AsyncStorage.removeItem(CALIB_KEY).catch(() => {});
+  }, []);
+  // Кнопки калібрування живуть ПОВЕРХ гри (у панелі під час webPinned) — бо
+  // гру видно на весь екран, і екран діагностики під нею недосяжний.
+  const [armed, setArmed] = useState(null);
+  const arm = useCallback((name) => {
+    setArmed(name);
+    armCalibration(name);
+  }, [armCalibration]);
+  useEffect(() => {
+    if (armed && calibPoints[armed]) { setArmed(null); }
+  }, [armed, calibPoints]);
+
+  // ТИМЧАСОВО: тестовий автоклік по вже збереженій точці "корабель" — щоб
+  // перевірити, чи гра взагалі реагує на синтетичний клік (не справжній дотик).
+  // Кліка "повернутись у місто" свідомо нема: це вікно гри однаково скоро
+  // закриється/перезавантажиться, тож заходимо в поселення останнім кроком.
+  const [autoEnterLog, setAutoEnterLog] = useState([]);
+  const autoEnterBusyRef = useRef(false);
+  const autoEnterTimeoutRef = useRef(null);
+  const [autoEnterBusy, setAutoEnterBusy] = useState(false);
+  const finishAutoEnter = useCallback(() => {
+    if (autoEnterTimeoutRef.current) {
+      clearTimeout(autoEnterTimeoutRef.current);
+      autoEnterTimeoutRef.current = null;
+    }
+    autoEnterBusyRef.current = false;
+    setAutoEnterBusy(false);
+  }, []);
+  useEffect(() => () => {
+    if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
+  }, []);
+  const tryAutoEnter = useCallback(async (points) => {
+    const ship = points?.ship;
+    if (!ship || autoEnterBusyRef.current) { return; }
+
+    const shipX = Number(ship.clientX);
+    const shipY = Number(ship.clientY);
+    const scrollDx = Number(ship.scrollDx || 0);
+    const scrollDy = Number(ship.scrollDy || 0);
+    if (![shipX, shipY, scrollDx, scrollDy].every(Number.isFinite)) { return; }
+
+    const injectAutoEnter = (dx, dy) => {
+      if (!webViewRef.current) { return false; }
+      webViewRef.current.injectJavaScript(
+        `window.__foeAutoEnterTest && window.__foeAutoEnterTest(${shipX}, ${shipY}, ${dx}, ${dy}); true;`
+      );
+      if (autoEnterTimeoutRef.current) clearTimeout(autoEnterTimeoutRef.current);
+      autoEnterTimeoutRef.current = setTimeout(() => {
+        setAutoEnterLog((prev) => [...prev, { step: 'enter_failed', at: Date.now() }].slice(-20));
+        finishAutoEnter();
+      }, 35 * 1000);
+      return true;
+    };
+
+    autoEnterBusyRef.current = true;
+    setAutoEnterBusy(true);
+    setAutoEnterLog([{ step: 'start', at: Date.now() }]);
+
+    const hasRecordedPan = scrollDx !== 0 || scrollDy !== 0;
+    if (Platform.OS !== 'android' || !hasRecordedPan) {
+      if (!injectAutoEnter(scrollDx, scrollDy)) { finishAutoEnter(); }
+      return;
+    }
+
+    const reactTag = Number(webViewTagRef.current);
+    const viewportWidth = Number(ship.viewportW || ship.canvasW);
+    const viewportHeight = Number(ship.viewportH || ship.canvasH);
+    if (
+      typeof FoeWebViewGesture?.swipe !== 'function' ||
+      !Number.isInteger(reactTag) ||
+      reactTag <= 0 ||
+      !Number.isFinite(viewportWidth) ||
+      !Number.isFinite(viewportHeight) ||
+      viewportWidth <= 0 ||
+      viewportHeight <= 0
+    ) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'native_pan_failed',
+        target: 'міст або розміри WebView недоступні — потрібна нова Android-збірка/калібровка',
+        at: Date.now(),
+      }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+
+    setAutoEnterLog((prev) => [...prev, {
+      step: 'panning', target: 'Android MotionEvent', at: Date.now(),
+    }].slice(-20));
+    try {
+      await FoeWebViewGesture.swipe(
+        reactTag,
+        scrollDx / viewportWidth,
+        scrollDy / viewportHeight
+      );
+      setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      if (!injectAutoEnter(0, 0)) { finishAutoEnter(); }
+    } catch (error) {
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'native_pan_failed',
+        target: String(error?.code || 'невідома помилка'),
+        at: Date.now(),
+      }].slice(-20));
+      finishAutoEnter();
+    }
+  }, [finishAutoEnter]);
+  // ТИМЧАСОВО: клік на нерухомій точці (без скролу) — щоб перевірити, чи
+  // винен скрол камери, а не сам механізм синтетичного кліка.
+  const tryProbeClick = useCallback((point) => {
+    if (!point || autoEnterBusyRef.current) { return; }
+    setAutoEnterLog([{ step: 'start', at: Date.now() }]);
+    webViewRef.current?.injectJavaScript(
+      `window.__foeSynthClickAt && window.__foeSynthClickAt(${point.clientX}, ${point.clientY}); true;`
+    );
+  }, []);
+
   // Скільки екранів зараз "замовили" синхронізацію (див. useFoeSyncActive).
   const [demand, setDemand] = useState(0);
   const demandRef = useRef(0);
@@ -140,6 +302,7 @@ export function FoeSyncProvider({ children }) {
   const [player, setPlayer] = useState(null);
   const [found, setFound] = useState({});
   const [seen, setSeen] = useState(() => new Set());
+  const [rawLog, setRawLog] = useState([]); // ТИМЧАСОВО: діагностика поселень
   const [iconSheet, setIconSheet] = useState(null);
   const [goodsSheet, setGoodsSheet] = useState(null);
   const [buildingDefs, setBuildingDefs] = useState(null);
@@ -147,6 +310,7 @@ export function FoeSyncProvider({ children }) {
 
   const iconSheetUrlsRef = useRef(null);
   const goodsSheetUrlsRef = useRef(null);
+  const rawLogIdRef = useRef(0); // ТИМЧАСОВО: унікальні ключі для сирого логу
   const guildIdRef = useRef(guildContext?.guildId || null);
   const defsRequestRef = useRef(0);
   const defsScopeRef = useRef(null);
@@ -164,6 +328,15 @@ export function FoeSyncProvider({ children }) {
     setPlayer(null);
     setFound({});
     setSeen(new Set());
+    setRawLog([]);
+    webViewTagRef.current = null;
+    if (autoEnterTimeoutRef.current) {
+      clearTimeout(autoEnterTimeoutRef.current);
+      autoEnterTimeoutRef.current = null;
+    }
+    autoEnterBusyRef.current = false;
+    setAutoEnterBusy(false);
+    setWebPinned(false);
     setBuildingDefs(null);
     setDefsProgress(null);
     setWebVisible(false);
@@ -172,12 +345,13 @@ export function FoeSyncProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, u, g, sheet, gSheet] = await Promise.all([
+      const [c, u, g, sheet, gSheet, calib] = await Promise.all([
         AsyncStorage.getItem(FOE_CONSENT_KEY),
         AsyncStorage.getItem('userId'),
         AsyncStorage.getItem('guildId'),
         loadCachedIconSheet(),
         loadCachedGoodsSheet(),
+        AsyncStorage.getItem(CALIB_KEY),
       ]);
       if (cancelled) return;
       setConsent(c === 'yes' ? 'yes' : 'no');
@@ -189,6 +363,9 @@ export function FoeSyncProvider({ children }) {
       }
       if (sheet) setIconSheet(sheet);
       if (gSheet) setGoodsSheet(gSheet);
+      if (calib) {
+        try { setCalibPoints(JSON.parse(calib)); } catch (_e) {}
+      }
     })();
     return () => {
       cancelled = true;
@@ -226,7 +403,15 @@ export function FoeSyncProvider({ children }) {
     setWebKey((k) => k + 1);
   }, [clearCapturedState]);
 
+  const rememberWebViewTag = useCallback((event) => {
+    const reactTag = Number(event?.nativeEvent?.target);
+    if (Number.isInteger(reactTag) && reactTag > 0) {
+      webViewTagRef.current = reactTag;
+    }
+  }, []);
+
   const onMessage = useCallback((event) => {
+    rememberWebViewTag(event);
     let msg;
     try {
       msg = JSON.parse(event.nativeEvent.data);
@@ -242,8 +427,8 @@ export function FoeSyncProvider({ children }) {
     if (msg.kind === 'authed') {
       // Логін/пароль прийнято — вхід у гру підтверджено. Прибираємо вікно гри
       // з екрана; WebView лишається змонтованим і доробляє вибір світу та
-      // збір даних у фоні.
-      setWebVisible(false);
+      // збір даних у фоні. Виняток — коли вікно закріплене вручну (діагностика).
+      if (!webPinnedRef.current) setWebVisible(false);
       return;
     }
     if (msg.kind === 'packet') {
@@ -256,6 +441,39 @@ export function FoeSyncProvider({ children }) {
     }
     if (msg.kind === 'domBoosts') {
       setFound((p) => ({ ...p, domBoosts: msg }));
+      return;
+    }
+    if (msg.kind === 'autoEnter' && msg.step) {
+      // ТИМЧАСОВО: живий лог тестового автокліка.
+      setAutoEnterLog((prev) => [...prev, {
+        step: msg.step, gridId: msg.gridId, target: msg.target, n: msg.n, at: msg.at || Date.now(),
+      }].slice(-20));
+      if (['entered', 'wrong_grid', 'enter_failed', 'error'].includes(msg.step)) {
+        finishAutoEnter();
+      }
+      return;
+    }
+    if (msg.kind === 'calibPoint' && msg.point && msg.point.name) {
+      // ТИМЧАСОВО: справжній дотик користувача — запамʼятовуємо й зберігаємо.
+      setCalibPoints((prev) => {
+        const next = { ...prev, [msg.point.name]: msg.point };
+        AsyncStorage.setItem(CALIB_KEY, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+      return;
+    }
+    if (msg.kind === 'jsenv' && msg.tag) {
+      // ТИМЧАСОВО: дамп JS-середовища гри (пошук гачка «відкрити поселення»).
+      setFound((p) => ({ ...p, jsEnv: { ...(p.jsEnv || {}), [msg.tag]: msg } }));
+      return;
+    }
+    if (msg.kind === 'rawlog' && msg.entry) {
+      // ТИМЧАСОВО: сирі пакети для діагностики культурних поселень.
+      // Власний унікальний _id: seq у грі скидається при кожному перезавантаженні
+      // вікна гри, тож на нього спиратись як на ключ у списку не можна.
+      rawLogIdRef.current += 1;
+      const entry = { ...msg.entry, _id: rawLogIdRef.current };
+      setRawLog((prev) => [entry, ...prev].slice(0, 150));
       return;
     }
     if (msg.kind === 'worldSelectDump') {
@@ -306,7 +524,7 @@ export function FoeSyncProvider({ children }) {
         setFound((prev) => ({ ...prev, ...msg.found }));
       }
     }
-  }, []);
+  }, [finishAutoEnter, rememberWebViewTag]);
 
   const playerEra = normalizeEra(player?.era);
   const activeLocale = normalizeLocale(i18n.resolvedLanguage || i18n.language);
@@ -435,7 +653,8 @@ export function FoeSyncProvider({ children }) {
   useEffect(() => {
     if (health.packets > 0) {
       // Пішли справжні дані гри — логін точно вдався, тримати вікно немає сенсу.
-      setWebVisible(false);
+      // Виняток — вікно закріплене вручну (діагностика поселень).
+      if (!webPinnedRef.current) setWebVisible(false);
       return;
     }
     if (!/forgeofempires\.com\/(page|game)/.test(currentUrl || '')) return;
@@ -521,12 +740,23 @@ export function FoeSyncProvider({ children }) {
     setWebVisible,
     openGameWindow,
     closeGameWindow,
+    pinGameWindow,
+    unpinGameWindow,
+    webPinned,
+    armCalibration,
+    calibPoints,
+    resetCalibration,
+    tryAutoEnter,
+    tryProbeClick,
+    autoEnterLog,
+    autoEnterBusy,
     currentUrl,
     health,
     synced: health.packets > 0,
     player,
     found,
     seen,
+    rawLog,
     iconSheet,
     goodsSheet,
     buildingDefs,
@@ -554,7 +784,104 @@ export function FoeSyncProvider({ children }) {
               : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
         >
-          {webVisible ? (
+          {webVisible && webPinned ? (
+            // ТИМЧАСОВО: панель діагностики поселень — ПОВЕРХ гри, бо гра на
+            // весь екран і кнопки екрана діагностики під нею недосяжні.
+            <View
+              style={{
+                paddingHorizontal: 10,
+                paddingTop: 8 + insets.top,
+                paddingBottom: 8,
+                backgroundColor: '#152330',
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: '#f4f7fb', fontWeight: '700', fontSize: 12 }}>
+                  Діагностика поселення
+                </Text>
+                <TouchableOpacity onPress={unpinGameWindow}>
+                  <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>Сховати гру</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ color: '#9aa3b2', fontSize: 11, marginTop: 4 }}>
+                Прогорни місто ОДНИМ пальцем (важливо — записуємо сам скрол,
+                щоб «Тест» міг його повторити) до корабля поселення, закрий
+                спливаючі вікна, тоді тисни «Корабель» і одразу тапай по
+                ньому. «Повернутись у місто» більше не калібруємо — після
+                входу просто «Сховати гру».
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                <TouchableOpacity
+                  disabled={autoEnterBusy}
+                  onPress={() => arm('ship')}
+                  style={{
+                    flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center',
+                    justifyContent: 'center', backgroundColor: armed === 'ship' ? '#ffa51f33' : '#1b2b3b',
+                    borderWidth: 1, borderColor: armed === 'ship' ? '#ffa51f' : '#36516a',
+                    opacity: autoEnterBusy ? 0.35 : 1,
+                  }}
+                >
+                  <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
+                    {calibPoints.ship ? '✓ ' : ''}{armed === 'ship' ? 'Чекаю тап…' : 'Корабель'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={!calibPoints.ship || autoEnterBusy}
+                  onPress={() => tryAutoEnter(calibPoints)}
+                  style={{
+                    flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center',
+                    justifyContent: 'center', backgroundColor: '#4ea1ff',
+                    opacity: calibPoints.ship && !autoEnterBusy ? 1 : 0.35,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                    {autoEnterBusy ? 'Тест…' : 'Тест'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 6 }}>
+                Перевірка: клік на будь-якій нерухомій кнопці в грі, куди не
+                треба скролити (напр. іконка меню внизу) — щоб зʼясувати, чи
+                винен скрол камери.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                <TouchableOpacity
+                  disabled={autoEnterBusy}
+                  onPress={() => arm('probe')}
+                  style={{
+                    flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center',
+                    justifyContent: 'center', backgroundColor: armed === 'probe' ? '#ffa51f33' : '#1b2b3b',
+                    borderWidth: 1, borderColor: armed === 'probe' ? '#ffa51f' : '#36516a',
+                    opacity: autoEnterBusy ? 0.35 : 1,
+                  }}
+                >
+                  <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
+                    {calibPoints.probe ? '✓ ' : ''}{armed === 'probe' ? 'Чекаю тап…' : 'Точка (без скролу)'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={!calibPoints.probe || autoEnterBusy}
+                  onPress={() => tryProbeClick(calibPoints.probe)}
+                  style={{
+                    flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center',
+                    justifyContent: 'center', backgroundColor: '#4ea1ff',
+                    opacity: calibPoints.probe && !autoEnterBusy ? 1 : 0.35,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Тест точки</Text>
+                </TouchableOpacity>
+              </View>
+              {autoEnterLog.length ? (
+                <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 4 }} numberOfLines={2}>
+                  {AUTO_STEP_LABELS[autoEnterLog[autoEnterLog.length - 1].step] ||
+                    autoEnterLog[autoEnterLog.length - 1].step}
+                  {autoEnterLog[autoEnterLog.length - 1].target
+                    ? ` · ${autoEnterLog[autoEnterLog.length - 1].target}`
+                    : ''}
+                </Text>
+              ) : null}
+            </View>
+          ) : webVisible ? (
             <View
               style={{
                 flexDirection: 'row',
@@ -573,6 +900,7 @@ export function FoeSyncProvider({ children }) {
             </View>
           ) : null}
           <WebView
+            ref={webViewRef}
             key={webKey}
             source={{ uri: gameUrl }}
             style={{ flex: 1 }}
@@ -584,6 +912,7 @@ export function FoeSyncProvider({ children }) {
             mixedContentMode="always"
             injectedJavaScriptBeforeContentLoaded={injectedJs}
             injectedJavaScript={injectedJs}
+            onLoadStart={rememberWebViewTag}
             onMessage={onMessage}
           />
         </View>
