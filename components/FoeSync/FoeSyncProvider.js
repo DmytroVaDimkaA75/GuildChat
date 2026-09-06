@@ -1992,6 +1992,11 @@ export function FoeSyncProvider({ children }) {
                     bottom: 0,
                     zIndex: 9999,
                     backgroundColor: '#0f1115',
+                    // ФІКСОВАНИЙ розмір WebView всередині (STEALTH_WEBVIEW_*)
+                    // може бути БІЛЬШИМ за реальний екран — без цього overflow
+                    // зайва частина гри (яку саме й ховаємо) вилазила з-під
+                    // екрана завантаження знизу/збоку.
+                    overflow: 'hidden',
                   }
                 : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
