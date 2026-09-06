@@ -48,6 +48,7 @@ import CommunityChannelsScreen from './Community/CommunityChannelsScreen';
 import CommunityScreen from './Community/CommunityScreen';
 import CulturalPlanner from './Culture/CulturalPlanner';
 import CulturalSettlements from './Culture/CulturalSettlements';
+import CulturalSettlementSync from './Culture/CulturalSettlementSync';
 import CulturalOptions from './Culture/CulturalOptions';
 import TechnologyCosts from './Culture/TechnologyCosts';
 import Planning from './Culture/Planning';
@@ -538,7 +539,15 @@ function AdmintStack({ canAccessTasks = false }) {
 function CultureStack() {
   const { t } = useTranslation();
   return (
-    <Stack.Navigator screenOptions={defaultHeaderOptions}>
+    <Stack.Navigator initialRouteName="CulturalSettlementSync" screenOptions={defaultHeaderOptions}>
+      <Stack.Screen
+        name="CulturalSettlementSync"
+        component={CulturalSettlementSync}
+        options={{
+          title: t("drawer.culture"),
+          headerLeft: () => <DrawerToggleButton tintColor={COLORS.textPrimary} />,
+        }}
+      />
       <Stack.Screen
         name="CulturalSettlements"
         component={CulturalSettlements}
@@ -820,7 +829,7 @@ function ProfileStack() {
 }
 
 // --- DRAWER CONTENT ---
-function CustomDrawerContent({ onLogout, onManualGuildSwitch, hasTesterAccess, ...props }) {
+function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
   const { t } = useTranslation();
   const { guildId, setGuildId } = useContext(GuildContext);
   const [guildName, setGuildName] = useState('');
@@ -927,67 +936,8 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, hasTesterAccess, .
     outputRange: ['0deg', '180deg'],
   });
 
-  const handleCultureMenuPress = async () => {
-    try {
-      // Тестери й розробники завжди бачать екран "Культурні поселення"
-      // (активне поселення з гри + тимчасові технічні дані), а не
-      // ярлик-пропуск одразу в планувальник/налаштування за збереженим
-      // статусом — незалежно від того, у якому зі своїх світів вони зараз.
-      if (hasTesterAccess) {
-        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
-        return;
-      }
-
-      const userId = await AsyncStorage.getItem('userId');
-      const activeGuildId = await AsyncStorage.getItem('guildId');
-
-      if (!userId || !activeGuildId) {
-        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
-        return;
-      }
-
-      const settlementPath = `users/${userId}/userGuilds/${activeGuildId}/settlement`;
-      const settlementSnap = await database().ref(settlementPath).once('value');
-
-      if (!settlementSnap.exists()) {
-        props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
-        return;
-      }
-
-      const settlementData = settlementSnap.val() || {};
-      const status = settlementData.status;
-      const selectedSettlement = settlementData.settlementName;
-
-      if (status === 'game') {
-        props.navigation.navigate('culture', {
-          screen: 'SettlementGamePlanner',
-          params: { settlementName: selectedSettlement },
-        });
-        return;
-      }
-
-      if (status === 'edit' && selectedSettlement) {
-        const [techSnap, obstacleSnap] = await Promise.all([
-          database().ref(`${settlementPath}/tech`).once('value'),
-          database().ref(`${settlementPath}/sectorObstaclesStatic`).once('value'),
-        ]);
-
-        props.navigation.navigate('culture', {
-          screen: 'CulturalOptions',
-          params: {
-            settlementName: selectedSettlement,
-            hasTech: techSnap.exists(),
-            hasObstacles: obstacleSnap.exists(),
-          },
-        });
-        return;
-      }
-
-      props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
-    } catch (error) {
-      console.error('Помилка під час відкриття культурного поселення:', error);
-      props.navigation.navigate('culture', { screen: 'CulturalSettlements' });
-    }
+  const handleCultureMenuPress = () => {
+    props.navigation.navigate('culture', { screen: 'CulturalSettlementSync' });
   };
 
   const performLogout = async () => {
@@ -1272,7 +1222,6 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
             {...props}
             onLogout={onLogout}
             onManualGuildSwitch={onManualGuildSwitch}
-            hasTesterAccess={hasTesterAccess}
           />
         )}
         initialRouteName="GBG"

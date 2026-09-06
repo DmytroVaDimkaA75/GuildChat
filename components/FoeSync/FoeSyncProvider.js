@@ -24,7 +24,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ActivityIndicator, NativeModules, Platform, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, AppState, NativeModules, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +41,9 @@ import {
   parseAtlas,
 } from './FoeIcon';
 import { getBuildingDefs } from '../../src/services/foeBuildings';
+import { DarkThemeColors } from '../../constants/theme';
+
+const { DEFAULT_SHIP_CALIB, createSettlementPacketSession } = require('./settlementPacketSession');
 
 const {
   normalizeEra,
@@ -122,15 +125,6 @@ const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реальн�
 // рівно 1024 CSS-пікселі незалежно від фізичного екрана. Тому зберігаємо не
 // абсолютні пікселі, а положення ВІДНОСНО полотна — і перед кожним входом
 // перераховуємо під те полотно, яке гра віддала цього разу.
-const DEFAULT_SHIP_CALIB = {
-  canvasX: 696,
-  canvasY: 228,
-  canvasW: 1024,
-  canvasH: 765,
-  scrollDx: -708,
-  scrollDy: 123,
-};
-
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
 const gameHostFromGuildId = (g) => {
   const worldId = worldIdFromGuildId(g);
@@ -339,6 +333,24 @@ export function FoeSyncProvider({ children }) {
   const [webKey, setWebKey] = useState(0);
   const webGenerationRef = useRef(webKey);
   webGenerationRef.current = webKey;
+  const packetSessionRef = useRef(null);
+  const packetSettlementBusyRef = useRef(false);
+  const packetLayoutRef = useRef(null);
+  const [packetSettlement, setPacketSettlement] = useState({ phase: 'idle', settlementId: null });
+  const [packetSettlementHidden, setPacketSettlementHidden] = useState(false);
+  const cancelPacketSettlementSync = useCallback(() => {
+    const session = packetSessionRef.current;
+    if (!session) return;
+    packetSessionRef.current = null;
+    packetSettlementBusyRef.current = false;
+    session.cancel();
+    setPacketSettlementHidden(false);
+    // Detach the old native view too: an in-flight native swipe must never
+    // continue into a different screen/world or a subsequent attempt.
+    webGenerationRef.current += 1;
+    setWebKey(webGenerationRef.current);
+  }, []);
+  useEffect(() => () => packetSessionRef.current?.cancel(), []);
   const [webVisible, setWebVisible] = useState(false);
   // Вікно гри показуємо лише для ручного вводу логіна/пароля. Щойно вхід
   // підтверджено (interceptor шле kind:'authed') або пішли пакети — згортаємо
@@ -350,9 +362,10 @@ export function FoeSyncProvider({ children }) {
   // пароля фокусує його, але клавіатура не спливає. Свіжий повнорозмірний
   // WebView такої вади не має.
   const openGameWindow = useCallback(() => {
+    cancelPacketSettlementSync();
     setWebKey((k) => k + 1);
     setWebVisible(true);
-  }, []);
+  }, [cancelPacketSettlementSync]);
   const closeGameWindow = useCallback(() => { setWebVisible(false); }, []);
 
   // ТИМЧАСОВО (діагностика поселень): "закріплене" вікно гри — його НЕ згортає
@@ -975,6 +988,7 @@ export function FoeSyncProvider({ children }) {
   // пам'ять settlement-diag-temp-screen). tryAutoEnter з реальними
   // координатами вже підтверджено надійний через кнопку "Тест".
   const autoEnterSettlementQuietly = useCallback(async ({ force = false } = {}) => {
+    if (packetSessionRef.current) return;
     if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
     if (webPinnedRef.current) { return; }
     // Без force — не заходимо, якщо мапа поселення вже є (автозапуск). З force
@@ -1185,6 +1199,7 @@ export function FoeSyncProvider({ children }) {
   currentUrlRef.current = currentUrl;
 
   const clearCapturedState = useCallback(() => {
+    cancelPacketSettlementSync();
     defsRequestRef.current += 1;
     defsScopeRef.current = null;
     setCurrentUrl('');
@@ -1230,7 +1245,7 @@ export function FoeSyncProvider({ children }) {
     setBuildingDefs(null);
     setDefsProgress(null);
     setWebVisible(false);
-  }, []);
+  }, [cancelPacketSettlementSync]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1291,6 +1306,65 @@ export function FoeSyncProvider({ children }) {
   }, [clearCapturedState, guildContext?.guildId]);
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
+
+  const startPacketSettlementSync = useCallback(() => {
+    if (consent !== 'yes') return;
+    if (!gameUrl || !userId) {
+      setPacketSettlement({ phase: 'error', settlementId: null, error: 'identity' });
+      return;
+    }
+    if (packetSettlementBusyRef.current) return;
+    // Always start with the initial city camera, using the existing session,
+    // world URL and interceptor. There is still only one game WebView.
+    clearCapturedState();
+    foundRef.current = {};
+    const generation = webGenerationRef.current + 1;
+    webGenerationRef.current = generation;
+    setWebKey(generation);
+    setPacketSettlement({ phase: 'loading', settlementId: null });
+    setPacketSettlementHidden(true);
+    packetSettlementBusyRef.current = true;
+    packetLayoutRef.current = null;
+    const session = createSettlementPacketSession({
+      generation,
+      expectedHost: gameHostFromGuildId(guildId),
+      inject: (script) => {
+        if (!webViewRef.current) throw new Error('WebView unavailable');
+        webViewRef.current.injectJavaScript(script);
+      },
+      getTag: () => webViewTagRef.current,
+      swipe: typeof FoeWebViewGesture?.swipe === 'function'
+        ? (...args) => FoeWebViewGesture.swipe(...args) : undefined,
+      tap: typeof FoeWebViewGesture?.tap === 'function'
+        ? (...args) => FoeWebViewGesture.tap(...args) : undefined,
+      nativeGestures: Platform.OS === 'android',
+      onState: (state) => {
+        if (packetSessionRef.current !== session) return;
+        setPacketSettlement(state);
+        if (['error', 'empty', 'ready'].includes(state.phase)) {
+          packetSettlementBusyRef.current = false;
+          setPacketSettlementHidden(false);
+        }
+        if (state.phase === 'error') {
+          // A failed/cancelled gesture must lose its native target, including
+          // when the phone rotated or the page renderer stopped responding.
+          webGenerationRef.current += 1;
+          setWebKey(webGenerationRef.current);
+        }
+      },
+    });
+    packetSessionRef.current = session;
+  }, [clearCapturedState, consent, gameUrl, guildId, userId]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' || !packetSessionRef.current) return;
+      packetSessionRef.current.fail('load');
+      cancelPacketSettlementSync();
+    });
+    return () => subscription.remove();
+  }, [cancelPacketSettlementSync]);
+
   const injectedJs =
     `window.__FOE_WORLD=${JSON.stringify(worldIdFromGuildId(guildId) || '')};\n` +
     `window.__FOE_SYNC_GENERATION=${JSON.stringify(webKey)};\n${FOE_INTERCEPTOR_JS}`;
@@ -1364,6 +1438,7 @@ export function FoeSyncProvider({ children }) {
         webDocumentStartedAtRef.current = messageStartedAt;
         webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
       }
+      packetSessionRef.current?.handleMessage(msg);
       setHealth((h) => ({ ...h, ready: true }));
       return;
     }
@@ -1383,6 +1458,8 @@ export function FoeSyncProvider({ children }) {
     ) {
       return;
     }
+
+    packetSessionRef.current?.handleMessage(msg);
 
     if (msg.kind === 'interactionProbe') {
       const pending = interactionProbeResolverRef.current;
@@ -1706,6 +1783,9 @@ export function FoeSyncProvider({ children }) {
 
   // Якщо застрягли на сторінці входу порталу — показати вікно для ручного входу
   useEffect(() => {
+    // The new settlement screen stays native even when the game session has
+    // expired. It offers the existing City/login flow explicitly on failure.
+    if (packetSessionRef.current) return undefined;
     if (health.packets > 0) {
       // Пішли справжні дані гри — логін точно вдався, тримати вікно немає сенсу.
       // Виняток — вікно закріплене вручну (діагностика поселень).
@@ -1716,6 +1796,7 @@ export function FoeSyncProvider({ children }) {
     const t = setTimeout(() => {
       if (
         engagedRef.current &&
+        !packetSessionRef.current &&
         healthRef.current.packets === 0 &&
         /\/page/.test(currentUrlRef.current || '')
       ) {
@@ -1966,7 +2047,7 @@ export function FoeSyncProvider({ children }) {
 
   // Приховане вікно гри вантажимо лише коли є замовник (або доробка збору,
   // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
-  const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering);
+  const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering || packetSettlementHidden);
 
   const value = {
     guildId,
@@ -1990,6 +2071,9 @@ export function FoeSyncProvider({ children }) {
     tryProbeClick,
     tryAutoAimEnter,
     autoEnterSettlementQuietly,
+    packetSettlement,
+    startPacketSettlementSync,
+    cancelPacketSettlementSync,
     debugScrollAndReveal,
     stealthEntering,
     autoEnterLog,
@@ -2017,9 +2101,13 @@ export function FoeSyncProvider({ children }) {
 
   return (
     <Ctx.Provider value={value}>
-      {children}
+      <View style={{ flex: 1, zIndex: 1, backgroundColor: DarkThemeColors.background }}>
+        {children}
+      </View>
       {webActive ? (
         <View
+          accessibilityElementsHidden={!webVisible}
+          importantForAccessibility={webVisible ? 'auto' : 'no-hide-descendants'}
           pointerEvents={webVisible || stealthEntering ? 'auto' : 'none'}
           style={
             webVisible
@@ -2054,7 +2142,11 @@ export function FoeSyncProvider({ children }) {
                     // екрана завантаження знизу/збоку.
                     overflow: 'hidden',
                   }
-                : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
+                : packetSettlementHidden
+                  // Keep the WebView laid out/rendering at the actual phone
+                  // size, underneath the opaque native navigation content.
+                  ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }
+                  : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
         >
           {webVisible && webPinned ? (
@@ -2245,6 +2337,15 @@ export function FoeSyncProvider({ children }) {
             </View>
           ) : null}
           <View
+            onLayout={(event) => {
+              if (webKey !== webGenerationRef.current || !packetSettlementBusyRef.current) return;
+              const { width, height } = event.nativeEvent.layout;
+              const previous = packetLayoutRef.current;
+              packetLayoutRef.current = { width, height };
+              if (previous && (Math.abs(previous.width - width) > 1 || Math.abs(previous.height - height) > 1)) {
+                packetSessionRef.current?.fail('layout');
+              }
+            }}
             style={
               // ЕКСПЕРИМЕНТ: у тихому режимі WebView отримує ЗАВЖДИ той самий
               // фіксований розмір (dp), незалежно від фізичного екрана —
@@ -2270,6 +2371,21 @@ export function FoeSyncProvider({ children }) {
               injectedJavaScript={injectedJs}
               onLoadStart={onWebViewLoadStart}
               onMessage={onMessage}
+              textZoom={packetSettlementHidden ? 100 : undefined}
+              onError={() => {
+                if (webKey === webGenerationRef.current) packetSessionRef.current?.fail('load');
+              }}
+              onHttpError={(event) => {
+                if (webKey === webGenerationRef.current && event.nativeEvent.url === gameUrl) {
+                  packetSessionRef.current?.fail('load');
+                }
+              }}
+              onContentProcessDidTerminate={() => {
+                if (webKey === webGenerationRef.current) packetSessionRef.current?.fail('load');
+              }}
+              onRenderProcessGone={() => {
+                if (webKey === webGenerationRef.current) packetSessionRef.current?.fail('load');
+              }}
             />
           </View>
           {stealthEntering ? (
