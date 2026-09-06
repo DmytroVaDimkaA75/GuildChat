@@ -38,9 +38,13 @@ const AUTO_STEP_LABELS = {
   autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
   autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
   autoaim_panning: 'авто-наведення: прогортаю за формулою…',
+  autoaim_geometry: 'розміри та координати авто-наведення',
+  autoaim_geometry_changed: 'розмір гри змінився — повторіть вхід',
+  autoaim_invalid_geometry: 'координати поза видимою областю гри',
   interaction_wait: 'чекаю, поки сцена гри стане інтерактивною…',
   interaction_ready: 'сцена гри готова ✓',
   interaction_not_ready: 'сцена гри не стала інтерактивною',
+  manual_login_required: 'потрібно увійти в гру — відкриваю форму входу',
   watch_armed: 'чекаю відповідь мапи…',
   touch_started: 'нативний дотик доставлено у гру…',
   request_sent: 'запит мапи відправлено…',
@@ -74,6 +78,7 @@ export default function SettlementDiag() {
     calibPoints = {},
     resetCalibration,
     autoEnterLog = [],
+    autoAimMeasurements = [],
     health = { packets: 0 },
     debugScrollAndReveal,
     stealthEntering,
@@ -132,11 +137,12 @@ export default function SettlementDiag() {
             : null,
           shipCalib: calibPoints.ship || null,
           shipAfterAutoAim: calibPoints.shipAfterAutoAim || null,
+          autoAimMeasurements,
         },
         null,
         2
       ),
-    [autoAimEntities, calibPoints.ship, calibPoints.shipAfterAutoAim]
+    [autoAimEntities, autoAimMeasurements, calibPoints.ship, calibPoints.shipAfterAutoAim]
   );
 
   const copy = async (label, text) => {
@@ -159,6 +165,8 @@ export default function SettlementDiag() {
           seen: seenList,
           foundKeys,
           calibPoints,
+          autoAimMeasurements,
+          autoEnterLog,
           jsEnv: found.jsEnv || null,
           rawLog,
         },
@@ -228,7 +236,27 @@ export default function SettlementDiag() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Калібрування кліків (автовхід у поселення)</Text>
+        <Text style={styles.sectionTitle}>Перевірка розмірів авто-наведення</Text>
+        <Text style={styles.note}>
+          Порівняй «Авто-наведення» у повному й стиснутому вікні. Перемикач
+          «Стиснути вікно» перезавантажує гру, щоб камера починала з тієї самої
+          позиції. Якщо CSS-ширина canvas не змінилась, це перевірка фізичного
+          масштабування WebView, але ще не іншої ширини ігрової сцени.
+        </Text>
+        {autoAimMeasurements.length ? autoAimMeasurements.map((sample, index) => (
+          <Text key={`${sample.at}-${index}`} style={styles.mono}>
+            {`${ts(sample.at)} · ${sample.debugShrink ? 'стиснутий' : 'повний'}\n`}
+            {`WebView ${sample.nativeLayoutDp?.width ?? '?'}×${sample.nativeLayoutDp?.height ?? '?'} dp\n`}
+            {`canvas ${sample.plan.geometry.width}×${sample.plan.geometry.height} CSS · viewport ${sample.plan.geometry.viewportWidth.toFixed(1)}×${sample.plan.geometry.viewportHeight.toFixed(1)} CSS\n`}
+            {`bitmap ${sample.probe.canvasBufferW ?? '?'}×${sample.probe.canvasBufferH ?? '?'} · DPR ${sample.probe.dpr}\n`}
+            {`X ${sample.plan.dragX.toFixed(2)} CSS · ratio ${sample.plan.swipe.xRatio.toFixed(6)}\n`}
+            {sample.cssWidthDiffersFromReference ? 'CSS-ширина відрізняється від еталонних 1024.' : 'CSS-ширина = еталонні 1024.'}
+          </Text>
+        )) : <Text style={styles.note}>Тестів авто-наведення ще немає.</Text>}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Ручне калібрування (діагностичний «Тест»)</Text>
         <Text style={styles.note}>
           Керування — кнопками «Корабель» / «Тест» у панелі, що зʼявляється
           ПОВЕРХ гри після «Відкрити гру» (бо гра на весь екран і кнопки

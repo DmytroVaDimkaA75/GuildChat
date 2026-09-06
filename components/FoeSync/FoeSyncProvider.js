@@ -47,6 +47,12 @@ const {
   normalizeLocale,
   resolveRequestedBuildingEra,
 } = require('../../src/services/foeBuildingMetadata');
+const {
+  SHIP_REFERENCE_CANVAS_WIDTH,
+  SHIP_DRAG_X_RATIO,
+  createAutoAimPlan,
+  sameAutoAimGeometry,
+} = require('../../src/services/foeAutoAim');
 
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -71,25 +77,8 @@ function settlementCategory(cid, rawType) {
   return type || 'unknown';
 }
 
-// ТИМЧАСОВО: по Y камера впирається в межу мапи (перевірено: запит
-// прокрутки на 686px замість 495px дав ІДЕНТИЧНИЙ результат — canvasY=237
-// обидва рази, той самий canvas 1024×908) — тому для Y досить прокрутити
-// ЗАВІДОМО забагато (вона однаково впреться в межу) і клікнути туди, де
-// корабель щоразу реально опиняється (SHIP_CLAMP_Y_RATIO = 0.261 висоти).
-//
-// По X межі НЕМАЄ — камера просто їде далі й далі на всю запитану відстань
-// (перевірено: 646.7px і 699.4px дали РІЗний, хоч і близький, результат:
-// canvasX 419 і 407). Тому для X — НЕ "із запасом", а якомога точніше
-// виміряне значення: SHIP_DRAG_X_PX (середнє з двох замірів на canvas
-// шириною 1024; масштабування на іншу ширину поки не перевірене).
-// Виміряне 0.261/0.403 влучило (поселення відкрилось), але користувач
-// сказав, що сам тапнув би трохи правіше й трохи вище — невеликий зсув
-// цільової точки клікання (сам скрол/SHIP_DRAG_X_PX не чіпаємо).
-const SHIP_CLAMP_Y_RATIO = 0.261 - 0.03;
-const SHIP_OVERDRIVE_Y_DIR = 1;
-const SHIP_OVERDRIVE_MULT = 2.5; // помножується на висоту canvas
-const SHIP_DRAG_X_PX = -673; // середнє: -699.42 та -646.7
-const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реально опинився після SHIP_DRAG_X_PX (canvasX≈413 з 1024)
+// Геометрія наведення — у foeAutoAim: X нормовано до еталонного canvas 1024,
+// Y зберігає перевірений overdrive до межі. UA не фіксує CSS-ширину гри.
 
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
 const gameHostFromGuildId = (g) => {
@@ -116,6 +105,8 @@ const CALIB_KEY = 'foeSettlementCalib_v1'; // ТИМЧАСОВО: діагнос
 const SETTLEMENT_SHEETS_KEY = 'foeSettlementSheetsV1'; // спрайт-листи іконок ресурсів поселень
 const ICON_URLS_KEY = 'foeResourceIconUrlsV1'; // поштучні PNG-іконки ресурсів поселень {key:url}
 const { FoeWebViewGesture } = NativeModules;
+const HAS_NATIVE_AUTO_AIM = Platform.OS === 'android' &&
+  typeof FoeWebViewGesture?.swipe === 'function' && typeof FoeWebViewGesture?.tap === 'function';
 const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків тесту автовходу
   start: 'старт',
   click_ship: 'клікаю по кораблю…',
@@ -135,9 +126,13 @@ const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків т
   autoaim_unsupported: 'авто-наведення: недоступне на цьому пристрої',
   autoaim_no_canvas: 'авто-наведення: не бачу canvas гри',
   autoaim_panning: 'авто-наведення: прогортаю за формулою…',
+  autoaim_geometry: 'розміри та координати авто-наведення',
+  autoaim_geometry_changed: 'розмір гри змінився — повторіть вхід',
+  autoaim_invalid_geometry: 'координати поза видимою областю гри',
   interaction_wait: 'чекаю, поки сцена гри стане інтерактивною…',
   interaction_ready: 'сцена гри готова ✓',
   interaction_not_ready: 'сцена гри не стала інтерактивною',
+  manual_login_required: 'потрібно увійти в гру — відкриваю форму входу',
   watch_armed: 'чекаю відповідь мапи…',
   touch_started: 'нативний дотик доставлено у гру…',
   request_sent: 'запит мапи відправлено…',
@@ -357,6 +352,9 @@ export function FoeSyncProvider({ children }) {
   // тож замість вгадувати — записуємо, куди САМ користувач тапнув, і зберігаємо.
   const webViewRef = useRef(null);
   const webViewTagRef = useRef(null);
+  const webViewLayoutRef = useRef(null);
+  const webViewLayoutEpochRef = useRef(0);
+  const [autoAimMeasurements, setAutoAimMeasurements] = useState([]);
   const webDocumentEpochRef = useRef(0);
   const webDocumentIdRef = useRef(null);
   const webDocumentStartedAtRef = useRef(0);
@@ -446,6 +444,11 @@ export function FoeSyncProvider({ children }) {
     }
     activeAutoEnterNonceRef.current = null;
     autoEnterRequestSentRef.current = false;
+    if (pendingAutoEnterResolveRef.current) {
+      const resolve = pendingAutoEnterResolveRef.current;
+      pendingAutoEnterResolveRef.current = null;
+      resolve();
+    }
   }, []);
 
   const requestInteractionProbe = useCallback(() => new Promise((resolve) => {
@@ -595,6 +598,9 @@ export function FoeSyncProvider({ children }) {
     y,
     viewportWidth,
     viewportHeight,
+    viewportLeft = 0,
+    viewportTop = 0,
+    ensureGeometry,
   }) => {
     if (Platform.OS !== 'android' || typeof FoeWebViewGesture?.tap !== 'function') {
       return false;
@@ -607,8 +613,8 @@ export function FoeSyncProvider({ children }) {
       return false;
     }
 
-    const xRatio = Math.max(0, Math.min(1, x / viewportWidth));
-    const yRatio = Math.max(0, Math.min(1, y / viewportHeight));
+    const xRatio = Math.max(0, Math.min(1, (x - viewportLeft) / viewportWidth));
+    const yRatio = Math.max(0, Math.min(1, (y - viewportTop) / viewportHeight));
     const attemptId = await armNativeAutoEnterWatch(x, y);
     if (!attemptId) {
       const error = new Error('The game response watcher was not armed');
@@ -627,6 +633,8 @@ export function FoeSyncProvider({ children }) {
       attempt <= 4 && autoEnterBusyRef.current && !autoEnterRequestSentRef.current;
       attempt += 1
     ) {
+      if (ensureGeometry) await ensureGeometry();
+      if (!autoEnterBusyRef.current || autoEnterRequestSentRef.current) break;
       setAutoEnterLog((prev) => [...prev, {
         step: attempt === 1 ? 'click_ship' : 'retry_click',
         n: attempt,
@@ -747,25 +755,14 @@ export function FoeSyncProvider({ children }) {
     );
   }, []);
 
-  // ТИМЧАСОВО (експеримент): вхід у поселення БЕЗ ручного калібрування —
-  // перевіряє, що потрібні дані з мапи міста (корабель + ратуша) вже є, тоді
-  // свідомо прокручує "занадто багато" в перевіреному напрямку (камера сама
-  // впреться в межу мапи) і клікає туди, де корабель тоді реально опиняється
-  // (SHIP_CLAMP_X/Y_RATIO). Якщо позиція невірна — просто не влучить;
-  // калібрування вручну лишається як резерв.
+  // Вхід без ручного калібрування: частки поточного canvas для скролу/тапу.
+  // Ігрові координати корабля й ратуші використовуються лише в діагностиці.
+  // Результат, як і раніше, підтверджується відповіддю сервера поселення.
   const tryAutoAimEnter = useCallback(async () => {
     if (autoEnterBusyRef.current) { return; }
     const entities = foundRef.current?.cityMap?.entities || [];
     const ship = entities.find((e) => e.type === 'outpost_ship');
     const townhall = entities.find((e) => e.type === 'main_building');
-    if (
-      !ship || !townhall ||
-      ![ship.x, ship.y, townhall.x, townhall.y].every(Number.isFinite)
-    ) {
-      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
-      finishAutoEnter();
-      return;
-    }
     if (
       Platform.OS !== 'android' ||
       typeof FoeWebViewGesture?.swipe !== 'function' ||
@@ -787,7 +784,7 @@ export function FoeSyncProvider({ children }) {
     // URL/DOM-евристика `authed` означає лише, що портал пропустив нас до
     // /game/index. Для дотику цього замало: OpenFL має вже створити canvas,
     // отримати реальний viewport і стабільно відмалювати кілька кадрів.
-    const interaction = await waitForInteractiveGame();
+    const interaction = await waitForInteractiveGame({ requireCurrentCityMap: false });
     if (!autoEnterBusyRef.current) return;
     if (webGenerationRef.current !== startGeneration) {
       finishAutoEnter();
@@ -804,6 +801,7 @@ export function FoeSyncProvider({ children }) {
     }
     setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
     const readyDocumentEpoch = webDocumentEpochRef.current;
+    const readyLayoutEpoch = webViewLayoutEpochRef.current;
 
     const reactTag = Number(webViewTagRef.current);
     if (!Number.isInteger(reactTag) || reactTag <= 0) {
@@ -829,17 +827,52 @@ export function FoeSyncProvider({ children }) {
       return;
     }
 
-    const dx = ship.x - townhall.x;
-    const dy = ship.y - townhall.y;
-    // X — точне виміряне значення (тут немає межі, яка б сама зупинила рух).
-    // Y — свідомо "занадто багато": камера впреться в межу мапи сама.
-    const dragX = SHIP_DRAG_X_PX;
-    const dragY = SHIP_OVERDRIVE_Y_DIR * SHIP_OVERDRIVE_MULT * rect.height;
-    lastAutoAimRef.current = { dx, dy, appliedDragX: dragX, appliedDragY: dragY };
+    const dx = Number.isFinite(ship?.x) && Number.isFinite(townhall?.x) ? ship.x - townhall.x : null;
+    const dy = Number.isFinite(ship?.y) && Number.isFinite(townhall?.y) ? ship.y - townhall.y : null;
+    // CSS canvas і нативний WebView — різні системи координат. Спершу
+    // масштабуємо еталон по canvas, тоді переводимо у частки видимого viewport.
+    const beforePan = await requestInteractionProbe();
+    const isCurrentGeometry = (probe) => (
+      autoEnterBusyRef.current &&
+      webGenerationRef.current === startGeneration &&
+      webDocumentEpochRef.current === readyDocumentEpoch &&
+      webViewLayoutEpochRef.current === readyLayoutEpoch &&
+      probe?.stable === true &&
+      sameAutoAimGeometry(interaction, probe)
+    );
+    if (!isCurrentGeometry(beforePan)) {
+      setAutoEnterLog((prev) => [...prev, { step: 'autoaim_geometry_changed', at: Date.now() }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+    const plan = createAutoAimPlan(beforePan);
+    if (!plan) {
+      setAutoEnterLog((prev) => [...prev, { step: 'autoaim_invalid_geometry', at: Date.now() }].slice(-20));
+      finishAutoEnter();
+      return;
+    }
+    const { dragX, dragY } = plan;
+    const measurement = {
+      at: Date.now(),
+      debugShrink,
+      nativeLayoutDp: webViewLayoutRef.current,
+      referenceCanvasWidth: SHIP_REFERENCE_CANVAS_WIDTH,
+      dragXRatio: SHIP_DRAG_X_RATIO,
+      cssWidthDiffersFromReference: Math.abs(plan.geometry.width - SHIP_REFERENCE_CANVAS_WIDTH) > 0.5,
+      probe: beforePan,
+      plan,
+    };
+    setAutoAimMeasurements((previous) => [...previous, measurement].slice(-8));
+    lastAutoAimRef.current = { dx, dy, appliedDragX: dragX, appliedDragY: dragY, geometry: measurement };
+    setAutoEnterLog((prev) => [...prev, {
+      step: 'autoaim_geometry',
+      target: `canvas ${plan.geometry.width}×${plan.geometry.height} CSS · X ${dragX.toFixed(1)} CSS`,
+      at: Date.now(),
+    }].slice(-20));
 
     setAutoEnterLog((prev) => [...prev, { step: 'autoaim_panning', at: Date.now() }].slice(-20));
     try {
-      await FoeWebViewGesture.swipe(reactTag, dragX / rect.width, dragY / rect.height);
+      await FoeWebViewGesture.swipe(reactTag, plan.swipe.xRatio, plan.swipe.yRatio);
       setAutoEnterLog((prev) => [...prev, { step: 'pan_done', at: Date.now() }].slice(-20));
     } catch (error) {
       setAutoEnterLog((prev) => [...prev, {
@@ -861,18 +894,31 @@ export function FoeSyncProvider({ children }) {
       finishAutoEnter();
       return;
     }
-    const clampX = rect.left + rect.width * SHIP_TARGET_X_RATIO;
-    const clampY = rect.top + rect.height * SHIP_CLAMP_Y_RATIO;
-    webViewRef.current.injectJavaScript(
-      `window.__foeShowAimMarker && window.__foeShowAimMarker(${clampX}, ${clampY}); true;`
-    );
     try {
+      const ensureGeometry = async () => {
+        const probe = await requestInteractionProbe();
+        // A server response can finish the attempt while this probe is pending.
+        if (!autoEnterBusyRef.current || autoEnterRequestSentRef.current) return;
+        if (!isCurrentGeometry(probe)) {
+          const error = new Error('Розмір гри змінився під час наведення; повторіть вхід');
+          error.code = 'E_AUTOAIM_GEOMETRY_CHANGED';
+          throw error;
+        }
+      };
+      await ensureGeometry();
+      if (!autoEnterBusyRef.current || autoEnterRequestSentRef.current) return;
+      webViewRef.current.injectJavaScript(
+        `window.__foeShowAimMarker && window.__foeShowAimMarker(${plan.tap.x}, ${plan.tap.y}); true;`
+      );
       const usedNativeTap = await runNativeAutoEnterTaps({
         reactTag,
-        x: clampX,
-        y: clampY,
-        viewportWidth: Number(interaction.viewportW),
-        viewportHeight: Number(interaction.viewportH),
+        x: plan.tap.x,
+        y: plan.tap.y,
+        viewportWidth: plan.geometry.viewportWidth,
+        viewportHeight: plan.geometry.viewportHeight,
+        viewportLeft: plan.geometry.viewportLeft,
+        viewportTop: plan.geometry.viewportTop,
+        ensureGeometry,
       });
       if (!usedNativeTap) {
         setAutoEnterLog((prev) => [...prev, {
@@ -884,28 +930,29 @@ export function FoeSyncProvider({ children }) {
       }
     } catch (error) {
       setAutoEnterLog((prev) => [...prev, {
-        step: 'native_tap_failed',
+        step: error?.code === 'E_AUTOAIM_GEOMETRY_CHANGED' ? 'autoaim_geometry_changed' : 'native_tap_failed',
         target: [error?.code, error?.message].filter(Boolean).join(': ') || 'невідома помилка',
         at: Date.now(),
       }].slice(-20));
       finishAutoEnter();
     }
-  }, [finishAutoEnter, runNativeAutoEnterTaps, waitForInteractiveGame]);
+  }, [debugShrink, finishAutoEnter, requestInteractionProbe, runNativeAutoEnterTaps, waitForInteractiveGame]);
 
-  // "Тихий" вхід у поселення на ВЖЕ прогрітому інстансі WebView — без
-  // ручного тапу КОЖНОГО разу, але на основі ОДНОРАЗОВОЇ ручної калібровки
-  // (calibPoints.ship), а не здогадної формули "з ігрових координат" —
-  // та формула (tryAutoAimEnter) виявилась ненадійною й покинута (див.
-  // пам'ять settlement-diag-temp-screen). tryAutoEnter з реальними
-  // координатами вже підтверджено надійний через кнопку "Тест".
+  // Тихий Android-вхід використовує те саме наведення, що й кнопка тесту,
+  // без збереженої точки з конкретного телефона. Інші платформи лишають
+  // попередній ручний калібрований сценарій.
   const autoEnterSettlementQuietly = useCallback(async ({ force = false } = {}) => {
     if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
     if (webPinnedRef.current) { return; }
     // Без force — не заходимо, якщо мапа поселення вже є (автозапуск). З force
     // (кнопка «Оновити») — заходимо повторно, щоб отримати свіжі дані.
     if (!force && foundRef.current?.settlementMap) { return; }
-    const ship = calibPoints?.ship;
-    if (!ship) {
+    if (consent !== 'yes' || !guildId) return;
+    if (Platform.OS === 'android' && !HAS_NATIVE_AUTO_AIM) {
+      setAutoEnterLog([{ step: 'autoaim_unsupported', at: Date.now() }]);
+      return;
+    }
+    if (Platform.OS !== 'android' && !calibPoints?.ship) {
       setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
       return;
     }
@@ -913,12 +960,7 @@ export function FoeSyncProvider({ children }) {
     stealthEnteringRef.current = true;
     setWebVisible(false);
     setStealthEntering(true);
-    // КРИТИЧНО: записана прокрутка (scrollDx/scrollDy) розрахована на камеру
-    // ТІЛЬКИ-ЩО завантаженої гри (як після "Відкрити гру" вручну) — а не на
-    // вже запущений фоновий інстанс, що встиг накопичити довільний власний
-    // стан. Тому "тихий" вхід теж має перезавантажити гру з нуля (webKey),
-    // інакше клік по записаних координатах поцілить будь-куди, залежно від
-    // того, де камера випадково опинилась у фоні.
+    // Наведення розраховане на початкову позицію камери після завантаження.
     setWebKey((k) => k + 1);
     setAutoEnterLog([{ step: 'interaction_wait', at: Date.now() }]);
 
@@ -931,7 +973,9 @@ export function FoeSyncProvider({ children }) {
       // його свідомо, а перед самим tryAutoEnter знімаємо назад, бо той сам
       // виставляє його з нуля і вважає true "вже триває інша спроба".
       autoEnterBusyRef.current = true;
+      setAutoEnterBusy(true);
       const ready = await waitForInteractiveGame({ requireCurrentCityMap: false });
+      if (!autoEnterBusyRef.current) return;
       autoEnterBusyRef.current = false;
       if (!ready) {
         setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
@@ -939,23 +983,28 @@ export function FoeSyncProvider({ children }) {
       }
       setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
 
-      await new Promise((resolve) => {
-        pendingAutoEnterResolveRef.current = resolve;
-        tryAutoEnter(calibPoints).catch((error) => {
-          setAutoEnterLog((prev) => [...prev, {
-            step: 'error',
-            target: String(error?.message || error || 'невідома помилка'),
-            at: Date.now(),
-          }].slice(-20));
-          finishAutoEnter();
+      let completionTimer;
+      try {
+        await new Promise((resolve) => {
+          pendingAutoEnterResolveRef.current = resolve;
+          completionTimer = setTimeout(() => {
+            if (pendingAutoEnterResolveRef.current === resolve) finishAutoEnter();
+          }, 120 * 1000);
+          const attempt = Platform.OS === 'android'
+            ? tryAutoAimEnter()
+            : tryAutoEnter(calibPoints);
+          attempt.catch((error) => {
+            setAutoEnterLog((prev) => [...prev, {
+              step: 'error',
+              target: String(error?.message || error || 'невідома помилка'),
+              at: Date.now(),
+            }].slice(-20));
+            finishAutoEnter();
+          });
         });
-        setTimeout(() => {
-          if (pendingAutoEnterResolveRef.current === resolve) {
-            pendingAutoEnterResolveRef.current = null;
-            resolve();
-          }
-        }, 120 * 1000);
-      });
+      } finally {
+        clearTimeout(completionTimer);
+      }
       // Невеликий запас, щоб встигла прийти й розпарситись відповідь мапи
       // поселення (found.settlementMap) до того, як згорнемо вікно.
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -963,11 +1012,12 @@ export function FoeSyncProvider({ children }) {
       setStealthEntering(false);
       stealthEnteringRef.current = false;
       autoEnterBusyRef.current = false;
+      setAutoEnterBusy(false);
     }
-  }, [finishAutoEnter, tryAutoEnter, calibPoints, waitForInteractiveGame]);
+  }, [consent, guildId, finishAutoEnter, tryAutoAimEnter, tryAutoEnter, calibPoints, waitForInteractiveGame]);
 
-  // ТИМЧАСОВО (налагодження): робить рівно те саме, що "тихий" вхід —
-  // невидиме перезавантаження + прокрутка записаними координатами — але
+  // ТИМЧАСОВО (налагодження старого ручного калібрування):
+  // невидиме перезавантаження + прокрутка записаними координатами, але
   // НЕ клікає. Натомість малює постійний маркер там, куди мав би клацнути,
   // і показує гру користувачу (як після "Відкрити гру"), щоб звірити оком,
   // куди реально доїхала прокрутка, і скоригувати calibPoints за скріном.
@@ -1109,6 +1159,8 @@ export function FoeSyncProvider({ children }) {
     setFound({});
     setSeen(new Set());
     setRawLog([]);
+    setAutoAimMeasurements([]);
+    lastAutoAimRef.current = null;
     // settlementSheets НЕ чистимо — спрайт-листи іконок ресурсів спільні для
     // всіх світів і кешуються (як iconSheet/goodsSheet).
     webViewTagRef.current = null;
@@ -1229,6 +1281,15 @@ export function FoeSyncProvider({ children }) {
     const reactTag = Number(event?.nativeEvent?.target);
     if (Number.isInteger(reactTag) && reactTag > 0) {
       webViewTagRef.current = reactTag;
+    }
+  }, []);
+
+  const onWebViewLayout = useCallback((event) => {
+    const { width, height } = event.nativeEvent.layout;
+    const previous = webViewLayoutRef.current;
+    if (!previous || Math.abs(previous.width - width) > 0.5 || Math.abs(previous.height - height) > 0.5) {
+      webViewLayoutEpochRef.current += 1;
+      webViewLayoutRef.current = { width, height };
     }
   }, []);
 
@@ -1635,6 +1696,13 @@ export function FoeSyncProvider({ children }) {
         healthRef.current.packets === 0 &&
         /\/page/.test(currentUrlRef.current || '')
       ) {
+        // Без калібрування автовхід можливий і на першому запуску, коли
+        // користувач іще не має ігрової сесії. Не перекривати форму логіна.
+        if (stealthEnteringRef.current) {
+          setAutoEnterLog((prev) => [...prev, { step: 'manual_login_required', at: Date.now() }].slice(-20));
+          finishAutoEnter();
+          setStealthEntering(false);
+        }
         // Свіжий повнорозмірний WebView — інакше на частині пристроїв у полі
         // логіна/пароля не спливає екранна клавіатура.
         setWebKey((k) => k + 1);
@@ -1642,7 +1710,7 @@ export function FoeSyncProvider({ children }) {
       }
     }, 15000);
     return () => clearTimeout(t);
-  }, [currentUrl, health.packets]);
+  }, [currentUrl, health.packets, finishAutoEnter]);
 
   // Єдина модель списку міських будівель для мапи та подальших екранів.
   // Інстанс із city_map лишається окремим від спільного визначення каталогу.
@@ -1881,6 +1949,8 @@ export function FoeSyncProvider({ children }) {
   // Приховане вікно гри вантажимо лише коли є замовник (або доробка збору,
   // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
   const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering);
+  const canAutoEnterSettlement = consent === 'yes' && !!gameUrl &&
+    (Platform.OS === 'android' ? HAS_NATIVE_AUTO_AIM : !!calibPoints?.ship);
 
   const value = {
     guildId,
@@ -1904,9 +1974,11 @@ export function FoeSyncProvider({ children }) {
     tryProbeClick,
     tryAutoAimEnter,
     autoEnterSettlementQuietly,
+    canAutoEnterSettlement,
     debugScrollAndReveal,
     stealthEntering,
     autoEnterLog,
+    autoAimMeasurements,
     autoEnterBusy,
     currentUrl,
     health,
@@ -1957,9 +2029,9 @@ export function FoeSyncProvider({ children }) {
                     // екраном завантаження нижче, який і бачить користувач.
                     position: 'absolute',
                     top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
+                    left: debugShrink ? '12%' : 0,
+                    right: debugShrink ? '12%' : 0,
+                    bottom: debugShrink ? '18%' : 0,
                     zIndex: 9999,
                     backgroundColor: '#0f1115',
                   }
@@ -1986,17 +2058,30 @@ export function FoeSyncProvider({ children }) {
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
-                onPress={() => setDebugShrink((v) => !v)}
+                disabled={autoEnterBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Змінити розмір гри та перезавантажити для тесту наведення"
+                onPress={() => {
+                  if (autoEnterBusyRef.current) return;
+                  setDebugShrink((v) => !v);
+                  setWebKey((k) => k + 1);
+                }}
                 style={{
                   marginTop: 6, minHeight: 30, borderRadius: 8, alignItems: 'center',
                   justifyContent: 'center', backgroundColor: debugShrink ? '#ffa51f33' : '#1b2b3b',
                   borderWidth: 1, borderColor: debugShrink ? '#ffa51f' : '#36516a',
+                  opacity: autoEnterBusy ? 0.35 : 1,
                 }}
               >
                 <Text style={{ color: '#f4f7fb', fontSize: 11, fontWeight: '700' }}>
                   {debugShrink ? '✓ Стиснуте вікно (тест іншого екрана) — вимкнути' : 'Стиснути вікно (тест іншого екрана)'}
                 </Text>
               </TouchableOpacity>
+              <Text numberOfLines={2} style={{ height: 30, color: '#9aa3b2', fontSize: 10 }}>
+                {autoAimMeasurements.length
+                  ? `Останній тест: ${autoAimMeasurements[autoAimMeasurements.length - 1].debugShrink ? 'стиснутий' : 'повний'} · canvas ${autoAimMeasurements[autoAimMeasurements.length - 1].plan.geometry.width}×${autoAimMeasurements[autoAimMeasurements.length - 1].plan.geometry.height} CSS`
+                  : 'Розміри тесту з’являться після авто-наведення; деталі — у технічних даних.'}
+              </Text>
               <Text style={{ color: '#9aa3b2', fontSize: 11, marginTop: 4 }}>
                 Прогорни місто ОДНИМ пальцем (важливо — записуємо сам скрол,
                 щоб «Тест» міг його повторити) до корабля поселення, закрий
@@ -2066,25 +2151,16 @@ export function FoeSyncProvider({ children }) {
                 </TouchableOpacity>
               </View>
               <Text style={{ color: '#9aa3b2', fontSize: 10, marginTop: 6 }}>
-                Експеримент: узагалі без тапу — сам рахує, куди прогорнути, за
-                координатами корабля й ратуші з мапи міста.
+                Наведення без калібрування: прокрутка й точка кліку рахуються
+                від поточного розміру canvas. Починай зі щойно завантаженої гри.
               </Text>
               <TouchableOpacity
-                disabled={
-                  autoEnterBusy ||
-                  !(found.cityMap?.entities || []).some((e) => e.type === 'outpost_ship') ||
-                  !(found.cityMap?.entities || []).some((e) => e.type === 'main_building')
-                }
+                disabled={autoEnterBusy || !HAS_NATIVE_AUTO_AIM}
                 onPress={tryAutoAimEnter}
                 style={{
                   minHeight: 36, borderRadius: 8, alignItems: 'center',
                   justifyContent: 'center', backgroundColor: '#2e7d32', marginTop: 6,
-                  opacity:
-                    autoEnterBusy ||
-                    !(found.cityMap?.entities || []).some((e) => e.type === 'outpost_ship') ||
-                    !(found.cityMap?.entities || []).some((e) => e.type === 'main_building')
-                      ? 0.35
-                      : 1,
+                  opacity: autoEnterBusy || !HAS_NATIVE_AUTO_AIM ? 0.35 : 1,
                 }}
               >
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
@@ -2167,6 +2243,7 @@ export function FoeSyncProvider({ children }) {
             injectedJavaScriptBeforeContentLoaded={injectedJs}
             injectedJavaScript={injectedJs}
             onLoadStart={onWebViewLoadStart}
+            onLayout={onWebViewLayout}
             onMessage={onMessage}
           />
           {stealthEntering ? (

@@ -255,6 +255,8 @@ export const FOE_INTERCEPTOR_JS = `
             }
           } catch (e) {}
           var target = second.target;
+          var visual = window.visualViewport;
+          var viewportMeta = document.querySelector('meta[name="viewport"]');
           post({
             __foeSync: true,
             kind: 'interactionProbe',
@@ -269,7 +271,17 @@ export const FOE_INTERCEPTOR_JS = `
               userActivation: activation,
               viewportW: Math.round(window.innerWidth || 0),
               viewportH: Math.round(window.innerHeight || 0),
+              visualViewport: visual ? {
+                width: visual.width,
+                height: visual.height,
+                offsetLeft: visual.offsetLeft,
+                offsetTop: visual.offsetTop,
+                scale: visual.scale,
+              } : null,
+              viewportMeta: viewportMeta ? viewportMeta.getAttribute('content') : null,
               dpr: Number(window.devicePixelRatio) || 1,
+              canvasBufferW: target ? Number(target.width) || null : null,
+              canvasBufferH: target ? Number(target.height) || null : null,
               canvasId: target ? (target.id || null) : null,
               canvasTag: target ? String(target.tagName || '').toLowerCase() : null,
               canvasClass: target && typeof target.className === 'string' ? target.className : null,

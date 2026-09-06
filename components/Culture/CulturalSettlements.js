@@ -184,7 +184,7 @@ const CulturalSettlements = () => {
     autoEnterSettlementQuietly,
     stealthEntering,
     autoEnterLog = [],
-    calibPoints = {},
+    canAutoEnterSettlement = false,
     settlementDefs = null,
     settlementBuildings = [],
     settlementDefsProgress = null,
@@ -207,10 +207,9 @@ const CulturalSettlements = () => {
     const timer = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
     return () => clearInterval(timer);
   }, []);
-  const hasCalibShip = !!calibPoints?.ship;
   const settlementMap = found.settlementMap;
   // Поки не маємо мапи поселення — тримаємо фонову синхронізацію активною
-  // (потрібна мапа міста, щоб дізнатись координати корабля/ратуші). Щойно
+  // (Android-вхід використовує живі розміри canvas без калібрування). Щойно
   // отримали мапу поселення — відпускаємо: вікно гри само згорнеться
   // (див. SYNC_LINGER_MS у FoeSyncProvider), не тримаємо його довше, ніж треба.
   useFoeSyncActive(!settlementMap);
@@ -236,35 +235,31 @@ const CulturalSettlements = () => {
   // Захист від повторного накладання спроб, поки асинхронний вхід ще триває.
   const runningRef = React.useRef(false);
   const runAutoEnter = React.useCallback(() => {
-    if (runningRef.current) return;
+    if (runningRef.current || !canAutoEnterSettlement) return;
     runningRef.current = true;
     Promise.resolve(autoEnterSettlementQuietly?.()).finally(() => {
       runningRef.current = false;
       setAttempts((n) => n + 1);
     });
-  }, [autoEnterSettlementQuietly]);
+  }, [autoEnterSettlementQuietly, canAutoEnterSettlement]);
 
   // Кнопка «Оновити» в хедері — примусовий повторний вхід у поселення заради
   // свіжих даних (мапа, час виробництв), навіть якщо мапа вже завантажена.
   const runRefresh = React.useCallback(() => {
-    if (runningRef.current || stealthEntering) return;
+    if (runningRef.current || stealthEntering || !canAutoEnterSettlement) return;
     runningRef.current = true;
     Promise.resolve(autoEnterSettlementQuietly?.({ force: true })).finally(() => {
       runningRef.current = false;
       setNowSec(Math.floor(Date.now() / 1000));
     });
-  }, [autoEnterSettlementQuietly, stealthEntering]);
+  }, [autoEnterSettlementQuietly, canAutoEnterSettlement, stealthEntering]);
 
-  // Автозапуск — тепер на ОСНОВІ ОДНОРАЗОВОЇ ручної калібровки (реальні
-  // координати з "Корабель", підтверджено надійні через кнопку "Тест"),
-  // а не здогадної формули "з ігрових координат" (та була ненадійна й
-  // покинута — див. пам'ять settlement-diag-temp-screen). Спрацьовує сам,
-  // без жодної дії користувача, щойно калібровка є.
+  // На Android достатньо згоди на синхронізацію й наявного native bridge.
+  // Збережена на іншому екрані точка «Корабель» для автовходу не потрібна.
   useEffect(() => {
-    if (settlementMap || !hasCalibShip || attempts > 0 || runningRef.current) return;
+    if (settlementMap || !canAutoEnterSettlement || attempts > 0 || runningRef.current) return;
     runAutoEnter();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settlementMap, hasCalibShip]);
+  }, [settlementMap, canAutoEnterSettlement, attempts, runAutoEnter]);
 
   const sectorStats = useMemo(() => {
     if (!settlementMap) return null;
@@ -288,7 +283,7 @@ const CulturalSettlements = () => {
   );
 
   useLayoutEffect(() => {
-    const options = {};
+    const options = { headerRight: undefined };
     if (activeSettlement) {
       options.headerTitle = () => (
         <View style={styles.headerTitle}>
@@ -297,7 +292,7 @@ const CulturalSettlements = () => {
         </View>
       );
     }
-    if (hasCalibShip) {
+    if (canAutoEnterSettlement) {
       options.headerRight = () => (
         <TouchableOpacity
           style={styles.headerRefresh}
@@ -316,7 +311,7 @@ const CulturalSettlements = () => {
       );
     }
     navigation.setOptions(options);
-  }, [navigation, activeSettlement, hasCalibShip, stealthEntering, runRefresh]);
+  }, [navigation, activeSettlement, canAutoEnterSettlement, stealthEntering, runRefresh]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -419,7 +414,7 @@ const CulturalSettlements = () => {
           <ActivityIndicator color={COLORS.accent} />
           <Text style={styles.loadingText}>Отримуємо дані поселення…</Text>
         </View>
-      ) : hasCalibShip && attempts > 0 ? (
+      ) : canAutoEnterSettlement && attempts > 0 ? (
         <>
           <Text style={styles.note}>
             Не вдалось автоматично отримати мапу поселення. Можна спробувати
@@ -441,14 +436,13 @@ const CulturalSettlements = () => {
             <Text style={styles.retryButtonText}>Спробувати ще раз</Text>
           </TouchableOpacity>
         </>
-      ) : hasCalibShip ? (
+      ) : canAutoEnterSettlement ? (
         <Text style={styles.note}>Зараз спробуємо отримати мапу поселення автоматично…</Text>
       ) : (
         <Text style={styles.note}>
-          Потрібне одноразове калібрування: відкрийте «Технічні дані
-          поселення» → «Відкрити гру» → прогорніть до кораблика поселення й
-          натисніть «Корабель» (один тап). Після цього вхід відбуватиметься
-          автоматично щоразу, без жодних дій.
+          Для автоматичного входу на Android увімкніть синхронізацію з грою
+          у профілі. Потрібна збірка з нативними жестами. Ручний вхід і
+          калібрування доступні через «Технічні дані поселення».
         </Text>
       )}
 
