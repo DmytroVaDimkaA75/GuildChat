@@ -71,6 +71,26 @@ function settlementCategory(cid, rawType) {
   return type || 'unknown';
 }
 
+// ЕКСПЕРИМЕНТ (гілка fixed-webview-size): замість підганяти формулу під
+// будь-яку роздільну здатність — робимо невидиме ("тихе") вікно гри
+// ЗАВЖДИ ОДНОГО й того самого розміру (dp), незалежно від фізичного екрана
+// телефону. Користувач це вікно однаково ніколи не бачить (воно завжди
+// накрите власним екраном завантаження), тож немає причини підганяти його
+// під конкретний екран. dp у React Native вже сам по собі не залежить від
+// фізичної роздільної здатності — тому canvas усередині мав би завжди
+// отримувати той самий CSS-розмір, і стара проста формула (нижче) не
+// потребує жодного масштабування під різні пристрої.
+//
+// Застереження (як і в docs/foe-autoaim.md): react-native-webview за
+// замовчуванням має useWideViewPort/loadWithOverviewMode — гіпотетично
+// сторінка може показувати свій "широкий" логічний viewport і просто
+// масштабуватись під контейнер, а не звужувати сам layout. Це перевіряється
+// емпірично: чи справді живий вимір (requestInteractionProbe) дає ту саму
+// ширину canvas щоразу, коли контейнер має фіксований розмір — дивись
+// STEALTH_WEBVIEW_WIDTH/HEIGHT нижче й компонент рендеру WebView.
+const STEALTH_WEBVIEW_WIDTH = 1024;
+const STEALTH_WEBVIEW_HEIGHT = 1600;
+
 // ТИМЧАСОВО: по Y камера впирається в межу мапи (перевірено: запит
 // прокрутки на 686px замість 495px дав ІДЕНТИЧНИЙ результат — canvasY=237
 // обидва рази, той самий canvas 1024×908) — тому для Y досить прокрутити
@@ -81,7 +101,8 @@ function settlementCategory(cid, rawType) {
 // (перевірено: 646.7px і 699.4px дали РІЗний, хоч і близький, результат:
 // canvasX 419 і 407). Тому для X — НЕ "із запасом", а якомога точніше
 // виміряне значення: SHIP_DRAG_X_PX (середнє з двох замірів на canvas
-// шириною 1024; масштабування на іншу ширину поки не перевірене).
+// шириною 1024). На гілці fixed-webview-size масштабування на іншу ширину
+// вже НЕ потрібне за задумом — вікно завжди 1024 dp завширшки.
 // Виміряне 0.261/0.403 влучило (поселення відкрилось), але користувач
 // сказав, що сам тапнув би трохи правіше й трохи вище — невеликий зсув
 // цільової точки клікання (сам скрол/SHIP_DRAG_X_PX не чіпаємо).
@@ -802,7 +823,16 @@ export function FoeSyncProvider({ children }) {
       finishAutoEnter();
       return;
     }
-    setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
+    setAutoEnterLog((prev) => [...prev, {
+      // ЕКСПЕРИМЕНТ (fixed-webview-size): фіксуємо реально виміряний розмір
+      // canvas у лозі — щоб перевірити, чи фіксований dp-розмір контейнера
+      // (STEALTH_WEBVIEW_WIDTH/HEIGHT) справді дає ОДНАКОВИЙ CSS-розмір на
+      // будь-якому пристрої, а не лише на цьому. Порівнюй "target" тут між
+      // різними телефонами/тестами "Стиснути вікно".
+      step: 'interaction_ready',
+      target: `canvas ${Math.round(rect.width)}×${Math.round(rect.height)} CSS px`,
+      at: Date.now(),
+    }].slice(-20));
     const readyDocumentEpoch = webDocumentEpochRef.current;
 
     const reactTag = Number(webViewTagRef.current);
@@ -2153,22 +2183,34 @@ export function FoeSyncProvider({ children }) {
               </TouchableOpacity>
             </View>
           ) : null}
-          <WebView
-            ref={webViewRef}
-            key={webKey}
-            source={{ uri: gameUrl }}
-            style={{ flex: 1 }}
-            userAgent={DESKTOP_UA}
-            javaScriptEnabled
-            domStorageEnabled
-            thirdPartyCookiesEnabled
-            sharedCookiesEnabled
-            mixedContentMode="always"
-            injectedJavaScriptBeforeContentLoaded={injectedJs}
-            injectedJavaScript={injectedJs}
-            onLoadStart={onWebViewLoadStart}
-            onMessage={onMessage}
-          />
+          <View
+            style={
+              // ЕКСПЕРИМЕНТ: у тихому режимі WebView отримує ЗАВЖДИ той самий
+              // фіксований розмір (dp), незалежно від фізичного екрана —
+              // користувач його все одно не бачить (накрите екраном нижче).
+              // У видимому/ручному режимі лишається як було — на весь контейнер.
+              stealthEntering
+                ? { width: STEALTH_WEBVIEW_WIDTH, height: STEALTH_WEBVIEW_HEIGHT }
+                : { flex: 1 }
+            }
+          >
+            <WebView
+              ref={webViewRef}
+              key={webKey}
+              source={{ uri: gameUrl }}
+              style={{ flex: 1 }}
+              userAgent={DESKTOP_UA}
+              javaScriptEnabled
+              domStorageEnabled
+              thirdPartyCookiesEnabled
+              sharedCookiesEnabled
+              mixedContentMode="always"
+              injectedJavaScriptBeforeContentLoaded={injectedJs}
+              injectedJavaScript={injectedJs}
+              onLoadStart={onWebViewLoadStart}
+              onMessage={onMessage}
+            />
+          </View>
           {stealthEntering ? (
             // Непрозорий екран поверх ЦІЛКОМ видимого WebView — користувач
             // бачить тільки це, гру під ним — ніколи.
