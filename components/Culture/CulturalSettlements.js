@@ -207,11 +207,10 @@ const CulturalSettlements = () => {
   const hasCalibShip = !!calibPoints?.ship;
   const settlementMap = found.settlementMap;
   // Поки не маємо мапи поселення — тримаємо фонову синхронізацію активною
-  // (для входу достатньо спільної каліброваної прокрутки й точки тапу). Після
-  // мапи ще трохи тримаємо вікно живим, поки interceptor не побачить URL-и
-  // метаданих будівель поселення (щоб перемалювати їх у реальних габаритах).
-  // SYNC_LINGER_MS у FoeSyncProvider — жорсткий стелю: довше вікно не живе.
-  useFoeSyncActive(!settlementMap || settlementDefsProgress != null || stealthEntering);
+  // (потрібна мапа міста, щоб дізнатись координати корабля/ратуші). Щойно
+  // отримали мапу поселення — відпускаємо: вікно гри само згорнеться
+  // (див. SYNC_LINGER_MS у FoeSyncProvider), не тримаємо його довше, ніж треба.
+  useFoeSyncActive(!settlementMap);
 
   const ship = useMemo(
     () => (found.cityMap?.entities || []).find((e) => e.type === 'outpost_ship') || null,
