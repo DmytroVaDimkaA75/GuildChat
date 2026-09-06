@@ -80,6 +80,7 @@ import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
 import { YOUTUBE_CHANNEL_NAME } from './YouTube/youtubeChannel';
+import { SyncedMarqueeGroup, SyncedMarqueeText } from './SyncedMarquee';
 
 // НОВЫЕ ИКОНКИ
 import Admin from "./ico/menu/setting.svg";
@@ -872,6 +873,7 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, hasTesterAccess, .
               if (otherGuildSnapshot.exists() && guildUserSnapshot.exists()) {
                 otherGuilds[key] = {
                   guildName: otherGuildSnapshot.val().guildName || t("customDrawer.noName"),
+                  worldName: otherGuildSnapshot.val().worldName || '',
                   imageUrl: guildUserSnapshot.val().imageUrl || ''
                 };
               }
@@ -1073,15 +1075,30 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, hasTesterAccess, .
           nestedScrollEnabled
           showsVerticalScrollIndicator={false}
         >
-          {Object.keys(tempData).map(key => (
+          <SyncedMarqueeGroup enabled={isWorldSelectVisible}>
+          {Object.keys(tempData).map(key => {
+            const worldLabel =
+              tempData[key].worldName || key.split('_')[0].toUpperCase();
+            return (
             <TouchableOpacity key={key} style={styles.worldItem} onPress={() => handleGuildPress(key)}>
               {tempData[key].imageUrl ?
                 <Image source={{ uri: tempData[key].imageUrl }} style={styles.smallAvatar} /> :
                 <View style={styles.smallAvatarPlaceholder} />
               }
-              <Text style={styles.worldItemText}>{tempData[key].guildName}</Text>
+              <SyncedMarqueeText id={key} height={22} style={styles.worldItemMarquee}>
+                <Text style={[styles.worldItemText, styles.worldItemTextFlat]} numberOfLines={1}>
+                  {tempData[key].guildName}
+                </Text>
+                {worldLabel ? (
+                  <Text style={styles.worldItemWorld} numberOfLines={1}>
+                    {'   ·   ' + worldLabel}
+                  </Text>
+                ) : null}
+              </SyncedMarqueeText>
             </TouchableOpacity>
-          ))}
+            );
+          })}
+          </SyncedMarqueeGroup>
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => {
@@ -2210,7 +2227,7 @@ export default function MainContent({ onLogout }) {
 
   return (
     <MenuProvider>
-      <FoeSyncProvider>
+      <FoeSyncProvider key={String(guildId || '')}>
         <AppNavigator
           onReady={() => setReadyGuildId(String(guildId || ""))}
           onManualGuildSwitch={cancelNotificationRouteForManualSwitch}
@@ -2327,6 +2344,19 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 15,
     marginLeft: 12,
+    fontWeight: '500',
+  },
+  worldItemMarquee: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  worldItemTextFlat: {
+    marginLeft: 0,
+  },
+  worldItemWorld: {
+    color: COLORS.primary,
+    fontSize: 15,
     fontWeight: '500',
   },
   sectionTitle: {

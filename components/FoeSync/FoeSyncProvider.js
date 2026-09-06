@@ -38,6 +38,7 @@ import {
   fetchIconSheet,
   loadCachedGoodsSheet,
   fetchGoodsSheet,
+  parseAtlas,
 } from './FoeIcon';
 import { getBuildingDefs } from '../../src/services/foeBuildings';
 
@@ -49,6 +50,26 @@ const {
 
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Категорія споруди культурного поселення (без ВС і культури; є дипломатичні).
+// Спершу за стабільним префіксом cityentity_id, потім за типом із метаданих.
+const SETTLEMENT_PREFIX_TYPE = {
+  H: 'main_building',
+  R: 'residential',
+  J: 'diplomacy',
+  I: 'impediment',
+  B: 'production',
+  G: 'production',
+  D: 'decoration',
+};
+function settlementCategory(cid, rawType) {
+  const prefix = String(cid || '').split('_')[0];
+  if (SETTLEMENT_PREFIX_TYPE[prefix]) return SETTLEMENT_PREFIX_TYPE[prefix];
+  const type = String(rawType || '');
+  if (/greatbuilding/i.test(type)) return 'generic_building';
+  if (/culture/i.test(type)) return 'diplomacy';
+  return type || 'unknown';
+}
 
 // ТИМЧАСОВО: по Y камера впирається в межу мапи (перевірено: запит
 // прокрутки на 686px замість 495px дав ІДЕНТИЧНИЙ результат — canvasY=237
@@ -71,6 +92,14 @@ const SHIP_DRAG_X_PX = -673; // середнє: -699.42 та -646.7
 const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реально опинився після SHIP_DRAG_X_PX (canvasX≈413 з 1024)
 
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
+const gameHostFromGuildId = (g) => {
+  const worldId = worldIdFromGuildId(g);
+  return worldId ? `${worldId.toLowerCase()}.forgeofempires.com` : null;
+};
+const hostFromUrl = (value) => {
+  const match = String(value || '').match(/^https?:\/\/([^/:?#]+)/i);
+  return match ? match[1].toLowerCase() : null;
+};
 const gameUrlFromGuildId = (g) => {
   const w = worldIdFromGuildId(g);
   return w ? `https://${w}.forgeofempires.com/game/index?` : null;
@@ -84,6 +113,8 @@ const SYNC_LINGER_MS = 90 * 1000;
 // час, проведений у прихованому 1×1 WebView, не зараховується.
 const GAME_SCENE_VISIBLE_WARMUP_MS = 25 * 1000;
 const CALIB_KEY = 'foeSettlementCalib_v1'; // ТИМЧАСОВО: діагностика поселень
+const SETTLEMENT_SHEETS_KEY = 'foeSettlementSheetsV1'; // спрайт-листи іконок ресурсів поселень
+const ICON_URLS_KEY = 'foeResourceIconUrlsV1'; // поштучні PNG-іконки ресурсів поселень {key:url}
 const { FoeWebViewGesture } = NativeModules;
 const AUTO_STEP_LABELS = { // ТИМЧАСОВО: підписи кроків тесту автовходу
   start: 'старт',
@@ -128,6 +159,133 @@ export function useFoeSyncActive(active = true) {
     if (!active || typeof retain !== 'function') return undefined;
     return retain();
   }, [active, retain]);
+}
+
+// Довантаження визначень будівель (розмір, назва, тип, бонуси) для довільного
+// списку сутностей мапи — головного міста АБО культурного поселення. Джерело
+// те саме: спільний lookup-файл гри (`building_entity_lookup`) + прямі URL
+// ресурсів, які встиг побачити interceptor. Тимчасовий збій або відсутній URL
+// не кешуються як "будівля 1×1" — будівля лишається "уточнюється".
+function useResolvedBuildingDefs(entities, {
+  guildId,
+  playerEra,
+  activeLocale,
+  buildingUrls,
+  buildingLookupUrl,
+  scopeTag,
+}) {
+  const [defs, setDefs] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const requestRef = useRef(0);
+  const scopeRef = useRef(null);
+  const directRef = useRef({ signature: '', map: {} });
+
+  const list = Array.isArray(entities) ? entities : null;
+
+  const entityIds = useMemo(
+    () => Array.from(new Set(
+      (list || []).map((entity) => String(entity?.cid || '').trim()).filter(Boolean)
+    )),
+    [list]
+  );
+
+  const definitionRequests = useMemo(() => {
+    const requests = new Map();
+    for (const entity of list || []) {
+      const entityId = String(entity?.cid || '').trim();
+      if (!entityId) continue;
+      const era = resolveRequestedBuildingEra(entityId, entity?.era, playerEra);
+      const key = `${entityId}@${era || 'unknown'}`;
+      requests.set(key, { entityId, era, key });
+    }
+    return Array.from(requests.values());
+  }, [list, playerEra]);
+  const definitionSignature = definitionRequests.map((request) => request.key).join('|');
+
+  const directSignature = useMemo(
+    () => entityIds.map((id) => `${id}=${buildingUrls?.[id] || ''}`).join('|'),
+    [entityIds, buildingUrls]
+  );
+  if (directRef.current.signature !== directSignature) {
+    directRef.current = {
+      signature: directSignature,
+      map: Object.fromEntries(
+        entityIds.filter((id) => !!buildingUrls?.[id]).map((id) => [id, buildingUrls[id]])
+      ),
+    };
+  }
+  const directUrls = directRef.current.map;
+
+  useEffect(() => {
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let active = true;
+    const stop = () => {
+      active = false;
+      controller?.abort();
+    };
+
+    if (!definitionRequests.length) {
+      setDefs(null);
+      setProgress(null);
+      return stop;
+    }
+
+    const haveDirectUrls = entityIds.some((id) => !!directUrls[id]);
+    if (!haveDirectUrls && !buildingLookupUrl) {
+      setProgress('очікування метаданих');
+      return stop;
+    }
+
+    const firstDirectUrl = entityIds.map((id) => directUrls[id]).find(Boolean);
+    const sourceScope = buildingLookupUrl || String(firstDirectUrl || '').split('?')[0];
+    const scopeKey = [scopeTag, guildId, definitionSignature, activeLocale, sourceScope].join('::');
+    if (scopeRef.current !== scopeKey) {
+      scopeRef.current = scopeKey;
+      setDefs(null);
+    }
+    setProgress(`0 / ${definitionRequests.length}`);
+
+    getBuildingDefs(
+      definitionRequests,
+      buildingLookupUrl,
+      (done, total) => {
+        if (active && requestRef.current === requestId) setProgress(`${done} / ${total}`);
+      },
+      directUrls,
+      { playerEra, locale: activeLocale, signal: controller?.signal, scope: scopeTag }
+    )
+      .then((definitions) => {
+        if (!active || requestRef.current !== requestId) return;
+        setDefs(definitions);
+        const resolved = Object.values(definitions).filter(
+          (definition) => definition?.resolved && definition.width && definition.length
+        ).length;
+        setProgress(
+          resolved === definitionRequests.length
+            ? null
+            : `${resolved} / ${definitionRequests.length}`
+        );
+      })
+      .catch((error) => {
+        if (!active || requestRef.current !== requestId || error?.name === 'AbortError') return;
+        setProgress('помилка метаданих');
+      });
+
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    scopeTag,
+    guildId,
+    activeLocale,
+    playerEra,
+    definitionSignature,
+    directSignature,
+    buildingLookupUrl,
+  ]);
+
+  return { defs, progress };
 }
 
 export function FoeSyncProvider({ children }) {
@@ -201,6 +359,7 @@ export function FoeSyncProvider({ children }) {
   const webViewTagRef = useRef(null);
   const webDocumentEpochRef = useRef(0);
   const webDocumentIdRef = useRef(null);
+  const webDocumentStartedAtRef = useRef(0);
   const cityMapDocumentEpochRef = useRef(null);
   const interactionProbeResolverRef = useRef(null);
   const interactionProbeNonceRef = useRef(0);
@@ -322,7 +481,10 @@ export function FoeSyncProvider({ children }) {
     }
   }), []);
 
-  const waitForInteractiveGame = useCallback(async (timeoutMs = 75000) => {
+  const waitForInteractiveGame = useCallback(async ({
+    timeoutMs = 75000,
+    requireCurrentCityMap = true,
+  } = {}) => {
     const deadline = Date.now() + timeoutMs;
     let stableCount = 0;
     let lastSignature = '';
@@ -331,6 +493,9 @@ export function FoeSyncProvider({ children }) {
       const probe = await requestInteractionProbe();
       const rect = probe?.rect;
       const frameDeltaMs = Number(probe?.frameDeltaMs);
+      const expectedHost = gameHostFromGuildId(guildIdRef.current);
+      const probeHost = String(probe?.pageHost || '').trim().toLowerCase();
+      const probePath = String(probe?.pagePath || '');
       const ready =
         !!rect &&
         Number(rect.width) > 100 &&
@@ -341,9 +506,15 @@ export function FoeSyncProvider({ children }) {
         String(probe?.canvasTag || '') === 'canvas' &&
         ['interactive', 'complete'].includes(String(probe?.readyState || '')) &&
         String(probe?.visibilityState || 'visible') === 'visible' &&
+        !!expectedHost &&
+        probeHost === expectedHost &&
+        /^\/game\/index(?:\/|$)/.test(probePath) &&
         webFullSizeSinceRef.current > 0 &&
         Date.now() - webFullSizeSinceRef.current >= GAME_SCENE_VISIBLE_WARMUP_MS &&
-        cityMapDocumentEpochRef.current === webDocumentEpochRef.current &&
+        (
+          !requireCurrentCityMap ||
+          cityMapDocumentEpochRef.current === webDocumentEpochRef.current
+        ) &&
         probe?.stable === true &&
         Number.isFinite(frameDeltaMs) &&
         frameDeltaMs > 0 &&
@@ -727,10 +898,12 @@ export function FoeSyncProvider({ children }) {
   // та формула (tryAutoAimEnter) виявилась ненадійною й покинута (див.
   // пам'ять settlement-diag-temp-screen). tryAutoEnter з реальними
   // координатами вже підтверджено надійний через кнопку "Тест".
-  const autoEnterSettlementQuietly = useCallback(async () => {
+  const autoEnterSettlementQuietly = useCallback(async ({ force = false } = {}) => {
     if (stealthEnteringRef.current || autoEnterBusyRef.current) { return; }
     if (webPinnedRef.current) { return; }
-    if (foundRef.current?.settlementMap) { return; }
+    // Без force — не заходимо, якщо мапа поселення вже є (автозапуск). З force
+    // (кнопка «Оновити») — заходимо повторно, щоб отримати свіжі дані.
+    if (!force && foundRef.current?.settlementMap) { return; }
     const ship = calibPoints?.ship;
     if (!ship) {
       setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
@@ -758,7 +931,7 @@ export function FoeSyncProvider({ children }) {
       // його свідомо, а перед самим tryAutoEnter знімаємо назад, бо той сам
       // виставляє його з нуля і вважає true "вже триває інша спроба".
       autoEnterBusyRef.current = true;
-      const ready = await waitForInteractiveGame();
+      const ready = await waitForInteractiveGame({ requireCurrentCityMap: false });
       autoEnterBusyRef.current = false;
       if (!ready) {
         setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
@@ -822,7 +995,7 @@ export function FoeSyncProvider({ children }) {
     autoEnterBusyRef.current = true;
 
     try {
-      const ready = await waitForInteractiveGame();
+      const ready = await waitForInteractiveGame({ requireCurrentCityMap: false });
       if (!ready) {
         setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
         return;
@@ -909,11 +1082,14 @@ export function FoeSyncProvider({ children }) {
   const [rawLog, setRawLog] = useState([]); // ТИМЧАСОВО: діагностика поселень
   const [iconSheet, setIconSheet] = useState(null);
   const [goodsSheet, setGoodsSheet] = useState(null);
+  const [settlementSheets, setSettlementSheets] = useState([]);
+  const [settlementIconUrls, setSettlementIconUrls] = useState({});
   const [buildingDefs, setBuildingDefs] = useState(null);
   const [defsProgress, setDefsProgress] = useState(null);
 
   const iconSheetUrlsRef = useRef(null);
   const goodsSheetUrlsRef = useRef(null);
+  const settlementSheetBasesRef = useRef(new Set());
   const rawLogIdRef = useRef(0); // ТИМЧАСОВО: унікальні ключі для сирого логу
   const guildIdRef = useRef(guildContext?.guildId || null);
   const defsRequestRef = useRef(0);
@@ -933,9 +1109,12 @@ export function FoeSyncProvider({ children }) {
     setFound({});
     setSeen(new Set());
     setRawLog([]);
+    // settlementSheets НЕ чистимо — спрайт-листи іконок ресурсів спільні для
+    // всіх світів і кешуються (як iconSheet/goodsSheet).
     webViewTagRef.current = null;
     cityMapDocumentEpochRef.current = null;
     webDocumentIdRef.current = null;
+    webDocumentStartedAtRef.current = 0;
     if (interactionProbeResolverRef.current) {
       const pending = interactionProbeResolverRef.current;
       interactionProbeResolverRef.current = null;
@@ -972,13 +1151,15 @@ export function FoeSyncProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, u, g, sheet, gSheet, calib] = await Promise.all([
+      const [c, u, g, sheet, gSheet, calib, sSheets, sIcons] = await Promise.all([
         AsyncStorage.getItem(FOE_CONSENT_KEY),
         AsyncStorage.getItem('userId'),
         AsyncStorage.getItem('guildId'),
         loadCachedIconSheet(),
         loadCachedGoodsSheet(),
         AsyncStorage.getItem(CALIB_KEY),
+        AsyncStorage.getItem(SETTLEMENT_SHEETS_KEY),
+        AsyncStorage.getItem(ICON_URLS_KEY),
       ]);
       if (cancelled) return;
       setConsent(c === 'yes' ? 'yes' : 'no');
@@ -990,6 +1171,19 @@ export function FoeSyncProvider({ children }) {
       }
       if (sheet) setIconSheet(sheet);
       if (gSheet) setGoodsSheet(gSheet);
+      try {
+        const parsed = sSheets ? JSON.parse(sSheets) : null;
+        if (Array.isArray(parsed) && parsed.length) {
+          setSettlementSheets(parsed);
+          parsed.forEach((s) => s?.base && settlementSheetBasesRef.current.add(s.base));
+        }
+      } catch (_e) { /* ignore */ }
+      try {
+        const parsed = sIcons ? JSON.parse(sIcons) : null;
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length) {
+          setSettlementIconUrls(parsed);
+        }
+      } catch (_e) { /* ignore */ }
       if (calib) {
         try { setCalibPoints(JSON.parse(calib)); } catch (_e) {}
       }
@@ -1040,10 +1234,6 @@ export function FoeSyncProvider({ children }) {
 
   const onWebViewLoadStart = useCallback((event) => {
     rememberWebViewTag(event);
-    webDocumentEpochRef.current += 1;
-    webDocumentIdRef.current = null;
-    cityMapDocumentEpochRef.current = null;
-    webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
   }, [rememberWebViewTag]);
 
   const onMessage = useCallback((event) => {
@@ -1065,17 +1255,48 @@ export function FoeSyncProvider({ children }) {
     const messageDocumentId = msg.documentId == null ? null : String(msg.documentId);
     if (msg.kind === 'ready') {
       if (!messageDocumentId) return;
+      const explicitStartedAt = Number(msg.documentStartedAt);
+      const idStartedAt = Number(messageDocumentId.split('-')[0]);
+      const messageStartedAt = Number.isFinite(explicitStartedAt) && explicitStartedAt > 0
+        ? explicitStartedAt
+        : (Number.isFinite(idStartedAt) && idStartedAt > 0 ? idStartedAt : 0);
+      const isNewDocument = webDocumentIdRef.current !== messageDocumentId;
+
+      // Android WebView викликає onLoadStart також для SPA/history-переходів.
+      // Реальну зміну документа визначає лише новий id самого інтерсептора.
+      // Старе queued-повідомлення не повинно повернути нас до попередньої сторінки.
       if (
+        isNewDocument &&
         webDocumentIdRef.current &&
-        webDocumentIdRef.current !== messageDocumentId
+        messageStartedAt > 0 &&
+        webDocumentStartedAtRef.current > messageStartedAt
       ) {
         return;
       }
-      webDocumentIdRef.current = messageDocumentId;
+      if (isNewDocument) {
+        webDocumentEpochRef.current += 1;
+        cityMapDocumentEpochRef.current = null;
+        webDocumentIdRef.current = messageDocumentId;
+        webDocumentStartedAtRef.current = messageStartedAt;
+        webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
+      }
       setHealth((h) => ({ ...h, ready: true }));
       return;
     }
     if (!messageDocumentId || messageDocumentId !== webDocumentIdRef.current) {
+      return;
+    }
+
+    // Пакети й жести приймаємо лише від світу активної гільдії. Сторінка
+    // порталу може надсилати тільки URL/діагностику вибору світу.
+    const expectedHost = gameHostFromGuildId(guildIdRef.current);
+    const messageHost = String(
+      msg.pageHost || hostFromUrl(event?.nativeEvent?.url) || ''
+    ).trim().toLowerCase();
+    if (
+      !['url', 'worldSelectDump'].includes(msg.kind) &&
+      (!expectedHost || messageHost !== expectedHost)
+    ) {
       return;
     }
 
@@ -1187,6 +1408,21 @@ export function FoeSyncProvider({ children }) {
       setFound((p) => ({ ...p, buildingUrls: { ...(p.buildingUrls || {}), ...msg.map } }));
       return;
     }
+    if (msg.kind === 'settlementCatalog' && Array.isArray(msg.defs)) {
+      setFound((p) => ({ ...p, settlementCatalogMeta: msg.defs }));
+      return;
+    }
+    if (msg.kind === 'iconUrls' && msg.map && typeof msg.map === 'object') {
+      setSettlementIconUrls((prev) => {
+        const next = { ...prev, ...msg.map };
+        if (Object.keys(next).length !== Object.keys(prev).length ||
+            Object.keys(next).some((k) => next[k] !== prev[k])) {
+          AsyncStorage.setItem(ICON_URLS_KEY, JSON.stringify(next)).catch(() => {});
+        }
+        return next;
+      });
+      return;
+    }
     if (msg.kind === 'goodsSheet' && msg.png && msg.json) {
       const key = msg.png + '|' + msg.json;
       if (goodsSheetUrlsRef.current !== key) {
@@ -1200,6 +1436,34 @@ export function FoeSyncProvider({ children }) {
       if (iconSheetUrlsRef.current !== key) {
         iconSheetUrlsRef.current = key;
         fetchIconSheet(msg.png, msg.json).then(setIconSheet).catch(() => {});
+      }
+      return;
+    }
+    // Додаткові спрайт-листи (іконки ресурсів поселення тощо). Пробуємо
+    // розібрати як атлас; збережемо ті, де є кадри.
+    if (msg.kind === 'spriteSheet' && msg.png && msg.json && msg.base) {
+      if (!settlementSheetBasesRef.current.has(msg.base)) {
+        settlementSheetBasesRef.current.add(msg.base);
+        fetch(msg.json)
+          .then((response) => response.json())
+          .then((json) => {
+            const { frames, sheetW, sheetH } = parseAtlas(json);
+            if (frames && Object.keys(frames).length && sheetW && sheetH) {
+              setSettlementSheets((prev) => {
+                if (prev.some((sheet) => sheet.base === msg.base)) return prev;
+                const next = [
+                  ...prev,
+                  { base: msg.base, pngUrl: msg.png, frames, sheetW, sheetH },
+                ].slice(-12);
+                const serialized = JSON.stringify(next);
+                if (serialized.length < 1500000) {
+                  AsyncStorage.setItem(SETTLEMENT_SHEETS_KEY, serialized).catch(() => {});
+                }
+                return next;
+              });
+            }
+          })
+          .catch(() => {});
       }
       return;
     }
@@ -1320,6 +1584,7 @@ export function FoeSyncProvider({ children }) {
         playerEra,
         locale: activeLocale,
         signal: controller?.signal,
+        scope: 'city',
       }
     )
       .then((definitions) => {
@@ -1430,6 +1695,189 @@ export function FoeSyncProvider({ children }) {
     [buildingDefs, found.cityMap, playerEra]
   );
 
+  // Те саме, але для мапи культурного поселення (found.settlementMap). Розміри
+  // й назви беруться зі спільного каталогу гри тим самим шляхом, що й для
+  // головного міста, — тож уже побудовані споруди поселення можна перемалювати
+  // в реальних габаритах, а не квадратиками 1×1.
+  const settlementMapEntities = useMemo(
+    () => (Array.isArray(found.settlementMap?.entities) ? found.settlementMap.entities : []),
+    [found.settlementMap]
+  );
+
+  // Токени активного поселення ("Pirates", …) — з cityentity_id споруд на мапі.
+  const settlementTokens = useMemo(() => {
+    const set = new Set();
+    for (const entity of settlementMapEntities) {
+      const match = String(entity?.cid || '').match(/^[A-Za-z]{1,3}_([A-Za-z]+)_/);
+      if (match) set.add(match[1].toLowerCase());
+    }
+    return set;
+  }, [settlementMapEntities]);
+
+  // Каталог із метаданих гри (StaticDataService.getMetadata) — усі споруди
+  // поселення, у т.ч. ще не збудовані. Лишаємо тільки активне поселення й
+  // прибираємо перешкоди (I_*) — це не будівлі.
+  const settlementCatalogMeta = useMemo(() => {
+    const list = Array.isArray(found.settlementCatalogMeta) ? found.settlementCatalogMeta : [];
+    if (!settlementTokens.size) return [];
+    return list.filter((item) => {
+      const cid = String(item?.cid || '');
+      if (/^I_/.test(cid)) return false;
+      const match = cid.match(/^[A-Za-z]{1,3}_([A-Za-z]+)_/);
+      return !!match && settlementTokens.has(match[1].toLowerCase());
+    });
+  }, [found.settlementCatalogMeta, settlementTokens]);
+
+  // Список для довантаження визначень = споруди на мапі + ще не збудовані з
+  // каталогу (щоб знати їхні назву/розмір/бонуси).
+  const settlementResolveList = useMemo(() => {
+    const seen = new Set(settlementMapEntities.map((entity) => String(entity?.cid || '')));
+    const extra = settlementCatalogMeta
+      .filter((item) => item?.cid && !seen.has(String(item.cid)))
+      .map((item) => ({ cid: item.cid }));
+    return [...settlementMapEntities, ...extra];
+  }, [settlementMapEntities, settlementCatalogMeta]);
+
+  const {
+    defs: settlementDefs,
+    progress: settlementDefsProgress,
+  } = useResolvedBuildingDefs(settlementResolveList, {
+    guildId,
+    playerEra,
+    activeLocale,
+    buildingUrls: found.buildingUrls,
+    buildingLookupUrl: found.buildingLookupUrl,
+    scopeTag: 'settlement',
+  });
+
+  const settlementBuildings = useMemo(() => {
+    const list = settlementMapEntities;
+    return list.map((entity, index) => {
+      const entityId = String(entity?.cid || '').trim();
+      const requestedEra = resolveRequestedBuildingEra(entityId, entity?.era, playerEra);
+      const definitionKey = `${entityId}@${requestedEra || 'unknown'}`;
+      const definition = entityId ? settlementDefs?.[definitionKey] || null : null;
+      const width = Number(definition?.width);
+      const length = Number(definition?.length);
+      const runtimeBonuses = Array.isArray(entity?.runtimeBonuses) ? entity.runtimeBonuses : [];
+      return {
+        ...entity,
+        instanceId: String(
+          entity?.id ?? `${entityId || 'unknown'}:${entity?.x ?? '?'}:${entity?.y ?? '?'}:${index}`
+        ),
+        entityId,
+        definitionKey,
+        name: definition?.name || entityId,
+        era: definition?.era || requestedEra,
+        footprint: {
+          width: Number.isFinite(width) && width > 0 ? width : null,
+          length: Number.isFinite(length) && length > 0 ? length : null,
+        },
+        bonuses: runtimeBonuses.length ? runtimeBonuses : (definition?.bonuses || []),
+        definition,
+        definitionStatus: definition?.resolved ? 'resolved' : definition?.error || 'loading',
+      };
+    });
+  }, [settlementDefs, settlementMapEntities, playerEra]);
+
+  // "Метадані по доступних для будівництва спорудах" — зведення за ТИПОМ споруди
+  // (не за інстансом). Джерела: каталог гри (усі споруди поселення, у т.ч. ще
+  // не збудовані) + мапа (скільки вже стоїть). Розмір/назва/бонуси — з
+  // довантажених визначень, з відкатом на числа з каталогу.
+  const settlementCatalog = useMemo(() => {
+    const builtCount = new Map();
+    const builtSample = new Map(); // cid -> уже перемальований інстанс (справжні розміри)
+    for (const building of settlementBuildings) {
+      if (!building.entityId) continue;
+      builtCount.set(building.entityId, (builtCount.get(building.entityId) || 0) + 1);
+      if (!builtSample.has(building.entityId) || building.definitionStatus === 'resolved') {
+        builtSample.set(building.entityId, building);
+      }
+    }
+
+    const metaByCid = new Map(
+      settlementCatalogMeta.filter((item) => item?.cid).map((item) => [String(item.cid), item])
+    );
+    // Порядок: спершу все з каталогу гри, потім те, що є на мапі, але не
+    // потрапило в каталог (напр. ратуша/особливі), — без дублів.
+    const cids = [];
+    const seen = new Set();
+    for (const item of settlementCatalogMeta) {
+      const cid = String(item?.cid || '');
+      if (cid && !seen.has(cid)) { seen.add(cid); cids.push(cid); }
+    }
+    for (const building of settlementBuildings) {
+      const cid = building.entityId;
+      if (cid && !seen.has(cid) && !/^I_/.test(cid)) { seen.add(cid); cids.push(cid); }
+    }
+
+    return cids.map((cid) => {
+      const requestedEra = resolveRequestedBuildingEra(cid, null, playerEra);
+      const definition =
+        builtSample.get(cid)?.definition ||
+        settlementDefs?.[`${cid}@${requestedEra || 'unknown'}`] ||
+        null;
+      const meta = metaByCid.get(cid) || null;
+      const sample = builtSample.get(cid) || null;
+      const width =
+        Number(sample?.footprint?.width) || Number(definition?.width) || Number(meta?.w) || null;
+      const length =
+        Number(sample?.footprint?.length) || Number(definition?.length) || Number(meta?.l) || null;
+      const built = builtCount.get(cid) || 0;
+      return {
+        cid,
+        name: sample?.name || definition?.name || meta?.name || cid,
+        type: settlementCategory(cid, definition?.type || sample?.type || meta?.type),
+        width: width && width > 0 ? width : null,
+        length: length && length > 0 ? length : null,
+        bonuses: definition?.bonuses || [],
+        requirements: meta?.req || null,
+        built,
+        buildable: built === 0,
+        resolved: !!definition?.resolved || (!!width && !!length),
+      };
+    }).sort((a, b) => {
+      if (a.buildable !== b.buildable) return a.buildable ? 1 : -1; // збудовані вгорі
+      return String(a.type).localeCompare(String(b.type)) || String(a.cid).localeCompare(String(b.cid));
+    });
+  }, [settlementBuildings, settlementCatalogMeta, settlementDefs, playerEra]);
+
+  // Виробництва поселення: рядок на кожну будівлю, у якої Є виробничий цикл
+  // (interceptor кладе стан у entity.prod лише для таких — перешкоди й чисто
+  // дипломатичні споруди туди не потрапляють). Додатково відкидаємо ті, чий
+  // єдиний продукт — дипломатія (збирати нема чого).
+  // Сортування: спершу готові до збору, далі за часом завершення.
+  const settlementProductions = useMemo(() => {
+    const rows = settlementBuildings
+      .filter((building) => {
+        const prod = building?.prod;
+        if (!prod || typeof prod !== 'object') return false;
+        const keys = Object.keys(prod.det || {});
+        const onlyDiplomacy = keys.length > 0 && keys.every((key) => /diploma/i.test(key));
+        if (onlyDiplomacy) return false;
+        return true;
+      })
+      .map((building) => ({
+        instanceId: building.instanceId,
+        cid: building.entityId,
+        name: building.name || building.entityId,
+        type: settlementCategory(building.entityId, building.definition?.type || building.type),
+        ready: !!building.prod.ready,
+        readyAt: Number(building.prod.readyAt) || null,
+        productName: building.prod.name || null,
+        product: building.prod.det || null,
+        state: building.prod.st || null,
+      }));
+    rows.sort((a, b) => {
+      if (a.ready !== b.ready) return a.ready ? -1 : 1;
+      const ta = a.readyAt || Infinity;
+      const tb = b.readyAt || Infinity;
+      if (ta !== tb) return ta - tb;
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return rows;
+  }, [settlementBuildings]);
+
   // Приховане вікно гри вантажимо лише коли є замовник (або доробка збору,
   // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
   const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering);
@@ -1469,9 +1917,16 @@ export function FoeSyncProvider({ children }) {
     rawLog,
     iconSheet,
     goodsSheet,
+    settlementSheets,
+    settlementIconUrls,
     buildingDefs,
     cityBuildings,
     defsProgress,
+    settlementDefs,
+    settlementBuildings,
+    settlementDefsProgress,
+    settlementCatalog,
+    settlementProductions,
   };
 
   return (

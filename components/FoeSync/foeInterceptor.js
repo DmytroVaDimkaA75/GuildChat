@@ -12,7 +12,8 @@ export const FOE_INTERCEPTOR_JS = `
 (function () {
   if (window.__foeSyncHook) { return; }
   window.__foeSyncHook = true;
-  var syncDocumentId = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+  var syncDocumentStartedAt = Date.now();
+  var syncDocumentId = String(syncDocumentStartedAt) + '-' + Math.random().toString(36).slice(2);
 
   // Буфер ресурсних таймінгів переповнюється (у грі > 2800 файлів будівель),
   // тож ловимо URL-и і напряму через PerformanceObserver, і збільшуємо буфер.
@@ -44,6 +45,9 @@ export const FOE_INTERCEPTOR_JS = `
         }
         if (payload && typeof payload === 'object') {
           payload.documentId = syncDocumentId;
+          payload.documentStartedAt = syncDocumentStartedAt;
+          payload.pageHost = String(location.hostname || '').toLowerCase();
+          payload.pagePath = String(location.pathname || '');
         }
         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
       }
@@ -258,6 +262,8 @@ export const FOE_INTERCEPTOR_JS = `
             probe: {
               readyState: document.readyState,
               visibilityState: document.visibilityState || null,
+              pageHost: String(location.hostname || '').toLowerCase(),
+              pagePath: String(location.pathname || ''),
               hidden: document.hidden === true,
               hasFocus: typeof document.hasFocus === 'function' ? document.hasFocus() : null,
               userActivation: activation,
@@ -284,6 +290,8 @@ export const FOE_INTERCEPTOR_JS = `
         probe: {
           readyState: document.readyState,
           visibilityState: document.visibilityState || null,
+          pageHost: String(location.hostname || '').toLowerCase(),
+          pagePath: String(location.pathname || ''),
           hidden: document.hidden === true,
           hasFocus: null,
           userActivation: null,
@@ -902,6 +910,64 @@ export const FOE_INTERCEPTOR_JS = `
     return out.length ? out : null;
   }
 
+  // Стан виробництва будівлі — для таблиці «час до завершення» у поселенні.
+  // Форма state.__class__ та полів така сама, як у головному місті.
+  // Повертає null, якщо в будівлі НЕМАЄ виробничого циклу як такого
+  // (чисто дипломатична споруда, перешкода тощо) — щоб вони не потрапляли
+  // у таблицю виробництв.
+  function compactProductionState(entity) {
+    var st = entity && entity.state;
+    if (!st || typeof st !== 'object') { return null; }
+    var cls = String(st.__class__ || '');
+
+    var readyAt = null;
+    if (st.next_state_transition_at != null) { readyAt = Number(st.next_state_transition_at); }
+    else if (st.production_finish_time != null) { readyAt = Number(st.production_finish_time); }
+    var hasTimer = isFinite(readyAt) && readyAt > 0;
+
+    var cp = st.current_product || st.produced_product || null;
+    var po = st.productionOption || (cp && cp.products ? cp : null);
+
+    // Ознака реального виробничого циклу: обраний/готовий продукт, перелік
+    // рецептів, таймер завершення або клас стану про виробництво/збір.
+    var hasCycle = !!cp || !!po || hasTimer || /Produc|Finished|Collect/i.test(cls);
+    if (!hasCycle) { return null; }
+
+    var ready = /Finished|Produced|Collect/i.test(cls) ||
+      (hasTimer && readyAt <= Math.floor(Date.now() / 1000));
+
+    var det = {};
+    function absorb(resObj) {
+      if (!resObj || typeof resObj !== 'object') { return; }
+      for (var k in resObj) {
+        if (Object.prototype.hasOwnProperty.call(resObj, k)) {
+          det[k] = (det[k] || 0) + (Number(resObj[k]) || 0);
+        }
+      }
+    }
+    var name = (cp && cp.name) || null;
+    if (cp && cp.product && cp.product.resources) { absorb(cp.product.resources); }
+    if (cp && Array.isArray(cp.goods)) {
+      for (var gi = 0; gi < cp.goods.length; gi++) {
+        var g = cp.goods[gi];
+        if (g && g.good_id) { det[g.good_id] = (det[g.good_id] || 0) + (Number(g.value) || 0); }
+      }
+    }
+    if (po && Array.isArray(po.products)) {
+      for (var pj = 0; pj < po.products.length; pj++) {
+        var pr = po.products[pj];
+        absorb(pr && pr.playerResources && pr.playerResources.resources);
+      }
+    }
+    return {
+      st: cls,
+      ready: !!ready,
+      readyAt: hasTimer ? readyAt : null,
+      name: name,
+      det: Object.keys(det).length ? det : null
+    };
+  }
+
   // Рекурсивно шукає об'єкти, схожі на Величну споруду (type === "greatbuilding"
   // або є поле bonus). Повертає до 3 прикладів (обрізаних), або null.
   function scanForGB(node, depth) {
@@ -1054,6 +1120,83 @@ export const FOE_INTERCEPTOR_JS = `
     } catch (e) {}
   }
 
+  // --- Каталог споруд культурного поселення (з StaticDataService.getMetadata) ---
+  // Гра тримає визначення ВСІХ споруд (у т.ч. поселенських, ще не збудованих) у
+  // блоці city_entities метаданих. Виловлюємо звідти рядки, чий cityentity_id
+  // явно належить поселенню, і шлемо компактний список — застосунок за ним
+  // покаже "що можна побудувати" й перемалює вже збудоване в реальному розмірі.
+  var SETTLEMENT_TOKEN_RE = /^(pirates?|vikings?|aztecs?|mughals?|polynesian?|egypt[a-z]*|japan[a-z]*|feudal[a-z]*|mughal[a-z]*)$/i;
+  var settlementCatalogSig = '';
+
+  function settlementTokenOfCid(cid) {
+    var m = String(cid || '').match(/^[A-Za-z]{1,3}_([A-Za-z]+)_/);
+    if (!m) { return null; }
+    return SETTLEMENT_TOKEN_RE.test(m[1]) ? m[1] : null;
+  }
+
+  function footprintOfDef(def) {
+    if (!def || typeof def !== 'object') { return { w: null, l: null }; }
+    var w = Number(def.width);
+    var l = Number(def.length);
+    if (w > 0 && l > 0) { return { w: w, l: l }; }
+    var comps = def.components && typeof def.components === 'object' ? def.components : {};
+    var keys = Object.keys(comps);
+    for (var i = 0; i < keys.length; i++) {
+      var c = comps[keys[i]];
+      var pl = c && c.placement;
+      var sz = pl && (pl.size || pl);
+      if (sz) {
+        var sw = Number(sz.x != null ? sz.x : sz.width);
+        var sl = Number(sz.y != null ? sz.y : sz.length);
+        if (sw > 0 && sl > 0) { return { w: sw, l: sl }; }
+      }
+    }
+    return { w: (w > 0 ? w : null), l: (l > 0 ? l : null) };
+  }
+
+  function collectSettlementCatalog(blocks) {
+    try {
+      var out = [];
+      var seenCid = {};
+      for (var bi = 0; bi < blocks.length && out.length < 400; bi++) {
+        var blk = blocks[bi];
+        if (!blk || typeof blk !== 'object') { continue; }
+        var payload = blk.metadata || blk.data || blk.entities || blk;
+        var arr = Array.isArray(payload) ? payload
+          : (payload && typeof payload === 'object'
+            ? Object.keys(payload).map(function (kk) { return payload[kk]; }) : null);
+        if (!arr) { continue; }
+        for (var ei = 0; ei < arr.length && out.length < 400; ei++) {
+          var def = arr[ei];
+          if (!def || typeof def !== 'object') { continue; }
+          var cid = def.cityentity_id || def.id;
+          if (!cid || seenCid[cid]) { continue; }
+          if (!settlementTokenOfCid(cid)) { continue; }
+          seenCid[cid] = 1;
+          var fp = footprintOfDef(def);
+          var nm = def.name;
+          if (nm && typeof nm === 'object') {
+            var nk = Object.keys(nm);
+            nm = nk.length ? nm[nk[0]] : null;
+          }
+          out.push({
+            cid: cid,
+            type: def.type || (def.__class__ ? String(def.__class__) : null),
+            w: fp.w,
+            l: fp.l,
+            name: (typeof nm === 'string' ? nm.slice(0, 80) : null),
+            req: def.requirements || def.unlock_requirements || null
+          });
+        }
+      }
+      if (!out.length) { return; }
+      var sig = out.length + ':' + out[0].cid;
+      if (settlementCatalogSig === sig) { return; }
+      settlementCatalogSig = sig;
+      post({ __foeSync: true, kind: 'settlementCatalog', defs: out });
+    } catch (e) {}
+  }
+
   function handleBody(body) {
     var data;
     try { data = JSON.parse(body); } catch (e) { return; }
@@ -1130,6 +1273,7 @@ export const FOE_INTERCEPTOR_JS = `
           }
         }
         found.metaInfo = meta;
+        collectSettlementCatalog(blocks);
         got = true;
       }
 
@@ -1161,7 +1305,8 @@ export const FOE_INTERCEPTOR_JS = `
               era: me.era || me.era_id || (me.state && me.state.era) || null,
               type: me.type,
               conn: me.connected,
-              runtimeBonuses: compactEntityBonuses(me)
+              runtimeBonuses: compactEntityBonuses(me),
+              prod: compactProductionState(me)
             };
           }).filter(Boolean)
         };
@@ -1575,8 +1720,8 @@ export const FOE_INTERCEPTOR_JS = `
 
   var lastAdvance = 0;
   var authedSent = false;
-  // Сигнал застосунку: вхід у гру підтверджено (логін/пароль прийнято).
-  // Далі вікно гри можна прибрати з екрана — автоперехід доробить у фоні.
+  // Сигнал застосунку: потрібний світ уже реально віддає ігрові пакети.
+  // Лише після цього вікно безпечно прибирати з екрана.
   function markAuthed() {
     if (authedSent) { return; }
     authedSent = true;
@@ -1584,9 +1729,32 @@ export const FOE_INTERCEPTOR_JS = `
   }
   function autoAdvance() {
     try {
-      var w = window.__FOE_WORLD || '';
+      var w = String(window.__FOE_WORLD || '').trim().toLowerCase();
       var href = String(location.href || '');
-      if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { markAuthed(); return; }
+      var currentHost = String(location.hostname || '').trim().toLowerCase();
+      var currentPath = String(location.pathname || '');
+      var targetHost = w ? w + '.forgeofempires.com' : '';
+      var onGameIndex = /^\\/game\\/index(?:\\/|$)/.test(currentPath);
+      var isLoginShell = /master-page-login/i.test(href);
+      if (targetHost && currentHost === targetHost && onGameIndex && !isLoginShell) {
+        if (packetNo > 0) { markAuthed(); }
+        return;
+      }
+      // Спільні cookies можуть спершу відкрити останній відвіданий світ.
+      // Не збираємо й не клікаємо його DOM — переходимо на host активної гільдії.
+      if (
+        targetHost && currentHost && currentHost !== targetHost &&
+        /(?:^|\\.)forgeofempires\\.com$/.test(currentHost) &&
+        onGameIndex && !isLoginShell
+      ) {
+        lastAdvance = Date.now();
+        if (typeof location.replace === 'function') {
+          location.replace('https://' + targetHost + '/game/index?');
+        } else {
+          location.href = 'https://' + targetHost + '/game/index?';
+        }
+        return;
+      }
 
       var worlds = [];
       var playBtns = [];
@@ -1600,9 +1768,8 @@ export const FOE_INTERCEPTOR_JS = `
 
       // Кнопки вибору світу: <a class="world_select_button" value="ru3">Сигард</a>
       var wsb = document.querySelectorAll('a.world_select_button, .world_select_button, [class*="world_select"]');
-      if (wsb.length) { markAuthed(); }
       for (var wi = 0; wi < wsb.length; wi++) {
-        var wv = wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '';
+        var wv = String(wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '').trim().toLowerCase();
         report.push('WSB value="' + wv + '" "' + (wsb[wi].textContent || '').trim() + '"');
         if (wv && wv === w) {
           if (Date.now() - lastAdvance >= 2000) {
@@ -1612,6 +1779,13 @@ export const FOE_INTERCEPTOR_JS = `
           post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
           return;
         }
+      }
+      // Селектор уже відкритий, але активного worldId у ньому немає.
+      // Не натискаємо випадковий Play/default world — лишаємо вибір видимим.
+      if (wsb.length) {
+        report.push('TARGET_WORLD_MISSING');
+        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
+        return;
       }
 
       // Знаходимо всі елементи з текстом = назва світу або "Грати"
@@ -1641,7 +1815,7 @@ export const FOE_INTERCEPTOR_JS = `
       // 1) якщо є кнопки світів — клікаємо ту, чий предок веде на наш worldId
       for (var k = 0; k < worlds.length; k++) {
         var wb = worlds[k];
-        var blob = outer(wb.anc) + ' ' + (wb.anc.href || '') + ' ' + (wb.anc.getAttribute && wb.anc.getAttribute('onclick') || '');
+        var blob = (outer(wb.anc) + ' ' + (wb.anc.href || '') + ' ' + (wb.anc.getAttribute && wb.anc.getAttribute('onclick') || '')).toLowerCase();
         if (blob.indexOf('//' + w + '.') !== -1 || blob.indexOf('/' + w + '/') !== -1 ||
             blob.indexOf('"' + w + '"') !== -1 || blob.indexOf("'" + w + "'") !== -1 ||
             blob.indexOf('world=' + w) !== -1 || blob.indexOf('=' + w) !== -1) {
@@ -1699,6 +1873,15 @@ export const FOE_INTERCEPTOR_JS = `
   var seenAssets = {};
   var buildingUrls = {};      // { cityentity_id: metadataUrl } — напряму з ресурсів гри
   var buildingUrlsSentCount = 0;
+  // Додаткові спрайт-листи (напр. іконки ресурсів поселення) — {base:{png,json}}.
+  var spritePairs = {};
+  var spritePairsSent = {};
+  // Окремі PNG-іконки ресурсів поселення. Гра вантажить їх поштучно на вимогу:
+  //   assets/shared/icons/goods_100x100/fine_<key>-<hash>.png  — чиста іконка
+  //   assets/city/gui/production_icons/<key>_<n>-<hash>.png     — іконка рецепта
+  // { <key>: { url, clean } }.  clean=true — з goods_100x100 (пріоритетна).
+  var iconUrls = {};
+  var lastIconSig = '';
   function scanAssets() {
     try {
       var live = performance.getEntriesByType('resource');
@@ -1721,13 +1904,62 @@ export const FOE_INTERCEPTOR_JS = `
           buildingUrls[m[1]] = u;
           if (!metaBase) { metaBase = u; }
         }
+        // Спрайт-листи (валюти в icons_0 тощо): <base>-<hash>.png + .json поруч.
+        var sp = u.match(/\\/([a-z0-9_]+)-[a-f0-9]{6,}\\.(png|json)(?:[?#]|$)/i);
+        if (sp) {
+          var base = sp[1].toLowerCase();
+          if (/(icons_0|goods_large|goods_small|currenc|resource_icon)/i.test(base)) {
+            if (!spritePairs[base]) { spritePairs[base] = {}; }
+            spritePairs[base][sp[2].toLowerCase()] = u;
+          }
+        }
+        // Поштучні іконки товарів поселення — за ТЕКОЮ (надійно):
+        //   .../goods_100x100/fine_<key>-<hash>.png     (чиста іконка товару)
+        //   .../production_icons/<key>_<n>-<hash>.png    (іконка рецепта)
+        var mIcon = u.match(
+          /\\/(goods_100x100|production_icons)\\/([a-z0-9_]+)-[a-f0-9]{5,}\\.png(?:[?#]|$)/i
+        );
+        if (mIcon) {
+          var clean = /goods_100x100/i.test(mIcon[1]);
+          var rkey = mIcon[2].toLowerCase()
+            .replace(/^fine_/, '')
+            .replace(/_[0-9]+$/, '');
+          var existing = iconUrls[rkey];
+          if (rkey && (!existing || (clean && !existing.clean))) {
+            iconUrls[rkey] = { url: u, clean: clean };
+          }
+        }
         if (seenAssets[u]) { continue; }
-        if (/\\.(png|json)(\\?|$)/i.test(u) && /(good|resource|icon|sprite|atlas)/i.test(u)) {
+        // Діагностика поселень: усі png/json/atlas (обрізаємо до шляху), щоб
+        // побачити, під якою назвою лежить лист іконок товарів.
+        if (
+          /\\.(png|json|atlas)(\\?|#|$)/i.test(u) &&
+          Object.keys(seenAssets).length < 600
+        ) {
           seenAssets[u] = true;
-          hits.push(u);
+          hits.push(u.replace(/^https?:\\/\\/[^/]+/i, '').split(/[?#]/)[0]);
         }
       }
       if (hits.length) { post({ __foeSync: true, kind: 'assets', urls: hits }); }
+      for (var b in spritePairs) {
+        if (!Object.prototype.hasOwnProperty.call(spritePairs, b)) { continue; }
+        var pair = spritePairs[b];
+        if (pair.png && pair.json && !spritePairsSent[b]) {
+          spritePairsSent[b] = 1;
+          post({ __foeSync: true, kind: 'spriteSheet', base: b, png: pair.png, json: pair.json });
+        }
+      }
+      var flatIcons = {};
+      for (var ik in iconUrls) {
+        if (Object.prototype.hasOwnProperty.call(iconUrls, ik)) {
+          flatIcons[ik] = iconUrls[ik].url;
+        }
+      }
+      var iconSig = JSON.stringify(flatIcons);
+      if (iconSig !== lastIconSig) {
+        lastIconSig = iconSig;
+        post({ __foeSync: true, kind: 'iconUrls', map: flatIcons });
+      }
       if (!iconSheetSent && iconPng && iconJson) {
         iconSheetSent = true;
         post({ __foeSync: true, kind: 'iconSheet', png: iconPng, json: iconJson });

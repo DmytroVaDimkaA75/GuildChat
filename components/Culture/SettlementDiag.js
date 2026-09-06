@@ -91,6 +91,24 @@ export default function SettlementDiag() {
   }, [seen]);
 
   const foundKeys = useMemo(() => Object.keys(found || {}).sort(), [found]);
+
+  // Дамп спрайт-листів / іконок ресурсів — щоб знайти лист іконок товарів.
+  const iconDump = useMemo(() => {
+    const lines = [];
+    const sheets = foe.settlementSheets || [];
+    lines.push(`settlementSheets: ${sheets.length}`);
+    for (const s of sheets) {
+      const keys = Object.keys(s.frames || {});
+      lines.push(`  [${s.base}] ${keys.length} кадрів: ${keys.slice(0, 60).join(', ')}`);
+    }
+    const iu = foe.settlementIconUrls || {};
+    lines.push('', `iconUrls: ${Object.keys(iu).length}`);
+    for (const k of Object.keys(iu)) lines.push(`  ${k} = ${iu[k]}`);
+    const assets = found.assetUrls || [];
+    lines.push('', `assetUrls: ${assets.length}`);
+    for (const a of assets) lines.push(`  ${a}`);
+    return lines.join('\n');
+  }, [foe.settlementSheets, foe.settlementIconUrls, found.assetUrls]);
   const jsEnvTags = useMemo(() => Object.keys(found.jsEnv || {}).sort(), [found.jsEnv]);
 
   // ТИМЧАСОВО: координати "корабля" й ратуші з уже захопленої мапи міста —
@@ -351,6 +369,30 @@ export default function SettlementDiag() {
           Знімок функцій/обʼєктів вікна гри — потрібен, щоб знайти безпечний
           спосіб автоматично відкривати поселення. Збирається за 4 / 12 / 30 с
           після завантаження гри. Відкрий гру, зачекай пів хвилини, тоді копіюй.
+        </Text>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Іконки ресурсів</Text>
+          <TouchableOpacity
+            onPress={() => copy('icons', iconDump)}
+            style={styles.miniBtn}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="content-copy" size={14} color={C.primary} />
+            <Text style={styles.miniBtnText}>
+              {copied === 'icons' ? 'Скопійовано ✓' : 'Копіювати'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.note}>
+          Зайди в поселення, зачекай, тоді (за можливості) відкрий будь-яку
+          виробничу будівлю в грі й вибери рецепт — тоді копіюй. Так видно
+          адресу листа з іконками товарів.
+        </Text>
+        <Text style={styles.mono} selectable>
+          {iconDump}
         </Text>
       </View>
 

@@ -16,7 +16,10 @@ const DEFS_KEY = 'foeBuildingDefsV3';
 
 let lookupMem = null;
 let defsMem = null;
-let requestGeneration = 0;
+// Покоління запиту тримаємо ОКРЕМО за scope ('city', 'settlement', …), щоб
+// паралельне довантаження мапи міста й мапи поселення не скасовувало одне одного
+// (спільний глобальний лічильник давав AbortError тому, хто стартував першим).
+const requestGenerations = new Map();
 let lookupWriteChain = Promise.resolve();
 let defsWriteChain = Promise.resolve();
 
@@ -29,8 +32,8 @@ function abortError() {
   return error;
 }
 
-function ensureCurrentRequest(generation, signal) {
-  if (signal?.aborted || generation !== requestGeneration) throw abortError();
+function ensureCurrentRequest(scope, generation, signal) {
+  if (signal?.aborted || generation !== requestGenerations.get(scope)) throw abortError();
 }
 
 async function readDefs() {
@@ -110,9 +113,9 @@ function lookupEntries(payload, depth = 0) {
     .map(([identifier, url]) => ({ identifier, url }));
 }
 
-async function resolveUrls(neededIds, lookupUrl, directUrlMap, signal, generation) {
+async function resolveUrls(neededIds, lookupUrl, directUrlMap, signal, scope, generation) {
   const storedCache = await loadLookupCache();
-  ensureCurrentRequest(generation, signal);
+  ensureCurrentRequest(scope, generation, signal);
   const cache = { ...storedCache, map: { ...(storedCache.map || {}) } };
   let dirty = false;
   let lookupFailed = false;
@@ -146,7 +149,7 @@ async function resolveUrls(neededIds, lookupUrl, directUrlMap, signal, generatio
       const response = await fetch(currentLookupUrl, { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
-      ensureCurrentRequest(generation, signal);
+      ensureCurrentRequest(scope, generation, signal);
       const wanted = new Set(missing);
       for (const entry of lookupEntries(payload)) {
         const id = String(entry?.identifier || '').replace(/^building_entity_/, '');
@@ -160,11 +163,11 @@ async function resolveUrls(neededIds, lookupUrl, directUrlMap, signal, generatio
     }
   }
 
-  ensureCurrentRequest(generation, signal);
+  ensureCurrentRequest(scope, generation, signal);
   if (dirty) {
     lookupMem = cache;
     await writeLookup(cache);
-    ensureCurrentRequest(generation, signal);
+    ensureCurrentRequest(scope, generation, signal);
   }
   return { map: cache.map, lookupFailed };
 }
@@ -209,7 +212,9 @@ function normalizeDefinitionRequests(items, fallbackEra) {
 // Повертає { "cityentity_id@requestedEra": normalizedDefinition }.
 // Один metadata-файл завантажується лише раз, навіть якщо місто має кілька
 // вікових варіантів тієї самої MultiAge-будівлі.
-// options: { playerEra, locale, signal }. onProgress(done, total) — необов'язково.
+// options: { playerEra, locale, signal, scope }. onProgress(done, total) — необов'язково.
+// scope ('city' | 'settlement' | …) — щоб паралельні виклики для різних мап
+// не скасовували одне одного; типово 'city'.
 export async function getBuildingDefs(
   buildingRequests,
   lookupUrl,
@@ -219,18 +224,20 @@ export async function getBuildingDefs(
 ) {
   const requests = normalizeDefinitionRequests(buildingRequests, options.playerEra);
   if (!requests.length) return {};
-  const generation = requestGeneration + 1;
-  requestGeneration = generation;
+  const scope = String(options.scope || 'city');
+  const generation = (requestGenerations.get(scope) || 0) + 1;
+  requestGenerations.set(scope, generation);
   const wantedIds = Array.from(new Set(requests.map((request) => request.entityId)));
 
   const storedCache = await readDefs();
-  ensureCurrentRequest(generation, options.signal);
+  ensureCurrentRequest(scope, generation, options.signal);
   const cache = { ...storedCache, entries: { ...(storedCache.entries || {}) } };
   const { map, lookupFailed } = await resolveUrls(
     wantedIds,
     lookupUrl,
     directUrlMap,
     options.signal,
+    scope,
     generation
   );
   const result = {};
@@ -273,7 +280,7 @@ export async function getBuildingDefs(
           const response = await fetch(url, { signal: options.signal });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json();
-          ensureCurrentRequest(generation, options.signal);
+          ensureCurrentRequest(scope, generation, options.signal);
           for (const request of entityRequests) {
             const normalized = normalizeBuildingDefinition(payload, {
               entityId,
@@ -303,11 +310,11 @@ export async function getBuildingDefs(
     onProgress?.(done, requests.length);
   }
 
-  ensureCurrentRequest(generation, options.signal);
+  ensureCurrentRequest(scope, generation, options.signal);
   if (cacheChanged) {
     defsMem = cache;
     await writeDefs(cache);
-    ensureCurrentRequest(generation, options.signal);
+    ensureCurrentRequest(scope, generation, options.signal);
   }
   return Object.fromEntries(requests.map((request) => [request.key, result[request.key]]));
 }

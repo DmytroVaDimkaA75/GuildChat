@@ -34,6 +34,7 @@ const RULER_W = 26; // ширина лівої координатної ліні
 const RULER_H = 16; // висота верхньої координатної лінійки
 const MIN_TILE = 6;
 const MIN_TILE_WITH_LEGEND = 4;
+const MAX_TILE = 40; // щоб дрібна мапа не роздувалась у величезні клітинки
 const SCREEN_HEIGHT_RESERVE = 286;
 const SCREEN_HEIGHT_RESERVE_WITH_LEGEND = 354;
 
@@ -52,6 +53,9 @@ const TYPE_COLOR = {
   friends_tavern: '#8e24aa',
   generic_building: '#3949ab',
   bonus_building: '#fb8c00',
+  // поселення
+  diplomacy: '#ab47bc',
+  impediment: '#6d4c41',
 };
 
 const TYPE_LABELS = {
@@ -67,6 +71,8 @@ const TYPE_LABELS = {
   tower: 'вежа',
   generic_building: 'будівля',
   bonus_building: 'бонусна',
+  diplomacy: 'дипломатична',
+  impediment: 'перешкода',
   unknown: 'тип уточнюється',
 };
 
@@ -105,6 +111,41 @@ const LEGEND = [
   ['street', 'дороги'],
 ];
 
+// У культурному поселенні немає Величних споруд і споруд культури, натомість є
+// дипломатичні споруди й перешкоди. Легенду й розкладку кольорів під це
+// підлаштовуємо окремо (див. isSettlement нижче).
+const SETTLEMENT_LEGEND = [
+  ['residential', 'житлові'],
+  ['production', 'виробничі'],
+  ['diplomacy', 'дипломатичні'],
+  ['military', 'військові'],
+  ['decoration', 'декорації'],
+  ['impediment', 'перешкоди'],
+  ['street', 'дороги'],
+];
+
+// Категорія споруди поселення: спершу за префіксом cityentity_id (він у грі
+// стабільний — H_ ратуша, R_ житлова, J_ дипломатична, I_ перешкода, B_/G_
+// виробнича), потім за типом із метаданих.
+const SETTLEMENT_PREFIX_TYPE = {
+  H: 'main_building',
+  R: 'residential',
+  J: 'diplomacy',
+  I: 'impediment',
+  B: 'production',
+  G: 'production',
+  D: 'decoration',
+};
+
+function settlementCategory(cid, rawType) {
+  const prefix = String(cid || '').split('_')[0];
+  if (SETTLEMENT_PREFIX_TYPE[prefix]) return SETTLEMENT_PREFIX_TYPE[prefix];
+  const type = String(rawType || '');
+  if (/greatbuilding/i.test(type)) return 'generic_building';
+  if (/culture/i.test(type)) return 'diplomacy';
+  return type || 'unknown';
+}
+
 const colorFor = (type) => TYPE_COLOR[type] || '#78909c';
 const positive = (value) => {
   const number = Number(value);
@@ -137,6 +178,16 @@ export default function FoeCityMap({
   horizontalInset = 46,
 }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  // Мапа культурного поселення (gridId "cultural_outpost" тощо) — не головне
+  // місто. Інша легенда, інші категорії споруд.
+  const isSettlement = !!cityMap?.gridId && cityMap.gridId !== 'main';
+  const displayType = useCallback(
+    (entity) => {
+      const raw = entity?.definition?.type || entity?.type;
+      return isSettlement ? settlementCategory(entity?.cid, raw) : raw;
+    },
+    [isSettlement]
+  );
   const [selectedId, setSelectedId] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -156,6 +207,7 @@ export default function FoeCityMap({
   );
 
   const model = useMemo(() => {
+    const isSettlementMap = !!cityMap?.gridId && cityMap.gridId !== 'main';
     const areas = Array.isArray(cityMap?.unlocked_areas)
       ? cityMap.unlocked_areas
       : Object.values(cityMap?.unlocked_areas || {});
@@ -208,6 +260,7 @@ export default function FoeCityMap({
     }
     if (!unlockedSet.size) return null;
 
+    // Повний діапазон сітки (для перебору клітинок) — з відкритих + заблокованих.
     let sectorColumnMin = Infinity;
     let sectorColumnMax = -Infinity;
     let sectorRowMin = Infinity;
@@ -220,16 +273,56 @@ export default function FoeCityMap({
       sectorRowMax = Math.max(sectorRowMax, row);
     }
 
-    const buyable = [];
-    const frame = [];
+    const buyableSet = new Set();
     for (let column = sectorColumnMin; column <= sectorColumnMax; column += 1) {
       for (let row = sectorRowMin; row <= sectorRowMax; row += 1) {
         const key = sectorKey(column, row);
-        if (unlockedSet.has(key)) continue;
-        const cell = { x: column * SECTOR, y: row * SECTOR };
-        if (blockedSet.has(key)) frame.push(cell);
-        else buyable.push(cell);
+        if (unlockedSet.has(key) || blockedSet.has(key)) continue;
+        buyableSet.add(key);
       }
+    }
+
+    // Головне місто: рамку (blocked) лишаємо всю — це тонка облямівка навколо
+    // міста. Поселення: blocked_areas — велика «глуха» зона по краях, тож
+    // залишаємо лише ту її частину, що межує з реальною ігровою зоною
+    // (відкриті + доступні для викупу сектори); суцільні заблоковані ряди й
+    // стовпці по краях узагалі не малюємо.
+    let playColumnMin = sectorColumnMin;
+    let playColumnMax = sectorColumnMax;
+    let playRowMin = sectorRowMin;
+    let playRowMax = sectorRowMax;
+    if (isSettlementMap) {
+      playColumnMin = Infinity;
+      playColumnMax = -Infinity;
+      playRowMin = Infinity;
+      playRowMax = -Infinity;
+      for (const sector of [...unlockedSet, ...buyableSet]) {
+        const [column, row] = sector.split(',').map(Number);
+        playColumnMin = Math.min(playColumnMin, column);
+        playColumnMax = Math.max(playColumnMax, column);
+        playRowMin = Math.min(playRowMin, row);
+        playRowMax = Math.max(playRowMax, row);
+      }
+      if (!Number.isFinite(playColumnMin)) return null;
+    }
+
+    const inPlayRange = (column, row) =>
+      column >= playColumnMin &&
+      column <= playColumnMax &&
+      row >= playRowMin &&
+      row <= playRowMax;
+
+    const buyable = [];
+    const frame = [];
+    for (const key of buyableSet) {
+      const [column, row] = key.split(',').map(Number);
+      if (isSettlementMap && !inPlayRange(column, row)) continue;
+      buyable.push({ x: column * SECTOR, y: row * SECTOR });
+    }
+    for (const key of blockedSet) {
+      const [column, row] = key.split(',').map(Number);
+      if (!inPlayRange(column, row)) continue;
+      frame.push({ x: column * SECTOR, y: row * SECTOR });
     }
 
     // 90° CW: (x,y,w,l) -> (H-y-l,x,l,w)
@@ -329,19 +422,23 @@ export default function FoeCityMap({
     };
   }, [buildings, cityMap, defs]);
 
-  const widthTile = Math.floor(
-    Math.max(VIEW_COLS * 2, screenWidth - horizontalInset - RULER_W) / VIEW_COLS
+  // Скільки клітинок реально треба показати по кожній осі: не більше вікна
+  // (VIEW_COLS/ROWS — далі скрол), але й не більше за саму мапу. Якщо мапа
+  // вужча/нижча за вікно — клітинку збільшуємо, щоб не лишалось порожнечі.
+  const mapCols = Math.max(1, Math.ceil(model?.width || VIEW_COLS));
+  const mapRows = Math.max(1, Math.ceil(model?.height || VIEW_ROWS));
+  const fitCols = Math.min(VIEW_COLS, mapCols);
+  const fitRows = Math.min(VIEW_ROWS, mapRows);
+  const availWidth = Math.max(VIEW_COLS * 2, screenWidth - horizontalInset - RULER_W);
+  const availHeight = Math.max(
+    VIEW_ROWS * (legendOpen ? MIN_TILE_WITH_LEGEND : MIN_TILE),
+    screenHeight - (legendOpen ? SCREEN_HEIGHT_RESERVE_WITH_LEGEND : SCREEN_HEIGHT_RESERVE)
   );
-  // Лишаємо місце заголовку навігації, chrome мапи та нижній панелі даних.
-  const heightTile = Math.floor(
-    Math.max(
-      VIEW_ROWS * (legendOpen ? MIN_TILE_WITH_LEGEND : MIN_TILE),
-      screenHeight - (legendOpen ? SCREEN_HEIGHT_RESERVE_WITH_LEGEND : SCREEN_HEIGHT_RESERVE)
-    ) / VIEW_ROWS
-  );
-  const tile = Math.max(2, Math.min(widthTile, heightTile));
-  const viewportWidth = tile * VIEW_COLS;
-  const viewportHeight = tile * VIEW_ROWS;
+  const widthTile = Math.floor(availWidth / fitCols);
+  const heightTile = Math.floor(availHeight / fitRows);
+  const tile = Math.max(2, Math.min(widthTile, heightTile, MAX_TILE));
+  const viewportWidth = tile * fitCols;
+  const viewportHeight = tile * fitRows;
   const contentWidth = (model?.width || 0) * tile;
   const contentHeight = (model?.height || 0) * tile;
   const cityOffsetX = model
@@ -428,8 +525,8 @@ export default function FoeCityMap({
 
     const vx0 = model.minX + -tx.value / tile;
     const vy0 = model.minY + -ty.value / tile;
-    const vx1 = vx0 + VIEW_COLS;
-    const vy1 = vy0 + VIEW_ROWS;
+    const vx1 = vx0 + viewportWidth / tile;
+    const vy1 = vy0 + viewportHeight / tile;
     const anyVisible = matches.some(
       (e) => e.rx + e.rw > vx0 && e.rx < vx1 && e.ry + e.rl > vy0 && e.ry < vy1
     );
@@ -493,8 +590,8 @@ export default function FoeCityMap({
           tileY >= entity.ry &&
           tileY < entity.ry + entity.rl
         ) {
-          const eType = entity.definition?.type || entity.type;
-          const hType = hit?.definition?.type || hit?.type;
+          const eType = displayType(entity);
+          const hType = hit ? displayType(hit) : null;
           if (!hit || (eType !== 'street' && hType === 'street')) hit = entity;
         }
       }
@@ -506,7 +603,7 @@ export default function FoeCityMap({
         setPopupOpen(false);
       }
     },
-    [tx, ty]
+    [tx, ty, displayType]
   );
 
   // Жест будується один раз: межі перетягування читаються з shared values,
@@ -543,7 +640,9 @@ export default function FoeCityMap({
     : selectedDefinition?.bonuses || [];
   const shownBonuses = selectedBonuses.map(formatBonus).filter(Boolean).slice(0, 6);
   const selectedEra = selectedEntity?.era || selectedDefinition?.era;
-  const selectedType = selectedDefinition?.type || selectedEntity?.type || 'unknown';
+  const selectedType = selectedEntity
+    ? displayType(selectedEntity) || 'unknown'
+    : selectedDefinition?.type || 'unknown';
   const selectedCollect = selectedEntity
     ? collect?.[String(selectedEntity.id)] ||
       collect?.[selectedEntity.instanceId] ||
@@ -557,6 +656,62 @@ export default function FoeCityMap({
   const sectorsY = Math.ceil(model.height / SECTOR);
   const isGB = /greatbuilding/i.test(selectedType);
   const hasFilter = highlightSet.size > 0;
+
+  // Легенда: у поселенні — тільки ті категорії, що реально є на мапі
+  // (дипломатичні / перешкоди / без ВС і культури).
+  const presentTypes = new Set(model.entities.map(displayType));
+  const legendItems = isSettlement
+    ? SETTLEMENT_LEGEND.filter(([type]) => presentTypes.has(type))
+    : LEGEND;
+
+  const isImpediment = (entity) => isSettlement && displayType(entity) === 'impediment';
+
+  const renderEntityRect = (entity) => {
+    const type = displayType(entity);
+    const selected = selectedId === entity.mapId;
+    const inFilter =
+      hasFilter &&
+      (highlightSet.has(String(entity.id)) ||
+        highlightSet.has(String(entity.instanceId)) ||
+        highlightSet.has(String(entity.entityId)));
+    const dimmed = hasFilter && !inFilter && !selected;
+    return (
+      <Rect
+        key={entity.mapId}
+        x={entity.rx + 0.04}
+        y={entity.ry + 0.04}
+        width={Math.max(entity.rw - 0.08, 0.1)}
+        height={Math.max(entity.rl - 0.08, 0.1)}
+        fill={colorFor(type)}
+        opacity={dimmed ? 0.28 : entity.conn === 0 ? 0.4 : 1}
+        stroke={inFilter ? '#00e5ff' : 'rgba(0,0,0,0.35)'}
+        strokeWidth={inFilter ? 0.16 : 0.03}
+      />
+    );
+  };
+
+  const renderSelectedFrame = (entity) => (
+    <React.Fragment key={`sel-${entity.mapId}`}>
+      <Rect
+        x={entity.rx - 0.06}
+        y={entity.ry - 0.06}
+        width={entity.rw + 0.12}
+        height={entity.rl + 0.12}
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth={0.34}
+      />
+      <Rect
+        x={entity.rx - 0.06}
+        y={entity.ry - 0.06}
+        width={entity.rw + 0.12}
+        height={entity.rl + 0.12}
+        fill="none"
+        stroke="#ff2d55"
+        strokeWidth={0.16}
+      />
+    </React.Fragment>
+  );
 
   return (
     <View style={styles.mapRoot}>
@@ -574,7 +729,7 @@ export default function FoeCityMap({
                   numberOfLines={1}
                   style={[styles.rulerText, styles.rulerTop, { width: s * SECTOR * tile }]}
                 >
-                  {model.minX + s * SECTOR}
+                  {isSettlement ? s * SECTOR : model.minX + s * SECTOR}
                 </Text>
               )
             )}
@@ -592,7 +747,7 @@ export default function FoeCityMap({
               s === 0 ? null : (
                 <View key={`ry-${s}`} style={[styles.rulerLeft, { height: s * SECTOR * tile }]}>
                   <Text style={styles.rulerText} numberOfLines={1}>
-                    {model.minY + s * SECTOR}
+                    {isSettlement ? s * SECTOR : model.minY + s * SECTOR}
                   </Text>
                 </View>
               )
@@ -724,56 +879,26 @@ export default function FoeCityMap({
                 />
               ))}
 
+              {/* Перешкоди поселення малюємо і на ЗАБЛОКОВАНИХ секторах —
+                  поза кліпом розблокованого міста, поверх темної рамки. */}
+              {isSettlement ? (
+                <G>
+                  {model.entities.filter(isImpediment).map(renderEntityRect)}
+                  {model.entities
+                    .filter((entity) => isImpediment(entity) && selectedId === entity.mapId)
+                    .map(renderSelectedFrame)}
+                </G>
+              ) : null}
+
               <G clipPath="url(#cityClip)">
-                {model.entities.map((entity) => {
-                  const type = entity.definition?.type || entity.type;
-                  const selected = selectedId === entity.mapId;
-                  const inFilter =
-                    hasFilter &&
-                    (highlightSet.has(String(entity.id)) ||
-                      highlightSet.has(String(entity.instanceId)) ||
-                      highlightSet.has(String(entity.entityId)));
-                  const dimmed = hasFilter && !inFilter && !selected;
-                  return (
-                    <Rect
-                      key={entity.mapId}
-                      x={entity.rx + 0.04}
-                      y={entity.ry + 0.04}
-                      width={Math.max(entity.rw - 0.08, 0.1)}
-                      height={Math.max(entity.rl - 0.08, 0.1)}
-                      fill={colorFor(type)}
-                      opacity={dimmed ? 0.28 : entity.conn === 0 ? 0.4 : 1}
-                      stroke={inFilter ? '#00e5ff' : 'rgba(0,0,0,0.35)'}
-                      strokeWidth={inFilter ? 0.16 : 0.03}
-                    />
-                  );
-                })}
+                {model.entities
+                  .filter((entity) => !isImpediment(entity))
+                  .map(renderEntityRect)}
 
                 {/* Обрана споруда — окрема яскрава рамка поверх усього */}
                 {model.entities
-                  .filter((entity) => selectedId === entity.mapId)
-                  .map((entity) => (
-                    <React.Fragment key={`sel-${entity.mapId}`}>
-                      <Rect
-                        x={entity.rx - 0.06}
-                        y={entity.ry - 0.06}
-                        width={entity.rw + 0.12}
-                        height={entity.rl + 0.12}
-                        fill="none"
-                        stroke="#ffffff"
-                        strokeWidth={0.34}
-                      />
-                      <Rect
-                        x={entity.rx - 0.06}
-                        y={entity.ry - 0.06}
-                        width={entity.rw + 0.12}
-                        height={entity.rl + 0.12}
-                        fill="none"
-                        stroke="#ff2d55"
-                        strokeWidth={0.16}
-                      />
-                    </React.Fragment>
-                  ))}
+                  .filter((entity) => selectedId === entity.mapId && !isImpediment(entity))
+                  .map(renderSelectedFrame)}
               </G>
             </Svg>
           </Animated.View>
@@ -809,7 +934,7 @@ export default function FoeCityMap({
               <View style={[styles.legendDot, styles.legendBox, { backgroundColor: '#ffe100' }]} />
               <Text style={styles.legendText}>можна купити ({model.counts.buyable})</Text>
             </View>
-            {LEGEND.map(([type, label]) => (
+            {legendItems.map(([type, label]) => (
               <View key={type} style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: colorFor(type) }]} />
                 <Text style={styles.legendText}>{label}</Text>
@@ -863,6 +988,13 @@ export default function FoeCityMap({
                     <Text style={styles.detailMeta}>
                       Велична споруда
                       {selectedEntity.lvl != null ? ` · рівень ${selectedEntity.lvl}` : ''}
+                    </Text>
+                  ) : isSettlement ? (
+                    <Text style={styles.detailMeta}>
+                      {TYPE_LABELS[selectedType] || selectedType}
+                      {selectedEntity.rw && selectedEntity.rl
+                        ? ` · ${selectedEntity.rl}×${selectedEntity.rw}`
+                        : ''}
                     </Text>
                   ) : selectedEra ? (
                     <Text style={styles.detailMeta}>{eraLabel(selectedEra)}</Text>
