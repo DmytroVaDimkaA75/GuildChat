@@ -26,32 +26,79 @@ const COLORS = {
 
 // Короткі назви ресурсів поселень (для колонки «Продукт»). Ключ, якого тут
 // немає, показуємо як є, прибравши префікс поселення (pirate_rum -> rum).
+// ПІДТВЕРДЖЕНО ГРОЮ: склад кожного поселення взято з відповіді
+// OutpostService.getAll (поля primaryResourceId — валюта, goodsResourceIds —
+// чотири товари). Нічого не вгадано. Ті самі id є іменами кадрів у листі
+// icons_0, тож за ними ж знаходяться й іконки.
 const RES_LABELS = {
+  // Пірати · валюта doubloons
   doubloons: 'дублони',
   pirate_fish: 'риба', pirate_spice: 'спеції', pirate_rum: 'ром', pirate_cannons: 'гармати',
-  viking_meat: 'мʼясо', viking_beer: 'пиво', viking_salt: 'сіль', viking_wool: 'вовна',
-  aztec_cocoa: 'какао', aztec_wood: 'деревина', aztec_textiles: 'тканини', aztec_ceramics: 'кераміка',
-  mughal_rice: 'рис', mughal_tea: 'чай', mughal_gems: 'самоцвіти', mughal_silk: 'шовк',
-  feudal_rice: 'рис', feudal_silk: 'шовк', feudal_tea: 'чай', feudal_lacquerware: 'лак',
-  egypt_papyrus: 'папірус', egypt_grain: 'зерно', egypt_gold: 'золото', egypt_ebony: 'чорне дерево',
-  polynesia_fish: 'риба', polynesia_shells: 'мушлі', polynesia_pearls: 'перли', polynesia_wood: 'деревина',
+  // Полінезія · валюта shells
+  shells: 'мушлі',
+  fresh_fish: 'свіжа риба', coconuts: 'кокоси', kava: 'кава', catamarans: 'катамарани',
+  // Імперія Моголів · валюта rupees
+  rupees: 'рупії',
+  basmati: 'басматі', saree: 'сарі', spices: 'прянощі', lotus: 'лотос',
+  // Ацтеки · валюта cocoa_beans
+  cocoa_beans: 'какао-боби',
+  vegetables: 'овочі', headdress: 'головні убори', maize: 'кукурудза',
+  stone_figures: 'камʼяні фігури',
+  // Древній Єгипет · валюта deben
+  deben: 'дебен',
+  barley: 'ячмінь', pottery: 'кераміка', flowers: 'квіти',
+  sacrificial_offerings: 'жертовні дари',
+  // Феодальна Японія · валюта koban_coins
+  koban_coins: 'кобан',
+  soy: 'соя', paintings: 'картини', armor: 'обладунки', instruments: 'інструменти',
+  // Вікінги · валюта copper_coins
+  copper_coins: 'мідні монети',
+  axes: 'сокири', mead: 'медовуха', horns: 'роги', wool: 'вовна',
 };
 
 function resLabel(key) {
   return RES_LABELS[key] || String(key || '').replace(/^[a-z]+_/, '');
 }
 
-// Варіанти імені кадру ресурсу в спрайт-листах гри.
+// Гра називає той самий товар по-різному в різних місцях (в id ресурсу — одне,
+// в імені файлу іконки — інше). Відомі пари тримаємо тут.
+const ICON_KEY_ALIASES = {
+  deben: 'egyptians_loot',
+  egyptians_loot: 'deben',
+};
+
+// Для цих восьми товарів (Єгипет і Полінезія) кадр у листі називається
+// `fine_<id>`, а не `<id>`. Звірено з foe-helfer-extension, який робить рівно
+// такий самий виняток саме для цього переліку — тож пробуємо їх першими.
+const FINE_PREFIX_ICONS = new Set([
+  'barley', 'pottery', 'flowers', 'sacrificial_offerings',
+  'fresh_fish', 'coconuts', 'kava', 'catamarans',
+]);
+
+// Варіанти імені кадру ресурсу в спрайт-листах гри. Порядок = пріоритет.
+// `fine_<id>` і `<id>_1` — реальні шаблони імен файлів гри (видно в шляхах
+// assets/shared/icons/goods_100x100/fine_<id>.png і
+// assets/city/gui/production_icons/<id>_<n>.png).
 function iconNames(key) {
-  const bare = String(key || '').replace(/^[a-z]+_/, '');
-  return [key, bare, `icon_${key}`, `${key}_icon`, `good_${key}`, `resource_${key}`];
+  const id = String(key || '');
+  const bare = id.replace(/^[a-z]+_/, '');
+  const alias = ICON_KEY_ALIASES[id] || ICON_KEY_ALIASES[bare];
+  const names = FINE_PREFIX_ICONS.has(id)
+    ? [`fine_${id}`, id, `${id}_1`, `icon_${id}`, `${id}_icon`]
+    : [
+      id, `fine_${id}`, `${id}_1`,
+      `icon_${id}`, `${id}_icon`, `good_${id}`, `resource_${id}`,
+      bare, `fine_${bare}`, `${bare}_1`,
+    ];
+  if (alias) names.push(alias, `fine_${alias}`, `${alias}_1`);
+  return names.filter((n, i) => n && names.indexOf(n) === i);
 }
 
-// Пряме посилання на PNG-іконку ресурсу (гра іноді вантажить поштучно).
+// Пряме посилання на PNG-іконку ресурсу (гра вантажить їх поштучно, лише
+// коли реально показує на екрані — тож часто цього посилання ще немає).
 function directIconUrl(iconUrls, key) {
   if (!iconUrls) return null;
-  const bare = String(key || '').replace(/^[a-z]+_/, '');
-  for (const candidate of [key, bare, `icon_${key}`, `good_${key}`]) {
+  for (const candidate of iconNames(key)) {
     if (iconUrls[candidate]) return iconUrls[candidate];
   }
   return null;
@@ -207,7 +254,11 @@ const CulturalSettlements = () => {
     const timer = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 30000);
     return () => clearInterval(timer);
   }, []);
-  const hasCalibShip = !!calibPoints?.ship;
+  // Авто-вхід більше не потребує ручного калібрування: якщо своєї записаної
+  // точки немає, провайдер бере «заводську» (DEFAULT_SHIP_CALIB). Тож екран
+  // не має нічого блокувати — інакше новий користувач ніколи не дочекався б
+  // автоматичного входу.
+  const hasCalibShip = true;
   const settlementMap = found.settlementMap;
   // Поки не маємо мапи поселення — тримаємо фонову синхронізацію активною
   // (потрібна мапа міста, щоб дізнатись координати корабля/ратуші). Щойно
@@ -363,7 +414,11 @@ const CulturalSettlements = () => {
                     <View style={[styles.prodCell, styles.prodColGoods, styles.prodGoodsWrap]}>
                       {entries.length ? (
                         entries.map(([key, amount]) => {
-                          const names = iconNames(key);
+                          // Ім'я кадру від самої гри (asset_name) пробуємо
+                          // першим — воно точне; далі загальні варіанти.
+                          const names = row.productAsset
+                            ? [row.productAsset, ...iconNames(key)]
+                            : iconNames(key);
                           const url = directIconUrl(settlementIconUrls, key);
                           const hasFrame = !url && names.some((n) => !!findFrame(iconSheets, n));
                           const hasIcon = !!url || hasFrame;

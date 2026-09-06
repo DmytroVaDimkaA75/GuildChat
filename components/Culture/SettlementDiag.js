@@ -104,11 +104,47 @@ export default function SettlementDiag() {
     const iu = foe.settlementIconUrls || {};
     lines.push('', `iconUrls: ${Object.keys(iu).length}`);
     for (const k of Object.keys(iu)) lines.push(`  ${k} = ${iu[k]}`);
+    // Справжні id товарів кожного поселення — гра називає їх сама
+    // (OutpostService.getAll). Одразу перевіряємо, чи знаходиться для них
+    // іконка: у поштучних PNG або в якомусь зі спрайт-листів. Це дає точну
+    // відповідь "де саме лежить іконка", без здогадів.
+    const outposts = found.outposts || [];
+    lines.push('', `outposts: ${outposts.length}`);
+    const allSheets = [
+      ...(foe.settlementSheets || []),
+      foe.goodsSheet,
+      foe.iconSheet,
+    ].filter(Boolean);
+    const candidatesFor = (id) => {
+      const bare = String(id || '').replace(/^[a-z]+_/, '');
+      return [id, `fine_${id}`, `${id}_1`, `icon_${id}`, `${id}_icon`,
+        `good_${id}`, `resource_${id}`, bare, `fine_${bare}`, `${bare}_1`];
+    };
+    for (const o of outposts) {
+      const ids = [
+        o.primaryResourceId,
+        ...(Array.isArray(o.goodsResourceIds) ? o.goodsResourceIds : []),
+      ].filter(Boolean);
+      lines.push(`  ${o.content} (${o.contentName || o.name || '?'}): ${ids.join(', ') || '—'}`);
+      for (const id of ids) {
+        let hit = iu[id] ? 'поштучний PNG' : null;
+        if (!hit) {
+          for (const cand of candidatesFor(id)) {
+            const sheet = allSheets.find((s) => s?.frames && s.frames[cand]);
+            if (sheet) { hit = `лист ${sheet.base} · кадр "${cand}"`; break; }
+          }
+        }
+        lines.push(`      ${id}: ${hit || 'ІКОНКИ НЕМАЄ'}`);
+      }
+    }
     const assets = found.assetUrls || [];
     lines.push('', `assetUrls: ${assets.length}`);
     for (const a of assets) lines.push(`  ${a}`);
     return lines.join('\n');
-  }, [foe.settlementSheets, foe.settlementIconUrls, found.assetUrls]);
+  }, [
+    foe.settlementSheets, foe.settlementIconUrls, foe.goodsSheet, foe.iconSheet,
+    found.assetUrls, found.outposts,
+  ]);
   const jsEnvTags = useMemo(() => Object.keys(found.jsEnv || {}).sort(), [found.jsEnv]);
 
   // ТИМЧАСОВО: координати "корабля" й ратуші з уже захопленої мапи міста —
@@ -159,6 +195,11 @@ export default function SettlementDiag() {
           seen: seenList,
           foundKeys,
           calibPoints,
+          // Товари поселень (справжні id від гри) і звіт, де знайшлась іконка
+          // кожного з них — інакше це видно лише на екрані й не потрапляє
+          // в те, що надсилають розробнику.
+          outposts: found.outposts || null,
+          iconReport: iconDump,
           jsEnv: found.jsEnv || null,
           rawLog,
         },

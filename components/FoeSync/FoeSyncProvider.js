@@ -112,6 +112,25 @@ const SHIP_OVERDRIVE_MULT = 2.5; // помножується на висоту c
 const SHIP_DRAG_X_PX = -673; // середнє: -699.42 та -646.7
 const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реально опинився після SHIP_DRAG_X_PX (canvasX≈413 з 1024)
 
+// «ЗАВОДСЬКА» КАЛІБРОВКА — щоб авто-вхід працював у КОЖНОГО користувача, а не
+// лише в того, хто одного разу вручну тицьнув «Корабель». Числа зняті з
+// реального пристрою (полотно гри 1024×765): корабель у точці 696,228, до
+// нього камера доїжджає прокруткою −708,123.
+//
+// Чому це коректно для всіх: тихе вікно завжди має фіксований розмір
+// (STEALTH_WEBVIEW_*), а гра при десктопному режимі малює полотно шириною
+// рівно 1024 CSS-пікселі незалежно від фізичного екрана. Тому зберігаємо не
+// абсолютні пікселі, а положення ВІДНОСНО полотна — і перед кожним входом
+// перераховуємо під те полотно, яке гра віддала цього разу.
+const DEFAULT_SHIP_CALIB = {
+  canvasX: 696,
+  canvasY: 228,
+  canvasW: 1024,
+  canvasH: 765,
+  scrollDx: -708,
+  scrollDy: 123,
+};
+
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
 const gameHostFromGuildId = (g) => {
   const worldId = worldIdFromGuildId(g);
@@ -661,6 +680,33 @@ export function FoeSyncProvider({ children }) {
     return true;
   }, [armNativeAutoEnterWatch, finishAutoEnter]);
 
+  // Перетворює «заводську» калібровку на точку для tryAutoEnter, прив'язавши
+  // її до РЕАЛЬНОГО полотна просто зараз. Якщо полотно того ж розміру, що й
+  // при знятті чисел, множники дорівнюють 1 і виходять рівно ті самі пікселі.
+  const buildDefaultCalibPoints = useCallback(async () => {
+    const probe = await requestInteractionProbe();
+    const rect = probe?.rect;
+    if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+    const scaleX = rect.width / DEFAULT_SHIP_CALIB.canvasW;
+    const scaleY = rect.height / DEFAULT_SHIP_CALIB.canvasH;
+    return {
+      ship: {
+        name: 'ship',
+        builtIn: true,
+        clientX: rect.left + DEFAULT_SHIP_CALIB.canvasX * scaleX,
+        clientY: rect.top + DEFAULT_SHIP_CALIB.canvasY * scaleY,
+        canvasX: DEFAULT_SHIP_CALIB.canvasX * scaleX,
+        canvasY: DEFAULT_SHIP_CALIB.canvasY * scaleY,
+        canvasW: rect.width,
+        canvasH: rect.height,
+        scrollDx: DEFAULT_SHIP_CALIB.scrollDx * scaleX,
+        scrollDy: DEFAULT_SHIP_CALIB.scrollDy * scaleY,
+        viewportW: probe?.viewportW,
+        viewportH: probe?.viewportH,
+      },
+    };
+  }, [requestInteractionProbe]);
+
   const tryAutoEnter = useCallback(async (points) => {
     const ship = points?.ship;
     if (!ship || autoEnterBusyRef.current) { return; }
@@ -934,12 +980,6 @@ export function FoeSyncProvider({ children }) {
     // Без force — не заходимо, якщо мапа поселення вже є (автозапуск). З force
     // (кнопка «Оновити») — заходимо повторно, щоб отримати свіжі дані.
     if (!force && foundRef.current?.settlementMap) { return; }
-    const ship = calibPoints?.ship;
-    if (!ship) {
-      setAutoEnterLog([{ step: 'autoaim_missing_data', at: Date.now() }]);
-      return;
-    }
-
     stealthEnteringRef.current = true;
     setWebVisible(false);
     setStealthEntering(true);
@@ -969,9 +1009,23 @@ export function FoeSyncProvider({ children }) {
       }
       setAutoEnterLog((prev) => [...prev, { step: 'interaction_ready', at: Date.now() }].slice(-20));
 
+      // Своя записана точка має пріоритет (людина калібрувала саме під себе);
+      // якщо її немає — беремо «заводську», щоб авто-вхід працював одразу,
+      // без жодного ручного калібрування.
+      const points = calibPoints?.ship ? calibPoints : await buildDefaultCalibPoints();
+      if (!points?.ship) {
+        setAutoEnterLog((prev) => [...prev, { step: 'autoaim_missing_data', at: Date.now() }].slice(-20));
+        return;
+      }
+      setAutoEnterLog((prev) => [...prev, {
+        step: 'calib_source',
+        target: calibPoints?.ship ? 'своя записана точка' : 'заводська точка',
+        at: Date.now(),
+      }].slice(-20));
+
       await new Promise((resolve) => {
         pendingAutoEnterResolveRef.current = resolve;
-        tryAutoEnter(calibPoints).catch((error) => {
+        tryAutoEnter(points).catch((error) => {
           setAutoEnterLog((prev) => [...prev, {
             step: 'error',
             target: String(error?.message || error || 'невідома помилка'),
@@ -994,7 +1048,7 @@ export function FoeSyncProvider({ children }) {
       stealthEnteringRef.current = false;
       autoEnterBusyRef.current = false;
     }
-  }, [finishAutoEnter, tryAutoEnter, calibPoints, waitForInteractiveGame]);
+  }, [finishAutoEnter, tryAutoEnter, buildDefaultCalibPoints, calibPoints, waitForInteractiveGame]);
 
   // ТИМЧАСОВО (налагодження): робить рівно те саме, що "тихий" вхід —
   // невидиме перезавантаження + прокрутка записаними координатами — але
@@ -1895,6 +1949,8 @@ export function FoeSyncProvider({ children }) {
         ready: !!building.prod.ready,
         readyAt: Number(building.prod.readyAt) || null,
         productName: building.prod.name || null,
+        // Ім'я кадру іконки продукту від самої гри (напр. "pirate_fish_1").
+        productAsset: building.prod.assetName || null,
         product: building.prod.det || null,
         state: building.prod.st || null,
       }));

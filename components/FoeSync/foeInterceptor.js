@@ -946,7 +946,16 @@ export const FOE_INTERCEPTOR_JS = `
       }
     }
     var name = (cp && cp.name) || null;
+    // Гра описує продукт ДВОМА різними формами, і саме через це виробничі
+    // споруди поселення показувались голим текстом ("Немного рыбы") замість
+    // товару з іконкою:
+    //   житлова/дипломатична: current_product.product.resources   {doubloons:129}
+    //   виробнича поселення:  current_product.resources.resources {pirate_fish:5}
     if (cp && cp.product && cp.product.resources) { absorb(cp.product.resources); }
+    if (cp && cp.resources && cp.resources.resources) { absorb(cp.resources.resources); }
+    // Ім'я кадру іконки гра дає сама: asset_name, напр. "pirate_fish_1"
+    // (лист production_icons) або "production_icon_money".
+    var assetName = (cp && cp.asset_name) || null;
     if (cp && Array.isArray(cp.goods)) {
       for (var gi = 0; gi < cp.goods.length; gi++) {
         var g = cp.goods[gi];
@@ -964,6 +973,7 @@ export const FOE_INTERCEPTOR_JS = `
       ready: !!ready,
       readyAt: hasTimer ? readyAt : null,
       name: name,
+      assetName: assetName,
       det: Object.keys(det).length ? det : null
     };
   }
@@ -1225,6 +1235,31 @@ export const FOE_INTERCEPTOR_JS = `
       if (WANTED[key] && rd != null) {
         found[WANTED[key]] = rd;
         got = true;
+      }
+
+      // Культурні поселення: гра САМА називає свої товари. Беремо лише
+      // описову "шапку" кожного поселення (сама відповідь ~1.6 МБ) — цього
+      // досить, щоб не вгадувати ні назви товарів, ні їхні іконки.
+      if (cls === 'OutpostService' && mth === 'getAll' && Array.isArray(rd)) {
+        var outposts = [];
+        for (var oi = 0; oi < rd.length; oi++) {
+          var op = rd[oi];
+          if (!op || typeof op !== 'object') { continue; }
+          outposts.push({
+            id: op.id,
+            content: op.content,
+            name: op.name,
+            contentName: op.contentName,
+            gridId: op.gridId,
+            minEra: op.minEra,
+            populationResourceId: op.populationResourceId,
+            primaryResourceId: op.primaryResourceId,
+            goodsResourceIds: Array.isArray(op.goodsResourceIds)
+              ? op.goodsResourceIds.slice(0, 12)
+              : null
+          });
+        }
+        if (outposts.length) { found.outposts = outposts; got = true; }
       }
 
       // Бонуси — підсумовуємо прямо тут, щоб великий масив не губився при передачі
