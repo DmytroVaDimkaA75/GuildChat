@@ -2034,6 +2034,10 @@ export function FoeSyncProvider({ children }) {
                     bottom: debugShrink ? '18%' : 0,
                     zIndex: 9999,
                     backgroundColor: '#0f1115',
+                    // Захист від витоку зображення гри з-під екрана
+                    // завантаження, якщо контент WebView колись виявиться
+                    // більшим за цю область (напр. інший розмір вікна).
+                    overflow: 'hidden',
                   }
                 : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
