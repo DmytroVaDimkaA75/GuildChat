@@ -12,7 +12,8 @@ export const FOE_INTERCEPTOR_JS = `
 (function () {
   if (window.__foeSyncHook) { return; }
   window.__foeSyncHook = true;
-  var syncDocumentId = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+  var syncDocumentStartedAt = Date.now();
+  var syncDocumentId = String(syncDocumentStartedAt) + '-' + Math.random().toString(36).slice(2);
 
   // Буфер ресурсних таймінгів переповнюється (у грі > 2800 файлів будівель),
   // тож ловимо URL-и і напряму через PerformanceObserver, і збільшуємо буфер.
@@ -44,6 +45,9 @@ export const FOE_INTERCEPTOR_JS = `
         }
         if (payload && typeof payload === 'object') {
           payload.documentId = syncDocumentId;
+          payload.documentStartedAt = syncDocumentStartedAt;
+          payload.pageHost = String(location.hostname || '').toLowerCase();
+          payload.pagePath = String(location.pathname || '');
         }
         window.ReactNativeWebView.postMessage(JSON.stringify(payload));
       }
@@ -258,6 +262,8 @@ export const FOE_INTERCEPTOR_JS = `
             probe: {
               readyState: document.readyState,
               visibilityState: document.visibilityState || null,
+              pageHost: String(location.hostname || '').toLowerCase(),
+              pagePath: String(location.pathname || ''),
               hidden: document.hidden === true,
               hasFocus: typeof document.hasFocus === 'function' ? document.hasFocus() : null,
               userActivation: activation,
@@ -284,6 +290,8 @@ export const FOE_INTERCEPTOR_JS = `
         probe: {
           readyState: document.readyState,
           visibilityState: document.visibilityState || null,
+          pageHost: String(location.hostname || '').toLowerCase(),
+          pagePath: String(location.pathname || ''),
           hidden: document.hidden === true,
           hasFocus: null,
           userActivation: null,
@@ -1575,8 +1583,8 @@ export const FOE_INTERCEPTOR_JS = `
 
   var lastAdvance = 0;
   var authedSent = false;
-  // Сигнал застосунку: вхід у гру підтверджено (логін/пароль прийнято).
-  // Далі вікно гри можна прибрати з екрана — автоперехід доробить у фоні.
+  // Сигнал застосунку: потрібний світ уже реально віддає ігрові пакети.
+  // Лише після цього вікно безпечно прибирати з екрана.
   function markAuthed() {
     if (authedSent) { return; }
     authedSent = true;
@@ -1584,9 +1592,32 @@ export const FOE_INTERCEPTOR_JS = `
   }
   function autoAdvance() {
     try {
-      var w = window.__FOE_WORLD || '';
+      var w = String(window.__FOE_WORLD || '').trim().toLowerCase();
       var href = String(location.href || '');
-      if (/\\/game\\/index/.test(href) && !/master-page-login/.test(href)) { markAuthed(); return; }
+      var currentHost = String(location.hostname || '').trim().toLowerCase();
+      var currentPath = String(location.pathname || '');
+      var targetHost = w ? w + '.forgeofempires.com' : '';
+      var onGameIndex = /^\\/game\\/index(?:\\/|$)/.test(currentPath);
+      var isLoginShell = /master-page-login/i.test(href);
+      if (targetHost && currentHost === targetHost && onGameIndex && !isLoginShell) {
+        if (packetNo > 0) { markAuthed(); }
+        return;
+      }
+      // Спільні cookies можуть спершу відкрити останній відвіданий світ.
+      // Не збираємо й не клікаємо його DOM — переходимо на host активної гільдії.
+      if (
+        targetHost && currentHost && currentHost !== targetHost &&
+        /(?:^|\\.)forgeofempires\\.com$/.test(currentHost) &&
+        onGameIndex && !isLoginShell
+      ) {
+        lastAdvance = Date.now();
+        if (typeof location.replace === 'function') {
+          location.replace('https://' + targetHost + '/game/index?');
+        } else {
+          location.href = 'https://' + targetHost + '/game/index?';
+        }
+        return;
+      }
 
       var worlds = [];
       var playBtns = [];
@@ -1600,9 +1631,8 @@ export const FOE_INTERCEPTOR_JS = `
 
       // Кнопки вибору світу: <a class="world_select_button" value="ru3">Сигард</a>
       var wsb = document.querySelectorAll('a.world_select_button, .world_select_button, [class*="world_select"]');
-      if (wsb.length) { markAuthed(); }
       for (var wi = 0; wi < wsb.length; wi++) {
-        var wv = wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '';
+        var wv = String(wsb[wi].getAttribute('value') || wsb[wi].getAttribute('data-world') || '').trim().toLowerCase();
         report.push('WSB value="' + wv + '" "' + (wsb[wi].textContent || '').trim() + '"');
         if (wv && wv === w) {
           if (Date.now() - lastAdvance >= 2000) {
@@ -1612,6 +1642,13 @@ export const FOE_INTERCEPTOR_JS = `
           post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
           return;
         }
+      }
+      // Селектор уже відкритий, але активного worldId у ньому немає.
+      // Не натискаємо випадковий Play/default world — лишаємо вибір видимим.
+      if (wsb.length) {
+        report.push('TARGET_WORLD_MISSING');
+        post({ __foeSync: true, kind: 'worldSelectDump', world: w, url: href, title: document.title, els: report });
+        return;
       }
 
       // Знаходимо всі елементи з текстом = назва світу або "Грати"
@@ -1641,7 +1678,7 @@ export const FOE_INTERCEPTOR_JS = `
       // 1) якщо є кнопки світів — клікаємо ту, чий предок веде на наш worldId
       for (var k = 0; k < worlds.length; k++) {
         var wb = worlds[k];
-        var blob = outer(wb.anc) + ' ' + (wb.anc.href || '') + ' ' + (wb.anc.getAttribute && wb.anc.getAttribute('onclick') || '');
+        var blob = (outer(wb.anc) + ' ' + (wb.anc.href || '') + ' ' + (wb.anc.getAttribute && wb.anc.getAttribute('onclick') || '')).toLowerCase();
         if (blob.indexOf('//' + w + '.') !== -1 || blob.indexOf('/' + w + '/') !== -1 ||
             blob.indexOf('"' + w + '"') !== -1 || blob.indexOf("'" + w + "'") !== -1 ||
             blob.indexOf('world=' + w) !== -1 || blob.indexOf('=' + w) !== -1) {

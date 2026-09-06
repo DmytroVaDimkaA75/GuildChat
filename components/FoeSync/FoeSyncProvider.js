@@ -71,6 +71,14 @@ const SHIP_DRAG_X_PX = -673; // середнє: -699.42 та -646.7
 const SHIP_TARGET_X_RATIO = 0.403 + 0.03; // де корабель реально опинився після SHIP_DRAG_X_PX (canvasX≈413 з 1024)
 
 const worldIdFromGuildId = (g) => String(g || '').split('_')[0].trim() || null;
+const gameHostFromGuildId = (g) => {
+  const worldId = worldIdFromGuildId(g);
+  return worldId ? `${worldId.toLowerCase()}.forgeofempires.com` : null;
+};
+const hostFromUrl = (value) => {
+  const match = String(value || '').match(/^https?:\/\/([^/:?#]+)/i);
+  return match ? match[1].toLowerCase() : null;
+};
 const gameUrlFromGuildId = (g) => {
   const w = worldIdFromGuildId(g);
   return w ? `https://${w}.forgeofempires.com/game/index?` : null;
@@ -201,6 +209,7 @@ export function FoeSyncProvider({ children }) {
   const webViewTagRef = useRef(null);
   const webDocumentEpochRef = useRef(0);
   const webDocumentIdRef = useRef(null);
+  const webDocumentStartedAtRef = useRef(0);
   const cityMapDocumentEpochRef = useRef(null);
   const interactionProbeResolverRef = useRef(null);
   const interactionProbeNonceRef = useRef(0);
@@ -322,7 +331,10 @@ export function FoeSyncProvider({ children }) {
     }
   }), []);
 
-  const waitForInteractiveGame = useCallback(async (timeoutMs = 75000) => {
+  const waitForInteractiveGame = useCallback(async ({
+    timeoutMs = 75000,
+    requireCurrentCityMap = true,
+  } = {}) => {
     const deadline = Date.now() + timeoutMs;
     let stableCount = 0;
     let lastSignature = '';
@@ -331,6 +343,9 @@ export function FoeSyncProvider({ children }) {
       const probe = await requestInteractionProbe();
       const rect = probe?.rect;
       const frameDeltaMs = Number(probe?.frameDeltaMs);
+      const expectedHost = gameHostFromGuildId(guildIdRef.current);
+      const probeHost = String(probe?.pageHost || '').trim().toLowerCase();
+      const probePath = String(probe?.pagePath || '');
       const ready =
         !!rect &&
         Number(rect.width) > 100 &&
@@ -341,9 +356,15 @@ export function FoeSyncProvider({ children }) {
         String(probe?.canvasTag || '') === 'canvas' &&
         ['interactive', 'complete'].includes(String(probe?.readyState || '')) &&
         String(probe?.visibilityState || 'visible') === 'visible' &&
+        !!expectedHost &&
+        probeHost === expectedHost &&
+        /^\/game\/index(?:\/|$)/.test(probePath) &&
         webFullSizeSinceRef.current > 0 &&
         Date.now() - webFullSizeSinceRef.current >= GAME_SCENE_VISIBLE_WARMUP_MS &&
-        cityMapDocumentEpochRef.current === webDocumentEpochRef.current &&
+        (
+          !requireCurrentCityMap ||
+          cityMapDocumentEpochRef.current === webDocumentEpochRef.current
+        ) &&
         probe?.stable === true &&
         Number.isFinite(frameDeltaMs) &&
         frameDeltaMs > 0 &&
@@ -758,7 +779,7 @@ export function FoeSyncProvider({ children }) {
       // його свідомо, а перед самим tryAutoEnter знімаємо назад, бо той сам
       // виставляє його з нуля і вважає true "вже триває інша спроба".
       autoEnterBusyRef.current = true;
-      const ready = await waitForInteractiveGame();
+      const ready = await waitForInteractiveGame({ requireCurrentCityMap: false });
       autoEnterBusyRef.current = false;
       if (!ready) {
         setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
@@ -822,7 +843,7 @@ export function FoeSyncProvider({ children }) {
     autoEnterBusyRef.current = true;
 
     try {
-      const ready = await waitForInteractiveGame();
+      const ready = await waitForInteractiveGame({ requireCurrentCityMap: false });
       if (!ready) {
         setAutoEnterLog((prev) => [...prev, { step: 'interaction_not_ready', at: Date.now() }].slice(-20));
         return;
@@ -936,6 +957,7 @@ export function FoeSyncProvider({ children }) {
     webViewTagRef.current = null;
     cityMapDocumentEpochRef.current = null;
     webDocumentIdRef.current = null;
+    webDocumentStartedAtRef.current = 0;
     if (interactionProbeResolverRef.current) {
       const pending = interactionProbeResolverRef.current;
       interactionProbeResolverRef.current = null;
@@ -1040,10 +1062,6 @@ export function FoeSyncProvider({ children }) {
 
   const onWebViewLoadStart = useCallback((event) => {
     rememberWebViewTag(event);
-    webDocumentEpochRef.current += 1;
-    webDocumentIdRef.current = null;
-    cityMapDocumentEpochRef.current = null;
-    webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
   }, [rememberWebViewTag]);
 
   const onMessage = useCallback((event) => {
@@ -1065,17 +1083,48 @@ export function FoeSyncProvider({ children }) {
     const messageDocumentId = msg.documentId == null ? null : String(msg.documentId);
     if (msg.kind === 'ready') {
       if (!messageDocumentId) return;
+      const explicitStartedAt = Number(msg.documentStartedAt);
+      const idStartedAt = Number(messageDocumentId.split('-')[0]);
+      const messageStartedAt = Number.isFinite(explicitStartedAt) && explicitStartedAt > 0
+        ? explicitStartedAt
+        : (Number.isFinite(idStartedAt) && idStartedAt > 0 ? idStartedAt : 0);
+      const isNewDocument = webDocumentIdRef.current !== messageDocumentId;
+
+      // Android WebView викликає onLoadStart також для SPA/history-переходів.
+      // Реальну зміну документа визначає лише новий id самого інтерсептора.
+      // Старе queued-повідомлення не повинно повернути нас до попередньої сторінки.
       if (
+        isNewDocument &&
         webDocumentIdRef.current &&
-        webDocumentIdRef.current !== messageDocumentId
+        messageStartedAt > 0 &&
+        webDocumentStartedAtRef.current > messageStartedAt
       ) {
         return;
       }
-      webDocumentIdRef.current = messageDocumentId;
+      if (isNewDocument) {
+        webDocumentEpochRef.current += 1;
+        cityMapDocumentEpochRef.current = null;
+        webDocumentIdRef.current = messageDocumentId;
+        webDocumentStartedAtRef.current = messageStartedAt;
+        webFullSizeSinceRef.current = webFullSizeActiveRef.current ? Date.now() : 0;
+      }
       setHealth((h) => ({ ...h, ready: true }));
       return;
     }
     if (!messageDocumentId || messageDocumentId !== webDocumentIdRef.current) {
+      return;
+    }
+
+    // Пакети й жести приймаємо лише від світу активної гільдії. Сторінка
+    // порталу може надсилати тільки URL/діагностику вибору світу.
+    const expectedHost = gameHostFromGuildId(guildIdRef.current);
+    const messageHost = String(
+      msg.pageHost || hostFromUrl(event?.nativeEvent?.url) || ''
+    ).trim().toLowerCase();
+    if (
+      !['url', 'worldSelectDump'].includes(msg.kind) &&
+      (!expectedHost || messageHost !== expectedHost)
+    ) {
       return;
     }
 

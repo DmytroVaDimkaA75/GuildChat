@@ -2210,7 +2210,7 @@ export default function MainContent({ onLogout }) {
 
   return (
     <MenuProvider>
-      <FoeSyncProvider>
+      <FoeSyncProvider key={String(guildId || '')}>
         <AppNavigator
           onReady={() => setReadyGuildId(String(guildId || ""))}
           onManualGuildSwitch={cancelNotificationRouteForManualSwitch}

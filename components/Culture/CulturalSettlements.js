@@ -64,8 +64,9 @@ const SETTLEMENTS = [
 // "H_Pirates_Townhall" усередині поселення, "Y_Pirates_Ship1" — сам кораблик
 // у ГОЛОВНОМУ місті, що веде туди). Це дає назву активного поселення БЕЗ
 // заходу в нього — досить cityentity_id кораблика з уже синхронізованої
-// мапи міста. Аліаси — бо англійська назва в грі не завжди збігається з
-// нашим value 1-в-1 (підтверджено поки що тільки "Pirates").
+// мапи міста. Якщо гра не надіслала головну мапу в цьому світі, тип можна
+// визначити вже з сутностей отриманої мапи поселення. Аліаси — бо англійська
+// назва в грі не завжди збігається з нашим value 1-в-1.
 const SETTLEMENT_CID_ALIASES = {
   vikings: ['vikings', 'viking'],
   japanese: ['japan', 'japanese'],
@@ -99,7 +100,7 @@ const CulturalSettlements = () => {
   const hasCalibShip = !!calibPoints?.ship;
   const settlementMap = found.settlementMap;
   // Поки не маємо мапи поселення — тримаємо фонову синхронізацію активною
-  // (потрібна мапа міста, щоб дізнатись координати корабля/ратуші). Щойно
+  // (для входу достатньо спільної каліброваної прокрутки й точки тапу). Щойно
   // отримали мапу поселення — відпускаємо: вікно гри само згорнеться
   // (див. SYNC_LINGER_MS у FoeSyncProvider), не тримаємо його довше, ніж треба.
   useFoeSyncActive(!settlementMap);
@@ -108,20 +109,21 @@ const CulturalSettlements = () => {
     () => (found.cityMap?.entities || []).find((e) => e.type === 'outpost_ship') || null,
     [found.cityMap]
   );
-  const townhall = useMemo(
-    () => (found.cityMap?.entities || []).find((e) => e.type === 'main_building') || null,
-    [found.cityMap]
-  );
-  const activeSettlement = useMemo(() => detectSettlementFromCid(ship?.cid), [ship?.cid]);
+  const activeSettlement = useMemo(() => {
+    const fromShip = detectSettlementFromCid(ship?.cid);
+    if (fromShip) return fromShip;
+    for (const entity of settlementMap?.entities || []) {
+      const fromSettlement = detectSettlementFromCid(entity?.cid);
+      if (fromSettlement) return fromSettlement;
+    }
+    return null;
+  }, [settlementMap, ship?.cid]);
 
   // ТИМЧАСОВО: рахуємо завершені спроби — щоб після невдалої мовчазної
   // спроби показати кнопку "Спробувати ще раз" замість вічного "зараз
   // спробуємо…" (раніше екран просто зависав без жодної ознаки провалу).
   const [attempts, setAttempts] = React.useState(0);
-  // Захист від повторного накладання: found.cityMap (і похідні ship/townhall)
-  // отримують новий обʼєкт-посилання майже на кожен пакет від гри, тож без
-  // цього прапорця ефект нижче міг би запускати другу спробу поверх ще
-  // незавершеної першої щоразу, коли приходять нові дані.
+  // Захист від повторного накладання спроб, поки асинхронний вхід ще триває.
   const runningRef = React.useRef(false);
   const runAutoEnter = React.useCallback(() => {
     if (runningRef.current) return;
