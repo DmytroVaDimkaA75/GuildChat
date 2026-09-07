@@ -43,7 +43,9 @@ import {
 import { getBuildingDefs } from '../../src/services/foeBuildings';
 import { DarkThemeColors } from '../../constants/theme';
 
-const { DEFAULT_SHIP_CALIB, createSettlementPacketSession } = require('./settlementPacketSession');
+const {
+  DEFAULT_SHIP_CALIB, createSettlementPacketSession, describePacketSettlement,
+} = require('./settlementPacketSession');
 
 const {
   normalizeEra,
@@ -142,6 +144,44 @@ const gameUrlFromGuildId = (g) => {
 // Скільки тримати приховане вікно гри після того, як зник останній екран-
 // замовник. Вистачає, щоб добрати перші пакети, бонуси й мапу міста.
 const SYNC_LINGER_MS = 90 * 1000;
+
+// ТИМЧАСОВО: показувати саме вікно гри під час автоматичного входу в поселення,
+// щоб було видно, що робить автомат (де камера, куди пішов свайп, чи відкрився
+// корабель). Коли вхід стане надійним — поставити false, і гра знову працюватиме
+// непомітно під вмістом застосунку. Розмір вікна при цьому НЕ змінюється:
+// калібровані координати свайпу й тапу лишаються дійсними.
+const PACKET_GAME_PREVIEW = false;
+
+// ТИМЧАСОВО: ручне наведення замість автоматичного свайпу й тапу. Гра
+// завантажується, зупиняється з червоною міткою, а людина САМА гортає місто
+// пальцем, поки корабель поселення не стане під мітку, і тисне «Тап». Її свайп
+// перехоплювач рахує сам — він і зберігається як калібровка, далі його повторює
+// вже автомат. Коли калібровка записана і вхід стабільний, ставимо false.
+const PACKET_MANUAL_AIM = false;
+
+// ТИМЧАСОВО: виконувати автоматичний вхід у СПРАВЖНЬОМУ відкритому вікні гри
+// (тому самому, що й ручний вхід), а не у вікні, яке технічно приховане під
+// вмістом застосунку. Приховане вікно Android місцями вважає невидимим і
+// притримує рендер гри — тоді клік по кораблю не спрацьовує.
+const PACKET_OPEN_WINDOW = false;
+
+// ТИМЧАСОВО: гра вантажиться сама, а прокрутку й тап запускає людина кнопками.
+// «Прокрутити» робить калібрований свайп, «Ще» додає чверть — доки корабель не
+// стане під мітку. Сума всього накрученого і є справжня довжина свайпу: саме її
+// застосунок збереже як нову калібровку, якщо вхід удасться.
+const PACKET_MANUAL_START = false;
+// Частка каліброваного свайпу на одне натискання «Ще».
+const SCROLL_MORE_FRACTION = 0.25;
+// Скільки чекаємо на людину під час наведення (автоматичний вхід — 75 с).
+const AIM_TIMEOUT_MS = 15 * 60 * 1000;
+const AIM_CALIB_KEY = 'foeSettlementAimCalib_v1';
+
+// Скільки ще разів пробуємо після невдалої спроби (те саме, що людина зробила б
+// кнопкою «Спробувати ще»). Помилки, які повтор не виправить, не повторюємо:
+// немає світу, немає підтримки жестів, або вхід скасували вручну.
+const PACKET_MAX_RETRIES = 2;
+const PACKET_RETRY_DELAY_MS = 1500;
+const PACKET_NO_RETRY_ERRORS = ['identity', 'unsupported', 'cancelled'];
 // StartupService може вже віддати мапу, коли Haxe/OpenFL ще добудовує сцену
 // та обробники вводу. Відлік починаємо лише з переходу на ПОВНИЙ розмір:
 // час, проведений у прихованому 1×1 WebView, не зараховується.
@@ -335,22 +375,63 @@ export function FoeSyncProvider({ children }) {
   webGenerationRef.current = webKey;
   const packetSessionRef = useRef(null);
   const packetSettlementBusyRef = useRef(false);
+  const packetRetriesRef = useRef(0);
+  const packetRetryTimerRef = useRef(null);
+  const startPacketRef = useRef(null);
+  const [packetAttempt, setPacketAttempt] = useState(1);
+  const clearPacketRetry = useCallback(() => {
+    if (packetRetryTimerRef.current) {
+      clearTimeout(packetRetryTimerRef.current);
+      packetRetryTimerRef.current = null;
+    }
+  }, []);
   const packetLayoutRef = useRef(null);
   const [packetSettlement, setPacketSettlement] = useState({ phase: 'idle', settlementId: null });
   const [packetSettlementHidden, setPacketSettlementHidden] = useState(false);
+  // Користувач може прибрати показ гри під час поточного входу (див.
+  // PACKET_GAME_PREVIEW) — далі процедура доробляє все у фоні, як завжди.
+  const [packetPreviewOff, setPacketPreviewOff] = useState(false);
+  // Записана вручну калібровка входу (точка кліку + сумарний свайп у
+  // координатах ігрового полотна). Поки її нема — працює заводська.
+  const [aimCalib, setAimCalib] = useState(null);
+  const aimCalibRef = useRef(null);
+  useEffect(() => {
+    AsyncStorage.getItem(AIM_CALIB_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && Number.isFinite(Number(parsed.canvasW))) {
+          aimCalibRef.current = parsed;
+          setAimCalib(parsed);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const cancelPacketSettlementSync = useCallback(() => {
     const session = packetSessionRef.current;
     if (!session) return;
     packetSessionRef.current = null;
     packetSettlementBusyRef.current = false;
     session.cancel();
+    clearPacketRetry();
     setPacketSettlementHidden(false);
+    setWebVisible(false);
+    // Явний кінець сеансу: інакше екран поселення лишався б із вічним
+    // кружечком у стані, з якого вже ніхто не вийде.
+    setPacketSettlement((prev) => (
+      ['ready', 'empty', 'error'].includes(prev.phase)
+        ? prev
+        : { phase: 'error', settlementId: prev.settlementId || null, error: 'cancelled' }
+    ));
     // Detach the old native view too: an in-flight native swipe must never
     // continue into a different screen/world or a subsequent attempt.
     webGenerationRef.current += 1;
     setWebKey(webGenerationRef.current);
+  }, [clearPacketRetry]);
+  useEffect(() => () => {
+    packetSessionRef.current?.cancel();
+    if (packetRetryTimerRef.current) clearTimeout(packetRetryTimerRef.current);
   }, []);
-  useEffect(() => () => packetSessionRef.current?.cancel(), []);
   const [webVisible, setWebVisible] = useState(false);
   // Вікно гри показуємо лише для ручного вводу логіна/пароля. Щойно вхід
   // підтверджено (interceptor шле kind:'authed') або пішли пакети — згортаємо
@@ -1307,8 +1388,23 @@ export function FoeSyncProvider({ children }) {
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
 
-  const startPacketSettlementSync = useCallback(() => {
+  // Підтвердження точки під час ручного наведення (див. PACKET_MANUAL_AIM).
+  const confirmAimTap = useCallback(() => {
+    packetSessionRef.current?.confirmTap?.();
+  }, []);
+  // Ручні кнопки прокрутки й тапу (див. PACKET_MANUAL_START).
+  const startPacketEntry = useCallback(() => {
+    packetSessionRef.current?.startEntry?.();
+  }, []);
+  const scrollPacketEntry = useCallback((fraction) => {
+    packetSessionRef.current?.scrollBy?.(fraction);
+  }, []);
+
+  const startPacketSettlementSync = useCallback(({ retry = false } = {}) => {
     if (consent !== 'yes') return;
+    clearPacketRetry();
+    if (!retry) packetRetriesRef.current = 0;
+    setPacketAttempt(packetRetriesRef.current + 1);
     if (!gameUrl || !userId) {
       setPacketSettlement({ phase: 'error', settlementId: null, error: 'identity' });
       return;
@@ -1323,6 +1419,10 @@ export function FoeSyncProvider({ children }) {
     setWebKey(generation);
     setPacketSettlement({ phase: 'loading', settlementId: null });
     setPacketSettlementHidden(true);
+    setPacketPreviewOff(false);
+    // ВАЖЛИВО: після clearCapturedState (він гасить вікно), інакше відкриття
+    // одразу ж скасувалося б.
+    if (PACKET_OPEN_WINDOW) setWebVisible(true);
     packetSettlementBusyRef.current = true;
     packetLayoutRef.current = null;
     const session = createSettlementPacketSession({
@@ -1338,12 +1438,48 @@ export function FoeSyncProvider({ children }) {
       tap: typeof FoeWebViewGesture?.tap === 'function'
         ? (...args) => FoeWebViewGesture.tap(...args) : undefined,
       nativeGestures: Platform.OS === 'android',
+      // ТИМЧАСОВО: разом з показом гри малюємо мітку в точці кліку.
+      showAim: PACKET_GAME_PREVIEW,
+      manualAim: PACKET_MANUAL_AIM,
+      manualStart: PACKET_MANUAL_START,
+      timeoutMs: PACKET_MANUAL_AIM || PACKET_MANUAL_START ? AIM_TIMEOUT_MS : undefined,
+      calibration: aimCalibRef.current || DEFAULT_SHIP_CALIB,
       onState: (state) => {
         if (packetSessionRef.current !== session) return;
         setPacketSettlement(state);
+        if (state.phase === 'ready' && PACKET_MANUAL_AIM) {
+          // Вхід підтверджений на ділі — саме тепер ці числа варто запам'ятати.
+          const recorded = session.recordedCalibration?.();
+          if (recorded) {
+            aimCalibRef.current = recorded;
+            setAimCalib(recorded);
+            AsyncStorage.setItem(AIM_CALIB_KEY, JSON.stringify(recorded)).catch(() => {});
+          }
+        }
         if (['error', 'empty', 'ready'].includes(state.phase)) {
           packetSettlementBusyRef.current = false;
           setPacketSettlementHidden(false);
+          setWebVisible(false);
+        }
+        // Невдача, яку має сенс повторити: беремося за неї самі, замість того
+        // щоб чекати, поки людина натисне «Спробувати ще».
+        if (
+          state.phase === 'error' &&
+          !PACKET_NO_RETRY_ERRORS.includes(state.error) &&
+          packetRetriesRef.current < PACKET_MAX_RETRIES
+        ) {
+          packetRetriesRef.current += 1;
+          // Тримаємо екран у стані «працюємо», щоб між спробами не блимала
+          // помилка, якої вже за секунду не буде.
+          setPacketSettlement({
+            phase: 'loading', settlementId: state.settlementId || null, step: 'retrying',
+          });
+          packetSettlementBusyRef.current = true;
+          packetRetryTimerRef.current = setTimeout(() => {
+            packetRetryTimerRef.current = null;
+            packetSettlementBusyRef.current = false;
+            startPacketRef.current?.({ retry: true });
+          }, PACKET_RETRY_DELAY_MS);
         }
         if (state.phase === 'error') {
           // A failed/cancelled gesture must lose its native target, including
@@ -1354,7 +1490,8 @@ export function FoeSyncProvider({ children }) {
       },
     });
     packetSessionRef.current = session;
-  }, [clearCapturedState, consent, gameUrl, guildId, userId]);
+  }, [clearCapturedState, clearPacketRetry, consent, gameUrl, guildId, userId]);
+  startPacketRef.current = startPacketSettlementSync;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -1474,8 +1611,10 @@ export function FoeSyncProvider({ children }) {
     if (msg.kind === 'authed') {
       // Логін/пароль прийнято — вхід у гру підтверджено. Прибираємо вікно гри
       // з екрана; WebView лишається змонтованим і доробляє вибір світу та
-      // збір даних у фоні. Виняток — коли вікно закріплене вручну (діагностика).
-      if (!webPinnedRef.current) setWebVisible(false);
+      // збір даних у фоні. Виняток — коли вікно закріплене вручну (діагностика)
+      // або коли саме зараз іде автоматичний вхід у поселення: він для того й
+      // працює у відкритому вікні, щоб гра не засинала.
+      if (!webPinnedRef.current && !packetSettlementBusyRef.current) setWebVisible(false);
       return;
     }
     if (msg.kind === 'packet') {
@@ -1652,6 +1791,13 @@ export function FoeSyncProvider({ children }) {
         setFound((prev) => ({ ...prev, ...msg.found }));
         if (hasSettlementMap && autoEnterBusyRef.current) {
           finishAutoEnter();
+        }
+        // Мапа поселення вже в застосунку — отже, вхід відбувся, і саме ці дані
+        // потрібні екрану. Цього достатньо: не тримаємо людину в очікуванні
+        // внутрішніх підтверджень сесії. Мапа тут завжди свіжа — запуск починає
+        // з чистого стану і перезавантаження гри.
+        if (hasSettlementMap && packetSettlementBusyRef.current) {
+          packetSessionRef.current?.succeed?.();
         }
       }
     }
@@ -2049,6 +2195,20 @@ export function FoeSyncProvider({ children }) {
   // або ручний вхід). Поза цим — жодного WebView, жодного навантаження.
   const webActive = consent === 'yes' && !!gameUrl && (engaged || linger || stealthEntering || packetSettlementHidden);
 
+  // ТИМЧАСОВО: чи піднімати гру НАД вмістом застосунку на час автоматичного
+  // входу в поселення.
+  const showPacketGame =
+    PACKET_GAME_PREVIEW && packetSettlementHidden && !stealthEntering && !packetPreviewOff;
+  const packetStatusText = describePacketSettlement(packetSettlement);
+  const aiming = packetSettlement.phase === 'aiming';
+  const awaitingStart = aiming && packetSettlement.step === 'start';
+  // Кнопки прокрутки й тапу тримаємо на екрані ВЕСЬ ручний сеанс, хай там що
+  // відповіла гра: інакше після невдалого тапу людина лишається без керування.
+  const entryControls = aiming && PACKET_MANUAL_START;
+  const aimShift = packetSettlement.aim;
+  // Дані поселення вже в застосунку? Тоді людині нема чого дивитись на гру.
+  const settlementDataReady = !!found.settlementMap?.entities?.length;
+
   const value = {
     guildId,
     userId,
@@ -2072,8 +2232,14 @@ export function FoeSyncProvider({ children }) {
     tryAutoAimEnter,
     autoEnterSettlementQuietly,
     packetSettlement,
+    packetAttempt,
+    packetMaxAttempts: PACKET_MAX_RETRIES + 1,
     startPacketSettlementSync,
     cancelPacketSettlementSync,
+    aimCalib,
+    confirmAimTap,
+    startPacketEntry,
+    scrollPacketEntry,
     debugScrollAndReveal,
     stealthEntering,
     autoEnterLog,
@@ -2106,9 +2272,10 @@ export function FoeSyncProvider({ children }) {
       </View>
       {webActive ? (
         <View
-          accessibilityElementsHidden={!webVisible}
-          importantForAccessibility={webVisible ? 'auto' : 'no-hide-descendants'}
-          pointerEvents={webVisible || stealthEntering ? 'auto' : 'none'}
+          accessibilityElementsHidden={!webVisible && !aiming}
+          importantForAccessibility={webVisible || aiming ? 'auto' : 'no-hide-descendants'}
+          // Під час наведення гра приймає дотик: місто гортає сам користувач.
+          pointerEvents={webVisible || stealthEntering || aiming ? 'auto' : 'none'}
           style={
             webVisible
               ? {
@@ -2144,8 +2311,19 @@ export function FoeSyncProvider({ children }) {
                   }
                 : packetSettlementHidden
                   // Keep the WebView laid out/rendering at the actual phone
-                  // size, underneath the opaque native navigation content.
-                  ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }
+                  // size. Зазвичай — під непрозорим вмістом застосунку
+                  // (zIndex 0). ТИМЧАСОВО (PACKET_GAME_PREVIEW) — над ним, щоб
+                  // було видно сам процес входу. Змінюється ЛИШЕ порядок
+                  // накладання, не розмір і не положення: інакше сесія впала б
+                  // з помилкою 'layout', а калібровані жести — мимо.
+                  ? {
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: showPacketGame ? 9998 : 0,
+                    }
                   : { position: 'absolute', width: 1, height: 1, opacity: 0, top: -10 }
           }
         >
@@ -2403,6 +2581,101 @@ export function FoeSyncProvider({ children }) {
               </Text>
             </View>
           ) : null}
+        </View>
+      ) : null}
+      {showPacketGame ? (
+        // ТИМЧАСОВО: смужка поверх показаної гри — щоб було зрозуміло, що це
+        // працює автомат, а не гра відкрилась сама. Гру НЕ перехоплюємо: під
+        // смужкою кліки й далі йдуть у застосунок під нею (як і тоді, коли
+        // гра невидима), а нативний тап автомата б'є прямо у вікно гри.
+        <View
+          // Панель — ЗНИЗУ: зверху вона перекривала корабель поселення, а саме
+          // його треба підвести під мітку.
+          pointerEvents="box-none"
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
+        >
+          <View
+            style={{
+              paddingTop: 10,
+              paddingHorizontal: 12,
+              paddingBottom: 10 + insets.bottom,
+              backgroundColor: 'rgba(15,17,21,0.92)',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {aiming ? null : <ActivityIndicator color="#4ea1ff" />}
+              <Text style={{ color: '#f4f7fb', fontSize: 12, flex: 1 }}>{packetStatusText}</Text>
+              <TouchableOpacity
+                // Під час наведення ховати гру нема сенсу — зникли б і кнопки,
+                // а сеанс лишився б чекати. Тут це вихід із наведення.
+                onPress={aiming ? cancelPacketSettlementSync : () => {
+                  setPacketPreviewOff(true);
+                  setWebVisible(false);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={{ color: '#4ea1ff', fontWeight: '700', fontSize: 12 }}>
+                  {aiming ? 'Скасувати' : 'Сховати гру'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {aiming ? (
+              // ТИМЧАСОВО: ручне наведення. Місто гортає сам користувач пальцем
+              // просто по грі; лишається одна кнопка — підтвердити точку.
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                {entryControls ? (
+                  <TouchableOpacity
+                    onPress={() => scrollPacketEntry(awaitingStart ? 1 : SCROLL_MORE_FRACTION)}
+                    style={{
+                      flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
+                      justifyContent: 'center', backgroundColor: '#1b2b3b',
+                      borderWidth: 1, borderColor: '#36516a',
+                    }}
+                  >
+                    <Text style={{ color: '#f4f7fb', fontSize: 14, fontWeight: '700' }}>
+                      {awaitingStart ? 'Прокрутити' : 'Ще'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  onPress={entryControls ? startPacketEntry : confirmAimTap}
+                  style={{
+                    flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
+                    justifyContent: 'center', backgroundColor: '#ffa51f33',
+                    borderWidth: 1, borderColor: '#ffa51f',
+                  }}
+                >
+                  <Text style={{ color: '#ffd79a', fontSize: 14, fontWeight: '700' }}>
+                    {entryControls ? 'Тапнути' : 'Тап у мітку'}
+                  </Text>
+                </TouchableOpacity>
+                {settlementDataReady ? (
+                  // Ручний вихід: дані вже є, і людина може забрати їх сама,
+                  // не чекаючи, поки автоматика сама здогадається.
+                  <TouchableOpacity
+                    onPress={() => packetSessionRef.current?.succeed?.()}
+                    style={{
+                      flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
+                      justifyContent: 'center', backgroundColor: '#1f7a4d',
+                      borderWidth: 1, borderColor: '#38d68a',
+                    }}
+                  >
+                    <Text style={{ color: '#eafff4', fontSize: 14, fontWeight: '700' }}>
+                      Забрати дані
+                    </Text>
+                  </TouchableOpacity>
+                ) : entryControls && !awaitingStart && aimShift ? (
+                  <Text style={{ color: '#9aa3b2', fontSize: 11, minWidth: 74, textAlign: 'right' }}>
+                    {aimShift.dx} / {aimShift.dy}
+                  </Text>
+                ) : aimShift ? (
+                  <Text style={{ color: '#9aa3b2', fontSize: 11, minWidth: 74, textAlign: 'right' }}>
+                    мітка {aimShift.x} / {aimShift.y}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
         </View>
       ) : null}
     </Ctx.Provider>

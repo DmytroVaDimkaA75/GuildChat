@@ -94,6 +94,19 @@ export const FOE_INTERCEPTOR_JS = `
     panTouchId = null;
   }, true);
 
+  // Скільки людина вже прогорнула місто власним пальцем від завантаження
+  // сторінки. Потрібно в момент, коли вона підтверджує точку входу: цей самий
+  // рух потім повторить автомат.
+  window.__foeReadPan = function (nonce) {
+    post({
+      __foeSync: true,
+      kind: 'panAccum',
+      nonce: nonce,
+      dx: Math.round(panAccum.dx),
+      dy: Math.round(panAccum.dy),
+    });
+  };
+
   function handleCalibEvent(type, clientX, clientY) {
     try {
       var mode = window.__foeCalib && window.__foeCalib.mode;
@@ -500,7 +513,7 @@ export const FOE_INTERCEPTOR_JS = `
   }
 
   function postAutoEnterWatchResult(rd, watch) {
-    if (rd && rd.gridId === 'cultural_outpost') {
+    if (rd && String(rd.gridId || '').indexOf('cultural_outpost') === 0) {
       post({
         __foeSync: true, kind: 'autoEnter', step: 'entered', gridId: rd.gridId,
         attemptId: watch && watch.attemptId, at: Date.now(),

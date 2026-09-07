@@ -33,6 +33,10 @@ import RoleSelectionScreen from "./components/RoleSelectionScreen";
 import UserSettingsScreen from "./components/UserSettingsScreen";
 import { discardAuthenticatedSession } from "./src/auth/googleAuth";
 import { clearPendingNotificationRoute } from "./src/notifications/notificationRouting";
+import {
+  getCurrentScreen,
+  subscribeToCurrentScreen,
+} from "./src/presence/currentScreen";
 
 
 
@@ -254,6 +258,7 @@ const unregisterPushDevice = async ({
     const presencePath =
       `guilds/${currentGuildId}/guildUsers/${currentUserId}/presence`;
     updates[`${presencePath}/state`] = "offline";
+    updates[`${presencePath}/screen`] = null;
     updates[`${presencePath}/lastChanged`] = timestamp;
     updates[`${presencePath}/lastActivityAt`] = timestamp;
   }
@@ -507,8 +512,19 @@ const AppContent = () => {
       const timestamp = database.ServerValue.TIMESTAMP;
       return presenceRef.update({
         state,
+        screen: state === "online" ? getCurrentScreen() : null,
         lastChanged: timestamp,
         lastActivityAt: timestamp,
+      });
+    };
+
+    const updateCurrentScreen = (screen) => {
+      if (localSessionResetInProgress || AppState.currentState !== "active") {
+        return Promise.resolve();
+      }
+      return presenceRef.update({
+        screen: screen || null,
+        lastActivityAt: database.ServerValue.TIMESTAMP,
       });
     };
 
@@ -519,6 +535,7 @@ const AppContent = () => {
         const timestamp = database.ServerValue.TIMESTAMP;
         await presenceRef.onDisconnect().update({
           state: "offline",
+          screen: null,
           lastChanged: timestamp,
           lastActivityAt: timestamp,
         });
@@ -538,6 +555,17 @@ const AppContent = () => {
     };
 
     connectedRef.on("value", handleConnectionChange);
+
+    const unsubscribeFromScreen = subscribeToCurrentScreen((screen) => {
+      updateCurrentScreen(screen).catch((error) => {
+        if (!disposed) {
+          console.log(
+            "❌ Не вдалося зафіксувати екран у presence:",
+            error?.message || String(error)
+          );
+        }
+      });
+    });
 
     const appStateSubscription = AppState.addEventListener(
       "change",
@@ -559,6 +587,7 @@ const AppContent = () => {
       disposed = true;
       connectedRef.off("value", handleConnectionChange);
       appStateSubscription.remove();
+      unsubscribeFromScreen();
       presenceRef
         .onDisconnect()
         .cancel()
@@ -566,6 +595,7 @@ const AppContent = () => {
         .then(() =>
           presenceRef.update({
             state: "offline",
+            screen: null,
             lastChanged: database.ServerValue.TIMESTAMP,
             lastActivityAt: database.ServerValue.TIMESTAMP,
           })

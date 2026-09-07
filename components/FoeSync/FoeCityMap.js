@@ -452,6 +452,12 @@ export default function FoeCityMap({
   // Межі вільного перетягування мапи (translate у [minT, 0]).
   const minTx = Math.min(0, viewportWidth - contentWidth);
   const minTy = Math.min(0, viewportHeight - contentHeight);
+  // Якщо вздовж осі мапа вже поміщається повністю — тягнути її туди нема куди.
+  // Тоді жест має ПРОВАЛИТИСЬ, а не з'їсти рух пальця: інакше мапа, вкладена у
+  // прокручуваний список (екран культурного поселення), намертво блокує його
+  // прокрутку — палець на мапі, а список не їде.
+  const canPanX = minTx < 0;
+  const canPanY = minTy < 0;
   useEffect(() => {
     minTxSV.value = minTx;
     minTySV.value = minTy;
@@ -606,11 +612,15 @@ export default function FoeCityMap({
     [tx, ty, displayType]
   );
 
-  // Жест будується один раз: межі перетягування читаються з shared values,
-  // тож свіжі дані з гри більше не перетворюють активне перетягування карти.
+  // Межі перетягування читаються з shared values, тож свіжі дані з гри не
+  // перебудовують жест і не перетворюють активне перетягування карти. Жест
+  // перебудовується лише коли змінився самий РОЗМІР мапи (а отже — чи є куди
+  // тягнути вздовж осі), не на кожному пакеті.
   const mapGesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .minDistance(4)
+    const pan = Gesture.Pan().minDistance(4);
+    if (!canPanX) pan.failOffsetX([-8, 8]);
+    if (!canPanY) pan.failOffsetY([-8, 8]);
+    pan
       .onStart(() => {
         panStartX.value = tx.value;
         panStartY.value = ty.value;
@@ -625,7 +635,7 @@ export default function FoeCityMap({
         runOnJS(handleTapAt)(e.x, e.y);
       });
     return Gesture.Race(pan, tap);
-  }, [tx, ty, panStartX, panStartY, minTxSV, minTySV, handleTapAt]);
+  }, [tx, ty, panStartX, panStartY, minTxSV, minTySV, handleTapAt, canPanX, canPanY]);
 
   if (!model) {
     return <Text style={styles.hint}>Мапа міста ще не містить відкритих секторів.</Text>;

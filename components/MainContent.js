@@ -34,6 +34,7 @@ import {
   savePendingNotificationRoute,
 } from '../src/notifications/notificationRouting';
 import { trimDisplayedNotifications } from '../src/notifications/trimDisplayedNotifications';
+import { setCurrentScreen } from '../src/presence/currentScreen';
 
 // Импорт компонентов
 import AdminMain from './Admin/AdminMain';
@@ -96,6 +97,12 @@ import QuantIcon from "./ico/quant.svg";
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
 const navigationRef = createNavigationContainerRef();
+
+const reportCurrentScreen = () => {
+  if (!navigationRef.isReady()) return;
+  setCurrentScreen(navigationRef.getCurrentRoute()?.name);
+};
+
 const NOTIFICATION_ROUTE_VALIDATION_TIMEOUT_MS = 12000;
 const GREAT_BUILDINGS_REFRESH_COOLDOWN_MS = 60 * 1000;
 
@@ -1213,7 +1220,11 @@ function AppNavigator({ onReady, onManualGuildSwitch, onLogout }) {
       key={guildId}
       ref={navigationRef}
       theme={navigationTheme}
-      onReady={onReady}
+      onReady={() => {
+        reportCurrentScreen();
+        onReady?.();
+      }}
+      onStateChange={reportCurrentScreen}
     >
       <Drawer.Navigator
         backBehavior="history"
