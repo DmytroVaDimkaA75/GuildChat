@@ -1,0 +1,95 @@
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  width: 420px;
+  color: #111;
+}
+header {
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+header > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+header small {
+  color: #666;
+}
+.row {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+}
+#search {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+.cb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #333;
+  font-size: 13px;
+}
+main {
+  max-height: 540px;
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th, td {
+  border-bottom: 1px solid #eee;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  z-index: 1;
+}
+.muted { color: #777; padding: 10px; }
+.tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  font-size: 12px;
+  margin: 0 2px 2px 0;
+}
+.owner {
+  font-weight: 600;
+}
+.time-open {
+  color: #22a600;
+  font-weight: 600;
+}
+.time-locked {
+  font-variant-numeric: tabular-nums;
+}
+.attack-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: #cf401e; /* червоні атаки */
+}
+.def-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: #4a98dd; /* сині захисти */
+}
+footer {
+  border-top: 1px solid #ddd;
+  padding: 6px 8px;
+  color: #666;
+  font-size: 12px;
+}

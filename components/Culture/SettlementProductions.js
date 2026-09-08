@@ -3,10 +3,20 @@
 // Таблиця виробництв поселення — «Споруда · Продукт · Залишилось», з іконками
 // товарів від самої гри. Винесена сюди, щоб екран автоматичного входу і старий
 // екран «Культурні поселення» показували ОДНЕ І ТЕ САМЕ, а не розходились.
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import FoeIcon, { findFrame } from '../FoeSync/FoeIcon';
+import { formatRawEntity } from '../FoeSync/rawEntity';
 
 export const COLORS = {
   background: '#0f1115',
@@ -153,12 +163,23 @@ export function isRowReady(row, nowSec) {
 
 export default function SettlementProductions({
   productions = [],
+  buildings = [],
   nowSec,
   iconSheets = [],
   iconUrls = {},
   defsProgress = null,
   hasBuildings = false,
 }) {
+  // Тап по рядку — технічні дані тієї споруди. Особливі споруди (наприклад
+  // Чорний ринок) стоять поза сіткою міста, на мапі їх не тапнути — а тут вони
+  // є, тож саме звідси до них і дістаємось.
+  const [detailId, setDetailId] = useState(null);
+  const detail = detailId
+    ? buildings.find((item) => String(item?.instanceId) === String(detailId))
+      || productions.find((row) => String(row.instanceId) === String(detailId))
+      || null
+    : null;
+
   if (!productions.length) {
     return hasBuildings ? (
       <Text style={styles.sectorStats}>
@@ -184,7 +205,14 @@ export default function SettlementProductions({
         const left = isReady ? 'готово' : formatLeft(row.readyAt, nowSec) || stateNote(row.state);
         const entries = goodsEntries(row.product);
         return (
-          <View key={row.instanceId} style={styles.prodRow}>
+          <TouchableOpacity
+            key={row.instanceId}
+            style={styles.prodRow}
+            activeOpacity={0.7}
+            onPress={() => setDetailId(row.instanceId)}
+            accessibilityRole="button"
+            accessibilityLabel={`Технічні дані: ${row.name}`}
+          >
             <View style={[styles.prodCell, styles.prodColName]}>
               <Text style={styles.prodName} numberOfLines={1}>{row.name}</Text>
               <Text style={styles.prodType}>{TYPE_LABELS[row.type] || row.type}</Text>
@@ -230,12 +258,51 @@ export default function SettlementProductions({
             >
               {left}
             </Text>
-          </View>
+          </TouchableOpacity>
         );
       })}
       <Text style={styles.catalogHint}>
-        Час рахується від останньої синхронізації з грою.
+        Торкніться рядка — технічні дані споруди. Час рахується від останньої
+        синхронізації з грою.
       </Text>
+
+      <Modal
+        visible={!!detail}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailId(null)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setDetailId(null)} accessible={false}>
+          <Pressable style={styles.popup} onPress={() => {}} accessible={false} accessibilityViewIsModal>
+            {detail ? (
+              <>
+                <View style={styles.popupHeader}>
+                  <Text style={styles.popupTitle} numberOfLines={2}>
+                    {detail.name || detail.cid || detail.entityId}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setDetailId(null)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Закрити технічні дані"
+                  >
+                    <Text style={styles.popupClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.popupMeta}>
+                  {TYPE_LABELS[detail.type] || detail.type || 'тип уточнюється'}
+                  {detail.cid || detail.entityId ? ` · ${detail.cid || detail.entityId}` : ''}
+                </Text>
+                <ScrollView style={styles.popupScroll}>
+                  <Text style={styles.rawText} selectable>
+                    {formatRawEntity(detail, detail.definition || null)}
+                  </Text>
+                </ScrollView>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -333,5 +400,53 @@ export const styles = StyleSheet.create({
   },
   prodLeftReady: {
     color: '#3ddc84',
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  popup: {
+    width: '100%',
+    maxHeight: '80%',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 14,
+  },
+  popupHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  popupTitle: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  popupClose: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    paddingHorizontal: 6,
+  },
+  popupMeta: {
+    color: '#9fb4c8',
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  popupScroll: {
+    maxHeight: '100%',
+  },
+  rawText: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: 'monospace',
   },
 });

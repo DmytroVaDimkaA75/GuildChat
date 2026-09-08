@@ -1,0 +1,19 @@
+{
+  "name": "foe-gbg-bot-functions",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "check": "node --check index.js",
+    "serve": "npx firebase-tools emulators:start --only functions",
+    "deploy": "npx firebase-tools deploy --only functions:authorizeBot,functions:guildData,functions:queueGreatBuildingsRefresh,functions:trackQuantumPresence,functions:trackQuantumNotificationNodes"
+  },
+  "dependencies": {
+    "@firebase/app": "^0.16.0",
+    "firebase-admin": "^14.2.0",
+    "firebase-functions": "^7.3.2"
+  }
+}

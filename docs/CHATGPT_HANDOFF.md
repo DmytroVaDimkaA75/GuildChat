@@ -71,7 +71,7 @@
 - `reserve_confirmation` → видалення або `final` біля `T - 2`;
 - failed/postponement express видаляється біля початкового `T`.
 
-Cloud Function `processScheduledExpressUpgrades` запускається щохвилини в регіоні `europe-west1`, читає guild express groups і застосовує reducer у Firebase transaction.
+Обробник `runScheduledExpressUpgrades` запускається щохвилини зі спільного scheduler-а `processScheduledJobs` (регіон `europe-west1`), отримує вже прочитане дерево гільдій і застосовує reducer у Firebase transaction.
 
 ### Унікальний підрахунок
 

@@ -1,0 +1,26 @@
+{
+  "name": "foe-game-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trigger-driven Forge of Empires great-building data worker",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "probe": "node index.js probe",
+    "city": "node capture-player-city.js",
+    "catalog": "node capture-building-catalog.js",
+    "firebase:bootstrap": "node bootstrap-firebase.js",
+    "setup": "node setup.js",
+    "worker": "node worker.js",
+    "worker:once": "node worker.js --once",
+    "check": "node --check index.js && node --check game-session.js && node --check gbg-monitor.js && node --check quantum-monitor.js && node --check worker.js && node --check setup.js && node --check bootstrap-firebase.js && node --check capture-quantum-snapshot.js && node --check clean-quantum-map.js && node --check proxy-bridge.js",
+    "test": "node index.test.js && node gbg-monitor.test.js && node quantum-monitor.test.js && node worker.test.js && node setup.test.js && node capture-quantum-snapshot.test.js && node clean-quantum-map.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0",
+    "socks": "^2.8.9"
+  }
+}

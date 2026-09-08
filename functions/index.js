@@ -4,6 +4,7 @@ const { HttpsError, onCall, onRequest } = require("firebase-functions/v2/https")
 const { logger } = require("firebase-functions");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { GoogleAuth } = require("google-auth-library");
 const { createGoogleAuthFunctions } = require("./googleAuth");
 const {
   createTelegramBindingFunctions,
@@ -1937,113 +1938,97 @@ exports.syncCultureNotificationsOnAlarmChange = onValueWritten(
   }
 );
 
-exports.processCultureNotificationQueue = onSchedule(
-  { schedule: "every 1 minutes", region: "europe-west1", timeZone: "Europe/Kiev" },
-  async () => {
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const db = admin.database();
-    const guildsSnap = await db.ref("guilds").once("value");
-    if (!guildsSnap.exists()) return null;
+async function runCultureNotificationQueue({ db, guildIds }) {
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  await Promise.all(
+    guildIds.map(async (guildId) => {
+      // Потрібен лише перелік учасників, а сам вузол важить ~1 МБ на гільдію.
+      const memberIds = await readChildKeys(db, `guilds/${guildId}/guildUsers`);
+      if (!memberIds.length) return;
 
-    const guildIds = Object.keys(guildsSnap.val() || {});
-    await Promise.all(
-      guildIds.map(async (guildId) => {
-        const membersSnap = await db.ref(`/guilds/${guildId}/guildUsers`).once("value");
-        if (!membersSnap.exists()) return;
+      await Promise.all(
+        memberIds.map(async (userId) => {
+          const queueRef = db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`);
+          const snapshot = await queueRef.once("value");
+          if (!snapshot.exists()) return;
 
-          const memberIds = Object.keys(membersSnap.val() || {});
-          await Promise.all(
-            memberIds.map(async (userId) => {
-            const queueRef = db.ref(`/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue`);
-            const snapshot = await queueRef.once("value");
-            if (!snapshot.exists()) return;
-
-            const queueItems = [];
-            snapshot.forEach((child) => {
-              queueItems.push({
-                ...child.val(),
-                queueKey: child.key,
-                queuePath: `/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
-              });
+          const queueItems = [];
+          snapshot.forEach((child) => {
+            queueItems.push({
+              ...child.val(),
+              queueKey: child.key,
+              queuePath: `/users/${userId}/userGuilds/${guildId}/settlement/cultureNotificationQueue/${child.key}`,
             });
+          });
 
-            const dueClusters = clusterCultureNotificationTasks(queueItems, nowInSeconds);
-            if (!dueClusters.length) return;
+          const dueClusters = clusterCultureNotificationTasks(queueItems, nowInSeconds);
+          if (!dueClusters.length) return;
 
-            await Promise.all(
-              dueClusters.map((cluster) =>
-                sendCulturePushAndMarkSent({
-                  db,
-                  userId,
-                  guildId,
-                  queuePaths: cluster.map((task) => task.queuePath),
-                  tasks: cluster,
-                })
-              )
-            );
-          })
-        );
-      })
-    );
+          await Promise.all(
+            dueClusters.map((cluster) =>
+              sendCulturePushAndMarkSent({
+                db,
+                userId,
+                guildId,
+                queuePaths: cluster.map((task) => task.queuePath),
+                tasks: cluster,
+              })
+            )
+          );
+        })
+      );
+    })
+  );
 
-    return null;
-  }
-);
+  return null;
+}
 
 /**
  * =====================================================================
  * ✅ Scheduled messages
  * =====================================================================
  */
-exports.sendScheduledMessages = onSchedule(
-  { schedule: "every 1 minutes", region: "europe-west1", timeZone: "Europe/Kiev" },
-  async () => {
-    const now = Date.now();
-    const db = admin.database();
-    const guildsSnap = await db.ref("guilds").once("value");
-    if (!guildsSnap.exists()) return null;
+async function runScheduledMessages({ db, guildIds }) {
+  const now = Date.now();
+  const guildPromises = guildIds.map(async (guildId) => {
+    const scheduledMessagesRef = db.ref(`/guilds/${guildId}/scheduledMessages`);
+    const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
+    const snapshot = await query.once("value");
+    const promises = [];
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        const messageId = childSnapshot.key;
+        const messageData = childSnapshot.val();
+        if (messageData.sendAt <= now) {
+          promises.push(moveMessageToChat({ guildId, messageId, messageData, db }));
+        }
+      });
+    }
 
-    const guildIds = Object.keys(guildsSnap.val() || {});
-    const guildPromises = guildIds.map(async (guildId) => {
-      const scheduledMessagesRef = db.ref(`/guilds/${guildId}/scheduledMessages`);
-      const query = scheduledMessagesRef.orderByChild("status").equalTo("pending");
-      const snapshot = await query.once("value");
-      const promises = [];
-      if (snapshot.exists()) {
-        snapshot.forEach((childSnapshot) => {
-          const messageId = childSnapshot.key;
-          const messageData = childSnapshot.val();
-          if (messageData.sendAt <= now) {
-            promises.push(moveMessageToChat({ guildId, messageId, messageData, db }));
-          }
-        });
-      }
+    const temporarySnapshot = await db
+      .ref(`/guilds/${guildId}/temporaryMessages`)
+      .orderByChild("status")
+      .equalTo("pending")
+      .once("value");
+    if (temporarySnapshot.exists()) {
+      temporarySnapshot.forEach((childSnapshot) => {
+        const messageId = childSnapshot.key;
+        const temporaryData = childSnapshot.val() || {};
+        if (Number(temporaryData.expiresAt) <= now) {
+          const chatId = String(temporaryData.chatId || "");
+          const updates = { [`temporaryMessages/${messageId}`]: null };
+          if (chatId) updates[`chats/${chatId}/messages/${messageId}`] = null;
+          promises.push(db.ref(`/guilds/${guildId}`).update(updates));
+        }
+      });
+    }
 
-      const temporarySnapshot = await db
-        .ref(`/guilds/${guildId}/temporaryMessages`)
-        .orderByChild("status")
-        .equalTo("pending")
-        .once("value");
-      if (temporarySnapshot.exists()) {
-        temporarySnapshot.forEach((childSnapshot) => {
-          const messageId = childSnapshot.key;
-          const temporaryData = childSnapshot.val() || {};
-          if (Number(temporaryData.expiresAt) <= now) {
-            const chatId = String(temporaryData.chatId || "");
-            const updates = { [`temporaryMessages/${messageId}`]: null };
-            if (chatId) updates[`chats/${chatId}/messages/${messageId}`] = null;
-            promises.push(db.ref(`/guilds/${guildId}`).update(updates));
-          }
-        });
-      }
+    await Promise.all(promises);
+  });
 
-      await Promise.all(promises);
-    });
-
-    await Promise.all(guildPromises);
-    return null;
-  }
-);
+  await Promise.all(guildPromises);
+  return null;
+}
 
 async function moveMessageToChat({ guildId, messageId, messageData, db }) {
   const { chatId, text, senderId } = messageData;
@@ -2208,59 +2193,46 @@ exports.syncGbgNotifications = onValueWritten(
   }
 );
 
-exports.processGbgNotificationQueue = onSchedule(
-  {
-    schedule: "every 1 minutes",
-    region: "europe-west1",
-    timeZone: "Europe/Kiev",
-    secrets: [TELEGRAM_BOT_TOKEN],
-  },
-  async () => {
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const db = admin.database();
-    const guildsSnap = await db.ref("guilds").once("value");
-    if (!guildsSnap.exists()) return null;
+async function runGbgNotificationQueue({ db, guildIds }) {
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  const guildPromises = guildIds.map(async (guildId) => {
+    const queueRef = db.ref(`/guilds/${guildId}/GBG/gbgNotificationQueue`);
+    const query = queueRef.orderByChild("notificationTime").endAt(nowInSeconds);
+    const snapshot = await query.once("value");
 
-    const guildIds = Object.keys(guildsSnap.val() || {});
-    const guildPromises = guildIds.map(async (guildId) => {
-      const queueRef = db.ref(`/guilds/${guildId}/GBG/gbgNotificationQueue`);
-      const query = queueRef.orderByChild("notificationTime").endAt(nowInSeconds);
-      const snapshot = await query.once("value");
+    if (!snapshot.exists()) return;
 
-      if (!snapshot.exists()) return;
+    const pendingTasks = [];
+    snapshot.forEach((child) => {
+      const task = child.val();
+      const taskId = child.key;
+      const queuePath = `/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`;
 
-      const pendingTasks = [];
-      snapshot.forEach((child) => {
-        const task = child.val();
-        const taskId = child.key;
-        const queuePath = `/guilds/${guildId}/GBG/gbgNotificationQueue/${taskId}`;
-
-        if (task.status === "pending") {
-          pendingTasks.push({ taskId, task, queuePath });
-        }
-      });
-
-      if (!pendingTasks.length) return;
-      const telegramChatId = await getGuildTelegramChatId({ db, guildId });
-
-      await Promise.all(
-        pendingTasks.map(({ taskId, task, queuePath }) =>
-          sendPushAndMarkSent({
-            guildId,
-            telegramChatId,
-            taskId,
-            task,
-            db,
-            queuePath,
-          })
-        )
-      );
+      if (task.status === "pending") {
+        pendingTasks.push({ taskId, task, queuePath });
+      }
     });
 
-    await Promise.all(guildPromises);
-    return null;
-  }
-);
+    if (!pendingTasks.length) return;
+    const telegramChatId = await getGuildTelegramChatId({ db, guildId });
+
+    await Promise.all(
+      pendingTasks.map(({ taskId, task, queuePath }) =>
+        sendPushAndMarkSent({
+          guildId,
+          telegramChatId,
+          taskId,
+          task,
+          db,
+          queuePath,
+        })
+      )
+    );
+  });
+
+  await Promise.all(guildPromises);
+  return null;
+}
 
 async function sendPushAndMarkSent({
   guildId: queueGuildId,
@@ -2621,277 +2593,263 @@ exports.scheduleGbgSectorBuildCheck = onValueWritten(
   }
 );
 
-exports.processGbgSectorBuildChecks = onSchedule(
-  {
-    schedule: "every 1 minutes",
-    region: "europe-west1",
-    timeZone: "Europe/Kiev",
-    // ✅ TG SECRETS: щоб Telegram працював у цьому scheduler
-    secrets: [TELEGRAM_BOT_TOKEN],
-  },
-  async () => {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const db = admin.database();
-    const guildsSnap = await db.ref("guilds").once("value");
-    if (!guildsSnap.exists()) return null;
+async function runGbgSectorBuildChecks({ db, guildIds }) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  await Promise.all(
+    guildIds.map(async (guildId) => {
+      const queueRef = db.ref(`/guilds/${guildId}/GBG/buildCheckQueue`);
+      const dueSnap = await queueRef.orderByChild("runAt").endAt(nowSec).once("value");
+      if (!dueSnap.exists()) return;
 
-    const guildIds = Object.keys(guildsSnap.val() || {});
-    await Promise.all(
-      guildIds.map(async (guildId) => {
-        const queueRef = db.ref(`/guilds/${guildId}/GBG/buildCheckQueue`);
-        const dueSnap = await queueRef.orderByChild("runAt").endAt(nowSec).once("value");
-        if (!dueSnap.exists()) return;
+      const tasks = [];
+      dueSnap.forEach((child) => {
+        const task = child.val() || {};
+        if (task.status !== "pending") return;
+        tasks.push({ taskId: child.key, task });
+      });
 
-        const tasks = [];
-        dueSnap.forEach((child) => {
-          const task = child.val() || {};
-          if (task.status !== "pending") return;
-          tasks.push({ taskId: child.key, task });
-        });
+      await Promise.all(
+        tasks.map(async ({ taskId, task }) => {
+          const queuePath = `/guilds/${guildId}/GBG/buildCheckQueue/${taskId}`;
 
-        await Promise.all(
-          tasks.map(async ({ taskId, task }) => {
-            const queuePath = `/guilds/${guildId}/GBG/buildCheckQueue/${taskId}`;
+          try {
+            await db.ref(queuePath).update({ status: "processing", processingAt: nowSec });
 
-            try {
-              await db.ref(queuePath).update({ status: "processing", processingAt: nowSec });
+            const sectorId = String(task.sectorId || "");
+            if (!sectorId) {
+              await db.ref(queuePath).remove();
+              return;
+            }
 
-              const sectorId = String(task.sectorId || "");
-              if (!sectorId) {
-                await db.ref(queuePath).remove();
-                return;
+            const [sectorSnap, resourcesSnap, settingSnap, mapSnap, membersSnap] = await Promise.all([
+              db.ref(`/guilds/${guildId}/GBG/sectors/${sectorId}`).once("value"),
+              db.ref(`/guilds/${guildId}/resources`).once("value"),
+              db.ref(`/guilds/${guildId}/setting`).once("value"),
+              db.ref(`/guilds/${guildId}/GBG/map`).once("value"),
+              db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
+            ]);
+
+            if (!sectorSnap.exists()) {
+              await db.ref(queuePath).remove();
+              return;
+            }
+
+            const sector = sectorSnap.val() || {};
+            const freeSlots = Number(sector.freeSlots || 0);
+            if (!Number.isFinite(freeSlots) || freeSlots <= 0) {
+              await db.ref(queuePath).remove();
+              return;
+            }
+
+            const existingBuildings = toArray(sector.buildings)
+              .map((b) => String(b?.name || "").toLowerCase())
+              .filter(Boolean);
+
+            const availableBuildingOptions = toArray(sector.availableBuildings)
+              .map((item) => ({
+                buildingId: String(item?.buildingId || "").toLowerCase(),
+                resources: item?.costs?.resources || {},
+              }))
+              .filter((item) => !!item.buildingId);
+
+            if (availableBuildingOptions.length === 0) {
+              await db.ref(queuePath).remove();
+              return;
+            }
+
+            const treasury = resourcesSnap.exists() ? (resourcesSnap.val() || {}) : {};
+            const guildSetting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
+            const mapName = mapSnap.exists() ? mapSnap.val() : "volcano_archipelago";
+            const mapBaseDefense = getMapBaseDefense(mapName);
+            const victoryPoints = Number(sector.victoryPoints || 0);
+            const gbgGoal = !!guildSetting.GBGGoal;
+            const telegramChatId = await getGuildTelegramChatId({
+              db,
+              guildId,
+            });
+
+            const variants = buildSectorConstructionVariants({ freeSlots, options: availableBuildingOptions, treasury });
+            if (!variants.length) {
+              await db.ref(queuePath).remove();
+              return;
+            }
+
+            const evaluated = variants
+              .map((variant) => {
+                const metrics = evaluateSectorVariant({
+                  existingBuildings,
+                  plannedBuildings: variant.planned,
+                  victoryPoints,
+                  mapBaseDefense,
+                });
+                return { ...variant, ...metrics };
+              })
+              .filter((v) => (Number(v?.sums?.attack) || 0) >= 80);
+
+            if (!evaluated.length) {
+              await db.ref(queuePath).remove();
+              return;
+            }
+
+            let best = evaluated[0];
+            for (let i = 1; i < evaluated.length; i += 1) {
+              const cur = evaluated[i];
+              if (gbgGoal) {
+                if (cur.production > best.production) best = cur;
+              } else if (cur.defenseRequirement > best.defenseRequirement) {
+                best = cur;
               }
+            }
 
-              const [sectorSnap, resourcesSnap, settingSnap, mapSnap, membersSnap] = await Promise.all([
-                db.ref(`/guilds/${guildId}/GBG/sectors/${sectorId}`).once("value"),
-                db.ref(`/guilds/${guildId}/resources`).once("value"),
-                db.ref(`/guilds/${guildId}/setting`).once("value"),
-                db.ref(`/guilds/${guildId}/GBG/map`).once("value"),
-                db.ref(`/guilds/${guildId}/guildUsers`).once("value"),
-              ]);
+            const memberIds = membersSnap.exists()
+              ? Object.keys(membersSnap.val() || {})
+              : [];
+            const nowMs = Date.now();
+            const leaderInfos = await Promise.all(
+              memberIds.map(async (uid) => {
+                const [roleSnap, tokenSnap, muteSnap] = await Promise.all([
+                  db.ref(`/users/${uid}/userGuilds/${guildId}/role`).once("value"),
+                  db.ref(`/users/${uid}/fcmToken`).once("value"),
+                  db.ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`).once("value"),
+                ]);
+                const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
+                if (
+                  role !== "guildLeader" &&
+                  role !== "tester" &&
+                  role !== "developer"
+                ) {
+                  return null;
+                }
 
-              if (!sectorSnap.exists()) {
-                await db.ref(queuePath).remove();
-                return;
-              }
+                const token = tokenSnap.exists() ? tokenSnap.val() : null;
+                if (!token) return null;
 
-              const sector = sectorSnap.val() || {};
-              const freeSlots = Number(sector.freeSlots || 0);
-              if (!Number.isFinite(freeSlots) || freeSlots <= 0) {
-                await db.ref(queuePath).remove();
-                return;
-              }
+                let soundBySchedule = false;
+                try {
+                  soundBySchedule = await shouldNotificationPlaySound(
+                    uid,
+                    nowMs
+                  );
+                } catch (error) {
+                  logger.error(
+                    "[GBG_BUILD_CHECK] schedule check error:",
+                    error
+                  );
+                  soundBySchedule = false;
+                }
 
-              const existingBuildings = toArray(sector.buildings)
-                .map((b) => String(b?.name || "").toLowerCase())
-                .filter(Boolean);
+                const isSoundMuted = isGbgNotificationSoundMuted({
+                  rawMute: muteSnap.val(),
+                  nowMs,
+                });
+                return { uid, token, sound: !isSoundMuted && !!soundBySchedule };
+              })
+            );
 
-              const availableBuildingOptions = toArray(sector.availableBuildings)
-                .map((item) => ({
-                  buildingId: String(item?.buildingId || "").toLowerCase(),
-                  resources: item?.costs?.resources || {},
-                }))
-                .filter((item) => !!item.buildingId);
-
-              if (availableBuildingOptions.length === 0) {
-                await db.ref(queuePath).remove();
-                return;
-              }
-
-              const treasury = resourcesSnap.exists() ? (resourcesSnap.val() || {}) : {};
-              const guildSetting = settingSnap.exists() ? (settingSnap.val() || {}) : {};
-              const mapName = mapSnap.exists() ? mapSnap.val() : "volcano_archipelago";
-              const mapBaseDefense = getMapBaseDefense(mapName);
-              const victoryPoints = Number(sector.victoryPoints || 0);
-              const gbgGoal = !!guildSetting.GBGGoal;
-              const telegramChatId = await getGuildTelegramChatId({
+            const recipients = leaderInfos.filter(Boolean);
+            const plannedReadable = formatRecommendedBuildings(best.planned);
+            const titleText = "🛠️ Рекомендовано побудувати";
+            const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
+            if (recipients.length) {
+              const worldContexts = await getPushWorldContext({
                 db,
                 guildId,
+                userIds: recipients.map((info) => info.uid),
+              });
+              const groups = new Map();
+              recipients.forEach((info) => {
+                const body = addWorldNameToPushBody(
+                  messageText,
+                  worldContexts.get(String(info.uid))
+                );
+                const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
+                if (!groups.has(key)) {
+                  groups.set(key, {
+                    sound: info.sound,
+                    body,
+                    tokens: [],
+                  });
+                }
+                groups.get(key).tokens.push(info.token);
               });
 
-              const variants = buildSectorConstructionVariants({ freeSlots, options: availableBuildingOptions, treasury });
-              if (!variants.length) {
-                await db.ref(queuePath).remove();
-                return;
-              }
-
-              const evaluated = variants
-                .map((variant) => {
-                  const metrics = evaluateSectorVariant({
-                    existingBuildings,
-                    plannedBuildings: variant.planned,
-                    victoryPoints,
-                    mapBaseDefense,
-                  });
-                  return { ...variant, ...metrics };
-                })
-                .filter((v) => (Number(v?.sums?.attack) || 0) >= 80);
-
-              if (!evaluated.length) {
-                await db.ref(queuePath).remove();
-                return;
-              }
-
-              let best = evaluated[0];
-              for (let i = 1; i < evaluated.length; i += 1) {
-                const cur = evaluated[i];
-                if (gbgGoal) {
-                  if (cur.production > best.production) best = cur;
-                } else if (cur.defenseRequirement > best.defenseRequirement) {
-                  best = cur;
-                }
-              }
-
-              const memberIds = membersSnap.exists()
-                ? Object.keys(membersSnap.val() || {})
-                : [];
-              const nowMs = Date.now();
-              const leaderInfos = await Promise.all(
-                memberIds.map(async (uid) => {
-                  const [roleSnap, tokenSnap, muteSnap] = await Promise.all([
-                    db.ref(`/users/${uid}/userGuilds/${guildId}/role`).once("value"),
-                    db.ref(`/users/${uid}/fcmToken`).once("value"),
-                    db.ref(`/users/${uid}/setting/notificationMutes/gbgSectorOpen/${guildId}`).once("value"),
-                  ]);
-                  const role = roleSnap.exists() ? String(roleSnap.val() || "") : "";
-                  if (
-                    role !== "guildLeader" &&
-                    role !== "tester" &&
-                    role !== "developer"
-                  ) {
-                    return null;
-                  }
-
-                  const token = tokenSnap.exists() ? tokenSnap.val() : null;
-                  if (!token) return null;
-
-                  let soundBySchedule = false;
-                  try {
-                    soundBySchedule = await shouldNotificationPlaySound(
-                      uid,
-                      nowMs
-                    );
-                  } catch (error) {
-                    logger.error(
-                      "[GBG_BUILD_CHECK] schedule check error:",
-                      error
-                    );
-                    soundBySchedule = false;
-                  }
-
-                  const isSoundMuted = isGbgNotificationSoundMuted({
-                    rawMute: muteSnap.val(),
-                    nowMs,
-                  });
-                  return { uid, token, sound: !isSoundMuted && !!soundBySchedule };
-                })
-              );
-
-              const recipients = leaderInfos.filter(Boolean);
-              const plannedReadable = formatRecommendedBuildings(best.planned);
-              const titleText = "🛠️ Рекомендовано побудувати";
-              const messageText = `Сектор ${sectorId}. Рекомендоно побудувати:\n${plannedReadable}`;
-              if (recipients.length) {
-                const worldContexts = await getPushWorldContext({
-                  db,
-                  guildId,
-                  userIds: recipients.map((info) => info.uid),
-                });
-                const groups = new Map();
-                recipients.forEach((info) => {
-                  const body = addWorldNameToPushBody(
-                    messageText,
-                    worldContexts.get(String(info.uid))
-                  );
-                  const key = `${info.sound ? "sound" : "silent"}\u0000${body}`;
-                  if (!groups.has(key)) {
-                    groups.set(key, {
-                      sound: info.sound,
-                      body,
-                      tokens: [],
-                    });
-                  }
-                  groups.get(key).tokens.push(info.token);
-                });
-
-                await Promise.all(
-                  Array.from(groups.values()).map((group) =>
-                    sendMulticastWithoutRecipientLimit({
-                      tokens: group.tokens,
-                      data: {
-                        screen: "GBG",
-                        type: "gbg_build_plan",
-                        title: titleText,
-                        body: group.body,
-                        guildId: String(guildId),
-                        sectorId: String(sectorId),
-                        notificationEventId: String(taskId),
-                        sound: group.sound ? "1" : "0",
-                      },
+              await Promise.all(
+                Array.from(groups.values()).map((group) =>
+                  sendMulticastWithoutRecipientLimit({
+                    tokens: group.tokens,
+                    data: {
+                      screen: "GBG",
+                      type: "gbg_build_plan",
+                      title: titleText,
+                      body: group.body,
+                      guildId: String(guildId),
+                      sectorId: String(sectorId),
+                      notificationEventId: String(taskId),
+                      sound: group.sound ? "1" : "0",
+                    },
+                    notification: {
+                      title: titleText,
+                      body: group.body,
+                    },
+                    android: {
+                      priority: "high",
                       notification: {
-                        title: titleText,
-                        body: group.body,
+                        channelId: group.sound
+                          ? "gbg_build"
+                          : "gbg_sector_silent",
+                        ...(group.sound ? { sound: "build" } : {}),
                       },
-                      android: {
-                        priority: "high",
-                        notification: {
-                          channelId: group.sound
-                            ? "gbg_build"
-                            : "gbg_sector_silent",
-                          ...(group.sound ? { sound: "build" } : {}),
+                    },
+                    apns: {
+                      payload: {
+                        aps: {
+                          ...(group.sound ? { sound: "default" } : {}),
+                          "content-available": 1,
                         },
                       },
-                      apns: {
-                        payload: {
-                          aps: {
-                            ...(group.sound ? { sound: "default" } : {}),
-                            "content-available": 1,
-                          },
-                        },
-                      },
-                    })
-                  )
-                );
-              }
-
-              // ✅ TG BUILD PLAN: дублюємо в Telegram гільдії (без технічних полів)
-              if (String(telegramChatId || "").trim()) {
-                try {
-                  const tgText =
-                    `<b>${titleText}</b>\n` +
-                    `Сектор <b>${sectorId}</b>\n` +
-                    `Рекомендовано побудувати:\n` +
-                    `${plannedReadable}`;
-
-                  await sendTelegramMessage({
-                    chatId: telegramChatId,
-                    text: tgText,
-                    parseMode: "HTML",
-                    guildId,
-                    notificationType: "gbg_build_plan",
-                  });
-                } catch (e) {
-                  logger.error("[TG] build plan send error:", {
-                    guildId,
-                    notificationType: "gbg_build_plan",
-                    error: e?.message || String(e),
-                  });
-                }
-              }
-
-              await db.ref(queuePath).remove();
-            } catch (e) {
-              logger.error("[GBG_BUILD_CHECK] processing error", { guildId, taskId, error: e?.message || e });
-              await db.ref(queuePath).remove();
+                    },
+                  })
+                )
+              );
             }
-          })
-        );
-      })
-    );
 
-    return null;
-  }
-);
+            // ✅ TG BUILD PLAN: дублюємо в Telegram гільдії (без технічних полів)
+            if (String(telegramChatId || "").trim()) {
+              try {
+                const tgText =
+                  `<b>${titleText}</b>\n` +
+                  `Сектор <b>${sectorId}</b>\n` +
+                  `Рекомендовано побудувати:\n` +
+                  `${plannedReadable}`;
+
+                await sendTelegramMessage({
+                  chatId: telegramChatId,
+                  text: tgText,
+                  parseMode: "HTML",
+                  guildId,
+                  notificationType: "gbg_build_plan",
+                });
+              } catch (e) {
+                logger.error("[TG] build plan send error:", {
+                  guildId,
+                  notificationType: "gbg_build_plan",
+                  error: e?.message || String(e),
+                });
+              }
+            }
+
+            await db.ref(queuePath).remove();
+          } catch (e) {
+            logger.error("[GBG_BUILD_CHECK] processing error", { guildId, taskId, error: e?.message || e });
+            await db.ref(queuePath).remove();
+          }
+        })
+      );
+    })
+  );
+
+  return null;
+}
 
 /**
  * =====================================================================
@@ -3113,8 +3071,11 @@ exports.calculateGreatBuildingGuaranteeOnUpdatedAt = onValueWritten(
 );
 
 /** Scheduled express-upgrade state machine. The transaction makes every minute tick idempotent. */
+// Єдина будівля з guildUsers, яка потрібна express-у, — Арка.
+const EXPRESS_ARC_BUILDING_ID = "X_FutureEra_Landmark1";
+
 const getExpressMultiplier = (guildUsers, uid, record = {}) => {
-  const level = Math.max(0, Math.trunc(Number(guildUsers?.[uid]?.greatBuild?.["X_FutureEra_Landmark1"]?.level) || 0));
+  const level = Math.max(0, Math.trunc(Number(guildUsers?.[uid]?.greatBuild?.[EXPRESS_ARC_BUILDING_ID]?.level) || 0));
   const boost = level > 0 ? ARC_CONTRIBUTION_BOOSTS[Math.min(level, ARC_CONTRIBUTION_BOOSTS.length) - 1] : 0;
   const calculated = 1 + Number(boost || 0) / 100;
   return Number.isFinite(calculated) ? calculated : Number(record.contributionMultiplier) || 1;
@@ -3157,48 +3118,192 @@ const sendExpressPush = async ({ db, guildId, chatId, notice }) => {
   await ledgerRef.update({ status: "sent", completedAt: admin.database.ServerValue.TIMESTAMP });
 };
 
-exports.processScheduledExpressUpgrades = onSchedule(
-  { schedule: "every 1 minutes", region: "europe-west1", timeZone: "UTC", timeoutSeconds: 120, memory: "512MiB" },
+async function runScheduledExpressUpgrades({ db, guildIds }) {
+  const now = Date.now();
+  await Promise.all(guildIds.map(async (guildId) => {
+    const expressSnap = await db.ref(`/guilds/${guildId}/express`).once("value");
+    const expressGroups = expressSnap.val() || {};
+    if (!Object.keys(expressGroups).length) return;
+
+    // guildUsers важить ~600 КБ на гільдію, і майже все це — greatBuild
+    // кожного гравця (≈18 КБ на людину). Express-у звідти потрібні лише
+    // перелік учасників і рівень Арки, тому беремо ключі поверхнево і
+    // дочитуємо по одному числу на гравця — байти замість сотень кілобайт.
+    const memberIds = await readChildKeys(db, `guilds/${guildId}/guildUsers`);
+    const arcLevels = await Promise.all(
+      memberIds.map(async (memberId) => {
+        const levelSnap = await db
+          .ref(`/guilds/${guildId}/guildUsers/${memberId}/greatBuild/${EXPRESS_ARC_BUILDING_ID}/level`)
+          .once("value");
+        return [memberId, { greatBuild: { [EXPRESS_ARC_BUILDING_ID]: { level: levelSnap.val() } } }];
+      })
+    );
+    const guildUsers = Object.fromEntries(arcLevels);
+
+    await Promise.all(Object.entries(expressGroups).map(async ([chatId, rawGroup]) => {
+      // Legacy flat records remain readable by old clients but cannot be safely deadline-processed.
+      if ((!rawGroup?.gbs && !rawGroup?.postponementAudience) || !rawGroup?.scheduleTime) return;
+      const notices = [];
+      let shouldDelete = false;
+      const ref = db.ref(`/guilds/${guildId}/express/${chatId}`);
+      const result = await ref.transaction((current) => {
+        if (!current) return current;
+        const advanced = advanceExpress(current, now, (uid, record) => getExpressMultiplier(guildUsers, uid, record));
+        notices.splice(0, notices.length, ...advanced.notices);
+        shouldDelete = advanced.deleteGroup;
+        if (advanced.deleteGroup) return { ...current, workflow: { ...(current.workflow || {}), stage: "deleting", deletingAt: now } };
+        return advanced.group;
+      }, undefined, false);
+      if (!result.committed || !result.snapshot.exists()) return;
+      const current = result.snapshot.val();
+      if (current.postponementAudience && !current.workflow?.postponementPushSentAt) {
+        Object.keys(current.postponementAudience).forEach((uid) => notices.push({ event: "postponed", userId: uid, body: EXPRESS_PUSH.postponed }));
+        await Promise.all(notices.filter((notice) => notice.event === "postponed").map((notice) => sendExpressPush({ db, guildId, chatId, notice })));
+        await ref.update({ postponementAudience: null, "workflow/postponementPushSentAt": admin.database.ServerValue.TIMESTAMP });
+        if (!current.gbs || !Object.keys(current.gbs).length) {
+          await ref.remove();
+          return;
+        }
+      }
+      if (current.workflow?.recruitmentNeeded && !current.workflow?.recruitmentNoticesQueuedAt) {
+        const excluded = uniqueAvailableIds(current);
+        Object.keys(guildUsers).filter((uid) => !excluded.has(uid)).forEach((uid) => notices.push({ event: "recruit", userId: uid, body: EXPRESS_PUSH.recruit }));
+        await ref.child("workflow/recruitmentNoticesQueuedAt").set(admin.database.ServerValue.TIMESTAMP);
+      }
+      await Promise.all(notices.map((notice) => sendExpressPush({ db, guildId, chatId, notice }).catch((error) => logger.error("[EXPRESS_PUSH]", { guildId, chatId, userId: notice.userId, error: error?.message }))));
+      if (shouldDelete) await ref.remove();
+    }));
+  }));
+  return null;
+}
+
+/**
+ * =====================================================================
+ * ✅ Поверхневе читання (shallow)
+ * ---------------------------------------------------------------------
+ * `once("value")` на вузлі завжди тягне ВЕСЬ його вміст. Коли потрібен
+ * лише перелік дочірніх ключів (список гільдій, список учасників), це
+ * означає мегабайти трафіку заради кількох сотень байтів.
+ *
+ * REST-прапорець `?shallow=true` повертає тільки ключі. Профайлер
+ * 2026-09-08 показав, що `/guilds` важить 4.58 МБ, а
+ * `/guilds/{id}/guildUsers` — близько 1 МБ на гільдію; обидва читалися
+ * щохвилини лише заради ключів.
+ * =====================================================================
+ */
+let cachedRtdbAuthClient = null;
+
+const getRtdbAccessToken = async () => {
+  if (!cachedRtdbAuthClient) {
+    cachedRtdbAuthClient = new GoogleAuth({
+      scopes: [
+        "https://www.googleapis.com/auth/firebase.database",
+        "https://www.googleapis.com/auth/userinfo.email",
+      ],
+    }).getClient();
+  }
+  const client = await cachedRtdbAuthClient;
+  const { token } = await client.getAccessToken();
+  if (!token) throw new Error("Не вдалося отримати токен доступу до бази");
+  return token;
+};
+
+const getRtdbUrl = () => {
+  const fromApp = admin.app().options?.databaseURL;
+  if (fromApp) return String(fromApp).replace(/\/+$/, "");
+  const config = JSON.parse(process.env.FIREBASE_CONFIG || "{}");
+  return String(config.databaseURL || "").replace(/\/+$/, "");
+};
+
+/**
+ * Повертає лише ключі дочірніх вузлів, не завантажуючи їхній вміст.
+ * Кидає помилку замість тихого відкату на повне читання — інакше збій
+ * непомітно повернув би багатомегабайтний трафік.
+ */
+const readShallowKeys = async (path) => {
+  const databaseUrl = getRtdbUrl();
+  if (!databaseUrl) throw new Error("databaseURL не налаштовано");
+
+  const normalizedPath = String(path).replace(/^\/+|\/+$/g, "");
+  const accessToken = await getRtdbAccessToken();
+  const response = await fetch(`${databaseUrl}/${normalizedPath}.json?shallow=true`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    throw new Error(`Shallow read /${normalizedPath} -> ${response.status} ${details}`.trim());
+  }
+
+  const payload = await response.json();
+  return payload && typeof payload === "object" ? Object.keys(payload) : [];
+};
+
+/**
+ * Ключі дочірніх вузлів із запасним варіантом.
+ *
+ * Якщо поверхневе читання чомусь не спрацює (токен, мережа, права), ми
+ * не зупиняємо нагадування, а відкочуємось на звичайне читання — але
+ * гучно пишемо про це в лог, бо саме тоді трафік знову стане дорогим.
+ */
+const readChildKeys = async (db, path) => {
+  try {
+    return await readShallowKeys(path);
+  } catch (error) {
+    logger.error("[ScheduledJobs] SHALLOW READ FAILED — fell back to full read", {
+      path,
+      error: error?.message || String(error),
+    });
+    const snapshot = await db.ref(path).once("value");
+    return snapshot.exists() ? Object.keys(snapshot.val() || {}) : [];
+  }
+};
+
+/**
+ * =====================================================================
+ * ✅ Єдиний щохвилинний диспетчер
+ * ---------------------------------------------------------------------
+ * Раніше п'ять окремих scheduler-ів прокидалися щохвилини і КОЖЕН
+ * незалежно читав `/guilds` цілком — 5 повних завантажень бази на
+ * хвилину (7200 на добу). Тепер список гільдій читається один раз і
+ * передається всім обробникам: 1 читання замість 5.
+ *
+ * Обробники виконуються незалежно (allSettled) — збій одного не
+ * зупиняє решту, як і було з окремими функціями.
+ * =====================================================================
+ */
+exports.processScheduledJobs = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    region: "europe-west1",
+    timeZone: "Europe/Kiev",
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    secrets: [TELEGRAM_BOT_TOKEN],
+  },
   async () => {
     const db = admin.database();
-    const guildsSnap = await db.ref("/guilds").once("value");
-    const now = Date.now();
-    await Promise.all(Object.entries(guildsSnap.val() || {}).map(async ([guildId, guild]) => {
-      const guildUsers = guild?.guildUsers || {};
-      await Promise.all(Object.entries(guild?.express || {}).map(async ([chatId, rawGroup]) => {
-        // Legacy flat records remain readable by old clients but cannot be safely deadline-processed.
-        if ((!rawGroup?.gbs && !rawGroup?.postponementAudience) || !rawGroup?.scheduleTime) return;
-        const notices = [];
-        let shouldDelete = false;
-        const ref = db.ref(`/guilds/${guildId}/express/${chatId}`);
-        const result = await ref.transaction((current) => {
-          if (!current) return current;
-          const advanced = advanceExpress(current, now, (uid, record) => getExpressMultiplier(guildUsers, uid, record));
-          notices.splice(0, notices.length, ...advanced.notices);
-          shouldDelete = advanced.deleteGroup;
-          if (advanced.deleteGroup) return { ...current, workflow: { ...(current.workflow || {}), stage: "deleting", deletingAt: now } };
-          return advanced.group;
-        }, undefined, false);
-        if (!result.committed || !result.snapshot.exists()) return;
-        const current = result.snapshot.val();
-        if (current.postponementAudience && !current.workflow?.postponementPushSentAt) {
-          Object.keys(current.postponementAudience).forEach((uid) => notices.push({ event: "postponed", userId: uid, body: EXPRESS_PUSH.postponed }));
-          await Promise.all(notices.filter((notice) => notice.event === "postponed").map((notice) => sendExpressPush({ db, guildId, chatId, notice })));
-          await ref.update({ postponementAudience: null, "workflow/postponementPushSentAt": admin.database.ServerValue.TIMESTAMP });
-          if (!current.gbs || !Object.keys(current.gbs).length) {
-            await ref.remove();
-            return;
-          }
-        }
-        if (current.workflow?.recruitmentNeeded && !current.workflow?.recruitmentNoticesQueuedAt) {
-          const excluded = uniqueAvailableIds(current);
-          Object.keys(guildUsers).filter((uid) => !excluded.has(uid)).forEach((uid) => notices.push({ event: "recruit", userId: uid, body: EXPRESS_PUSH.recruit }));
-          await ref.child("workflow/recruitmentNoticesQueuedAt").set(admin.database.ServerValue.TIMESTAMP);
-        }
-        await Promise.all(notices.map((notice) => sendExpressPush({ db, guildId, chatId, notice }).catch((error) => logger.error("[EXPRESS_PUSH]", { guildId, chatId, userId: notice.userId, error: error?.message }))));
-        if (shouldDelete) await ref.remove();
-      }));
-    }));
+    const guildIds = await readChildKeys(db, "guilds");
+    if (!guildIds.length) return null;
+
+    const jobs = [
+      ["cultureNotificationQueue", () => runCultureNotificationQueue({ db, guildIds })],
+      ["scheduledMessages", () => runScheduledMessages({ db, guildIds })],
+      ["gbgNotificationQueue", () => runGbgNotificationQueue({ db, guildIds })],
+      ["gbgSectorBuildChecks", () => runGbgSectorBuildChecks({ db, guildIds })],
+      ["scheduledExpressUpgrades", () => runScheduledExpressUpgrades({ db, guildIds })],
+    ];
+
+    const results = await Promise.allSettled(jobs.map(([, run]) => run()));
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        logger.error("[ScheduledJobs] job failed", {
+          job: jobs[index][0],
+          error: result.reason?.message || String(result.reason),
+        });
+      }
+    });
+
     return null;
   }
 );

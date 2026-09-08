@@ -1028,7 +1028,10 @@ export const FOE_INTERCEPTOR_JS = `
   // під-гілки. Малі пакети (квести, ресурси) передаємо як є.
   var rawSeq = 0;
   var lastRawSig = {};
-  var RAWLOG_RE = /outpost|settlement|diploma|quest|chapter|resourcebag|autorefill|startup|citymap|city_map|impediment/i;
+  // ТИМЧАСОВО (особливі споруди поселень): додано ринкові/торгові служби —
+  // зміст Чорного ринку та подібних споруд приходить окремим запитом, коли
+  // людина відкриває їх у грі, і в попередній перелік він не потрапляв.
+  var RAWLOG_RE = /outpost|settlement|diploma|quest|chapter|resourcebag|autorefill|startup|citymap|city_map|impediment|market|trade|shop|barter|offer/i;
   var BIG_RE = /outpost|settlement|startup|citymap/i;
   var CAP = 16000;
 

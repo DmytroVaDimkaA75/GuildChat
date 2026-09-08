@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GBG Live</title>
+  <style>
+    body { font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', Arial, sans-serif; margin: 0; color:#222; }
+    header { padding: 8px 10px; border-bottom: 1px solid #eee; display:flex; gap:8px; align-items:center; }
+    header input[type="search"] { flex:1; padding:7px 10px; border:1px solid #ddd; border-radius:6px; }
+    header .meta { font-size:12px; color:#666; white-space:nowrap; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; border-bottom:1px solid #f0f0f0; vertical-align: middle; }
+    th { position:sticky; top:0; background:#fff; z-index:1; font-weight:600; }
+    .time-locked { color:#111; }
+    .time-open { color:#24a148; font-weight:600; }
+    .attack-dot, .def-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:1px; }
+    .attack-dot { background:#d23b2d; }
+    .def-dot { background:#2f80ed; }
+    .muted { color:#888; }
+    .owner { white-space:nowrap; }
+    .tag { display:inline-block; padding:2px 6px; border:1px solid #eee; border-radius:10px; margin-right:4px; font-size:12px; white-space:nowrap; }
+    #empty { padding: 14px; color:#666; }
+    .table-wrap { max-height: 480px; overflow:auto; }
+
+    /* колір гільдії */
+    .swatch {
+      display:inline-block; width:14px; height:14px; border-radius:3px;
+      border:1px solid #d9d9d9; background:#f4f4f4;
+      box-shadow: inset 0 0 0 1px #ffffff80;
+    }
+    .swatch.none {
+      background:
+        repeating-linear-gradient(45deg, #eee, #eee 4px, #fafafa 4px, #fafafa 8px);
+    }
+    .swatch-cell { text-align:center; }
+
+    /* ID/UNIX комірки */
+    .id-cell, .unix-cell { text-align:center; color:#555; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <header>
+    <input id="search" type="search" placeholder="Пошук за назвою або гільдією…" />
+    <div class="meta" id="mapId"></div>
+    <div class="meta" id="updated">—</div>
+  </header>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:92px">Час</th>
+          <th style="width:120px">UNIX</th>
+          <th style="width:110px">Сектор</th>
+          <th style="width:46px">Колір</th>
+          <th style="width:64px">ID</th>
+          <th>Власник</th>
+          <th style="width:50%">Слоти / споруди / бафи</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty">Немає даних. Відкрий сторінку гри та мапу GBG.</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

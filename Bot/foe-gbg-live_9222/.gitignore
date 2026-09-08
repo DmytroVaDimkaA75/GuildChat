@@ -1,0 +1,12 @@
+# Dependencies
+game-api/node_modules/
+functions/node_modules/
+
+# Firebase credentials and diagnostics
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+firebase-debug.log
+**/firebase-debug.log
+
+# Generated local data
+guildchat-*-default-rtdb*-export.json

@@ -1,0 +1,37 @@
+{
+  "browserURL": "http://127.0.0.1:9222",
+  "gameOrigin": "https://ru11.forgeofempires.com",
+  "firebase": {
+    "enabled": true,
+    "authorizeUrl": "https://europe-west1-foechat-b903e.cloudfunctions.net/authorizeBot",
+    "guildDataUrl": "https://europe-west1-foechat-b903e.cloudfunctions.net/guildData",
+    "playerId": "8183328",
+    "botType": "GBGbot",
+    "worldName": "ru11",
+    "guildId": "10821",
+    "guildOverrides": {
+      "8183328": {
+        "worldName": "ru11",
+        "guildId": "10821"
+      }
+    }
+  },
+  "worker": {
+    "id": "ru11-10821-gbgbot-8183328",
+    "pollIntervalMs": 3000,
+    "heartbeatIntervalMs": 30000,
+    "privateMessagePollIntervalMs": 60000,
+    "guildMemberSyncIntervalMs": 3600000,
+    "guildMemberFullReconcileIntervalMs": 86400000,
+    "gbgMapPollIntervalMs": 10000,
+    "gbgPlayerLeaderboardPollIntervalMs": 60000,
+    "gbgBuildingFullAuditIntervalMs": 1800000,
+    "gbgEmptySlotRecheckIntervalMs": 300000,
+    "gbgGuildPointsMinute": 2,
+    "gbgSeasonDurationSeconds": 950400,
+    "quantumMapPollIntervalMs": 10000,
+    "quantumMemberPollIntervalMs": 60000,
+    "quantumDetailRefreshIntervalMs": 60000,
+    "quantumFirebaseHeartbeatIntervalMs": 60000
+  }
+}

@@ -204,6 +204,7 @@ export default function CulturalSettlementSync() {
           ) : null}
           <SettlementProductions
             productions={rows}
+            buildings={settlementBuildings}
             nowSec={nowSec}
             iconSheets={iconSheets}
             iconUrls={settlementIconUrls}

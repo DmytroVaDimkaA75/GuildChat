@@ -242,6 +242,7 @@ const CulturalSettlements = () => {
 
           <SettlementProductions
             productions={settlementProductions}
+            buildings={settlementBuildings}
             nowSec={nowSec}
             iconSheets={iconSheets}
             iconUrls={settlementIconUrls}

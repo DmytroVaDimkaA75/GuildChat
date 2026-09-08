@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+
+import { formatRawEntity } from './rawEntity';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -190,6 +192,9 @@ export default function FoeCityMap({
   );
   const [selectedId, setSelectedId] = useState(null);
   const [popupOpen, setPopupOpen] = useState(false);
+  // Сирі дані вибраної будівлі — усе, що гра про неї надіслала. Згорнуто, щоб
+  // не заважати, але доступно на один дотик і придатне до копіювання.
+  const [rawOpen, setRawOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
@@ -918,6 +923,7 @@ export default function FoeCityMap({
 
       <Text style={styles.hint}>Мапу можна рухати пальцем у будь-який бік. Торкніться будівлі — деталі.</Text>
 
+
       {/* згортаний блок легенди */}
       <TouchableOpacity
         style={[styles.legendHeader, legendOpen && styles.legendHeaderOpen]}
@@ -1052,6 +1058,28 @@ export default function FoeCityMap({
                   {!isGB && !selectedDefinition?.resolved ? (
                     <Text style={styles.pendingText}>Метадані цієї будівлі ще завантажуються.</Text>
                   ) : null}
+
+                  <TouchableOpacity
+                    style={styles.rawToggle}
+                    onPress={() => setRawOpen((open) => !open)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: rawOpen }}
+                  >
+                    <Text style={styles.rawToggleText}>
+                      {rawOpen ? 'Сховати технічні дані' : 'Технічні дані'}
+                    </Text>
+                    <MaterialIcons
+                      name={rawOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                      size={20}
+                      color={DarkThemeColors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {rawOpen ? (
+                    <Text style={styles.rawText} selectable>
+                      {formatRawEntity(selectedEntity, selectedDefinition)}
+                    </Text>
+                  ) : null}
                 </ScrollView>
               </>
             ) : null}
@@ -1074,6 +1102,27 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingRight: 3,
     paddingBottom: 1,
+  },
+  rawToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: DarkThemeColors.border,
+  },
+  rawToggleText: {
+    color: DarkThemeColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rawText: {
+    color: DarkThemeColors.text,
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: 'monospace',
+    marginBottom: 8,
   },
   legendHeader: {
     flexDirection: 'row',
