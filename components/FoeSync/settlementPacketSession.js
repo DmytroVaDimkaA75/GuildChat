@@ -17,6 +17,19 @@ const READY_STABLE_PROBES = 3;
 const PROBE_INTERVAL_MS = 150;
 // Пауза між появою мітки і самим свайпом.
 const SWIPE_LEAD_MS = 2000;
+// Скільки гра має мовчати (не слати пакетів), щоб вважати місто завантаженим,
+// і скільки таких перевірок робимо щонайбільше.
+const QUIET_MS = 1200;
+const QUIET_MAX_ROUNDS = 6;
+// Пауза після свайпу, поки камера зупиниться.
+const SWIPE_SETTLE_MS = 600;
+// Скільки разів тапаємо в одну точку і з якою паузою.
+const TAP_ATTEMPTS = 3;
+const TAP_GAP_MS = 2200;
+// Пошук навколо цілі, якщо тапи не влучили: частки каліброваного свайпу, туди
+// й назад із наростанням. Один тап на позицію — інакше пошук надто довгий.
+const SEARCH_STEPS = [0.15, -0.3, 0.45, -0.6, 0.75];
+const SEARCH_TAP_ATTEMPTS = 1;
 // Скільки даємо грі на те, щоб прибрати спливаюче вікно після Escape.
 const POPUP_SETTLE_MS = 400;
 
@@ -127,6 +140,10 @@ function createSettlementPacketSession({
   let scrolledDx = 0;
   let scrolledDy = 0;
   let gestureBusy = false;
+  // Чи прилітали пакети від гри за час останнього очікування. Поки вони йдуть —
+  // місто ще довантажується й камера може рухатись; свайп у цей момент дає
+  // щоразу інший результат.
+  let sawPacket = false;
   const timers = new Map();
 
   function delay(ms) {
@@ -333,7 +350,7 @@ function createSettlementPacketSession({
 
   // Тап по кораблю з повторами: повторювати можна лише тап — повторний свайп
   // зсунув би камеру далі від записаного місця.
-  async function tapShip(runEpoch) {
+  async function tapShip(runEpoch, attempts = TAP_ATTEMPTS) {
     const current = () => active && epoch === runEpoch;
     // У ручних режимах керування МУСИТЬ лишитись у людини: невдалий тап не
     // забирає кнопки й не вбиває сеанс — можна докрутити й тапнути ще раз.
@@ -355,11 +372,11 @@ function createSettlementPacketSession({
       fail();
       return;
     }
-    for (let attempt = 0; attempt < 4 && current() && !requestSent; attempt += 1) {
-      report('tap', { attempt: attempt + 1, attempts: 4 });
+    for (let attempt = 0; attempt < attempts && current() && !requestSent; attempt += 1) {
+      report('tap', { attempt: attempt + 1, attempts });
       tapped = true;
       await tap(tag, aim.x / aim.viewportW, aim.y / aim.viewportH, attemptId);
-      if (current() && !requestSent && attempt < 3) await delay(2200);
+      if (current() && !requestSent && attempt < attempts - 1) await delay(TAP_GAP_MS);
     }
     // Чотири спроби минули, поселення не відкрилось — повертаємо кнопки.
     if (manual && current() && !requestSent) scrollState('retry');
@@ -375,6 +392,15 @@ function createSettlementPacketSession({
       onState({ phase: 'opening', settlementId, step: 'settle' });
       await delay(SWIPE_LEAD_MS);
       if (!current()) return;
+      // Додатково чекаємо, поки гра ЗАМОВКНЕ. Перевірка проста: спимо коротко і
+      // дивимось, чи прилетів за цей час бодай один пакет. Не прилетів — місто
+      // догрузилось, камера стоїть.
+      for (let round = 0; round < QUIET_MAX_ROUNDS; round += 1) {
+        sawPacket = false;
+        await delay(QUIET_MS);
+        if (!current()) return;
+        if (!sawPacket) break;
+      }
       // Аж ТЕПЕР Escape: спливаюче вікно (щоденна нагорода, подія) перехоплює
       // дотик на себе, і свайп по ньому камеру не рухає. Закривати його раніше
       // сенсу немає — воно могло з'явитись саме за ці дві секунди.
@@ -393,9 +419,22 @@ function createSettlementPacketSession({
         return;
       }
       if (!(await panBy(1, runEpoch))) return;
-      await delay(600);
+      await delay(SWIPE_SETTLE_MS);
       if (!current()) return;
       await tapShip(runEpoch);
+      // Камера не завжди зупиняється точно там, де було під час калібрування:
+      // масштаб, момент запуску й інерція гри трохи плавають. Тоді всі тапи
+      // б'ють в одну й ту саму порожню точку. Тому, якщо не вийшло, підкручуємо
+      // камеру потроху ТУДИ Й НАЗАД навколо цілі — і пробуємо знову. Це те
+      // саме, що людина робила кнопкою «Ще».
+      for (const step of SEARCH_STEPS) {
+        if (!current() || requestSent) break;
+        onState({ phase: 'opening', settlementId, step: 'search' });
+        if (!(await panBy(step, runEpoch))) return;
+        await delay(SWIPE_SETTLE_MS);
+        if (!current() || requestSent) break;
+        await tapShip(runEpoch, SEARCH_TAP_ATTEMPTS);
+      }
     } catch (_error) {
       if (current()) fail();
     }
@@ -481,6 +520,7 @@ function createSettlementPacketSession({
       return;
     }
     if (message.kind !== 'data') return;
+    sawPacket = true;
     const map = message.found?.settlementMap;
     // Сувора перевірка (наш тап + підтверджений запит) боронить АВТОМАТИЧНИЙ
     // вхід від того, щоб зарахувати чужу стару мапу. Під час ручного наведення
@@ -536,6 +576,7 @@ function describePacketSettlement(state) {
   }
   if (phase === 'opening') {
     if (step === 'settle') return 'Гра намальована. Чекаємо, поки сцена стане на місце…';
+    if (step === 'search') return 'Корабель не там, де очікували. Підкручуємо камеру…';
     if (step === 'popups') return 'Закриваємо спливаючі вікна гри…';
     if (step === 'swipe') return 'Прокручуємо місто до корабля поселення…';
     if (step === 'arm') return 'Наводимось на корабель…';

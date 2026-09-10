@@ -101,6 +101,8 @@ function createHarness(t, options = {}) {
     await flushPromises();
     t.mock.timers.tick(2000); // пауза після появи мітки
     await flushPromises();
+    t.mock.timers.tick(1200); // очікування тиші від гри
+    await flushPromises();
     t.mock.timers.tick(400); // закриття спливаючих вікон
     await flushPromises();
   };

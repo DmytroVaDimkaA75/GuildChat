@@ -453,6 +453,9 @@ export function FoeSyncProvider({ children }) {
   // авто-приховування після authed / перших пакетів, бо користувач має вручну
   // зайти у своє поселення. Не перемонтовуємо WebView (граємо в наявному).
   const [webPinned, setWebPinned] = useState(false);
+  // Панель діагностики стоїть НАД грою в колонці, тож з'їдає висоту екрана.
+  // Згортаємо її до одного рядка, коли потрібно клацати в самій грі.
+  const [diagPanelOpen, setDiagPanelOpen] = useState(true);
   const webPinnedRef = useRef(false);
   webPinnedRef.current = webPinned;
   // ТИМЧАСОВО: штучно звужує вікно гри (без іншого телефона), щоб
@@ -2342,10 +2345,22 @@ export function FoeSyncProvider({ children }) {
                 <Text style={{ color: '#f4f7fb', fontWeight: '700', fontSize: 12 }}>
                   Діагностика поселення
                 </Text>
-                <TouchableOpacity onPress={unpinGameWindow}>
-                  <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>Сховати гру</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <TouchableOpacity
+                    onPress={() => setDiagPanelOpen((open) => !open)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>
+                      {diagPanelOpen ? 'Згорнути ▲' : 'Розгорнути ▼'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={unpinGameWindow}>
+                    <Text style={{ color: '#4ea1ff', fontWeight: '700' }}>Сховати гру</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
+              {diagPanelOpen ? (
+              <>
               <TouchableOpacity
                 onPress={() => setDebugShrink((v) => !v)}
                 style={{
@@ -2494,6 +2509,8 @@ export function FoeSyncProvider({ children }) {
                     ? ` · ${autoEnterLog[autoEnterLog.length - 1].target}`
                     : ''}
                 </Text>
+              ) : null}
+              </>
               ) : null}
             </View>
           ) : webVisible ? (
