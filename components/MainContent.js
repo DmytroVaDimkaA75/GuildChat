@@ -78,6 +78,7 @@ import QuantScreen from './Quant';
 import FoeSyncScreen from './FoeSync/FoeSyncScreen';
 import { FoeSyncProvider } from './FoeSync/FoeSyncProvider';
 import BonusesModal from './FoeSync/BonusesModal';
+import SettlementEntryWarning from './Culture/SettlementEntryWarning';
 import { refreshGbgWidgetCacheFromFirebase } from './GBG/gbgWidgetRefresh';
 import { recordWidgetFcmReceipt } from './GBG/widgetCache';
 import YouTubeVideosScreen from './YouTube/YouTubeVideosScreen';
@@ -847,6 +848,7 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
   const [selectedGuildId, setSelectedGuildId] = useState('');
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [bonusesOpen, setBonusesOpen] = useState(false);
+  const [cultureWarnOpen, setCultureWarnOpen] = useState(false);
 
   const animatedHeight = useRef(new Animated.Value(0)).current;
   const rotation = useRef(new Animated.Value(0)).current;
@@ -943,9 +945,14 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
     outputRange: ['0deg', '180deg'],
   });
 
-  const handleCultureMenuPress = () => {
+  // Вхід у поселення робиться тапом по кораблику в місті, і промах тапу
+  // збирає сусідню споруду (див. SettlementEntryWarning). Тому рішення —
+  // за людиною: спершу попереджаємо й пропонуємо зібрати самому.
+  const openSettlements = () => {
+    setCultureWarnOpen(false);
     props.navigation.navigate('culture', { screen: 'CulturalSettlementSync' });
   };
+  const handleCultureMenuPress = () => setCultureWarnOpen(true);
 
   const performLogout = async () => {
     if (logoutBusy || typeof onLogout !== 'function') return;
@@ -995,6 +1002,11 @@ function CustomDrawerContent({ onLogout, onManualGuildSwitch, ...props }) {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
       <BonusesModal visible={bonusesOpen} onClose={() => setBonusesOpen(false)} />
+      <SettlementEntryWarning
+        visible={cultureWarnOpen}
+        onCancel={() => setCultureWarnOpen(false)}
+        onContinue={openSettlements}
+      />
 
       <View style={styles.header}>
         <View style={styles.profileRow}>

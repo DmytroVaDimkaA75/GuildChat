@@ -3,11 +3,22 @@
 // а тап падав під нього.
 // Мітку тримаємо довго: людина наводить її руками, поспішати нема куди.
 const AIM_MARKER_MS = 900000;
-// Де мітка стоїть у РУЧНИХ режимах (наведення й ручний старт) — угорі екрана,
-// як під час калібрування. Це окреме число, не з калібровки: там canvasY —
-// точка корабля ПІСЛЯ автоматичного свайпу, і чіпати її заради зручності
-// наведення не можна, інакше автомат тапне не туди.
-const MANUAL_AIM_CANVAS_Y = 134;
+// Грубий свайп: одним махом покриваємо більшу частину шляху до корабля. Довжина
+// СТАЛА і живе в коді — тільки тоді інерція від нього щоразу однакова, а отже
+// передбачувана. Палець іде вліво, бо від лівого верхнього кута корабель завжди
+// праворуч. Те, що лишиться після цього маху, доміряється дрібними кроками.
+const COARSE_SCREENS = 2.5;
+// Крок однієї стрілки калібрувальника — частка екрана. Рухає камеру САМ
+// застосунок, тими самими нативними жестами, якими потім відтворюватиме шлях.
+// Вимірювати пальцем не можна: гра прокручує з інерцією, тож один і той самий
+// кінцевий кадр дає геть різні числа залежно від того, махнули ви чи тягнули.
+const CALIB_STEP = 0.1;
+// Пауза між кроками під час відтворення — щоб інерція встигала згаснути так
+// само, як вона гасла між натисканнями людини.
+const CALIB_STEP_GAP_MS = 150;
+// Довжина відходу в кут, у екранах. Навмисне більша за будь-яку мапу: камера
+// однаково впреться в межу, тож де б вона не була — опиниться в тому самому куті.
+const CORNER_SCREENS = 5;
 // Скільки чекаємо на реакцію гри після ручного тапу, перш ніж пропонувати ще раз.
 const TAP_SETTLE_MS = 5000;
 // Скільки щонайбільше чекаємо, поки гра почне малювати кадри, перш ніж свайпати.
@@ -26,16 +37,30 @@ const SWIPE_SETTLE_MS = 600;
 // Скільки разів тапаємо в одну точку і з якою паузою.
 const TAP_ATTEMPTS = 3;
 const TAP_GAP_MS = 2200;
-// Пошук навколо цілі, якщо тапи не влучили: частки каліброваного свайпу, туди
-// й назад із наростанням. Один тап на позицію — інакше пошук надто довгий.
-const SEARCH_STEPS = [0.15, -0.3, 0.45, -0.6, 0.75];
+// Пошук навколо цілі, якщо тапи не влучили: кроки туди й назад із наростанням,
+// у ЧАСТКАХ ЕКРАНА. Саме екрана, а не каліброваного свайпу: свайп після відходу
+// в кут довгий (кілька екранів), і частка від нього кидала б камеру через пів
+// мапи замість того, щоб підкрутити її трохи.
+const SEARCH_STEPS = [0.08, -0.16, 0.24, -0.32, 0.40];
 const SEARCH_TAP_ATTEMPTS = 1;
 // Скільки даємо грі на те, щоб прибрати спливаюче вікно після Escape.
 const POPUP_SETTLE_MS = 400;
 
+// Виміряно калібрувальником ВІД ЛІВОГО ВЕРХНЬОГО КУТА мапи — і виміряно САМИМ
+// застосунком, його ж жестами. Попередні числа міряли рух пальця, і вони були
+// хибні: гра прокручує з інерцією, тож те саме кінцеве положення давало щоразу
+// інший результат. Тут, зокрема, вертикаль виявилась нульовою — після відходу в
+// кут корабель уже на потрібній висоті, рухати треба лише вбік. Тому автоматичний
+// вхід зобов'язаний спершу відвести камеру в той самий кут — без цього числа
+// нічого не означають.
+//
+// Чому це спільні числа, а не «для одного телефона»: кут — точка, у яку камера
+// впирається в будь-якому світі, а корабель поселення ставить гра, не гравець.
+// canvasW/canvasH — розмір поля, на якому міряли; на іншому екрані
+// scaleSettlementGesture перерахує все пропорційно.
 const DEFAULT_SHIP_CALIB = Object.freeze({
-  canvasX: 696, canvasY: 134, canvasW: 1024, canvasH: 765,
-  scrollDx: -708, scrollDy: 123,
+  canvasX: 696, canvasY: 321, canvasW: 1024, canvasH: 1831,
+  scrollDx: -2458, scrollDy: 0,
 });
 
 // Гра справді ожила: полотно на місці, сторінка інтерактивна, і — головне —
@@ -76,6 +101,36 @@ const SETTLEMENT_ALIASES = {
   pirates: ['pirates', 'pirate'],
 };
 
+// Те, що гра САМА знає про місто: де стоїть корабель поселення і де межі
+// ділянки. Камера впирається саме в ці межі, тож маючи їх і координати корабля,
+// відстань до нього можна ПОРАХУВАТИ — під будь-який розмір міста, замість того
+// щоб запам'ятовувати одну цифру, яка підходить лише одному місту.
+function cityGeometryFrom(cityMap) {
+  const ship = (cityMap?.entities || []).find((entity) => entity?.type === 'outpost_ship');
+  const areas = Array.isArray(cityMap?.unlocked_areas)
+    ? cityMap.unlocked_areas
+    : Object.values(cityMap?.unlocked_areas || {});
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const area of areas) {
+    if (!area || typeof area !== 'object') continue;
+    const x = Number(area.x) || 0;
+    const y = Number(area.y) || 0;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + (Number(area.width) || 0));
+    maxY = Math.max(maxY, y + (Number(area.length) || 0));
+  }
+  if (!ship || !Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
+  return {
+    shipX: Number(ship.x) || 0,
+    shipY: Number(ship.y) || 0,
+    minX, minY, maxX, maxY,
+  };
+}
+
 function settlementIdFromCityMap(cityMap) {
   if (!Array.isArray(cityMap?.entities)) return null;
   const ship = cityMap.entities.find((entity) => entity?.type === 'outpost_ship');
@@ -108,17 +163,16 @@ function scaleSettlementGesture(probe, calibration = DEFAULT_SHIP_CALIB) {
 function createSettlementPacketSession({
   generation, expectedHost, inject, getTag, swipe, tap, onState,
   nativeGestures = true, timeoutMs = 75000, showAim = false,
-  // Ручне наведення: гру завантажуємо, мітку малюємо — але свайп і тап робить
-  // людина кнопками. Накопичений рух стрілок і є той свайп, який потім
-  // повторюватиметься автоматично.
-  manualAim = false, calibration = DEFAULT_SHIP_CALIB,
-  // Ручний старт: гра вантажиться сама, мітка малюється, але прокрутку з тапом
-  // запускає людина кнопкою — щоб було видно, чи справа в моменті запуску, чи
-  // в самій довжині свайпу.
-  manualStart = false,
+  calibration = DEFAULT_SHIP_CALIB,
+  // Режим калібрування. Гра вантажиться, камера сама відводиться в ЛІВИЙ
+  // ВЕРХНІЙ кут мапи — це та єдина точка, яку неможливо не вгадати: камера
+  // впирається в межу й далі не їде, скільки б її не тягнути. Від цього кута
+  // людина власним пальцем підводить корабель під мітку й тисне «Тапнути».
+  // Пройдений нею шлях гра рахує сама, і він разом із точкою мітки й стає
+  // калібровкою — вже від відомого початку, а не від того місця, де камера
+  // випадково опинилась після завантаження.
+  calibrate = false,
 }) {
-  // Будь-який режим, де за кермом людина.
-  const manual = manualAim || manualStart;
   let active = true;
   let documentId = null;
   let documentStartedAt = 0;
@@ -132,18 +186,14 @@ function createSettlementPacketSession({
   let pending = null;
   let aim = null;
   let aimRect = null;
-  let aimProbe = null;
-  let entryEpoch = null;
   let manualDx = 0;
   let manualDy = 0;
-  // Скільки насправді накрутили СВОЇМИ жестами (калібрований свайп + докрутки).
-  let scrolledDx = 0;
-  let scrolledDy = 0;
   let gestureBusy = false;
   // Чи прилітали пакети від гри за час останнього очікування. Поки вони йдуть —
   // місто ще довантажується й камера може рухатись; свайп у цей момент дає
   // щоразу інший результат.
   let sawPacket = false;
+  let cityGeometry = null;
   const timers = new Map();
 
   function delay(ms) {
@@ -178,7 +228,7 @@ function createSettlementPacketSession({
   function drawAim(x, y) {
     inject(`window.__foeShowAimMarker && window.__foeShowAimMarker(${x}, ${y}, ${AIM_MARKER_MS}); true;`);
   }
-  // Те, що бачить людина під час наведення: де мітка і скільки вже накрутили.
+  // Те, що бачить людина під час калібрування: де мітка і скільки вже накрутили.
   function aimState() {
     if (!aim) return null;
     return {
@@ -188,7 +238,7 @@ function createSettlementPacketSession({
     };
   }
   function reportAim(step) {
-    if (active) onState({ phase: 'aiming', settlementId, step, aim: aimState() });
+    if (active) onState({ phase: 'calibrating', settlementId, step, aim: aimState() });
   }
   // Готова калібровка у координатах ігрового полотна — рівно в тому вигляді,
   // в якому її чекає scaleSettlementGesture (і DEFAULT_SHIP_CALIB у коді).
@@ -202,8 +252,42 @@ function createSettlementPacketSession({
     return {
       canvasX: aim.x - left, canvasY: aim.y - top,
       canvasW: width, canvasH: height,
-      scrollDx: manualDx + scrolledDx, scrollDy: manualDy + scrolledDy,
+      scrollDx: manualDx, scrollDy: manualDy,
+      city: cityGeometry,
     };
+  }
+
+  // Один крок стрілки калібрувальника. Напрямок задається рухом ПАЛЬЦЯ, бо саме
+  // палець ми потім і відтворюємо: щоб подивитись правіше, палець іде вліво.
+  async function nudgeCalibration(fingerX, fingerY) {
+    if (!active || !aim || gestureBusy || typeof swipe !== 'function') return false;
+    const tag = Number(getTag());
+    if (!Number.isInteger(tag) || tag <= 0) return false;
+    const dx = fingerX * CALIB_STEP * aim.viewportW;
+    const dy = fingerY * CALIB_STEP * aim.viewportH;
+    // Назад за кут камера не поїде — вона там уперлась. А жест, який НІЧОГО не
+    // рухає, гра зараховує як КЛІК: палець стартує з середини екрана, тобто
+    // тапне по чиїйсь споруді й збере з неї виробництво. Тому такий крок просто
+    // не робимо.
+    if (manualDx + dx > 0 || manualDy + dy > 0) {
+      reportAim('edge');
+      return false;
+    }
+    gestureBusy = true;
+    try {
+      await swipe(tag, dx / aim.viewportW, dy / aim.viewportH);
+      if (!active) return false;
+      manualDx += dx;
+      manualDy += dy;
+      // Гра могла перемалювати свій шар поверх мітки — малюємо знову.
+      drawAim(aim.x, aim.y);
+      reportAim('aim');
+      return true;
+    } catch (_error) {
+      return false;
+    } finally {
+      gestureBusy = false;
+    }
   }
 
   // Підтвердження точки: тапаємо туди, де стоїть мітка. Далі все як завжди —
@@ -216,16 +300,6 @@ function createSettlementPacketSession({
     gestureBusy = true;
     try {
       reportAim('tap');
-      // Скільки людина прогорнула місто власним пальцем від завантаження
-      // сторінки — це і є той свайп, який автомат потім повторить сам.
-      const panNonce = `settlement-pan-${generation}-${++sequence}`;
-      const pan = await waitForMessage('panAccum', panNonce,
-        `window.__foeReadPan && window.__foeReadPan(${JSON.stringify(panNonce)}); true;`);
-      if (!active) return false;
-      if (pan) {
-        manualDx = Number(pan.dx) || 0;
-        manualDy = Number(pan.dy) || 0;
-      }
       attemptId = `settlement-tap-${generation}-${++sequence}`;
       const armed = await waitForMessage('watch_armed', attemptId,
         `window.__foeArmNativeAutoEnter && window.__foeArmNativeAutoEnter(${aim.x}, ${aim.y}, ${JSON.stringify(attemptId)}); true;`);
@@ -288,7 +362,6 @@ function createSettlementPacketSession({
           if (forced || stableCount >= READY_STABLE_PROBES) {
             gesture = candidate;
             aimRect = probe.rect;
-            aimProbe = probe;
             break;
           }
         } else {
@@ -299,27 +372,20 @@ function createSettlementPacketSession({
       }
       if (!current()) return;
       aim = gesture;
-      if (manual) {
-        // Для ручних режимів вікна закриваємо одразу: людина має бачити місто.
-        inject('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
-        await delay(POPUP_SETTLE_MS);
+      if (calibrate) {
+        if (!(await settleBeforeGesture(runEpoch, 'calibrating'))) return;
+        if (!(await panToTopLeft(runEpoch, 'calibrating'))) return;
         if (!current()) return;
-      }
-      if (manualAim) {
-        // Далі гру не чіпаємо самі: мітка стоїть, чекаємо на кнопки людини.
-        aim = scaleSettlementGesture(aimProbe, { ...calibration, canvasY: MANUAL_AIM_CANVAS_Y }) || gesture;
+        // Той самий грубий мах, що й у відтворенні: доміряємо лише залишок.
+        onState({ phase: 'calibrating', settlementId, step: 'coarse' });
+        if (!(await coarsePan(runEpoch))) return;
+        manualDx = -COARSE_SCREENS * aim.viewportW;
+        manualDy = 0;
+        // Мітка стоїть у точці з калібровки — рівно там, куди потім тапатиме
+        // автомат. Іншого місця їй бути не може: що ми зараз розмітимо, те він
+        // і повторить.
         drawAim(aim.x, aim.y);
-        reportAim('aim');
-        return;
-      }
-      if (manualStart) {
-        // Готові, але жест робимо лише на команду людини. Мітку ставимо туди ж,
-        // де вона стояла під час калібрування — угорі; сам свайп (dx/dy) при
-        // цьому лишається калібрований.
-        entryEpoch = runEpoch;
-        aim = scaleSettlementGesture(aimProbe, { ...calibration, canvasY: MANUAL_AIM_CANVAS_Y }) || aim;
-        if (showAim) drawAim(aim.x, aim.y);
-        onState({ phase: 'aiming', settlementId, step: 'start', aim: aimState() });
+        onState({ phase: 'calibrating', settlementId, aim: aimState() });
         return;
       }
       // Мітка з'являється ТУТ — щойно гра готова, ще до будь-яких жестів. Від
@@ -331,21 +397,113 @@ function createSettlementPacketSession({
     }
   }
 
-  // Прокрутка на задану ЧАСТКУ каліброваного свайпу. Частка 1 — повний свайп,
-  // менша — докрутка. Усе накручене підсумовується: саме ця сума й стане новою
-  // калібровкою, якщо вхід удасться.
-  async function panBy(fraction, runEpoch) {
+  // Дочекатись, поки сцена міста стане на місце, і закрити спливаючі вікна.
+  // БЕЗ цього будь-який свайп іде в нікуди: полотно вже намальоване, але гра ще
+  // довантажує місто й камеру не віддає. Саме на цьому ми вже спіткнулись раніше
+  // («не тягнеться»), тож калібрування мусить чекати так само, як і автомат.
+  async function settleBeforeGesture(runEpoch, phase) {
+    const current = () => active && epoch === runEpoch;
+    onState({ phase, settlementId, step: 'settle' });
+    await delay(SWIPE_LEAD_MS);
+    if (!current()) return false;
+    for (let round = 0; round < QUIET_MAX_ROUNDS; round += 1) {
+      sawPacket = false;
+      await delay(QUIET_MS);
+      if (!current()) return false;
+      if (!sawPacket) break;
+    }
+    onState({ phase, settlementId, step: 'popups' });
+    inject('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
+    await delay(POPUP_SETTLE_MS);
+    return current();
+  }
+
+  // Відхід у ЛІВИЙ ВЕРХНІЙ кут мапи. Палець управо — камера йде до лівої межі,
+  // палець униз — до верхньої. Довжина надмірна навмисне: камера впреться в межу
+  // й стане, тож кінцева точка та сама незалежно від того, звідки почали.
+  async function panToTopLeft(runEpoch, phase) {
     const current = () => active && epoch === runEpoch;
     if (!current() || !aim || typeof swipe !== 'function') return false;
     const tag = Number(getTag());
     if (!Number.isInteger(tag) || tag <= 0) { fail(); return false; }
-    const dx = aim.dx * fraction;
-    const dy = aim.dy * fraction;
-    await swipe(tag, dx / aim.viewportW, dy / aim.viewportH);
-    if (!current()) return false;
-    scrolledDx += dx;
-    scrolledDy += dy;
+    onState({ phase, settlementId, step: 'corner' });
+    for (const [dx, dy] of [[CORNER_SCREENS, 0], [0, CORNER_SCREENS]]) {
+      if (!current()) return false;
+      try {
+        await swipe(tag, dx, dy);
+      } catch (error) {
+        // Не мовчимо: якщо гра не прийняла жест, людина має бачити причину.
+        onState({
+          phase, settlementId, step: 'corner_failed',
+          note: String(error?.message || error?.code || error),
+        });
+        return false;
+      }
+      if (!current()) return false;
+      await delay(SWIPE_SETTLE_MS);
+    }
     return true;
+  }
+
+  // Грубий мах — той самий і в калібруванні, і у відтворенні. Саме тому інерція
+  // від нього однакова, і доміряти лишається тільки залишок.
+  async function coarsePan(runEpoch) {
+    const current = () => active && epoch === runEpoch;
+    if (!current() || !aim || typeof swipe !== 'function') return false;
+    const tag = Number(getTag());
+    if (!Number.isInteger(tag) || tag <= 0) { fail(); return false; }
+    await swipe(tag, -COARSE_SCREENS, 0);
+    if (!current()) return false;
+    await delay(SWIPE_SETTLE_MS);
+    return current();
+  }
+
+  // Скільки дрібних кроків лишилось після грубого маху — у координатах
+  // КАЛІБРОВКИ, тож на будь-якому екрані їх однаково: сам крок масштабується,
+  // а кількість ні.
+  function fineSteps(distance, size, coarse) {
+    const step = CALIB_STEP * size;
+    if (!(step > 0)) return 0;
+    return Math.round((distance - coarse) / step);
+  }
+
+  // Відтворення каліброваного шляху: спершу грубий мах, тоді залишок дрібними
+  // кроками — рівно тією самою послідовністю, якою його міряли.
+  async function replayCalibratedPan(runEpoch) {
+    const current = () => active && epoch === runEpoch;
+    if (!(await coarsePan(runEpoch))) return false;
+    const tag = Number(getTag());
+    const stepsX = fineSteps(
+      calibration.scrollDx, calibration.canvasW, -COARSE_SCREENS * calibration.canvasW
+    );
+    const stepsY = fineSteps(calibration.scrollDy, calibration.canvasH, 0);
+    for (const [count, dx, dy] of [
+      [Math.abs(stepsX), Math.sign(stepsX) * CALIB_STEP, 0],
+      [Math.abs(stepsY), 0, Math.sign(stepsY) * CALIB_STEP],
+    ]) {
+      for (let index = 0; index < count; index += 1) {
+        if (!current()) return false;
+        await swipe(tag, dx, dy);
+        if (!current()) return false;
+        await delay(CALIB_STEP_GAP_MS);
+      }
+    }
+    return current();
+  }
+
+  // Підкручування на задану частку ЕКРАНА вздовж напрямку каліброваного свайпу.
+  async function nudgeBy(screenFraction, runEpoch) {
+    const current = () => active && epoch === runEpoch;
+    if (!current() || !aim || typeof swipe !== 'function') return false;
+    const tag = Number(getTag());
+    if (!Number.isInteger(tag) || tag <= 0) { fail(); return false; }
+    const length = Math.hypot(aim.dx, aim.dy);
+    if (!(length > 0)) return false;
+    // Крок тієї самої довжини в точках екрана, спрямований уздовж свайпу.
+    const step = screenFraction * aim.viewportW;
+    await swipe(tag, (aim.dx / length) * step / aim.viewportW,
+      (aim.dy / length) * step / aim.viewportH);
+    return current();
   }
 
   // Тап по кораблю з повторами: повторювати можна лише тап — повторний свайп
@@ -356,7 +514,7 @@ function createSettlementPacketSession({
     // забирає кнопки й не вбиває сеанс — можна докрутити й тапнути ще раз.
     const report = (step, extra) => {
       if (!current()) return;
-      if (manual) scrollState(step);
+      if (calibrate) reportAim(step);
       else onState({ phase: 'opening', settlementId, step, ...extra });
     };
     if (!current() || !aim || typeof tap !== 'function') { fail('unsupported'); return; }
@@ -368,7 +526,7 @@ function createSettlementPacketSession({
       `window.__foeArmNativeAutoEnter && window.__foeArmNativeAutoEnter(${aim.x}, ${aim.y}, ${JSON.stringify(attemptId)}); true;`);
     if (!current()) return;
     if (!armed) {
-      if (manual) { scrollState('retry'); return; }
+      if (calibrate) { reportAim('retry'); return; }
       fail();
       return;
     }
@@ -379,7 +537,7 @@ function createSettlementPacketSession({
       if (current() && !requestSent && attempt < attempts - 1) await delay(TAP_GAP_MS);
     }
     // Чотири спроби минули, поселення не відкрилось — повертаємо кнопки.
-    if (manual && current() && !requestSent) scrollState('retry');
+    if (calibrate && current() && !requestSent) reportAim('retry');
   }
 
   // Сам вхід: прокрутка до корабля і тап по ньому.
@@ -387,29 +545,12 @@ function createSettlementPacketSession({
     const current = () => active && epoch === runEpoch;
     try {
       if (!current() || !aim) return;
-      // Пауза після появи мітки: гра щойно домалювала перший кадр, але сцена
-      // міста ще доїжджає на місце, і свайп у цей момент її не зачепить.
-      onState({ phase: 'opening', settlementId, step: 'settle' });
-      await delay(SWIPE_LEAD_MS);
-      if (!current()) return;
-      // Додатково чекаємо, поки гра ЗАМОВКНЕ. Перевірка проста: спимо коротко і
-      // дивимось, чи прилетів за цей час бодай один пакет. Не прилетів — місто
-      // догрузилось, камера стоїть.
-      for (let round = 0; round < QUIET_MAX_ROUNDS; round += 1) {
-        sawPacket = false;
-        await delay(QUIET_MS);
-        if (!current()) return;
-        if (!sawPacket) break;
-      }
-      // Аж ТЕПЕР Escape: спливаюче вікно (щоденна нагорода, подія) перехоплює
-      // дотик на себе, і свайп по ньому камеру не рухає. Закривати його раніше
-      // сенсу немає — воно могло з'явитись саме за ці дві секунди.
-      onState({ phase: 'opening', settlementId, step: 'popups' });
-      inject('window.__foeDismissPopups && window.__foeDismissPopups(); true;');
-      await delay(POPUP_SETTLE_MS);
-      if (!current()) return;
+      if (!(await settleBeforeGesture(runEpoch, 'opening'))) return;
+      // Калібровку міряли від лівого верхнього кута — отже й відраховувати її
       onState({ phase: 'opening', settlementId, step: 'swipe' });
       if (!nativeGestures) {
+        // Запасна гілка без нативних жестів: сторінка сама відтворює і прокрутку,
+        // і клік, тож відхід у кут нативним свайпом тут ні до чого.
         tapped = true;
         inject(`window.__foeAutoEnterTest && window.__foeAutoEnterTest(${aim.x}, ${aim.y}, ${aim.dx}, ${aim.dy}); true;`);
         return;
@@ -418,7 +559,10 @@ function createSettlementPacketSession({
         fail('unsupported');
         return;
       }
-      if (!(await panBy(1, runEpoch))) return;
+      // Калібровку міряли від лівого верхнього кута — отже й відраховувати її
+      // треба звідти. Без цього кроку scrollDx/scrollDy ні про що не кажуть.
+      if (!(await panToTopLeft(runEpoch, 'opening'))) return;
+      if (!(await replayCalibratedPan(runEpoch))) return;
       await delay(SWIPE_SETTLE_MS);
       if (!current()) return;
       await tapShip(runEpoch);
@@ -430,7 +574,7 @@ function createSettlementPacketSession({
       for (const step of SEARCH_STEPS) {
         if (!current() || requestSent) break;
         onState({ phase: 'opening', settlementId, step: 'search' });
-        if (!(await panBy(step, runEpoch))) return;
+        if (!(await nudgeBy(step, runEpoch))) return;
         await delay(SWIPE_SETTLE_MS);
         if (!current() || requestSent) break;
         await tapShip(runEpoch, SEARCH_TAP_ATTEMPTS);
@@ -438,41 +582,6 @@ function createSettlementPacketSession({
     } catch (_error) {
       if (current()) fail();
     }
-  }
-
-  function scrollState(step) {
-    if (active) {
-      onState({
-        phase: 'aiming', settlementId, step,
-        aim: { ...aimState(), dx: Math.round(scrolledDx), dy: Math.round(scrolledDy) },
-      });
-    }
-  }
-
-  // Кнопки ручного режиму: «Прокрутити» / «Ще» (частка) і «Тапнути».
-  function scrollBy(fraction) {
-    if (!active || entryEpoch === null || gestureBusy) return false;
-    gestureBusy = true;
-    (async () => {
-      try {
-        if (await panBy(fraction, entryEpoch)) {
-          if (showAim) drawAim(aim.x, aim.y);
-          scrollState('scrolled');
-        }
-      } catch (_error) { /* лишаємось у наведенні */ }
-      gestureBusy = false;
-    })();
-    return true;
-  }
-
-  function startEntry() {
-    if (!active || entryEpoch === null || gestureBusy) return false;
-    gestureBusy = true;
-    (async () => {
-      try { await tapShip(entryEpoch); } catch (_error) { /* нехай спробує ще */ }
-      gestureBusy = false;
-    })();
-    return true;
   }
 
   function handleMessage(message) {
@@ -514,7 +623,7 @@ function createSettlementPacketSession({
       if (['wrong_grid', 'no_request', 'request_no_response', 'error'].includes(message.step)) {
         // У ручних режимах невдалий тап — нормальна частина пристрілювання:
         // не вбиваємо сеанс, а повертаємо керування людині.
-        if (manual) scrollState(message.step);
+        if (calibrate) reportAim(message.step);
         else fail();
       }
       return;
@@ -530,12 +639,13 @@ function createSettlementPacketSession({
     // 'cultural_outpost_2', вхід не має мовчки провалюватись. Але й не будь-яка
     // не-головна мапа: 'quantum_incursions' — теж окрема мапа, і не поселення.
     if (isSettlementGrid(map?.gridId) && Array.isArray(map.entities) &&
-      (manualAim || (tapped && requestSent))) {
+      (calibrate || (tapped && requestSent))) {
       finish('ready');
       return;
     }
     const city = message.found?.cityMap;
     if (started || !Array.isArray(city?.entities)) return;
+    cityGeometry = cityGeometryFrom(city) || cityGeometry;
     settlementId = settlementIdFromCityMap(city);
     if (!settlementId) {
       // Unknown ship IDs may be introduced by the game. Do not misreport them
@@ -553,26 +663,47 @@ function createSettlementPacketSession({
   function succeed() { finish('ready'); }
 
   return {
-    handleMessage, cancel, fail, confirmTap, scrollBy, startEntry, succeed, recordedCalibration,
+    handleMessage, cancel, fail, confirmTap, nudgeCalibration, succeed, recordedCalibration,
   };
 }
 
 // Людський опис того, що автомат робить просто зараз. Один текст і для смужки
 // поверх показаної гри, і для картки на екрані поселення.
+// Причина невдачі людською мовою — щоб «гра перезавантажилась» не виглядало
+// загадкою: перезавантаження це наслідок, а не причина.
+const FAIL_REASONS = {
+  timeout: 'гра не відповіла вчасно',
+  load: 'вікно гри перервалося',
+  layout: 'змінився розмір екрана',
+  unsupported: 'жести недоступні в цій збірці',
+  identity: 'не визначено світ',
+  cancelled: 'вхід скасовано',
+};
+
 function describePacketSettlement(state) {
   const { phase, step, attempt, attempts } = state || {};
-  if (phase === 'aiming') {
-    if (step === 'start') return 'Гра завантажена. «Прокрутити» — зробити калібрований свайп.';
-    if (step === 'scrolled') return 'Корабель під міткою? Якщо ні — «Ще». Якщо так — «Тапнути».';
-    if (step === 'tap') return 'Тиснемо в точку мітки…';
-    if (step === 'wrong_grid') return 'Тап відкрив не поселення. Підправте мітку і спробуйте ще.';
-    if (step === 'retry') return 'Поселення не відкрилось. Докрутіть «Ще» або тапніть знову.';
-    if (step === 'arm') return 'Готуємось тапнути…';
-    if (step === 'no_request' || step === 'request_no_response') {
-      return 'Тап пройшов, але гра на нього не відповіла. Докрутіть «Ще» і тапніть знову.';
+  if (phase === 'calibrating') {
+    if (step === 'corner') return 'Відводимо камеру в лівий верхній кут мапи…';
+    if (step === 'coarse') return 'Один довгий свайп до корабля…';
+    if (step === 'edge') {
+      return 'Далі в цей бік камера не поїде — вона вже в куті мапи.';
     }
-    if (step && step !== 'aim') return 'Гра не відповіла на тап. Підправте мітку і спробуйте ще.';
-    return 'Прогорніть місто пальцем так, щоб корабель поселення став під червону мітку, тоді «Тап».';
+    if (step === 'corner_failed') {
+      return `Гра не прийняла жест відходу в кут${state.note ? `: ${state.note}` : ''}.`;
+    }
+    if (step === 'corner_failed') {
+      return `Гра не прийняла жест відходу в кут${state.note ? `: ${state.note}` : ''}.`;
+    }
+    if (step === 'settle') return 'Гра намальована. Чекаємо, поки сцена стане на місце…';
+    if (step === 'popups') return 'Закриваємо спливаючі вікна гри…';
+    if (step === 'arm') return 'Готуємось тапнути…';
+    if (step === 'tap') return 'Тиснемо в точку мітки…';
+    if (step === 'wrong_grid') return 'Тап відкрив не поселення. Підправте і спробуйте ще.';
+    if (step === 'retry') return 'Поселення не відкрилось. Підправте і тапніть знову.';
+    if (step === 'no_request' || step === 'request_no_response') {
+      return 'Тап пройшов, але гра на нього не відповіла. Підправте і тапніть знову.';
+    }
+    return 'Стрілками підведіть корабель під червону мітку, тоді «Тапнути».';
   }
   if (phase === 'opening') {
     if (step === 'settle') return 'Гра намальована. Чекаємо, поки сцена стане на місце…';
@@ -587,13 +718,17 @@ function describePacketSettlement(state) {
     }
     return 'Заходимо в поселення…';
   }
-  if (step === 'retrying') return 'Спроба не вдалася. Пробуємо ще раз…';
+  if (step === 'retrying') {
+    const reason = FAIL_REASONS[state?.error];
+    return `Спроба не вдалася${reason ? ` (${reason})` : ''}. Пробуємо ще раз…`;
+  }
   if (step === 'probe') return 'Поселення знайдено. Чекаємо, поки гра почне малювати…';
   return 'Чекаємо, поки гра покаже мапу міста…';
 }
 
 module.exports = {
   DEFAULT_SHIP_CALIB, settlementIdFromCityMap, scaleSettlementGesture, describePacketSettlement,
+  cityGeometryFrom,
   isSettlementGrid,
   createSettlementPacketSession,
 };

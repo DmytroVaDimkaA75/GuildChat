@@ -20,20 +20,59 @@ const SETTLEMENT_MAP = {
   gridId: 'cultural_outpost',
   entities: [{ id: 2, cid: 'H_Pirates_Townhall', x: 0, y: 0 }],
 };
+// Полотно рівно того розміру, на якому міряли калібровку: тоді жест має
+// відтворитись без жодного перерахунку.
 const PROBE = {
   readyState: 'complete',
   visibilityState: 'visible',
   hidden: false,
   pageHost: HOST,
-  viewportW: 1024,
-  viewportH: 765,
+  viewportW: DEFAULT_SHIP_CALIB.canvasW,
+  viewportH: DEFAULT_SHIP_CALIB.canvasH,
   canvasTag: 'canvas',
   canvasCount: 1,
   frameDeltaMs: 16,
-  rect: { left: 0, top: 0, width: 1024, height: 765 },
+  rect: {
+    left: 0, top: 0,
+    width: DEFAULT_SHIP_CALIB.canvasW,
+    height: DEFAULT_SHIP_CALIB.canvasH,
+  },
   targetVisible: true,
   stable: true,
 };
+
+// Два надмірні свайпи, якими камера відводиться в лівий верхній кут мапи. Вони
+// передують КОЖНОМУ каліброваному свайпу: відстань міряли саме від кута.
+const CORNER_SWIPES = [[TAG, 5, 0], [TAG, 0, 5]];
+
+// Калібрований шлях відтворюється тією самою послідовністю, якою його міряли:
+// один сталий грубий мах, а тоді залишок дрібними кроками.
+const CALIB_STEP = 0.1;
+const COARSE_SCREENS = 2.5;
+const COARSE_SWIPE = [TAG, -COARSE_SCREENS, 0];
+const fineSteps = (distance, size, coarse) =>
+  Math.round((distance - coarse) / (CALIB_STEP * size));
+const CALIB_STEPS = [
+  COARSE_SWIPE,
+  ...Array(Math.abs(fineSteps(
+    DEFAULT_SHIP_CALIB.scrollDx,
+    DEFAULT_SHIP_CALIB.canvasW,
+    -COARSE_SCREENS * DEFAULT_SHIP_CALIB.canvasW,
+  ))).fill([
+    TAG,
+    Math.sign(fineSteps(
+      DEFAULT_SHIP_CALIB.scrollDx,
+      DEFAULT_SHIP_CALIB.canvasW,
+      -COARSE_SCREENS * DEFAULT_SHIP_CALIB.canvasW,
+    )) * CALIB_STEP,
+    0,
+  ]),
+  ...Array(Math.abs(fineSteps(DEFAULT_SHIP_CALIB.scrollDy, DEFAULT_SHIP_CALIB.canvasH, 0)))
+    .fill([TAG, 0, Math.sign(fineSteps(
+      DEFAULT_SHIP_CALIB.scrollDy, DEFAULT_SHIP_CALIB.canvasH, 0,
+    )) * CALIB_STEP]),
+];
+
 
 // Гра ще не ожила: полотно виміряти можна, але кадри не йдуть.
 const SLEEPING_PROBE = { ...PROBE, readyState: 'loading', stable: false, frameDeltaMs: 0 };
@@ -106,11 +145,32 @@ function createHarness(t, options = {}) {
     t.mock.timers.tick(400); // закриття спливаючих вікон
     await flushPromises();
   };
+  // Після відходу в кут — по паузі на кожен із двох свайпів.
+  const settleCorner = async () => {
+    for (let index = 0; index < 2; index += 1) {
+      await flushPromises();
+      t.mock.timers.tick(600);
+      await flushPromises();
+    }
+  };
+  // Кожен крок відтворення чекає свою паузу — проганяємо їх по черзі.
+  const settleCalibSteps = async () => {
+    await flushPromises();
+    t.mock.timers.tick(600); // пауза після грубого маху
+    await flushPromises();
+    for (let index = 1; index < CALIB_STEPS.length; index += 1) {
+      await flushPromises();
+      t.mock.timers.tick(150);
+      await flushPromises();
+    }
+  };
   const settleSwipe = async () => {
     await flushPromises();
     t.mock.timers.tick(150); // інтервал між замірами гри
     await settleBeforeSwipe();
-    t.mock.timers.tick(600); // пауза після свайпу
+    await settleCorner();
+    await settleCalibSteps();
+    t.mock.timers.tick(600); // пауза після каліброваного шляху
     await flushPromises();
   };
   const armAndTap = async () => {
@@ -126,7 +186,7 @@ function createHarness(t, options = {}) {
   };
   return {
     session, calls, send, sendShip, sendProbe, sendProbesUntilReady,
-    settleBeforeSwipe, settleSwipe, armAndTap,
+    settleBeforeSwipe, settleCorner, settleCalibSteps, settleSwipe, armAndTap,
   };
 }
 
@@ -172,20 +232,28 @@ test('scales to the canvas bounds and adds offsets without using the canvas as t
     viewportH: 600,
     rect: { left: 100, top: 20, width: 512, height: 382.5 },
   };
-  assert.deepEqual(scaleSettlementGesture(probe), {
-    x: 448, y: 87, dx: -354, dy: 61.5, viewportW: 800, viewportH: 600,
-  });
+  const scaleX = 512 / DEFAULT_SHIP_CALIB.canvasW;
+  const scaleY = 382.5 / DEFAULT_SHIP_CALIB.canvasH;
+  const expected = {
+    x: 100 + DEFAULT_SHIP_CALIB.canvasX * scaleX,
+    y: 20 + DEFAULT_SHIP_CALIB.canvasY * scaleY,
+    dx: DEFAULT_SHIP_CALIB.scrollDx * scaleX,
+    dy: DEFAULT_SHIP_CALIB.scrollDy * scaleY,
+    viewportW: 800,
+    viewportH: 600,
+  };
+  assert.deepEqual(scaleSettlementGesture(probe), expected);
   const harness = createHarness(t);
   harness.sendShip();
   await harness.sendProbesUntilReady(probe);
   await harness.settleSwipe();
-  assert.deepEqual(harness.calls.swipes, [[TAG, -354 / 800, 61.5 / 600]]);
+  assert.deepEqual(harness.calls.swipes, [...CORNER_SWIPES, ...CALIB_STEPS]);
   const [x, y, attemptId] = harness.calls.arms[0];
-  assert.equal(x, 448);
-  assert.equal(y, 87);
+  assert.equal(x, expected.x);
+  assert.equal(y, expected.y);
   harness.send({ kind: 'autoEnter', step: 'watch_armed', attemptId });
   await flushPromises();
-  assert.deepEqual(harness.calls.taps, [[TAG, 448 / 800, 87 / 600, attemptId]]);
+  assert.deepEqual(harness.calls.taps, [[TAG, expected.x / 800, expected.y / 600, attemptId]]);
 });
 
 test('rejects unmeasurable, nonfinite and offscreen gesture geometry', () => {
@@ -198,7 +266,7 @@ test('rejects unmeasurable, nonfinite and offscreen gesture geometry', () => {
     { ...PROBE, rect: { ...PROBE.rect, width: -1 } },
     { ...PROBE, rect: { ...PROBE.rect, height: NaN } },
     { ...PROBE, rect: { ...PROBE.rect, left: 1000 } },
-    { ...PROBE, rect: { ...PROBE.rect, top: -300 } },
+    { ...PROBE, rect: { ...PROBE.rect, top: -DEFAULT_SHIP_CALIB.canvasY - 1 } },
   ]) {
     assert.equal(scaleSettlementGesture(probe), null);
   }
@@ -219,7 +287,13 @@ test('waits for the game to actually render before swiping', async (t) => {
   await flushPromises();
   await harness.settleBeforeSwipe();
   await flushPromises();
-  assert.equal(harness.calls.swipes.length, 1, 'the swipe starts as soon as the game renders');
+  assert.equal(
+    harness.calls.swipes.length, 1,
+    'щойно гра малює — починається відхід у кут'
+  );
+  await harness.settleCorner();
+  await harness.settleCalibSteps();
+  assert.deepEqual(harness.calls.swipes, [...CORNER_SWIPES, ...CALIB_STEPS]);
   assert.equal(harness.calls.arms.length, 0);
   t.mock.timers.tick(599);
   await flushPromises();
@@ -242,7 +316,7 @@ test('ignores duplicate ship packets and probes with a different nonce', async (
   await harness.settleSwipe();
   const probesBeforeDuplicate = harness.calls.probes.length;
   harness.sendShip();
-  assert.equal(harness.calls.swipes.length, 1);
+  assert.equal(harness.calls.swipes.length, CORNER_SWIPES.length + CALIB_STEPS.length);
   // Повторний пакет із кораблем не починає другий захід і не просить нових замірів.
   assert.equal(harness.calls.probes.length, probesBeforeDuplicate);
   const [, , attemptId] = harness.calls.arms[0];
@@ -475,7 +549,12 @@ test('the non-native fallback also requires a post-tap game request and cultural
   await flushPromises();
   await harness.settleBeforeSwipe();
   await flushPromises();
-  assert.deepEqual(harness.calls.fallbacks, [[696, 134, -708, 123]]);
+  assert.deepEqual(harness.calls.fallbacks, [[
+    DEFAULT_SHIP_CALIB.canvasX,
+    DEFAULT_SHIP_CALIB.canvasY,
+    DEFAULT_SHIP_CALIB.scrollDx,
+    DEFAULT_SHIP_CALIB.scrollDy,
+  ]]);
   assert.equal(harness.calls.swipes.length, 0);
   assert.equal(harness.calls.taps.length, 0);
   harness.send({ kind: 'data', found: { settlementMap: SETTLEMENT_MAP } });

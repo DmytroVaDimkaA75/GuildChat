@@ -14,7 +14,11 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import FoeCityMap from '../FoeSync/FoeCityMap';
 import { useFoeSync, useFoeSyncActive } from '../FoeSync/FoeSyncProvider';
-import { describePacketSettlement, isSettlementGrid } from '../FoeSync/settlementPacketSession';
+import {
+  cityGeometryFrom,
+  describePacketSettlement,
+  isSettlementGrid,
+} from '../FoeSync/settlementPacketSession';
 import SettlementProductions, {
   COLORS,
   goodsEntries,
@@ -65,7 +69,7 @@ export default function CulturalSettlementSync() {
   } = useFoeSync();
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
   const { phase = 'idle', settlementId, error } = packetSettlement;
-  const busy = consent === 'yes' && ['idle', 'loading', 'opening', 'aiming'].includes(phase);
+  const busy = consent === 'yes' && ['idle', 'loading', 'opening', 'calibrating'].includes(phase);
   const settlement = SETTLEMENTS[settlementId];
   const map = phase === 'ready' && isSettlementGrid(found.settlementMap?.gridId)
     ? found.settlementMap : null;
@@ -185,6 +189,17 @@ export default function CulturalSettlementSync() {
       .map((key) => `${key}: ${Math.round(Number(aimCalib[key]))}`)
       .join(', ')
     : null;
+  // Те, що гра сама знає про місто: де корабель і де межі ділянки. Показуємо
+  // ОДРАЗУ, щойно прийшла мапа міста — не чекаючи вдалого входу. Саме ці числа
+  // різні в різних світах, і саме їх треба зібрати, щоб рахувати відстань до
+  // корабля замість того, щоб пам'ятати одну цифру.
+  const cityText = useMemo(() => {
+    const geometry = cityGeometryFrom(found.cityMap);
+    if (!geometry) return null;
+    return ['shipX', 'shipY', 'minX', 'minY', 'maxX', 'maxY']
+      .map((key) => `${key}: ${Math.round(Number(geometry[key]))}`)
+      .join(', ');
+  }, [found.cityMap]);
 
   const openCity = () => navigation.navigate('FoeSync', { screen: 'FoeSyncScreen' });
   const readyEntries = goodsEntries(readyGoods);
@@ -264,13 +279,25 @@ export default function CulturalSettlementSync() {
         </>
       ) : null}
 
-      {calibText ? (
+      {calibText || cityText ? (
         <View style={styles.catalogCard}>
-          <Text style={styles.catalogTitle}>Записана калібровка входу</Text>
-          <Text style={styles.calib} selectable>{calibText}</Text>
+          <Text style={styles.catalogTitle}>Дані для розрахунку входу</Text>
+          {cityText ? (
+            <>
+              <Text style={styles.calibLabel}>Місто (з пакета гри)</Text>
+              <Text style={styles.calib} selectable>{cityText}</Text>
+            </>
+          ) : null}
+          {calibText ? (
+            <>
+              <Text style={styles.calibLabel}>Виміряно калібрувальником</Text>
+              <Text style={styles.calib} selectable>{calibText}</Text>
+            </>
+          ) : null}
           <Text style={styles.catalogHint}>
-            Ці числа вже діють на цьому телефоні. Перекажіть їх розробнику, щоб
-            вони стали заводськими для всіх.
+            На телефоні нічого не зберігається. Перший рядок гра надсилає сама —
+            він різний у кожному світі; другий доступний лише після вдалого
+            калібрування.
           </Text>
         </View>
       ) : null}
@@ -320,7 +347,8 @@ const styles = StyleSheet.create({
   },
   catalogTitle: { color: COLORS.textPrimary, fontSize: 14, fontWeight: '700', marginBottom: 6 },
   catalogHint: { color: '#9fb4c8', fontSize: 11, lineHeight: 16, marginTop: 8 },
-  calib: { color: COLORS.textPrimary, fontSize: 12, fontFamily: 'monospace' },
+  calib: { color: COLORS.textPrimary, fontSize: 12, fontFamily: 'monospace', marginBottom: 4 },
+  calibLabel: { color: '#9fb4c8', fontSize: 11, marginTop: 6, marginBottom: 2 },
   retryButton: {
     marginTop: 14,
     minHeight: 46,

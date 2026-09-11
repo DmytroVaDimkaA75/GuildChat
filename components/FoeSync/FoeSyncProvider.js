@@ -150,31 +150,23 @@ const SYNC_LINGER_MS = 90 * 1000;
 // корабель). Коли вхід стане надійним — поставити false, і гра знову працюватиме
 // непомітно під вмістом застосунку. Розмір вікна при цьому НЕ змінюється:
 // калібровані координати свайпу й тапу лишаються дійсними.
-const PACKET_GAME_PREVIEW = false;
+const PACKET_GAME_PREVIEW = true;
 
-// ТИМЧАСОВО: ручне наведення замість автоматичного свайпу й тапу. Гра
-// завантажується, зупиняється з червоною міткою, а людина САМА гортає місто
-// пальцем, поки корабель поселення не стане під мітку, і тисне «Тап». Її свайп
-// перехоплювач рахує сам — він і зберігається як калібровка, далі його повторює
-// вже автомат. Коли калібровка записана і вхід стабільний, ставимо false.
-const PACKET_MANUAL_AIM = false;
+// ТИМЧАСОВО: режим калібрування. Гра завантажується, камера сама відводиться в
+// лівий верхній кут мапи, і далі людина власним пальцем підводить корабель під
+// мітку та тисне «Тапнути». Пройдений шлях гра рахує сама — він разом із точкою
+// мітки і є калібровка, яку треба переписати в DEFAULT_SHIP_CALIB
+// (settlementPacketSession.js). На телефоні нічого не зберігається.
+const PACKET_CALIBRATE = false;
 
 // ТИМЧАСОВО: виконувати автоматичний вхід у СПРАВЖНЬОМУ відкритому вікні гри
 // (тому самому, що й ручний вхід), а не у вікні, яке технічно приховане під
 // вмістом застосунку. Приховане вікно Android місцями вважає невидимим і
 // притримує рендер гри — тоді клік по кораблю не спрацьовує.
-const PACKET_OPEN_WINDOW = false;
+const PACKET_OPEN_WINDOW = true;
 
-// ТИМЧАСОВО: гра вантажиться сама, а прокрутку й тап запускає людина кнопками.
-// «Прокрутити» робить калібрований свайп, «Ще» додає чверть — доки корабель не
-// стане під мітку. Сума всього накрученого і є справжня довжина свайпу: саме її
-// застосунок збереже як нову калібровку, якщо вхід удасться.
-const PACKET_MANUAL_START = false;
-// Частка каліброваного свайпу на одне натискання «Ще».
-const SCROLL_MORE_FRACTION = 0.25;
 // Скільки чекаємо на людину під час наведення (автоматичний вхід — 75 с).
 const AIM_TIMEOUT_MS = 15 * 60 * 1000;
-const AIM_CALIB_KEY = 'foeSettlementAimCalib_v1';
 
 // Скільки ще разів пробуємо після невдалої спроби (те саме, що людина зробила б
 // кнопкою «Спробувати ще»). Помилки, які повтор не виправить, не повторюємо:
@@ -391,22 +383,11 @@ export function FoeSyncProvider({ children }) {
   // Користувач може прибрати показ гри під час поточного входу (див.
   // PACKET_GAME_PREVIEW) — далі процедура доробляє все у фоні, як завжди.
   const [packetPreviewOff, setPacketPreviewOff] = useState(false);
-  // Записана вручну калібровка входу (точка кліку + сумарний свайп у
-  // координатах ігрового полотна). Поки її нема — працює заводська.
+  // Результат ручного вимірювання — ЛИШЕ щоб показати числа на екрані й
+  // перенести їх у код (DEFAULT_SHIP_CALIB). На телефоні нічого не зберігаємо і
+  // звідси нічим не керуємось: єдине джерело калібровки — код, однаковий для
+  // всіх. Інакше в кожного був би свій застосунок, який працює тільки в нього.
   const [aimCalib, setAimCalib] = useState(null);
-  const aimCalibRef = useRef(null);
-  useEffect(() => {
-    AsyncStorage.getItem(AIM_CALIB_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (parsed && Number.isFinite(Number(parsed.canvasW))) {
-          aimCalibRef.current = parsed;
-          setAimCalib(parsed);
-        }
-      })
-      .catch(() => {});
-  }, []);
   const cancelPacketSettlementSync = useCallback(() => {
     const session = packetSessionRef.current;
     if (!session) return;
@@ -1391,16 +1372,14 @@ export function FoeSyncProvider({ children }) {
 
   const gameUrl = useMemo(() => gameUrlFromGuildId(guildId), [guildId]);
 
-  // Підтвердження точки під час ручного наведення (див. PACKET_MANUAL_AIM).
+  // Підтвердження точки під час калібрування (див. PACKET_CALIBRATE).
   const confirmAimTap = useCallback(() => {
     packetSessionRef.current?.confirmTap?.();
   }, []);
-  // Ручні кнопки прокрутки й тапу (див. PACKET_MANUAL_START).
-  const startPacketEntry = useCallback(() => {
-    packetSessionRef.current?.startEntry?.();
-  }, []);
-  const scrollPacketEntry = useCallback((fraction) => {
-    packetSessionRef.current?.scrollBy?.(fraction);
+  // Стрілка показує, куди їде ПОГЛЯД. Щоб подивитись правіше, палець має йти
+  // вліво — тож сюди передаємо саме рух пальця, протилежний до стрілки.
+  const nudgeCalibration = useCallback((fingerX, fingerY) => {
+    packetSessionRef.current?.nudgeCalibration?.(fingerX, fingerY);
   }, []);
 
   const startPacketSettlementSync = useCallback(({ retry = false } = {}) => {
@@ -1443,21 +1422,17 @@ export function FoeSyncProvider({ children }) {
       nativeGestures: Platform.OS === 'android',
       // ТИМЧАСОВО: разом з показом гри малюємо мітку в точці кліку.
       showAim: PACKET_GAME_PREVIEW,
-      manualAim: PACKET_MANUAL_AIM,
-      manualStart: PACKET_MANUAL_START,
-      timeoutMs: PACKET_MANUAL_AIM || PACKET_MANUAL_START ? AIM_TIMEOUT_MS : undefined,
-      calibration: aimCalibRef.current || DEFAULT_SHIP_CALIB,
+      calibrate: PACKET_CALIBRATE,
+      timeoutMs: PACKET_CALIBRATE ? AIM_TIMEOUT_MS : undefined,
+      calibration: DEFAULT_SHIP_CALIB,
       onState: (state) => {
         if (packetSessionRef.current !== session) return;
         setPacketSettlement(state);
-        if (state.phase === 'ready' && PACKET_MANUAL_AIM) {
-          // Вхід підтверджений на ділі — саме тепер ці числа варто запам'ятати.
+        if (state.phase === 'ready') {
+          // Вхід підтверджений на ділі — показуємо виміряні числа, щоб їх можна
+          // було перенести в код. Нікуди не зберігаємо (див. aimCalib).
           const recorded = session.recordedCalibration?.();
-          if (recorded) {
-            aimCalibRef.current = recorded;
-            setAimCalib(recorded);
-            AsyncStorage.setItem(AIM_CALIB_KEY, JSON.stringify(recorded)).catch(() => {});
-          }
+          if (recorded) setAimCalib(recorded);
         }
         if (['error', 'empty', 'ready'].includes(state.phase)) {
           packetSettlementBusyRef.current = false;
@@ -1475,7 +1450,12 @@ export function FoeSyncProvider({ children }) {
           // Тримаємо екран у стані «працюємо», щоб між спробами не блимала
           // помилка, якої вже за секунду не буде.
           setPacketSettlement({
-            phase: 'loading', settlementId: state.settlementId || null, step: 'retrying',
+            phase: 'loading',
+            settlementId: state.settlementId || null,
+            step: 'retrying',
+            // Причину тягнемо далі: інакше людина бачить лише перезавантаження
+            // гри й не знає, через що воно сталося.
+            error: state.error || null,
           });
           packetSettlementBusyRef.current = true;
           packetRetryTimerRef.current = setTimeout(() => {
@@ -2203,11 +2183,7 @@ export function FoeSyncProvider({ children }) {
   const showPacketGame =
     PACKET_GAME_PREVIEW && packetSettlementHidden && !stealthEntering && !packetPreviewOff;
   const packetStatusText = describePacketSettlement(packetSettlement);
-  const aiming = packetSettlement.phase === 'aiming';
-  const awaitingStart = aiming && packetSettlement.step === 'start';
-  // Кнопки прокрутки й тапу тримаємо на екрані ВЕСЬ ручний сеанс, хай там що
-  // відповіла гра: інакше після невдалого тапу людина лишається без керування.
-  const entryControls = aiming && PACKET_MANUAL_START;
+  const calibrating = packetSettlement.phase === 'calibrating';
   const aimShift = packetSettlement.aim;
   // Дані поселення вже в застосунку? Тоді людині нема чого дивитись на гру.
   const settlementDataReady = !!found.settlementMap?.entities?.length;
@@ -2241,8 +2217,7 @@ export function FoeSyncProvider({ children }) {
     cancelPacketSettlementSync,
     aimCalib,
     confirmAimTap,
-    startPacketEntry,
-    scrollPacketEntry,
+    nudgeCalibration,
     debugScrollAndReveal,
     stealthEntering,
     autoEnterLog,
@@ -2275,10 +2250,10 @@ export function FoeSyncProvider({ children }) {
       </View>
       {webActive ? (
         <View
-          accessibilityElementsHidden={!webVisible && !aiming}
-          importantForAccessibility={webVisible || aiming ? 'auto' : 'no-hide-descendants'}
+          accessibilityElementsHidden={!webVisible && !calibrating}
+          importantForAccessibility={webVisible || calibrating ? 'auto' : 'no-hide-descendants'}
           // Під час наведення гра приймає дотик: місто гортає сам користувач.
-          pointerEvents={webVisible || stealthEntering || aiming ? 'auto' : 'none'}
+          pointerEvents={webVisible || stealthEntering || calibrating ? 'auto' : 'none'}
           style={
             webVisible
               ? {
@@ -2620,77 +2595,83 @@ export function FoeSyncProvider({ children }) {
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {aiming ? null : <ActivityIndicator color="#4ea1ff" />}
+              {calibrating ? null : <ActivityIndicator color="#4ea1ff" />}
               <Text style={{ color: '#f4f7fb', fontSize: 12, flex: 1 }}>{packetStatusText}</Text>
               <TouchableOpacity
                 // Під час наведення ховати гру нема сенсу — зникли б і кнопки,
                 // а сеанс лишився б чекати. Тут це вихід із наведення.
-                onPress={aiming ? cancelPacketSettlementSync : () => {
+                onPress={calibrating ? cancelPacketSettlementSync : () => {
                   setPacketPreviewOff(true);
                   setWebVisible(false);
                 }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Text style={{ color: '#4ea1ff', fontWeight: '700', fontSize: 12 }}>
-                  {aiming ? 'Скасувати' : 'Сховати гру'}
+                  {calibrating ? 'Скасувати' : 'Сховати гру'}
                 </Text>
               </TouchableOpacity>
             </View>
-            {aiming ? (
-              // ТИМЧАСОВО: ручне наведення. Місто гортає сам користувач пальцем
-              // просто по грі; лишається одна кнопка — підтвердити точку.
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                {entryControls ? (
+            {calibrating ? (
+              // Калібрування: камеру рухає САМ застосунок своїми жестами — тими
+              // самими, якими потім відтворюватиме шлях. Пальцем міряти не можна:
+              // гра прокручує з інерцією, і те саме кінцеве положення дає щоразу
+              // інші числа.
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                  {[
+                    ['←', 1, 0],
+                    ['→', -1, 0],
+                    ['↑', 0, 1],
+                    ['↓', 0, -1],
+                  ].map(([label, fx, fy]) => (
+                    <TouchableOpacity
+                      key={label}
+                      onPress={() => nudgeCalibration(fx, fy)}
+                      style={{
+                        flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
+                        justifyContent: 'center', backgroundColor: '#1b2b3b',
+                        borderWidth: 1, borderColor: '#36516a',
+                      }}
+                    >
+                      <Text style={{ color: '#f4f7fb', fontSize: 18, fontWeight: '700' }}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
                   <TouchableOpacity
-                    onPress={() => scrollPacketEntry(awaitingStart ? 1 : SCROLL_MORE_FRACTION)}
+                    onPress={confirmAimTap}
                     style={{
                       flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
-                      justifyContent: 'center', backgroundColor: '#1b2b3b',
-                      borderWidth: 1, borderColor: '#36516a',
+                      justifyContent: 'center', backgroundColor: '#ffa51f33',
+                      borderWidth: 1, borderColor: '#ffa51f',
                     }}
                   >
-                    <Text style={{ color: '#f4f7fb', fontSize: 14, fontWeight: '700' }}>
-                      {awaitingStart ? 'Прокрутити' : 'Ще'}
+                    <Text style={{ color: '#ffd79a', fontSize: 14, fontWeight: '700' }}>
+                      Тапнути
                     </Text>
                   </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity
-                  onPress={entryControls ? startPacketEntry : confirmAimTap}
-                  style={{
-                    flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
-                    justifyContent: 'center', backgroundColor: '#ffa51f33',
-                    borderWidth: 1, borderColor: '#ffa51f',
-                  }}
-                >
-                  <Text style={{ color: '#ffd79a', fontSize: 14, fontWeight: '700' }}>
-                    {entryControls ? 'Тапнути' : 'Тап у мітку'}
-                  </Text>
-                </TouchableOpacity>
-                {settlementDataReady ? (
-                  // Ручний вихід: дані вже є, і людина може забрати їх сама,
-                  // не чекаючи, поки автоматика сама здогадається.
-                  <TouchableOpacity
-                    onPress={() => packetSessionRef.current?.succeed?.()}
-                    style={{
-                      flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
-                      justifyContent: 'center', backgroundColor: '#1f7a4d',
-                      borderWidth: 1, borderColor: '#38d68a',
-                    }}
-                  >
-                    <Text style={{ color: '#eafff4', fontSize: 14, fontWeight: '700' }}>
-                      Забрати дані
+                  {settlementDataReady ? (
+                    <TouchableOpacity
+                      onPress={() => packetSessionRef.current?.succeed?.()}
+                      style={{
+                        flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center',
+                        justifyContent: 'center', backgroundColor: '#1f7a4d',
+                        borderWidth: 1, borderColor: '#38d68a',
+                      }}
+                    >
+                      <Text style={{ color: '#eafff4', fontSize: 14, fontWeight: '700' }}>
+                        Забрати дані
+                      </Text>
+                    </TouchableOpacity>
+                  ) : aimShift ? (
+                    <Text style={{ color: '#9aa3b2', fontSize: 11, minWidth: 86, textAlign: 'right' }}>
+                      {aimShift.dx} / {aimShift.dy}
                     </Text>
-                  </TouchableOpacity>
-                ) : entryControls && !awaitingStart && aimShift ? (
-                  <Text style={{ color: '#9aa3b2', fontSize: 11, minWidth: 74, textAlign: 'right' }}>
-                    {aimShift.dx} / {aimShift.dy}
-                  </Text>
-                ) : aimShift ? (
-                  <Text style={{ color: '#9aa3b2', fontSize: 11, minWidth: 74, textAlign: 'right' }}>
-                    мітка {aimShift.x} / {aimShift.y}
-                  </Text>
-                ) : null}
-              </View>
+                  ) : null}
+                </View>
+              </>
             ) : null}
           </View>
         </View>
